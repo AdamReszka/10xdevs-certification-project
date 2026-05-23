@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 <!-- BEGIN @przeprogramowani/10x-cli -->
 
 ## 10xDevs AI Toolkit — Module 1, Lesson 3
@@ -69,3 +73,40 @@ The shipped skill carries no 10xDevs / cohort / certification references. The po
 Skills must not write to `context/archive/`. Archived changes are immutable; if a resolved target path starts with `context/archive/`, abort with: "This change is archived. Open a new change with `/10x-new` instead."
 
 <!-- END @przeprogramowani/10x-cli -->
+
+## Project: SprintFlow
+
+Sprint anomaly detector for tech leads — reads GitHub and Jira data to surface workflow anomalies ranked by sprint-delivery risk. Full spec: @context/foundation/prd.md
+
+## Commands
+
+```
+npm run dev     # dev server at localhost:3000
+npm run build   # production build
+npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
+```
+
+## Architecture
+
+- **Next.js 16.2.6 App Router** — use server components by default; do not use Pages Router
+- **TypeScript 5 strict mode** — path alias `@/*` → `./src/*`
+- **Tailwind CSS 4** + PostCSS (no UI component library yet)
+- **Deployment target: Cloudflare Pages** — do not suggest Vercel-specific APIs or config
+- No test framework installed yet — add one before implementing business logic
+- No CI workflows yet (`.github/workflows/` is empty)
+
+## Security constraints (non-negotiable)
+
+- GitHub PAT and Jira API tokens must be encrypted at rest, never logged, never in client payloads
+- No per-developer performance framing — all anomalies are team/sprint-level
+- Graceful degradation: show last cached state + error banner on API failure
+
+## Planned integrations (not yet installed)
+
+These are required by the PRD but not wired yet:
+- Auth: NextAuth or Better Auth (FR-001, email + password)
+- Database: PostgreSQL + Drizzle ORM via Neon or Supabase
+- AI: `@anthropic-ai/sdk`, model `claude-haiku-4-5` (FR-020, Refinement Helper only)
+- Email: Resend (FR-018, Daily Recap)
+- Background jobs: node-cron or Cloudflare Cron Triggers (15-min sync loops)
+- Cloudflare adapter: `@cloudflare/next-on-pages`
