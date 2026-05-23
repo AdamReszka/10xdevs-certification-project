@@ -1,18 +1,11 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "sprintflow",
+	"name": "10xdevs-certification-project",
 	"main": ".open-next/worker.js",
 	"compatibility_date": "2026-05-23",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"assets": {
 		"directory": ".open-next/assets",
 		"binding": "ASSETS"
-	},
-	"services": [
-		{
-			// Self-reference required for Next.js incremental caching
-			"binding": "WORKER_SELF_REFERENCE",
-			"service": "sprintflow"
-		}
-	]
+	}
 }
