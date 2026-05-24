@@ -6,11 +6,15 @@
     "dev": "next dev",
     "build": "next build",
     "build:cf": "opennextjs-cloudflare build",
+    "deploy": "npm run build:cf && npx wrangler deploy",
+    "preview": "npm run build:cf && npx wrangler dev",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "next": "16.2.6",
+    "pg": "^8.21.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -21,10 +25,13 @@
     "@opennextjs/cloudflare": "^1.19.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "supabase": "^2.101.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "wrangler": "^4.94.0"
