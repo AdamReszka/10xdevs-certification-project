@@ -1,0 +1,17 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "10xdevs-certification-project",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-05-23",
+	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"hyperdrive": [
+		{
+			"binding": "HYPERDRIVE",
+			"id": "86417a117a96464e947d5005e56f2a21"
+		}
+	]
+}
