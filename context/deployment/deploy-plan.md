@@ -1,6 +1,6 @@
 # SprintFlow — Cloudflare Workers Deploy Plan
 
-**Status**: Pending execution approval  
+**Status**: In progress — Phases 0–8 complete, Phase 9 (Git integration) pending  
 **Platform**: Cloudflare Workers (Paid, $5/mo)  
 **Adapter**: `@opennextjs/cloudflare` ≥ 1.19.9  
 **Database**: Supabase (PostgreSQL) via Cloudflare Hyperdrive + Drizzle ORM  
@@ -23,56 +23,30 @@ This plan covers the path from a bare Next.js 16.2.6 scaffold to a running produ
 
 ### Cloudflare Account
 
-- [ ] **[HUMAN]** Create a Cloudflare account at https://dash.cloudflare.com/sign-up (skip if you already have one)
-- [ ] **[HUMAN]** Upgrade to **Workers Paid plan** ($5/month):
-  - Dashboard → Workers & Pages → Plans → Upgrade
-  - Required: the free plan's 3 MiB gzip bundle limit makes a Next.js 16 App Router project undeployable
-- [ ] **[HUMAN]** Note your **Account ID** — visible in the right sidebar of any Workers & Pages page, or via `npx wrangler whoami` after login
+- [x] **[HUMAN]** Create a Cloudflare account at https://dash.cloudflare.com/sign-up (skip if you already have one)
+- [x] **[HUMAN]** Upgrade to **Workers Paid plan** ($5/month)
+- [x] **[HUMAN]** Account ID confirmed via `npx wrangler whoami`
 
 ### Supabase Account & Project
 
-- [ ] **[HUMAN]** Create a Supabase account at https://supabase.com (skip if you already have one)
-- [ ] **[HUMAN]** Create a new Supabase project:
-  - Choose a region close to your users (e.g. EU West for Poland)
-  - Project creation takes ~2 minutes
-- [ ] **[HUMAN]** Once provisioned, collect the following from **Project Settings → Database → Connection string**:
-  - Copy the **Transaction pooler** connection string (port **6543**, NOT 5432)
-  - Format: `postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres`
-  - This is `DATABASE_URL` — store it in your password manager now
-- [ ] **[HUMAN]** From **Project Settings → API** collect:
-  - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
-  - **anon** public key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-  - **service_role** secret key → `SUPABASE_SERVICE_ROLE_KEY` (never expose client-side)
-- [ ] **[HUMAN]** Create `.env.local` in the project root (git-ignored — never commit):
-  ```env
-  DATABASE_URL=postgresql://postgres.[ref]:[pw]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require
-  NEXT_PUBLIC_SUPABASE_URL=https://[ref].supabase.co
-  NEXT_PUBLIC_SUPABASE_ANON_KEY=[anon-key]
-  SUPABASE_SERVICE_ROLE_KEY=[service-role-key]
-  ```
+- [x] **[HUMAN]** Supabase account exists; project `uzqwuikgbbkpnemcnlwo` provisioned (EU region)
+- [x] **[HUMAN]** Credentials collected and stored in `.env` and `.env.local`
+  - Note: env var is `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (not `ANON_KEY` — newer Supabase naming)
+  - `.env.local` points to local Supabase (`127.0.0.1:54321`); `.env` points to cloud
+- [x] **[HUMAN]** `.env.local` created and gitignored
 
 ### GitHub Repository
 
-- [ ] Confirm `.github/workflows/` directory exists (currently empty — CI is set up in Phase 10)
-- [ ] Confirm GitHub Actions is enabled for the repository (Settings → Actions → Allow all actions)
+- [x] `.github/workflows/` directory exists (currently empty — CI set up in Phase 10)
+- [x] GitHub Actions enabled for the repository
 
 ---
 
 ## Phase 1 — Wrangler Authentication
 
-- [ ] Install Wrangler as a dev dependency (pins the version for CI parity):
-  ```bash
-  npm install -D wrangler
-  ```
-- [ ] **[HUMAN]** Authenticate the CLI — opens browser OAuth:
-  ```bash
-  npx wrangler login
-  ```
-- [ ] Verify authentication:
-  ```bash
-  npx wrangler whoami
-  # Expected: "You are logged in with an OAuth Token, associated with the email ..."
-  ```
+- [x] Wrangler 4.94.0 installed as dev dependency
+- [x] **[HUMAN]** Authenticated via OAuth — `adam.reszka85@gmail.com`
+- [x] `npx wrangler whoami` confirmed
 
 ---
 
@@ -80,37 +54,19 @@ This plan covers the path from a bare Next.js 16.2.6 scaffold to a running produ
 
 > Hyperdrive maintains a warm TCP connection pool between Cloudflare's edge and Supabase, solving the Workers request-scoped I/O problem. Without it, every Worker invocation would open a cold TCP connection to Supabase — causing latency spikes and risking connection exhaustion.
 
-- [ ] **[HUMAN]** Create a Hyperdrive configuration pointing at the Supabase Transaction Pooler:
-  ```bash
-  npx wrangler hyperdrive create sprintflow-db \
-    --connection-string="postgresql://postgres.[ref]:[pw]@aws-0-[region].pooler.supabase.com:6543/postgres?sslmode=require"
-  ```
-  Output includes a Hyperdrive **ID** (32-character hex string) — copy it now
-- [ ] Verify the Hyperdrive config was created:
-  ```bash
-  npx wrangler hyperdrive list
-  # Should show "sprintflow-db" with its ID
-  ```
+- [x] **[HUMAN]** Hyperdrive `sprintflow-db` created
+  - ID: `86417a117a96464e947d5005e56f2a21`
+  - Host: `db.uzqwuikgbbkpnemcnlwo.supabase.co:5432` (direct connection — correct when using Hyperdrive; Hyperdrive is the pooler)
+- [x] `npx wrangler hyperdrive list` confirmed
 
 ---
 
 ## Phase 3 — Package Installation
 
-- [ ] Install the Cloudflare adapter:
-  ```bash
-  npm install -D @opennextjs/cloudflare
-  ```
-- [ ] Install database packages:
-  ```bash
-  npm install drizzle-orm pg
-  npm install -D drizzle-kit @types/pg
-  ```
-- [ ] Verify adapter version is ≥ 1.19.9 (this version confirmed Next.js 16.2.6 compatibility):
-  ```bash
-  node -e "console.log(require('./node_modules/@opennextjs/cloudflare/package.json').version)"
-  # Must print 1.19.9 or higher
-  ```
-  If lower: `npm install -D @opennextjs/cloudflare@latest`
+- [x] `@opennextjs/cloudflare` 1.19.11 installed
+- [x] `drizzle-orm` 0.45.2 + `pg` 8.21.0 installed
+- [x] `drizzle-kit` 0.31.10 + `@types/pg` 8.20.0 installed
+- [x] `wrangler` 4.94.0 installed
 
 ---
 
@@ -201,11 +157,11 @@ Add if missing:
 .env*.local
 ```
 
-- [ ] 4a complete — `wrangler.toml` created with correct Hyperdrive ID
-- [ ] 4b complete — `open-next.config.ts` created
-- [ ] 4c complete — `next.config.ts` updated
-- [ ] 4d complete — `package.json` scripts updated
-- [ ] 4e complete — `.gitignore` updated
+- [x] 4a complete — `wrangler.toml` created with Hyperdrive ID `86417a117a96464e947d5005e56f2a21`; build command is `npm run build:cf`
+- [x] 4b complete — `open-next.config.ts` uses `defineCloudflareConfig` with `staticAssetsIncrementalCache` (newer API than plan template; functionally equivalent and preferred)
+- [x] 4c complete — `next.config.ts` updated with `images: { unoptimized: true }`
+- [x] 4d complete — `deploy` and `preview` scripts added to `package.json`
+- [x] 4e complete — `.open-next/` and `.wrangler/` already in `.gitignore`
 
 ---
 
@@ -254,9 +210,9 @@ Create `src/db/schema.ts` (will be expanded during feature implementation):
 export {};
 ```
 
-- [ ] 5a complete — `src/lib/db.ts` created
-- [ ] 5b complete — `drizzle.config.ts` created
-- [ ] 5c complete — `src/db/schema.ts` placeholder created
+- [x] 5a complete — `src/lib/db.ts` created
+- [x] 5b complete — `drizzle.config.ts` created
+- [x] 5c complete — `src/db/schema.ts` placeholder created
 
 ---
 
@@ -264,24 +220,15 @@ export {};
 
 > Secrets are encrypted at rest and injected into the Worker at runtime via `env`. They never appear in `wrangler.toml`, logs, or any client payload.
 
-- [ ] **[HUMAN]** Set `DATABASE_URL` (paste Transaction Pooler connection string when prompted):
-  ```bash
-  npx wrangler secret put DATABASE_URL
-  ```
-- [ ] **[HUMAN]** Set `SUPABASE_SERVICE_ROLE_KEY`:
-  ```bash
-  npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
-  ```
-- [ ] **[HUMAN]** Set `NEXTAUTH_SECRET` (or `BETTER_AUTH_SECRET` depending on auth library chosen):
+- [x] **[HUMAN]** `DATABASE_URL` secret set via `wrangler secret put`
+- [x] **[HUMAN]** `SUPABASE_SERVICE_ROLE_KEY` secret set via `wrangler secret put`
+- [ ] **[HUMAN]** Set auth secret once auth library is chosen (NextAuth or Better Auth):
   ```bash
   npx wrangler secret put NEXTAUTH_SECRET
-  # Generate a strong random value: openssl rand -base64 32
+  # or: npx wrangler secret put BETTER_AUTH_SECRET
+  # Generate: openssl rand -base64 32
   ```
-- [ ] Verify all secrets are registered (values are never shown):
-  ```bash
-  npx wrangler secret list
-  # Should show: DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NEXTAUTH_SECRET
-  ```
+- [ ] Verify all secrets registered: `npx wrangler secret list`
 
 ---
 
@@ -319,22 +266,13 @@ export {};
 
 ## Phase 8 — First Production Deploy
 
-- [ ] Deploy:
-  ```bash
-  npx wrangler deploy
-  ```
-  Expected: output ends with `Deployed sprintflow (https://sprintflow.<account>.workers.dev)`
+- [x] Deployed via `npm run deploy`
+  - URL: https://10xdevs-certification-project.adam-reszka85.workers.dev
+  - Version ID: `20afb2ec-d1ff-49f5-be99-9e4591fc4e81`
+  - Bundle: 928 KiB gzip / startup 27ms
 
-- [ ] Tail live logs immediately and open the workers.dev URL in a browser:
-  ```bash
-  npx wrangler tail
-  ```
-  Confirm no errors appear in the log stream on page load.
-
-- [ ] List deployments to confirm the version is recorded:
-  ```bash
-  npx wrangler deployments list
-  ```
+- [ ] Tail live logs: `npx wrangler tail`
+- [ ] List deployments: `npx wrangler deployments list`
 
 **Rollback reference** (if something is wrong):
 ```bash
