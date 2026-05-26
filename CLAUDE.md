@@ -40,6 +40,18 @@ These are required by the PRD but not wired yet:
 - Cloudflare adapter: `@opennextjs/cloudflare` (Workers target; `@cloudflare/next-on-pages` is deprecated)
 - Database driver: `@neondatabase/serverless` with `drizzle-orm/neon-http` (Workers require HTTP mode, not TCP)
 
+## Task tracking conventions
+
+Issue/PR work follows the hybrid convention in `context/foundation/task-tracking.md`. Read that file before creating, editing, or referencing GitHub issues. Highlights:
+
+- **Roadmap IDs (`F-01`, `S-07`) are the stable identifier.** They live in `context/foundation/roadmap.md` and never change.
+- **GitHub `#N` is secondary** — a clickable autolink, never a primary contract. Issues and PRs share one counter, so `#N` can't be predicted before creation.
+- Issue body format (dependency sections): `**F-01** auth-provider-scaffold (#8) — description`.
+- Parent tracker (#25) keeps bare `#N` first in checkboxes (`- [ ] #8 **F-01** …`) so GitHub auto-checks on close.
+- **Never predict `#N` before an issue exists.** Always look it up via `gh issue list`.
+- **Never delete an issue.** Edit, don't recreate — a recreated issue gets a new `#N` that breaks every prior reference.
+- Scope changes start in `roadmap.md`, not in issue bodies. Roadmap is canonical; issues are instances.
+
 <!-- BEGIN @przeprogramowani/10x-cli -->
 
 ## 10xDevs AI Toolkit - Module 2, Lesson 1
