@@ -190,3 +190,85 @@ Update the parent tracker (#25) to add the new checkbox under the right stream:
 ```
 
 Done. `S-15` is the stable name in every doc, conversation, and future reference; `#27` is just the convenient link.
+
+## Linear mirror — collected inputs for the mirroring process
+
+> Captured 2026-05-26 before first sync of the GitHub roadmap issues into the Linear workspace. This section is *inputs only* — concrete data the mirroring step will consume, plus the open decisions that must be locked in before we create anything in Linear. The conventions above (roadmap ID stable, `#N` secondary, never delete) all carry over; mirroring adds a third surface, not a new source of truth.
+
+### Source state — GitHub (`AdamReszka/10xdevs-certification-project`)
+
+Snapshot of what we will be mirroring.
+
+- **18 open issues** in scope: 17 roadmap children (`#8`–`#24`) + 1 parent tracker (`#25`). All `state: OPEN`, all assigned to `AdamReszka`, all on milestone `MVP`.
+- **Roadmap children:**
+
+  | GH # | Roadmap ID | Title | Kind | Status | Stream |
+  |------|------------|-------|------|--------|--------|
+  | #8   | F-01 | auth-provider-scaffold | foundation | ready | A |
+  | #9   | F-02 | data-schema-baseline | foundation | ready | A |
+  | #10  | F-03 | ui-component-foundation | foundation | ready | A |
+  | #11  | S-01 | account-auth-flow | slice | proposed | A |
+  | #12  | S-02 | setup-github-integration | slice | proposed | A |
+  | #13  | S-03 | setup-jira-integration | slice | proposed | A |
+  | #14  | S-04 | setup-team-roster-cadence | slice | proposed | A |
+  | #15  | S-05 | data-sync-engine | slice | proposed | A |
+  | #16  | S-06 | anomaly-detection-engine | slice | proposed | A |
+  | #17  | S-07 | dashboard-today ⭐ north-star | slice | proposed | A |
+  | #18  | S-08 | absence-calendar | slice | proposed | B |
+  | #19  | S-09 | demo-mode | slice | blocked | B |
+  | #20  | S-10 | dashboard-sprint-detail | slice | proposed | B |
+  | #21  | S-11 | daily-recap-email | slice | proposed | C |
+  | #22  | S-12 | recap-history | slice | proposed | C |
+  | #23  | S-13 | refinement-helper-ai | slice | proposed | D |
+  | #24  | S-14 | anomaly-settings-page | slice | proposed | B |
+  | #25  | —    | MVP Roadmap parent tracker | — | — | — |
+
+- **Labels in use** (10 distinct):
+  - kind: `roadmap`, `foundation`, `slice`, `north-star`
+  - status: `status:ready`, `status:proposed`, `status:blocked`
+  - stream: `stream:A`, `stream:B`, `stream:C`, `stream:D`
+- **Milestone:** `MVP` — *SprintFlow MVP: 3 foundations + 14 vertical slices toward north-star Dashboard Today (S-07)*. No due date.
+- **Body schema** (per child issue): a header note pointing back to `roadmap.md`, then `**Change ID:** …`, `**Status:** …`, `**Stream:** …`, `**Type:** …`, followed by `## Outcome` / `## PRD refs` / `## Prerequisites` / `## Parallel with` / `## Unlocks` / `## Unknowns` / `## Risk` / `## Next step`. Dependency sections use the convention `**F-01** auth-provider-scaffold (#8) — description`.
+- **Parent tracker (#25) body:** grouped checkbox list — `## ⭐ North star`, `## Foundations`, `## Stream A` / `B` / `C` / `D`, `## Open roadmap questions`, `## Hand-off`. Checkbox lines use the bare-`#N`-first form so GitHub auto-checks on close.
+
+### Target state — Linear workspace (live snapshot)
+
+| Field | Value |
+|-------|-------|
+| Team name | `SprintFlow 10xDevs Project` |
+| Team ID | `d6326beb-da27-49f2-a11f-55c53077ef8d` |
+| Projects | *none* (empty) |
+| Members | Adam Reszka (`ae4a0ffd-0293-42bc-ad7a-b98468abaf7c`) + Linear bot |
+| Existing labels (team) | `Feature`, `Bug`, `Improvement` — none of the GH roadmap labels exist |
+| Existing statuses | `Backlog`, `Todo`, `In Progress`, `In Review`, `Done`, `Canceled`, `Duplicate` |
+
+No issues, projects, milestones, or cycles exist yet in the Linear team — the mirror starts from empty state.
+
+### Proposed mapping (decisions to confirm before mirroring)
+
+The mirror needs explicit answers on each row below. Defaults reflect what fits the conventions above with the least new ceremony.
+
+| # | Mapping question | Proposed default | Rationale |
+|---|------------------|------------------|-----------|
+| 1 | Where does the GH milestone `MVP` land in Linear? | Create a Linear **Project** named `MVP` (description copied from the GH milestone) and attach every mirrored issue to it. | Linear projects are the closest match for a scoped MVP backlog; cycles imply time-boxed sprints we don't want yet. |
+| 2 | How does GH parent tracker (`#25`) land? | Create the project (row 1), put the tracker's grouped-checkbox content into the **project description** (or attach it as a Linear Document). Do NOT create a standalone "parent" Linear issue. | Linear projects already provide the grouping `#25` provides on GitHub; a duplicate parent issue would split the truth surface. |
+| 3 | How do the 10 GH labels land? | Create all 10 on the Linear team verbatim (`roadmap`, `foundation`, `slice`, `north-star`, `status:ready`, `status:proposed`, `status:blocked`, `stream:A`–`stream:D`). | Preserves filterability and parity with GitHub. `status:*` labels coexist with Linear's native status (row 4) — they record the *roadmap* status, not workflow state. |
+| 4 | Linear native status per issue | `status:ready` → `Todo`; `status:proposed` → `Backlog`; `status:blocked` → `Backlog`. | Linear has no `Blocked` status by default; the `status:blocked` label (row 3) carries that signal until we decide whether to create a custom status. |
+| 5 | Issue title format | Keep GH titles verbatim — `[F-01] change-id — Title`. | Roadmap ID stays the visible primary identifier in both surfaces (per the TL;DR rule above). Linear's auto-assigned identifier (e.g. `SPR-1`) becomes the third coordinate, alongside `F-01` and `#8`. |
+| 6 | Issue body content | Copy the GH body verbatim into the Linear description. Replace `#N` references with full GitHub issue URLs (`https://github.com/AdamReszka/10xdevs-certification-project/issues/N`) so they hyperlink from Linear. | Linear does not autolink bare `#N`. Full URLs work in both directions; we do NOT rewrite `#N` back into a future Linear ID — `**F-01** … (#8)` stays canonical per row 5. |
+| 7 | Cross-link back to GitHub | Add a one-line header at the top of each Linear issue: `> Mirrored from GitHub #N — <gh issue url>. Edit `roadmap.md`, not this description, for spec changes.` | Makes the GitHub issue the editable surface; Linear is a read-mostly mirror unless we explicitly say otherwise. |
+| 8 | Dependency edges between children (Prerequisites / Unlocks) | Leave them as **text-only** in the description for v1. Do not create Linear `relation: blocks` edges yet. | Text already exists in the body; encoding relations is a separate pass once the user confirms the mirror is correct. |
+| 9 | Assignee | Adam Reszka on all 17 children (matches GH). | Single-owner project; matches Linear's only human member. |
+| 10 | Priority | None / `0` for all 17 — except the north-star `S-07` (`#17`), which is set to `Urgent`. | The roadmap already encodes ordering; Linear priority only carries weight on the `S-07` north-star milestone. (Skip if you'd rather keep priority unset everywhere.) |
+| 11 | Creation order | (a) Create project (row 1). (b) Create the 10 labels (row 3). (c) Create issues in roadmap order F-01 → S-14. (d) Update project description (row 2) with the grouped checklist using the now-known Linear IDs. | Project + labels must exist before issues are created. The parent-tracker description is written last because it needs Linear IDs to link cleanly. |
+| 12 | What does NOT mirror | The `MVP Roadmap` tracker (`#25`) is not mirrored as a Linear issue (row 2). Closed/merged PRs are out of scope. Foundation docs (`prd.md`, `roadmap.md`, `infrastructure.md`) stay in the repo, not in Linear Documents. | Avoid duplicate sources of truth. |
+
+### Re-sync expectations after first mirror
+
+Once approved and run, the mirror is **one-shot**, not continuous. Follow-up rules:
+
+- GitHub stays the source of truth for issue body, status label, and the parent checklist (row 7 anchors this).
+- If an issue's spec changes, edit `roadmap.md` → edit the GH issue body → re-run a targeted mirror update on the matching Linear issue (look up by roadmap ID, not by Linear ID).
+- New roadmap items follow the existing "Creating a new issue" flow first; mirror to Linear afterwards.
+- Closing an issue on GitHub does NOT auto-close it in Linear (no webhook yet). Treat that as a manual second step until we add automation.
+- Never delete a Linear issue for the same reason we never delete a GH issue: it breaks every reference to that roadmap ID across the three surfaces.
