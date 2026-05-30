@@ -262,32 +262,32 @@ No automated framework this slice (deferred). Verification is:
 
 #### Automated
 
-- [x] 1.1 Dependencies install cleanly: `npm install`
-- [x] 1.2 Production build + type-check passes: `npm run build`
-- [x] 1.3 Lint passes: `npm run lint`
-- [x] 1.4 OpenNext bundle builds: `npm run build:cf`
+- [x] 1.1 Dependencies install cleanly: `npm install` — 11354aa
+- [x] 1.2 Production build + type-check passes: `npm run build` — 11354aa
+- [x] 1.3 Lint passes: `npm run lint` — 11354aa
+- [x] 1.4 OpenNext bundle builds: `npm run build:cf` — 11354aa
 
 #### Manual
 
-- [x] 1.5 Deployed to Workers: `npm run deploy` succeeds
-- [x] 1.6 `/api/auth-smoke` returns `ok: true` with small `ms` (no 500/timeout)
-- [x] 1.7 `wrangler tail --status error` shows no `exceededCpu` / no-response / `@noble` fallback
+- [x] 1.5 Deployed to Workers: `npm run deploy` succeeds — 11354aa
+- [x] 1.6 `/api/auth-smoke` returns `ok: true` with small `ms` (no 500/timeout) — 11354aa
+- [x] 1.7 `wrangler tail --status error` shows no `exceededCpu` / no-response / `@noble` fallback — 11354aa
 - [ ] 1.8 (Optional de-risk) trivial `proxy.ts` redirect fires on deployed Worker
-- [x] 1.9 Smoke route deleted after gate passes
+- [x] 1.9 Smoke route deleted after gate passes — 11354aa
 
 ### Phase 2: Auth Schema + Migration
 
 #### Automated
 
-- [ ] 2.1 Schema generates: `npx @better-auth/cli generate`
-- [ ] 2.2 Migration generates: `npx drizzle-kit generate`
-- [ ] 2.3 Build + type-check passes: `npm run build`
-- [ ] 2.4 Lint passes: `npm run lint`
+- [x] 2.1 Schema generates: `npx @better-auth/cli generate`
+- [x] 2.2 Migration generates: `npx drizzle-kit generate`
+- [x] 2.3 Build + type-check passes: `npm run build`
+- [x] 2.4 Lint passes: `npm run lint`
 
 #### Manual
 
-- [ ] 2.5 Migration applies; four auth tables exist in Supabase
-- [ ] 2.6 `src/db/schema.ts` exports user/session/account/verification (no placeholder)
+- [x] 2.5 Migration applies; four auth tables exist in Supabase
+- [x] 2.6 `src/db/schema.ts` exports user/session/account/verification (no placeholder)
 
 ### Phase 3: Handler + Proxy Middleware + End-to-End Verify
 
