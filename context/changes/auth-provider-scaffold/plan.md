@@ -262,18 +262,18 @@ No automated framework this slice (deferred). Verification is:
 
 #### Automated
 
-- [ ] 1.1 Dependencies install cleanly: `npm install`
-- [ ] 1.2 Production build + type-check passes: `npm run build`
-- [ ] 1.3 Lint passes: `npm run lint`
-- [ ] 1.4 OpenNext bundle builds: `npm run build:cf`
+- [x] 1.1 Dependencies install cleanly: `npm install`
+- [x] 1.2 Production build + type-check passes: `npm run build`
+- [x] 1.3 Lint passes: `npm run lint`
+- [x] 1.4 OpenNext bundle builds: `npm run build:cf`
 
 #### Manual
 
-- [ ] 1.5 Deployed to Workers: `npm run deploy` succeeds
-- [ ] 1.6 `/api/auth-smoke` returns `ok: true` with small `ms` (no 500/timeout)
-- [ ] 1.7 `wrangler tail --status error` shows no `exceededCpu` / no-response / `@noble` fallback
+- [x] 1.5 Deployed to Workers: `npm run deploy` succeeds
+- [x] 1.6 `/api/auth-smoke` returns `ok: true` with small `ms` (no 500/timeout)
+- [x] 1.7 `wrangler tail --status error` shows no `exceededCpu` / no-response / `@noble` fallback
 - [ ] 1.8 (Optional de-risk) trivial `proxy.ts` redirect fires on deployed Worker
-- [ ] 1.9 Smoke route deleted after gate passes
+- [x] 1.9 Smoke route deleted after gate passes
 
 ### Phase 2: Auth Schema + Migration
 
