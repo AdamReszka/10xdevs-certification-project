@@ -293,15 +293,15 @@ No automated framework this slice (deferred). Verification is:
 
 #### Automated
 
-- [x] 3.1 Build + type-check passes: `npm run build`
-- [x] 3.2 Lint passes: `npm run lint`
-- [x] 3.3 OpenNext bundle builds within budget: `npm run build:cf`
-- [x] 3.4 `npx wrangler secret list` shows `BETTER_AUTH_SECRET`
+- [x] 3.1 Build + type-check passes: `npm run build` — c020a63
+- [x] 3.2 Lint passes: `npm run lint` — c020a63
+- [x] 3.3 OpenNext bundle builds within budget: `npm run build:cf` — c020a63
+- [x] 3.4 `npx wrangler secret list` shows `BETTER_AUTH_SECRET` — c020a63
 
 #### Manual
 
-- [x] 3.5 `npm run deploy` succeeds
-- [x] 3.6 Sign-up creates user + session (no exceededCpu/timeout)
-- [x] 3.7 get-session returns session; sign-out clears it
-- [x] 3.8 Gated path with no session redirects to `/login`; allowlist loads unauthenticated
-- [x] 3.9 `wrangler tail --status error` clean; no secret leaks in logs/responses
+- [x] 3.5 `npm run deploy` succeeds — c020a63
+- [x] 3.6 Sign-up creates user + session (no exceededCpu/timeout) — c020a63
+- [x] 3.7 get-session returns session; sign-out clears it — c020a63
+- [x] 3.8 Gated path with no session redirects to `/login`; allowlist loads unauthenticated — c020a63
+- [x] 3.9 `wrangler tail --status error` clean; no secret leaks in logs/responses — c020a63
