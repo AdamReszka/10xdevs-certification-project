@@ -279,29 +279,29 @@ No automated framework this slice (deferred). Verification is:
 
 #### Automated
 
-- [x] 2.1 Schema generates: `npx @better-auth/cli generate`
-- [x] 2.2 Migration generates: `npx drizzle-kit generate`
-- [x] 2.3 Build + type-check passes: `npm run build`
-- [x] 2.4 Lint passes: `npm run lint`
+- [x] 2.1 Schema generates: `npx @better-auth/cli generate` — 53c62cc
+- [x] 2.2 Migration generates: `npx drizzle-kit generate` — 53c62cc
+- [x] 2.3 Build + type-check passes: `npm run build` — 53c62cc
+- [x] 2.4 Lint passes: `npm run lint` — 53c62cc
 
 #### Manual
 
-- [x] 2.5 Migration applies; four auth tables exist in Supabase
-- [x] 2.6 `src/db/schema.ts` exports user/session/account/verification (no placeholder)
+- [x] 2.5 Migration applies; four auth tables exist in Supabase — 53c62cc
+- [x] 2.6 `src/db/schema.ts` exports user/session/account/verification (no placeholder) — 53c62cc
 
 ### Phase 3: Handler + Proxy Middleware + End-to-End Verify
 
 #### Automated
 
-- [ ] 3.1 Build + type-check passes: `npm run build`
-- [ ] 3.2 Lint passes: `npm run lint`
-- [ ] 3.3 OpenNext bundle builds within budget: `npm run build:cf`
-- [ ] 3.4 `npx wrangler secret list` shows `BETTER_AUTH_SECRET`
+- [x] 3.1 Build + type-check passes: `npm run build`
+- [x] 3.2 Lint passes: `npm run lint`
+- [x] 3.3 OpenNext bundle builds within budget: `npm run build:cf`
+- [x] 3.4 `npx wrangler secret list` shows `BETTER_AUTH_SECRET`
 
 #### Manual
 
-- [ ] 3.5 `npm run deploy` succeeds
-- [ ] 3.6 Sign-up creates user + session (no exceededCpu/timeout)
-- [ ] 3.7 get-session returns session; sign-out clears it
-- [ ] 3.8 Gated path with no session redirects to `/login`; allowlist loads unauthenticated
-- [ ] 3.9 `wrangler tail --status error` clean; no secret leaks in logs/responses
+- [x] 3.5 `npm run deploy` succeeds
+- [x] 3.6 Sign-up creates user + session (no exceededCpu/timeout)
+- [x] 3.7 get-session returns session; sign-out clears it
+- [x] 3.8 Gated path with no session redirects to `/login`; allowlist loads unauthenticated
+- [x] 3.9 `wrangler tail --status error` clean; no secret leaks in logs/responses

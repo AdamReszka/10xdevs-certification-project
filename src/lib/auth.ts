@@ -56,3 +56,30 @@ export function createAuth(env?: AuthEnv) {
  * Worker request paths — use `createAuth(env)` there.
  */
 export const auth = createAuth();
+
+/**
+ * Authoritative session guard for gated server components/layouts (consumed by
+ * S-01's gated layout). Does a full DB-backed validation via
+ * `auth.api.getSession` — the real security boundary behind the optimistic
+ * cookie check in `proxy.ts` (defense-in-depth; CVE-2025-29927). Redirects to
+ * `/login` when there is no valid session.
+ *
+ * Request-only modules are imported lazily so the static `auth` export above
+ * stays safe to import from the Node build / schema-gen CLI.
+ */
+export async function requireSession() {
+  const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+  const { headers } = await import("next/headers");
+  const { redirect } = await import("next/navigation");
+
+  const { env } = getCloudflareContext();
+  const session = await createAuth(env).api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session) {
+    redirect("/login");
+  }
+
+  return session;
+}

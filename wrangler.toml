@@ -14,3 +14,8 @@ id = "86417a117a96464e947d5005e56f2a21"
 [vars]
 NEXT_PUBLIC_SUPABASE_URL = "https://uzqwuikgbbkpnemcnlwo.supabase.co"
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lwIhY8exodoHZM-0SjRQEg_6XHX3It-"
+# NOTE: BETTER_AUTH_URL and BETTER_AUTH_SECRET are Workers *secrets* (wrangler
+# secret put), NOT [vars]. Plain [vars] entries did not surface in
+# getCloudflareContext().env on this OpenNext version (resolved to null at
+# runtime), whereas secrets do — so baseURL/trustedOrigins is delivered as a
+# secret to avoid the localhost-baseURL CSRF failure. Never put secret values here.
