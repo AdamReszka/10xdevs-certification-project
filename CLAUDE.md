@@ -18,7 +18,8 @@ npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 
 - **Next.js 16.2.6 App Router** — use server components by default; do not use Pages Router
 - **TypeScript 5 strict mode** — path alias `@/*` → `./src/*`
-- **Tailwind CSS 4** + PostCSS (no UI component library yet)
+- **Tailwind CSS 4** + **shadcn/ui** (new-york style, neutral base, OKLCH tokens) — all UI must be built with shadcn/ui components; use the `@shadcn` MCP server to look up available components before implementing any UI surface; add components with `npx shadcn add <name>`
+- **Component architecture: atomic design** — `src/components/ui/` (shadcn-generated primitives), `atoms/` (custom stateless primitives), `molecules/` (composite widgets), `organisms/{anomaly,dashboard,auth,setup}/` (feature sections), `templates/` (page-level shells), `providers/` (React context wrappers)
 - **Deployment target: Cloudflare Workers** — do not suggest Vercel-specific APIs or config; adapter is `@opennextjs/cloudflare` (not the deprecated `@cloudflare/next-on-pages`)
 - No test framework installed yet — add one before implementing business logic
 - No CI workflows yet (`.github/workflows/` is empty)
@@ -54,47 +55,52 @@ Issue/PR work follows the hybrid convention in `context/foundation/task-tracking
 
 <!-- BEGIN @przeprogramowani/10x-cli -->
 
-## 10xDevs AI Toolkit - Module 2, Lesson 1
+## 10xDevs AI Toolkit - Module 2, Lesson 4
 
-Move from sprint-zero setup to project orchestration with the **roadmap chain**:
+Prepare for a harder implementation stream with the **research-backed planning chain**:
 
 ```
-(Module 1 foundation docs) -> /10x-roadmap -> backlog-ready roadmap items
+internal research (/10x-research) + external research (exa.ai, Context7) -> /10x-plan -> /10x-implement -> success
 ```
 
-`/10x-roadmap` is the lesson focus. `/10x-new` is intentionally introduced in Module 2, Lesson 2, when a selected roadmap item becomes an implementation change folder.
+The lesson focus is distinguishing internal from external research and using evidence to back planning decisions.
 
 ### Task Router - Where to start
 
 | Skill | Use it when |
 | --- | --- |
-| **Roadmap (lesson focus)** | |
-| `/10x-roadmap` | You have `context/foundation/prd.md` and a scaffolded project baseline, and you need a vertical-first MVP roadmap. The skill reads the PRD, inspects the code baseline, uses available foundation docs such as `tech-stack.md`, `infrastructure.md`, and `deploy-plan.md`, then writes `context/foundation/roadmap.md`. Use it BEFORE creating per-change folders or implementation plans. |
-| **Re-run upstream if needed** | |
-| `/10x-shape` / `/10x-prd` / `/10x-tech-stack-selector` / `/10x-bootstrapper` / `/10x-agents-md` / `/10x-infra-research` | Bundled from Module 1 so foundation contracts can be fixed before roadmap sequencing. If roadmap generation exposes a PRD gap, repair the PRD before pretending the backlog is ready. |
+| **Internal research (lesson focus)** | |
+| `/10x-research <change-id>` | You need evidence from the existing codebase — patterns, conventions, integration points, or existing implementations. Runs parallel sub-agents over the repo and writes structured findings to `research.md`. |
+| **External research (lesson focus)** | |
+| exa.ai | You need AI-native web search for library comparisons, best practices, or ecosystem context that the codebase cannot answer. |
+| Context7 (`resolve-library-id` → `get-library-docs`) | You need live, current documentation for a specific library or framework. Resolves a library ID first, then fetches relevant doc pages. |
+| **Framing spare wheel** | |
+| `/10x-frame <change-id>` | The plan won't converge, the plan doesn't deliver expected results, or persistent drift keeps breaking the implementation. Use as an escape hatch on a separate problem (demonstrated on Space Explorers example), not as pre-research ritual. |
+| **Planning and execution** | |
+| `/10x-plan <change-id>` / `/10x-implement <change-id> phase <n>` | Use the same planning and execution chain from Lesson 2, now with upstream research evidence feeding the plan. |
 
-### How the chain hands off
+### Research discipline
 
-- `/10x-roadmap` bridges product and implementation. It does not choose frameworks, design schemas, or write a per-change implementation plan.
-- The output is `context/foundation/roadmap.md`: ordered milestones, vertical slices, bounded foundations, dependencies, unknowns, risk, and backlog handoff fields.
-- Roadmap items should receive stable human-readable identifiers in backlog tools. The actual `context/changes/<change-id>/` folder is created in Lesson 2 with `/10x-new`.
+- Internal research (`/10x-research`) answers "what does our codebase already do?" — patterns, schemas, conventions, integration points.
+- External research (exa.ai, Context7) answers "what should we do?" — library capabilities, API docs, ecosystem best practices.
+- Combine both as evidence-backed input to `/10x-plan`. A plan without research evidence on a non-trivial stream is a guess.
+- Agent-friendly docs (`llms.txt`, markdown-for-agents, `/md` endpoints) are a quality signal for library selection — libraries that publish agent-readable docs integrate faster.
 
-### Roadmap boundaries
+### `/10x-frame` as spare wheel
 
-- Default to vertical slices: user-visible outcomes that cross UI, data, business logic, and integrations.
-- Horizontal work is allowed only as a bounded enabler that names the downstream vertical milestone it unlocks.
-- Avoid orphan horizontal work such as "build the whole database", "build all API endpoints", or "design the whole UI" before the first user-visible flow.
-- Roadmap is not a calendar estimate. Do not invent dates, story points, or sprint velocity unless the user explicitly asks for a separate planning artifact.
+Three triggers for reaching for `/10x-frame`:
+1. The plan won't converge — research keeps opening more questions instead of narrowing to a contract.
+2. The plan doesn't deliver — implementation repeatedly fails to meet success criteria.
+3. Persistent drift — the implementation keeps diverging from the plan in ways that suggest the problem was mis-framed.
 
-### Foundation paths used by this lesson
+Demonstrated on a Space Explorers example, not the SRS path. It is an escape hatch, not a mandatory step.
 
-- `context/foundation/prd.md` - input
-- `context/foundation/tech-stack.md` - optional input
-- `context/foundation/infrastructure.md` - optional input
-- `context/deployment/deploy-plan.md` - optional input
-- `context/foundation/roadmap.md` - output
+### Paths used by this lesson
+
+- `context/changes/<change-id>/research.md` - internal research output
+- `context/changes/<change-id>/frame.md` - framing output when needed
+- `context/changes/<change-id>/plan.md` - evidence-backed implementation contract
 - `context/foundation/lessons.md` - recurring rules and pitfalls
-- `docs/reference/contract-surfaces.md` - load-bearing names registry
 
 Skills must not write to `context/archive/`. Archived changes are immutable; if a resolved target path starts with `context/archive/`, abort with: "This change is archived. Open a new change with `/10x-new` instead."
 
