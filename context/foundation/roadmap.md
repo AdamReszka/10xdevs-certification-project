@@ -63,7 +63,7 @@ Navigation aid — groups items that share a Prerequisites chain. Canonical orde
 What's already in place in the codebase as of 2026-05-26 (auto-researched + user-confirmed).
 Foundations below assume these are present and do NOT re-scaffold them.
 
-- **Frontend:** present — Next.js 16.2.6 App Router + TypeScript + Tailwind CSS 4; `src/app/page.tsx`; no UI component library yet (shadcn/ui planned → F-03)
+- **Frontend:** present — Next.js 16.2.6 App Router + TypeScript + Tailwind CSS 4; `src/app/page.tsx`; shadcn/ui wired (`components.json` present, `globals.css` with OKLCH theme tokens, `src/lib/utils.ts` with `cn`); atomic design folder tree scaffolded (`ui/`, `atoms/`, `molecules/`, `organisms/{anomaly,dashboard,auth,setup}/`, `templates/`, `providers/`); no shadcn components added yet → F-03
 - **Backend / API:** absent — no `src/app/api/` directory; only `src/lib/db.ts` (DB connection helper)
 - **Data:** partial — `drizzle-orm` + `drizzle-kit` + `pg` installed; `drizzle.config.ts` present; `src/db/schema.ts` is a placeholder comment; one Supabase migration file; no seeded data
 - **Auth:** absent — no next-auth / better-auth / `middleware.ts`
@@ -114,8 +114,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Parallel with:** F-01, F-02
 - **Blockers:** —
 - **Unknowns:**
-  - shadcn/ui + Tailwind CSS 4 compatibility — shadcn/ui was designed for Tailwind v3; v4 uses a new CSS-based config format. Owner: TBD. Block: no (the shadcn `canary` CLI targets Tailwind 4; or manually wire components; resolve at `/10x-plan` time).
-- **Risk:** If the shadcn/ui integration requires a non-trivial Tailwind 4 shim, every downstream UI slice is affected; verify the integration works end-to-end (install → render one component → no style breakage) before marking this foundation done.
+  - ~~shadcn/ui + Tailwind CSS 4 compatibility~~ — **resolved**: `components.json` written, `shadcn/tailwind.css` imported, OKLCH theme tokens in `globals.css`, `src/lib/utils.ts` present, atomic design folder tree scaffolded (`ui/`, `atoms/`, `molecules/`, `organisms/{anomaly,dashboard,auth,setup}/`, `templates/`, `providers/`), `npm run build` passes. No Tailwind shim required; `shadcn/tailwind.css` from the `shadcn` package (v4.8.3 devDep) handles the v4 integration natively.
+- **Risk:** Integration wired but no component rendered yet — add one shadcn/ui component (e.g. Button) to a page and verify no style regression before marking F-03 done.
 - **Status:** ready
 
 ---
