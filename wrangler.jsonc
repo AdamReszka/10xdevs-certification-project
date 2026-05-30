@@ -2,6 +2,8 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "10xdevs-certification-project",
 	"main": ".open-next/worker.js",
+	// nodejs_compat is required for Better Auth's native node:crypto scrypt path
+	// (F-01). compatibility_date must stay 2025+ for the fully-native crypto build.
 	"compatibility_date": "2026-05-23",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"assets": {
@@ -13,5 +15,13 @@
 			"binding": "HYPERDRIVE",
 			"id": "86417a117a96464e947d5005e56f2a21"
 		}
-	]
+	],
+	// Public, client-safe Supabase config. NOTE: BETTER_AUTH_SECRET and
+	// BETTER_AUTH_URL are Workers *secrets* (wrangler secret put), NOT vars —
+	// plain vars did not surface in getCloudflareContext().env on this OpenNext
+	// version (resolved to null), whereas secrets do. Never put secret values here.
+	"vars": {
+		"NEXT_PUBLIC_SUPABASE_URL": "https://uzqwuikgbbkpnemcnlwo.supabase.co",
+		"NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY": "sb_publishable_lwIhY8exodoHZM-0SjRQEg_6XHX3It-"
+	}
 }

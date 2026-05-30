@@ -27,6 +27,17 @@ export function createAuth(env?: AuthEnv) {
   const secret = env?.BETTER_AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET;
   const baseURL = env?.BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL;
 
+  // Fail loudly at runtime (env present) on a missing secret — without it Better
+  // Auth signs sessions with an ephemeral key, silently breaking session
+  // validation across invocations. The static schema-gen export (no env) is
+  // exempt: the CLI doesn't need a secret.
+  if (env && !secret) {
+    throw new Error(
+      "BETTER_AUTH_SECRET is not set — set it as a Workers secret " +
+        "(wrangler secret put BETTER_AUTH_SECRET).",
+    );
+  }
+
   return betterAuth({
     appName: "SprintFlow",
     secret,
@@ -73,9 +84,20 @@ export async function requireSession() {
   const { redirect } = await import("next/navigation");
 
   const { env } = getCloudflareContext();
-  const session = await createAuth(env).api.getSession({
-    headers: await headers(),
-  });
+
+  let session;
+  try {
+    session = await createAuth(env).api.getSession({
+      headers: await headers(),
+    });
+  } catch (error) {
+    // Fail closed: a DB/Hyperdrive blip during validation must not surface an
+    // error page on a gated route — treat it as "no valid session" and send the
+    // user to /login (PRD guardrail: never a white screen on API failure). The
+    // redirect() throw (NEXT_REDIRECT) is intentionally outside this try.
+    console.error("[auth] requireSession: getSession failed", error);
+    redirect("/login");
+  }
 
   if (!session) {
     redirect("/login");
