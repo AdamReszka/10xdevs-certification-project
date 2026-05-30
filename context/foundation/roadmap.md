@@ -29,7 +29,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 
 | ID   | Change ID                 | Outcome (user can … / foundation)                                                            | Prerequisites      | PRD refs                                        | Status   |
 |------|---------------------------|----------------------------------------------------------------------------------------------|--------------------|-------------------------------------------------|----------|
-| F-01 | auth-provider-scaffold    | (foundation) auth scaffold landed; session middleware; gated routes redirect to /login       | —                  | FR-001, Access Control                          | ready    |
+| F-01 | auth-provider-scaffold    | (foundation) auth scaffold landed; session middleware; gated routes redirect to /login       | —                  | FR-001, Access Control                          | done     |
 | F-02 | data-schema-baseline      | (foundation) Drizzle schema + Supabase migration for all product entities                    | —                  | FR-002–FR-007, FR-009–FR-013, FR-018–FR-020     | ready    |
 | F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | ready    |
 | S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | proposed |
@@ -84,7 +84,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - Auth library choice (NextAuth vs Better Auth) — Owner: user. Block: no (either works; decide at `/10x-plan` time — Better Auth tends to be simpler on Cloudflare Workers).
 - **Risk:** Auth library crypto APIs may not be fully covered by Workers `nodejs_compat` flag (flagged in `context/foundation/infrastructure.md`); prototype session create → validate → invalidate cycle in a Workers dev environment before building all gated routes to avoid discovering the incompatibility after all downstream slices are built.
-- **Status:** ready
+- **Status:** done
 
 ---
 
@@ -334,7 +334,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 | Roadmap ID | Change ID                 | Suggested issue title                                                  | Ready for `/10x-plan` | Notes |
 |------------|---------------------------|------------------------------------------------------------------------|------------------------|-------|
-| F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | yes                    | Run `/10x-plan auth-provider-scaffold` |
+| F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | done                   | ✅ Implemented & reviewed — PR #27 |
 | F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | yes                    | Run `/10x-plan data-schema-baseline` |
 | F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | yes                    | Run `/10x-plan ui-component-foundation` |
 | S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | no                     | Awaits F-01, F-02, F-03 |
