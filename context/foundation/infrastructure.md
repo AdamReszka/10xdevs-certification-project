@@ -9,14 +9,33 @@ tech_stack:
   framework: Next.js 16.2.6 (App Router)
   runtime: Node.js (Workers nodejs_compat)
   adapter: "@opennextjs/cloudflare"
-  database: PostgreSQL via Neon (HTTP/serverless driver required)
+  database: PostgreSQL via Supabase over Cloudflare Hyperdrive (node-postgres TCP; no HTTP driver)
 ---
+
+> **Correction (F-02, 2026-05-31).** This research (2026-05-23) treated an
+> HTTP-only Postgres driver (`@neondatabase/serverless` / `drizzle-orm/neon-http`)
+> as a hard prerequisite, on the premise that Workers cannot hold persistent TCP
+> connections. That premise was superseded: the project uses **Cloudflare
+> Hyperdrive**, which makes the standard `pg` TCP driver Workers-safe. The shipped
+> driver is `drizzle-orm/node-postgres` over the `HYPERDRIVE` binding
+> (`src/lib/db.ts`), and `@neondatabase/serverless` is **not installed**. Wherever
+> the sections below call the HTTP/Neon driver "required," read it as **not
+> required** — Hyperdrive is the load-bearing decision. The database backend is
+> **Supabase** (not Neon).
+>
+> **Cross-account isolation rationale.** The app reaches Postgres **only** via the
+> Hyperdrive direct connection — never via Supabase's PostgREST Data API. The
+> product tables carry the Supabase baseline `anon` grants and no RLS, so isolation
+> depends on the **Data API (PostgREST) being disabled** for the project (the
+> browser-bundled publishable key would otherwise expose every table cross-account).
+> Verified disabled in F-02 (Phase 4); enabling RLS + revoking `anon`/`authenticated`
+> is the phase-2 defense-in-depth fallback if the Data API is ever turned on.
 
 ## Recommendation
 
 **Deploy on Cloudflare Workers.**
 
-Cloudflare Workers is the highest-scoring platform across all five agent-friendly criteria, costs $5/month at MVP scale (10M requests/month included), and supports the 15-minute background sync requirement via native Cron Triggers. The `@opennextjs/cloudflare` adapter (GA) targets Workers directly, replacing the deprecated `@cloudflare/next-on-pages` that `CLAUDE.md` currently references — updating that reference is the first action item. Two hard prerequisites before first deploy: (1) verify the Next.js 16.2.0 crash (opennextjs-cloudflare issue #1157) is resolved in the installed adapter version, and (2) replace the standard pg/Drizzle TCP client with Neon's HTTP serverless driver, which is required by the Workers request-scoped I/O model.
+Cloudflare Workers is the highest-scoring platform across all five agent-friendly criteria, costs $5/month at MVP scale (10M requests/month included), and supports the 15-minute background sync requirement via native Cron Triggers. The `@opennextjs/cloudflare` adapter (GA) targets Workers directly, replacing the deprecated `@cloudflare/next-on-pages` that `CLAUDE.md` currently references — updating that reference is the first action item. Two hard prerequisites before first deploy: (1) verify the Next.js 16.2.0 crash (opennextjs-cloudflare issue #1157) is resolved in the installed adapter version, and (2) ~~replace the standard pg/Drizzle TCP client with Neon's HTTP serverless driver, which is required by the Workers request-scoped I/O model~~ **[SUPERSEDED — see Correction above: Cloudflare Hyperdrive makes the standard `pg`/`node-postgres` TCP client Workers-safe; no HTTP driver swap is needed].**
 
 ## Platform Comparison
 
@@ -50,7 +69,7 @@ Railway's persistent containers make node-cron straightforward — no serverless
 ### Devil's Advocate — Weaknesses
 
 1. **Adapter is deprecated and `CLAUDE.md` references the wrong package.** `@cloudflare/next-on-pages` is deprecated as of late 2025. The current adapter is `@opennextjs/cloudflare`. A known crash on Next.js 16.2.0 (opennextjs-cloudflare issue #1157) must be verified fixed for 16.2.6 before the first deploy.
-2. **No persistent TCP connections to PostgreSQL.** The Workers request-scoped I/O model is incompatible with standard pg connection pools. The project must switch to `@neondatabase/serverless` (HTTP driver) — a constraint that shapes every database access pattern and isn't flagged by the Drizzle + Neon choice alone.
+2. **No persistent TCP connections to PostgreSQL.** ~~The Workers request-scoped I/O model is incompatible with standard pg connection pools. The project must switch to `@neondatabase/serverless` (HTTP driver)~~ **[SUPERSEDED — see Correction above: Cloudflare Hyperdrive pools and proxies TCP on Cloudflare's edge, so `drizzle-orm/node-postgres` (`pg`) over the `HYPERDRIVE` binding is Workers-safe. No HTTP driver is used.]**
 3. **Worker bundle size ceiling is a hard wall.** Paid plan: 10 MiB gzip compressed. A Next.js 16 app with App Router, Drizzle schema, Anthropic SDK, and auth middleware can approach this ceiling before the product is feature-complete. Free plan's 3 MiB limit makes testing on free effectively impossible.
 4. **CI build hangs in non-TTY environments.** The `@opennextjs/cloudflare` build step prompts interactively in GitHub Actions / Docker (issue #1198). Requires `--yes` flag or env var workaround not documented in the main Getting Started guide.
 5. **Subrequest limit (10,000 paid) shapes sync architecture.** Each outbound call to Jira, GitHub, Anthropic, and Resend counts toward the per-invocation ceiling. A sprint with 20+ PRs across 3 repos with paginated API calls consumes the budget faster than the feature count implies.
@@ -81,7 +100,7 @@ The team deployed SprintFlow on Cloudflare Workers, drawn by the $5/month cost a
 |---|---|---|---|---|
 | `@cloudflare/next-on-pages` is deprecated; CLAUDE.md references it | Research finding | High (confirmed) | High | Update CLAUDE.md and install `@opennextjs/cloudflare` before any deploy attempt |
 | Next.js 16.2.0 crash bug (issue #1157) in opennextjs-cloudflare | Research finding | Medium (may be fixed in 16.2.6) | High | Run `npx opennextjs-cloudflare build` locally against the project and verify clean output before CI setup |
-| HTTP-only PostgreSQL driver required (no persistent TCP) | Devil's advocate | High (confirmed architectural constraint) | High | Install `@neondatabase/serverless` and configure Drizzle with `drizzle-orm/neon-http` before writing any DB access code |
+| ~~HTTP-only PostgreSQL driver required (no persistent TCP)~~ **RESOLVED via Hyperdrive** | Devil's advocate | — | — | SUPERSEDED: Cloudflare Hyperdrive makes TCP `pg` Workers-safe. Shipped as `drizzle-orm/node-postgres` over the `HYPERDRIVE` binding (`src/lib/db.ts`); `@neondatabase/serverless` not installed. |
 | Auth library crypto incompatibility (NextAuth / Better Auth) | Unknown unknowns | Medium | High | Prototype the auth flow on Workers in a branch before building auth-gated routes; test session create/validate/invalidate cycle |
 | Worker bundle size ceiling (10 MiB gzip, paid) | Devil's advocate | Medium (grows with codebase) | Medium | Monitor bundle size in CI with `wrangler deploy --dry-run`; use dynamic imports for large SDK dependencies (Anthropic SDK) |
 | CI build hang in non-TTY (issue #1198) | Research finding | High (confirmed in GitHub Actions) | Medium | Add `--yes` flag to the build command or set the documented env var in the GitHub Actions workflow |
@@ -121,11 +140,11 @@ The following commands assume the project is on Next.js 16.2.6 and targets Cloud
    "build:cloudflare": "npx opennextjs-cloudflare build"
    ```
 
-4. **Switch the database client to Neon's HTTP serverless driver** (required before writing any DB code):
+4. **Database client — `node-postgres` (`pg`) over Cloudflare Hyperdrive** *(SUPERSEDES the original "switch to Neon HTTP driver" step; see Correction above):*
    ```bash
-   npm install @neondatabase/serverless
+   # already installed: pg + drizzle-orm/node-postgres; no @neondatabase/serverless
    ```
-   Configure Drizzle with `drizzle-orm/neon-http` and `neon()` from `@neondatabase/serverless` instead of a standard TCP pool.
+   Drizzle is configured with `drizzle-orm/node-postgres` and a `pg` `Pool`, reading the connection string from the `HYPERDRIVE` binding (`src/lib/db.ts`). Hyperdrive pools/proxies the TCP connection at Cloudflare's edge, so no HTTP driver is needed.
 
 5. **Verify the build locally and deploy:**
    ```bash

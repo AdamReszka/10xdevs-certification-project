@@ -349,26 +349,26 @@ High-write correlation tables (`githubCommit`, `githubPullRequest`, `githubRevie
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `npx tsc --noEmit`
-- [x] 3.2 Linting passes: `npm run lint`
+- [x] 3.1 Type checking passes: `npx tsc --noEmit` — eebabf3
+- [x] 3.2 Linting passes: `npm run lint` — eebabf3
 
 #### Manual
 
-- [x] 3.3 All 18 tables present; every enum used; `DEFAULT_THRESHOLDS` covers all 8 anomaly types and type-checks
+- [x] 3.3 All 18 tables present; every enum used; `DEFAULT_THRESHOLDS` covers all 8 anomaly types and type-checks — eebabf3
 
 ### Phase 4: Migration & Doc Cleanup
 
 #### Automated
 
-- [ ] 4.1 Migration generates: `npm run db:generate` (new `0001_*` appears)
-- [ ] 4.2 Migration applies: `npm run db:migrate` reports success
-- [ ] 4.3 Type checking passes: `npx tsc --noEmit`
-- [ ] 4.4 Linting passes: `npm run lint`
-- [ ] 4.5 Anon Data API blocked: `curl` to `/rest/v1/github_credential` with publishable key returns no rows
+- [x] 4.1 Migration generates: `npm run db:generate` (new `0001_*` appears)
+- [x] 4.2 Migration applies: `npm run db:migrate` reports success
+- [x] 4.3 Type checking passes: `npx tsc --noEmit`
+- [x] 4.4 Linting passes: `npm run lint`
+- [x] 4.5 Anon Data API blocked: `curl` to `/rest/v1/github_credential` with publishable key returns no rows
 
 #### Manual
 
-- [ ] 4.6 18 tables + enums exist in Supabase; 4 Better Auth tables unchanged
-- [ ] 4.7 The three docs describe Hyperdrive-TCP (no neon-http mandate)
-- [ ] 4.8 `0000_*` migration untouched; only `0001_*` added
-- [ ] 4.9 Supabase Data API confirmed disabled; isolation rationale recorded in `infrastructure.md`
+- [x] 4.6 18 tables + enums exist in Supabase; 4 Better Auth tables unchanged
+- [x] 4.7 The three docs describe Hyperdrive-TCP (no neon-http mandate)
+- [x] 4.8 `0000_*` migration untouched; only `0001_*` added
+- [x] 4.9 Supabase Data API confirmed disabled; isolation rationale recorded in `infrastructure.md`

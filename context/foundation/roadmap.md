@@ -90,7 +90,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### F-02: Data schema baseline
 
-- **Outcome:** (foundation) Drizzle schema for all product entities landed with a Supabase migration applied; DB connection helper updated for Workers HTTP mode; `src/db/schema.ts` no longer a placeholder.
+- **Outcome:** (foundation) Drizzle schema for all product entities landed with a Supabase migration applied; DB connection helper uses `node-postgres` (`pg`) over Cloudflare Hyperdrive (Workers-safe TCP — no HTTP-mode driver); `src/db/schema.ts` no longer a placeholder.
 - **Change ID:** data-schema-baseline
 - **PRD refs:** FR-002, FR-003, FR-004, FR-005, FR-006, FR-007, FR-009, FR-010, FR-011, FR-012, FR-013, FR-018, FR-019, FR-020
 - **Unlocks:** S-01 (user table), S-02 (GitHub credential + repo config tables), S-03 (Jira credential + project + status-mapping tables), S-04 (team member + sprint cadence tables), S-05 (sync state + GitHub/Jira data tables), S-06 (anomaly records table), S-08 (absence records table), S-11 (daily recap records table), S-13 (refinement session table)
@@ -99,7 +99,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:**
   - Encrypted storage design for GitHub PAT + Jira API token at rest — Owner: TBD. Block: no (AES-256 column encryption or application-layer encryption are standard patterns; decide at `/10x-plan` time; must be resolved before S-02 / S-03 are implemented).
-- **Risk:** The existing `drizzle.config.ts` targets Supabase via TCP — Workers require HTTP mode; confirm the connection helper in `src/lib/db.ts` is updated to the HTTP/pooler driver before writing any DB access code, otherwise schema migrations succeed locally but the app crashes in Workers production (documented risk in `infrastructure.md`).
+- **Risk:** ~~The existing `drizzle.config.ts` targets Supabase via TCP — Workers require HTTP mode~~ **RESOLVED (F-02): the driver is already `drizzle-orm/node-postgres` (`pg`) over Cloudflare Hyperdrive in `src/lib/db.ts`, which makes TCP Workers-safe — there is no HTTP-mode migration to do and `@neondatabase/serverless` is not installed.** The only live caveat is keeping the `HYPERDRIVE` binding id valid; note that `drizzle-kit migrate` connects directly to Supabase (not via Hyperdrive), and the IPv6-only direct host requires the Supavisor pooler from IPv4 networks (see `.env.example`).
 - **Status:** ready
 
 ---
