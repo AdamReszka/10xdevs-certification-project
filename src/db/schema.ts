@@ -5,7 +5,11 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
+  bigint,
+  jsonb,
   index,
+  unique,
 } from "drizzle-orm/pg-core";
 
 /**
@@ -177,9 +181,240 @@ export const verification = pgTable(
   (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
-export const userRelations = relations(user, ({ many }) => ({
+// ============================================================================
+// F-02 product tables (Phase 2: STABLE config & entity tables)
+//
+// Every product table is account-scoped: `ownerId text NOT NULL → user.id
+// ON DELETE CASCADE` — the relational form of the PRD cross-account-isolation
+// guarantee. Intra-product FKs also cascade so a single account deletion (or a
+// parent-row deletion) leaves no orphans. PKs are app-generated `text` ids,
+// mirroring the Better Auth convention above.
+// ============================================================================
+
+// --- Credentials (one of each per account; encrypted token + non-secret meta) ---
+
+export const githubCredential = pgTable("github_credential", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  // AES-256-GCM envelope (see src/lib/crypto.ts). Never logged, never client-sent.
+  encryptedToken: text("encrypted_token").notNull(),
+  tokenLast4: text("token_last4"),
+  githubLogin: text("github_login"),
+  scopes: text("scopes"),
+  validatedAt: timestamp("validated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
+export const jiraCredential = pgTable("jira_credential", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  encryptedToken: text("encrypted_token").notNull(),
+  tokenLast4: text("token_last4"),
+  workspaceUrl: text("workspace_url").notNull(),
+  jiraEmail: text("jira_email").notNull(),
+  validatedAt: timestamp("validated_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at")
+    .defaultNow()
+    .$onUpdate(() => /* @__PURE__ */ new Date())
+    .notNull(),
+});
+
+// --- Monitoring config (which repos, which single Jira project, status map) ---
+
+export const monitoredRepo = pgTable(
+  "monitored_repo",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    credentialId: text("credential_id")
+      .notNull()
+      .references(() => githubCredential.id, { onDelete: "cascade" }),
+    // GitHub repo numeric id fits JS safe-int range → number mode (not BigInt).
+    githubRepoId: bigint("github_repo_id", { mode: "number" }).notNull(),
+    fullName: text("full_name").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+  },
+  (table) => [
+    unique("monitored_repo_owner_repo_uq").on(table.ownerId, table.githubRepoId),
+  ],
+);
+
+export const jiraProject = pgTable("jira_project", {
+  id: text("id").primaryKey(),
+  ownerId: text("owner_id")
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: "cascade" }),
+  credentialId: text("credential_id")
+    .notNull()
+    .references(() => jiraCredential.id, { onDelete: "cascade" }),
+  jiraProjectId: text("jira_project_id").notNull(),
+  projectKey: text("project_key").notNull(),
+  projectName: text("project_name"),
+  boardId: text("board_id"),
+});
+
+export const statusMapping = pgTable(
+  "status_mapping",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    jiraProjectId: text("jira_project_id")
+      .notNull()
+      .references(() => jiraProject.id, { onDelete: "cascade" }),
+    jiraStatusId: text("jira_status_id").notNull(),
+    jiraStatusName: text("jira_status_name").notNull(),
+    category: statusCategory("category").notNull(),
+  },
+  (table) => [
+    unique("status_mapping_project_status_uq").on(
+      table.jiraProjectId,
+      table.jiraStatusId,
+    ),
+  ],
+);
+
+// --- Roster, sprint, sync cursor, absences ---
+
+export const teamMember = pgTable(
+  "team_member",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    githubUsername: text("github_username"),
+    jiraAccountId: text("jira_account_id"),
+    role: text("role"),
+    spCapacity: integer("sp_capacity"),
+    technologyTrack: technologyTrack("technology_track"),
+    source: memberSource("source").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [index("team_member_ownerId_idx").on(table.ownerId)],
+);
+
+export const sprint = pgTable(
+  "sprint",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    jiraProjectId: text("jira_project_id")
+      .notNull()
+      .references(() => jiraProject.id, { onDelete: "cascade" }),
+    jiraSprintId: text("jira_sprint_id").notNull(),
+    name: text("name"),
+    state: sprintState("state"),
+    startDate: timestamp("start_date"),
+    // Load-bearing for S-12 retention purge (keyed to sprint boundaries).
+    endDate: timestamp("end_date"),
+    committedSp: integer("committed_sp"),
+    completedSp: integer("completed_sp"),
+    lengthDays: integer("length_days"),
+    startDay: text("start_day"),
+    workingDays: jsonb("working_days").$type<string[]>(),
+    cadenceOverridden: boolean("cadence_overridden").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [unique("sprint_owner_sprint_uq").on(table.ownerId, table.jiraSprintId)],
+);
+
+export const syncState = pgTable(
+  "sync_state",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    integration: integration("integration").notNull(),
+    lastSuccessfulSyncAt: timestamp("last_successful_sync_at"),
+    lastAttemptAt: timestamp("last_attempt_at"),
+    status: syncStatus("status"),
+    lastError: text("last_error"),
+    // Incremental Jira status-history delta cursor (FR-012).
+    jiraHistoryCursor: text("jira_history_cursor"),
+    freshnessWindowMinutes: integer("freshness_window_minutes")
+      .default(15)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    unique("sync_state_owner_integration_uq").on(
+      table.ownerId,
+      table.integration,
+    ),
+  ],
+);
+
+export const absence = pgTable(
+  "absence",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    teamMemberId: text("team_member_id")
+      .notNull()
+      .references(() => teamMember.id, { onDelete: "cascade" }),
+    sprintId: text("sprint_id").references(() => sprint.id, {
+      onDelete: "cascade",
+    }),
+    type: absenceType("type").notNull(),
+    startDate: timestamp("start_date").notNull(),
+    endDate: timestamp("end_date").notNull(),
+    isPlanned: boolean("is_planned"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("absence_member_window_idx").on(
+      table.teamMemberId,
+      table.startDate,
+      table.endDate,
+    ),
+  ],
+);
+
+export const userRelations = relations(user, ({ one, many }) => ({
   sessions: many(session),
   accounts: many(account),
+  githubCredential: one(githubCredential),
+  jiraCredential: one(jiraCredential),
+  jiraProject: one(jiraProject),
+  monitoredRepos: many(monitoredRepo),
+  teamMembers: many(teamMember),
+  sprints: many(sprint),
+  syncStates: many(syncState),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -195,3 +430,122 @@ export const accountRelations = relations(account, ({ one }) => ({
     references: [user.id],
   }),
 }));
+
+// --- F-02 product relations (Phase 2). Hub tables whose relations span both
+// phases (monitoredRepo, sprint, jiraProject) are single declarations here and
+// are EXTENDED IN PLACE in Phase 3 — never re-declared. ---
+
+export const githubCredentialRelations = relations(
+  githubCredential,
+  ({ one, many }) => ({
+    owner: one(user, {
+      fields: [githubCredential.ownerId],
+      references: [user.id],
+    }),
+    monitoredRepos: many(monitoredRepo),
+  }),
+);
+
+export const jiraCredentialRelations = relations(jiraCredential, ({ one }) => ({
+  owner: one(user, {
+    fields: [jiraCredential.ownerId],
+    references: [user.id],
+  }),
+  jiraProject: one(jiraProject),
+}));
+
+export const monitoredRepoRelations = relations(monitoredRepo, ({ one }) => ({
+  owner: one(user, {
+    fields: [monitoredRepo.ownerId],
+    references: [user.id],
+  }),
+  credential: one(githubCredential, {
+    fields: [monitoredRepo.credentialId],
+    references: [githubCredential.id],
+  }),
+  // commits + pullRequests added in Phase 3 (extend this block in place).
+}));
+
+export const jiraProjectRelations = relations(
+  jiraProject,
+  ({ one, many }) => ({
+    owner: one(user, {
+      fields: [jiraProject.ownerId],
+      references: [user.id],
+    }),
+    credential: one(jiraCredential, {
+      fields: [jiraProject.credentialId],
+      references: [jiraCredential.id],
+    }),
+    statusMappings: many(statusMapping),
+    sprints: many(sprint),
+    // jiraTickets added in Phase 3 (extend this block in place).
+  }),
+);
+
+export const statusMappingRelations = relations(statusMapping, ({ one }) => ({
+  jiraProject: one(jiraProject, {
+    fields: [statusMapping.jiraProjectId],
+    references: [jiraProject.id],
+  }),
+}));
+
+export const teamMemberRelations = relations(teamMember, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [teamMember.ownerId],
+    references: [user.id],
+  }),
+  absences: many(absence),
+}));
+
+export const sprintRelations = relations(sprint, ({ one, many }) => ({
+  owner: one(user, {
+    fields: [sprint.ownerId],
+    references: [user.id],
+  }),
+  jiraProject: one(jiraProject, {
+    fields: [sprint.jiraProjectId],
+    references: [jiraProject.id],
+  }),
+  absences: many(absence),
+  // tickets + anomalies + dailyRecaps added in Phase 3 (extend in place).
+}));
+
+export const syncStateRelations = relations(syncState, ({ one }) => ({
+  owner: one(user, {
+    fields: [syncState.ownerId],
+    references: [user.id],
+  }),
+}));
+
+export const absenceRelations = relations(absence, ({ one }) => ({
+  teamMember: one(teamMember, {
+    fields: [absence.teamMemberId],
+    references: [teamMember.id],
+  }),
+  sprint: one(sprint, {
+    fields: [absence.sprintId],
+    references: [sprint.id],
+  }),
+}));
+
+// --- Inferred types (Phase 2 tables) ---
+
+export type SelectGithubCredential = typeof githubCredential.$inferSelect;
+export type InsertGithubCredential = typeof githubCredential.$inferInsert;
+export type SelectJiraCredential = typeof jiraCredential.$inferSelect;
+export type InsertJiraCredential = typeof jiraCredential.$inferInsert;
+export type SelectMonitoredRepo = typeof monitoredRepo.$inferSelect;
+export type InsertMonitoredRepo = typeof monitoredRepo.$inferInsert;
+export type SelectJiraProject = typeof jiraProject.$inferSelect;
+export type InsertJiraProject = typeof jiraProject.$inferInsert;
+export type SelectStatusMapping = typeof statusMapping.$inferSelect;
+export type InsertStatusMapping = typeof statusMapping.$inferInsert;
+export type SelectTeamMember = typeof teamMember.$inferSelect;
+export type InsertTeamMember = typeof teamMember.$inferInsert;
+export type SelectSprint = typeof sprint.$inferSelect;
+export type InsertSprint = typeof sprint.$inferInsert;
+export type SelectSyncState = typeof syncState.$inferSelect;
+export type InsertSyncState = typeof syncState.$inferInsert;
+export type SelectAbsence = typeof absence.$inferSelect;
+export type InsertAbsence = typeof absence.$inferInsert;
