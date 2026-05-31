@@ -1,5 +1,109 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  pgEnum,
+  text,
+  timestamp,
+  boolean,
+  index,
+} from "drizzle-orm/pg-core";
+
+/**
+ * Central Postgres enums (F-02). Declared once via `pgEnum` so every table
+ * references the same DB-enforced type. Postgres enum names are snake_case;
+ * the exported TS identifiers are camelCase. Adding a value later is an additive
+ * `ALTER TYPE … ADD VALUE` migration (e.g. a phase-2 `BLOCKED` status category).
+ */
+
+// The 5 standard workflow categories every Jira status maps onto (FR-005).
+export const statusCategory = pgEnum("status_category", [
+  "TODO",
+  "IN_PROGRESS",
+  "CODE_REVIEW",
+  "TESTING",
+  "DONE",
+]);
+
+// The 8 detected anomaly types (FR-013).
+export const anomalyType = pgEnum("anomaly_type", [
+  "PR_REVIEW_STALLED",
+  "TICKET_STATUS_AGING",
+  "DEVELOPER_INACTIVE",
+  "TICKET_NO_COMMIT_LINK",
+  "SPRINT_AT_RISK",
+  "PR_TOO_BIG",
+  "SCOPE_CREEP",
+  "PR_TICKET_DESYNC",
+]);
+
+// Anomaly severity tier (FR-014; default per rule, user-overridable).
+export const severity = pgEnum("severity", ["HIGH", "MEDIUM", "LOW"]);
+
+// Team-member technology track (FR-006; mutable over time).
+export const technologyTrack = pgEnum("technology_track", [
+  "FRONTEND",
+  "BACKEND",
+  "MOBILE",
+  "QA",
+]);
+
+// Recorded absence kind (FR-010).
+export const absenceType = pgEnum("absence_type", [
+  "VACATION",
+  "SICKNESS",
+  "TRAINING",
+]);
+
+// Which third-party integration a row belongs to (sync state, credentials).
+export const integration = pgEnum("integration", ["GITHUB", "JIRA"]);
+
+// Outcome of the most recent sync attempt per integration (FR-011/012).
+export const syncStatus = pgEnum("sync_status", [
+  "OK",
+  "ERROR",
+  "RATE_LIMITED",
+]);
+
+// GitHub pull-request lifecycle state.
+export const prState = pgEnum("pr_state", ["OPEN", "CLOSED", "MERGED"]);
+
+// GitHub review verdict.
+export const reviewState = pgEnum("review_state", [
+  "APPROVED",
+  "CHANGES_REQUESTED",
+  "COMMENTED",
+]);
+
+// Jira sprint lifecycle state.
+export const sprintState = pgEnum("sprint_state", [
+  "ACTIVE",
+  "CLOSED",
+  "FUTURE",
+]);
+
+// Anomaly lifecycle (active vs resolved/cleared).
+export const anomalyStatus = pgEnum("anomaly_status", ["ACTIVE", "RESOLVED"]);
+
+// Daily-recap email send outcome (FR-018).
+export const recapSendStatus = pgEnum("recap_send_status", [
+  "PENDING",
+  "SENT",
+  "FAILED",
+]);
+
+// Refinement Helper input source (FR-020).
+export const refinementSourceType = pgEnum("refinement_source_type", [
+  "PASTED_TEXT",
+  "JIRA_TICKET",
+]);
+
+// How a roster member was discovered/created (FR-006 auto-import + manual edit).
+export const memberSource = pgEnum("member_source", [
+  "GITHUB",
+  "JIRA",
+  "MANUAL",
+  "BOTH",
+]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),

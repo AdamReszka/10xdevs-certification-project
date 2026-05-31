@@ -325,14 +325,14 @@ High-write correlation tables (`githubCommit`, `githubPullRequest`, `githubRevie
 
 #### Automated
 
-- [ ] 1.1 Type checking passes: `npx tsc --noEmit`
-- [ ] 1.2 Linting passes: `npm run lint`
+- [x] 1.1 Type checking passes: `npx tsc --noEmit`
+- [x] 1.2 Linting passes: `npm run lint`
 
 #### Manual
 
-- [ ] 1.3 Throwaway script round-trips a token (encrypt → decrypt returns original)
-- [ ] 1.4 Tamper test: byte-flip or wrong `{ownerId,provider}` AAD makes decrypt throw
-- [ ] 1.5 Missing `TOKEN_ENCRYPTION_KEY` makes encrypt throw loudly
+- [x] 1.3 Throwaway script round-trips a token (encrypt → decrypt returns original)
+- [x] 1.4 Tamper test: byte-flip or wrong `{ownerId,provider}` AAD makes decrypt throw
+- [x] 1.5 Missing `TOKEN_ENCRYPTION_KEY` makes encrypt throw loudly
 
 ### Phase 2: Config & Entity Tables (STABLE)
 

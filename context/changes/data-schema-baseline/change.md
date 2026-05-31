@@ -1,7 +1,7 @@
 ---
 change_id: data-schema-baseline
 title: Data schema baseline
-status: plan_reviewed
+status: implementing
 created: 2026-05-31
 updated: 2026-05-31
 archived_at: null
