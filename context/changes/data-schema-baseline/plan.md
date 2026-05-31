@@ -338,23 +338,23 @@ High-write correlation tables (`githubCommit`, `githubPullRequest`, `githubRevie
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npx tsc --noEmit`
-- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.1 Type checking passes: `npx tsc --noEmit` — 0fa6e76
+- [x] 2.2 Linting passes: `npm run lint` — 0fa6e76
 
 #### Manual
 
-- [x] 2.3 FK targets + enum refs resolve; `ownerId` cascade + index/unique on every new table
+- [x] 2.3 FK targets + enum refs resolve; `ownerId` cascade + index/unique on every new table — 0fa6e76
 
 ### Phase 3: Engine & Data Tables + Defaults
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `npx tsc --noEmit`
-- [ ] 3.2 Linting passes: `npm run lint`
+- [x] 3.1 Type checking passes: `npx tsc --noEmit`
+- [x] 3.2 Linting passes: `npm run lint`
 
 #### Manual
 
-- [ ] 3.3 All 18 tables present; every enum used; `DEFAULT_THRESHOLDS` covers all 8 anomaly types and type-checks
+- [x] 3.3 All 18 tables present; every enum used; `DEFAULT_THRESHOLDS` covers all 8 anomaly types and type-checks
 
 ### Phase 4: Migration & Doc Cleanup
 
