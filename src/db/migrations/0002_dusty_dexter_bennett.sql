@@ -1,0 +1,1 @@
+ALTER TABLE "jira_status_history" ALTER COLUMN "jira_changelog_id" SET NOT NULL;

@@ -558,7 +558,9 @@ export const jiraStatusHistory = pgTable(
     fromCategory: statusCategory("from_category"),
     toCategory: statusCategory("to_category"),
     changedAt: timestamp("changed_at"),
-    jiraChangelogId: text("jira_changelog_id"),
+    // NOT NULL: this is the dedup half of the (ticketId, jiraChangelogId) upsert
+    // key — a nullable column defeats the UNIQUE constraint (NULLs are distinct).
+    jiraChangelogId: text("jira_changelog_id").notNull(),
   },
   (table) => [
     unique("jira_status_history_ticket_changelog_uq").on(

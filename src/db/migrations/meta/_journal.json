@@ -15,6 +15,13 @@
       "when": 1780218674507,
       "tag": "0001_lying_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780221033129,
+      "tag": "0002_dusty_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }
