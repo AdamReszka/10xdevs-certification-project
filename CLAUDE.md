@@ -18,7 +18,7 @@ npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 
 - **Next.js 16.2.6 App Router** — use server components by default; do not use Pages Router
 - **TypeScript 5 strict mode** — path alias `@/*` → `./src/*`
-- **Tailwind CSS 4** + **shadcn/ui** (new-york style, neutral base, OKLCH tokens) — all UI must be built with shadcn/ui components; use the `@shadcn` MCP server to look up available components before implementing any UI surface; add components with `npx shadcn add <name>`
+- **Tailwind CSS 4** + **shadcn/ui** (new-york style, zinc base, OKLCH tokens) — all UI must be built with shadcn/ui components; use the `@shadcn` MCP server to look up available components before implementing any UI surface; add components with `npx shadcn add <name>`
 - **Component architecture: atomic design** — `src/components/ui/` (shadcn-generated primitives), `atoms/` (custom stateless primitives), `molecules/` (composite widgets), `organisms/{anomaly,dashboard,auth,setup}/` (feature sections), `templates/` (page-level shells), `providers/` (React context wrappers)
 - **Deployment target: Cloudflare Workers** — do not suggest Vercel-specific APIs or config; adapter is `@opennextjs/cloudflare` (not the deprecated `@cloudflare/next-on-pages`)
 - No test framework installed yet — add one before implementing business logic
