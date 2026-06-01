@@ -40,7 +40,7 @@ Notes: the plan's CRITICAL blind spot (Supabase Data API exposing public tables 
 - **Location**: src/db/schema.ts (githubCredential/jiraCredential.encryptedToken, anomaly.sprintId)
 - **Detail**: The plan only explicitly marked jira's `workspaceUrl`/`jiraEmail` and `dailyRecap.sprintId` as NOT NULL. `encryptedToken` and `anomaly.sprintId` were also made NOT NULL (disclosed at the phase gates). Both are defensible — a credential row without a secret is invalid, and anomalies are sprint-scoped — and they strengthen integrity. Benign drift, already surfaced.
 - **Fix**: None needed. Accept as intended.
-- **Decision**: PENDING
+- **Decision**: ACCEPTED — extra NOT NULLs are correct and were disclosed at the phase gates.
 
 ### F3 — production TOKEN_ENCRYPTION_KEY secret not yet provisioned
 
@@ -50,4 +50,4 @@ Notes: the plan's CRITICAL blind spot (Supabase Data API exposing public tables 
 - **Location**: .env.example / Workers Secrets
 - **Detail**: The key is documented in `.env.example` and read via `env?.TOKEN_ENCRYPTION_KEY ?? process.env`. No runtime code consumes it yet (call sites land in S-02/S-03), so this is not an F-02 gap — but the Workers Secret (`wrangler secret put TOKEN_ENCRYPTION_KEY`) must exist before S-02/S-03 deploy, or `encryptToken` throws in prod.
 - **Fix**: Ensure the prod secret is set as part of S-02/S-03 deploy prep.
-- **Decision**: PENDING
+- **Decision**: ACCEPTED — no F-02 action; reminder carried for S-02/S-03 deploy prep (`wrangler secret put TOKEN_ENCRYPTION_KEY`).
