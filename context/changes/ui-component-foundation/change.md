@@ -1,7 +1,7 @@
 ---
 change_id: ui-component-foundation
 title: UI component foundation — shadcn/ui base layout + auth page shells
-status: implemented
+status: impl_reviewed
 created: 2026-06-01
 updated: 2026-06-01
 archived_at: null
