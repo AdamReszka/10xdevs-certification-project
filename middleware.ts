@@ -18,7 +18,12 @@ import { getSessionCookie } from "better-auth/cookies";
 
 // Unauthenticated-reachable path prefixes. Public auth pages (S-01) + the Better
 // Auth API itself must stay open so sign-in/sign-up/reset can work.
-const PUBLIC_PREFIXES = ["/login", "/signup", "/reset", "/api/auth"];
+// NOTE on "/": isPublic() matches a prefix when `pathname === p` OR
+// `pathname.startsWith(p + "/")`. For "/" the startsWith check becomes
+// startsWith("//"), which no real path matches — so "/" opens ONLY the exact
+// landing page, not every route. The marketing landing must be reachable
+// unauthenticated (F-03); child routes stay gated.
+const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/reset", "/api/auth"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(
