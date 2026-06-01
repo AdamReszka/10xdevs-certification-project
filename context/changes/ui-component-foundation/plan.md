@@ -251,20 +251,20 @@ None material — static/server-rendered shells, no data fetching. Keep nav a se
 
 #### Automated
 
-- [x] 1.1 Component files exist (button, input, label, card, form, sonner)
-- [x] 1.2 Build passes: `npm run build`
-- [x] 1.3 Lint passes: `npm run lint`
+- [x] 1.1 Component files exist (button, input, label, card, form, sonner) — fad759a
+- [x] 1.2 Build passes: `npm run build` — fad759a
+- [x] 1.3 Lint passes: `npm run lint` — fad759a
 
 #### Manual
 
-- [x] 1.4 CLAUDE.md shadcn bullet reads "zinc base"; no other doc drift
+- [x] 1.4 CLAUDE.md shadcn bullet reads "zinc base"; no other doc drift — fad759a
 
 ### Phase 2: App shell + base layout
 
 #### Automated
 
-- [ ] 2.1 Build passes: `npm run build`
-- [ ] 2.2 Lint passes: `npm run lint`
+- [x] 2.1 Build passes: `npm run build`
+- [x] 2.2 Lint passes: `npm run lint`
 
 #### Manual
 

@@ -1,30 +1,43 @@
+import Link from "next/link";
+
+import AppShell from "@/components/templates/app-shell";
+import { Button } from "@/components/ui/button";
+
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
+    <AppShell
+      actions={
+        <>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/login">Sign in</Link>
+          </Button>
+          <Button asChild size="sm">
+            <Link href="/signup">Get started</Link>
+          </Button>
+        </>
+      }
+    >
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-10 px-4 py-24 sm:px-6">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             10xDevs Certification · Module 1
           </span>
-          <span className="text-2xl font-bold tracking-tight text-black dark:text-zinc-50">
-            SprintFlow
-          </span>
         </div>
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-sm text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
+        <div className="flex flex-col gap-6">
+          <h1 className="max-w-xl text-4xl font-semibold leading-tight tracking-tight">
             Sprint anomaly detection for tech leads.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+          <p className="max-w-md text-lg leading-8 text-muted-foreground">
             SprintFlow reads your GitHub and Jira data to surface workflow
-            anomalies ranked by sprint-delivery risk — so you spend 5 minutes
-            at the morning sync on the 3–5 things that actually threaten the
+            anomalies ranked by sprint-delivery risk — so you spend 5 minutes at
+            the morning sync on the 3–5 things that actually threaten the
             sprint, instead of fusing two tools in your head.
           </p>
-          <p className="max-w-md text-sm leading-7 text-zinc-400 dark:text-zinc-500">
+          <p className="max-w-md text-sm leading-7 text-muted-foreground">
             This app is being built live as a certification project for the{" "}
             <a
               href="https://10xdevs.pl"
-              className="font-medium text-zinc-600 underline underline-offset-2 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="font-medium underline underline-offset-2 hover:text-foreground"
             >
               10xDevs
             </a>{" "}
@@ -32,25 +45,23 @@ export default function Home() {
             sprint by sprint, in public.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-auto"
-            href="https://github.com/AdamReszka/10xdevs-certification-project"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            View on GitHub
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-auto"
-            href="https://10xdevs.pl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            10xDevs Programme
-          </a>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Button asChild>
+            <a
+              href="https://github.com/AdamReszka/10xdevs-certification-project"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              View on GitHub
+            </a>
+          </Button>
+          <Button asChild variant="outline">
+            <a href="https://10xdevs.pl" target="_blank" rel="noopener noreferrer">
+              10xDevs Programme
+            </a>
+          </Button>
         </div>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
