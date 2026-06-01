@@ -31,7 +31,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 |------|---------------------------|----------------------------------------------------------------------------------------------|--------------------|-------------------------------------------------|----------|
 | F-01 | auth-provider-scaffold    | (foundation) auth scaffold landed; session middleware; gated routes redirect to /login       | —                  | FR-001, Access Control                          | done     |
 | F-02 | data-schema-baseline      | (foundation) Drizzle schema + Supabase migration for all product entities                    | —                  | FR-002–FR-007, FR-009–FR-013, FR-018–FR-020     | done     |
-| F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | ready    |
+| F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | done     |
 | S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | proposed |
 | S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | proposed |
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | proposed |
@@ -115,8 +115,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:**
   - ~~shadcn/ui + Tailwind CSS 4 compatibility~~ — **resolved**: `components.json` written, `shadcn/tailwind.css` imported, OKLCH theme tokens in `globals.css`, `src/lib/utils.ts` present, atomic design folder tree scaffolded (`ui/`, `atoms/`, `molecules/`, `organisms/{anomaly,dashboard,auth,setup}/`, `templates/`, `providers/`), `npm run build` passes. No Tailwind shim required; `shadcn/tailwind.css` from the `shadcn` package (v4.8.3 devDep) handles the v4 integration natively.
-- **Risk:** Integration wired but no component rendered yet — add one shadcn/ui component (e.g. Button) to a page and verify no style regression before marking F-03 done.
-- **Status:** ready
+- **Risk:** ~~Integration wired but no component rendered yet — add one shadcn/ui component (e.g. Button) to a page and verify no style regression before marking F-03 done.~~ — **resolved**: shadcn `Button` (and the full form kit) render styled on `/` and the auth shells; `npm run build` + `npm run lint` green with no style regression.
+- **Status:** done
 
 ---
 
@@ -336,7 +336,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 |------------|---------------------------|------------------------------------------------------------------------|------------------------|-------|
 | F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | done                   | ✅ Implemented & reviewed — PR #27 |
 | F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | done                   | ✅ Implemented (branch F-02) |
-| F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | yes                    | Run `/10x-plan ui-component-foundation` |
+| F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | done                   | ✅ Implemented (branch F-03, PR #30) |
 | S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | no                     | Awaits F-01, F-02, F-03 |
 | S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | no                     | Awaits S-01; parallel with S-03 |
 | S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | no                     | Awaits S-01; parallel with S-02 |
