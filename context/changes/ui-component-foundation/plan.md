@@ -263,23 +263,23 @@ None material — static/server-rendered shells, no data fetching. Keep nav a se
 
 #### Automated
 
-- [x] 2.1 Build passes: `npm run build`
-- [x] 2.2 Lint passes: `npm run lint`
+- [x] 2.1 Build passes: `npm run build` — 15be0d6
+- [x] 2.2 Lint passes: `npm run lint` — 15be0d6
 
 #### Manual
 
-- [ ] 2.3 `/` loads (no redirect) with styled AppShell nav + content
-- [ ] 2.4 shadcn Buttons render correctly styled (no regression)
-- [ ] 2.5 Dark-mode OKLCH palette applies correctly when `class="dark"` is set on `<html>`
-- [ ] 2.6 Browser tab title reads "SprintFlow"
+- [x] 2.3 `/` loads (no redirect) with styled AppShell nav + content — 15be0d6
+- [x] 2.4 shadcn Buttons render correctly styled (no regression) — 15be0d6
+- [x] 2.5 Dark-mode OKLCH palette applies correctly when `class="dark"` is set on `<html>` — 15be0d6
+- [x] 2.6 Browser tab title reads "SprintFlow" — 15be0d6
 
 ### Phase 3: Auth page shells
 
 #### Automated
 
-- [ ] 3.1 Auth route files exist (login, signup, reset)
-- [ ] 3.2 Build passes: `npm run build`
-- [ ] 3.3 Lint passes: `npm run lint`
+- [x] 3.1 Auth route files exist (login, signup, reset)
+- [x] 3.2 Build passes: `npm run build`
+- [x] 3.3 Lint passes: `npm run lint`
 
 #### Manual
 
