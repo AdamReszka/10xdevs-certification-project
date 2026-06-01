@@ -277,13 +277,13 @@ None material — static/server-rendered shells, no data fetching. Keep nav a se
 
 #### Automated
 
-- [x] 3.1 Auth route files exist (login, signup, reset)
-- [x] 3.2 Build passes: `npm run build`
-- [x] 3.3 Lint passes: `npm run lint`
+- [x] 3.1 Auth route files exist (login, signup, reset) — 9de8f02
+- [x] 3.2 Build passes: `npm run build` — 9de8f02
+- [x] 3.3 Lint passes: `npm run lint` — 9de8f02
 
 #### Manual
 
-- [ ] 3.4 `/login`, `/signup`, `/reset` render centered styled auth cards (no redirect/404)
-- [ ] 3.5 Inter-page auth links navigate correctly
-- [ ] 3.6 Auth pages show no app nav (use `(auth)` layout, not AppShell)
-- [ ] 3.7 Styling consistent with landing page (same tokens/fonts) in light + dark
+- [x] 3.4 `/login`, `/signup`, `/reset` render centered styled auth cards (no redirect/404) — 9de8f02
+- [x] 3.5 Inter-page auth links navigate correctly — 9de8f02
+- [x] 3.6 Auth pages show no app nav (use `(auth)` layout, not AppShell) — 9de8f02
+- [x] 3.7 Styling consistent with landing page (same tokens/fonts) in light + dark — 9de8f02
