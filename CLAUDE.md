@@ -39,7 +39,7 @@ These are required by the PRD but not wired yet:
 - Email: Resend (FR-018, Daily Recap)
 - Background jobs: node-cron or Cloudflare Cron Triggers (15-min sync loops)
 - Cloudflare adapter: `@opennextjs/cloudflare` (Workers target; `@cloudflare/next-on-pages` is deprecated)
-- Database driver: `@neondatabase/serverless` with `drizzle-orm/neon-http` (Workers require HTTP mode, not TCP)
+- Database driver: `drizzle-orm/node-postgres` (`pg`) over Cloudflare Hyperdrive — Workers-safe TCP via the `HYPERDRIVE` binding (`src/lib/db.ts`). An HTTP-mode driver (`@neondatabase/serverless` / `drizzle-orm/neon-http`) is NOT used; Hyperdrive removes the no-persistent-TCP constraint.
 
 ## Task tracking conventions
 

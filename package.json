@@ -9,7 +9,9 @@
     "deploy": "npm run build:cf && npx wrangler deploy",
     "preview": "npm run build:cf && npx wrangler dev",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "better-auth": "^1.6.12",
