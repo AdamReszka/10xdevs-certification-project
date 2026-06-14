@@ -326,29 +326,29 @@ None — no schema or data migration. `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` alr
 
 #### Automated
 
-- [x] 3.1 Build passes: `npm run build`
-- [x] 3.2 Linting passes: `npm run lint`
+- [x] 3.1 Build passes: `npm run build` — e1cdf8b
+- [x] 3.2 Linting passes: `npm run lint` — e1cdf8b
 
 #### Manual
 
-- [x] 3.3 Signup (name+email+password+match) creates user, auto-signs-in, lands `/dashboard`
-- [x] 3.4 Mismatched confirm shows inline error and blocks submit
-- [x] 3.5 Duplicate-email signup shows a toast error, no crash
-- [x] 3.6 Sign-in with correct creds lands `/dashboard`; wrong password shows toast error
-- [x] 3.7 Sign-out returns to `/login` and `/dashboard` is no longer accessible
+- [x] 3.3 Signup (name+email+password+match) creates user, auto-signs-in, lands `/dashboard` — e1cdf8b
+- [x] 3.4 Mismatched confirm shows inline error and blocks submit — e1cdf8b
+- [x] 3.5 Duplicate-email signup shows a toast error, no crash — e1cdf8b
+- [x] 3.6 Sign-in with correct creds lands `/dashboard`; wrong password shows toast error — e1cdf8b
+- [x] 3.7 Sign-out returns to `/login` and `/dashboard` is no longer accessible — e1cdf8b
 
 ### Phase 4: Password reset flow
 
 #### Automated
 
-- [ ] 4.1 Build passes: `npm run build`
-- [ ] 4.2 Linting passes: `npm run lint`
-- [ ] 4.3 Route `/reset/confirm` is emitted in the build output
+- [x] 4.1 Build passes: `npm run build`
+- [x] 4.2 Linting passes: `npm run lint`
+- [x] 4.3 Route `/reset/confirm` is emitted in the build output
 
 #### Manual
 
-- [ ] 4.4 `/reset` with a known email logs a reset URL + shows neutral confirmation
-- [ ] 4.5 Opening the logged URL lands `/reset/confirm` (unauthenticated, no redirect) with token + new-password form
-- [ ] 4.6 Setting a new matching password succeeds, redirects `/login`, sign-in with new password works
-- [ ] 4.7 `/reset/confirm` with no/invalid token shows invalid-link state; expired token shows toast error, no crash
-- [ ] 4.8 Non-existent email still shows neutral confirmation (no enumeration)
+- [x] 4.4 `/reset` with a known email logs a reset URL + shows neutral confirmation
+- [x] 4.5 Opening the logged URL lands `/reset/confirm` (unauthenticated, no redirect) with token + new-password form
+- [x] 4.6 Setting a new matching password succeeds, redirects `/login`, sign-in with new password works
+- [x] 4.7 `/reset/confirm` with no/invalid token shows invalid-link state; expired token shows toast error, no crash
+- [x] 4.8 Non-existent email still shows neutral confirmation (no enumeration)
