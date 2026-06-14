@@ -105,6 +105,10 @@ export async function requireSession() {
 
   if (!session) {
     redirect("/login");
+    // redirect() throws (NEXT_REDIRECT), so this is unreachable at runtime; it
+    // narrows the inferred return type to a guaranteed-present session for
+    // callers (the dynamically-imported redirect isn't seen as `never` here).
+    throw new Error("unreachable: redirect did not throw");
   }
 
   return session;

@@ -299,21 +299,21 @@ None — no schema or data migration. `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` alr
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `npm run build`
-- [x] 1.2 Linting passes: `npm run lint`
-- [x] 1.3 `auth-client.ts` and `validations/auth.ts` exist and export named symbols
+- [x] 1.1 Type checking passes: `npm run build` — cb71f45
+- [x] 1.2 Linting passes: `npm run lint` — cb71f45
+- [x] 1.3 `auth-client.ts` and `validations/auth.ts` exist and export named symbols — cb71f45
 
 #### Manual
 
-- [x] 1.4 Importing `authClient` in a client component pulls no server/`pg` code into the bundle
+- [x] 1.4 Importing `authClient` in a client component pulls no server/`pg` code into the bundle — cb71f45
 
 ### Phase 2: Authenticated route group + sign-out home
 
 #### Automated
 
-- [ ] 2.1 Build passes: `npm run build`
-- [ ] 2.2 Linting passes: `npm run lint`
-- [ ] 2.3 Route `/dashboard` is emitted in the build output
+- [x] 2.1 Build passes: `npm run build`
+- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.3 Route `/dashboard` is emitted in the build output
 
 #### Manual
 
