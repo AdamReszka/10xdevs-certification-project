@@ -1,7 +1,7 @@
 ---
 change_id: account-auth-flow
 title: Account auth flow
-status: plan_reviewed
+status: implementing
 created: 2026-06-14
 updated: 2026-06-14
 archived_at: null

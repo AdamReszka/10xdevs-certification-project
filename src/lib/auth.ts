@@ -46,6 +46,10 @@ export function createAuth(env?: AuthEnv) {
     database: drizzleAdapter(db, { provider: "pg", schema }),
     emailAndPassword: {
       enabled: true,
+      // Sign-up auto-creates a session so the user lands on /dashboard without a
+      // second sign-in step (relied on by the S-01 signup form). Made explicit
+      // rather than depending on the library default.
+      autoSignIn: true,
       // MVP: no email-verification gate (FR-001 is email+password). Hardening later.
       requireEmailVerification: false,
       // Reset email transport is S-01/S-11; for now log the link so the flow is exercisable.
