@@ -1,6 +1,13 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Pin the workspace root to this project so a stray lockfile in a parent
+  // directory can't make Next/Turbopack infer the wrong root (which expands
+  // filesystem watching to the whole parent tree and can spin into a loop).
+  turbopack: {
+    root: path.join(__dirname),
+  },
   images: {
     unoptimized: true,
   },
