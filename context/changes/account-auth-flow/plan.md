@@ -341,14 +341,14 @@ None — no schema or data migration. `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` alr
 
 #### Automated
 
-- [x] 4.1 Build passes: `npm run build`
-- [x] 4.2 Linting passes: `npm run lint`
-- [x] 4.3 Route `/reset/confirm` is emitted in the build output
+- [x] 4.1 Build passes: `npm run build` — 61ccdd1
+- [x] 4.2 Linting passes: `npm run lint` — 61ccdd1
+- [x] 4.3 Route `/reset/confirm` is emitted in the build output — 61ccdd1
 
 #### Manual
 
-- [x] 4.4 `/reset` with a known email logs a reset URL + shows neutral confirmation
-- [x] 4.5 Opening the logged URL lands `/reset/confirm` (unauthenticated, no redirect) with token + new-password form
-- [x] 4.6 Setting a new matching password succeeds, redirects `/login`, sign-in with new password works
-- [x] 4.7 `/reset/confirm` with no/invalid token shows invalid-link state; expired token shows toast error, no crash
-- [x] 4.8 Non-existent email still shows neutral confirmation (no enumeration)
+- [x] 4.4 `/reset` with a known email logs a reset URL + shows neutral confirmation — 61ccdd1
+- [x] 4.5 Opening the logged URL lands `/reset/confirm` (unauthenticated, no redirect) with token + new-password form — 61ccdd1
+- [x] 4.6 Setting a new matching password succeeds, redirects `/login`, sign-in with new password works — 61ccdd1
+- [x] 4.7 `/reset/confirm` with no/invalid token shows invalid-link state; expired token shows toast error, no crash — 61ccdd1
+- [x] 4.8 Non-existent email still shows neutral confirmation (no enumeration) — 61ccdd1
