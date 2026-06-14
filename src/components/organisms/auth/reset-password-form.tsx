@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -25,36 +24,40 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
-import { loginSchema, type LoginValues } from "@/lib/validations/auth";
+import {
+  resetConfirmSchema,
+  type ResetConfirmValues,
+} from "@/lib/validations/auth";
 
 /**
- * Sign-in form. Validates with zod, calls Better Auth's signIn.email, surfaces
- * field errors inline and auth/network failures via toast, and redirects to
- * /dashboard on success.
+ * New-password form for the reset flow. Submits the new password against the
+ * reset token from the link. On success redirects to /login; an expired/invalid
+ * token surfaces as a toast.
  */
-export default function LoginForm() {
+export default function ResetPasswordForm({ token }: { token: string }) {
   const router = useRouter();
-  const form = useForm<LoginValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+  const form = useForm<ResetConfirmValues>({
+    resolver: zodResolver(resetConfirmSchema),
+    defaultValues: { password: "", confirmPassword: "" },
   });
 
-  async function onSubmit(values: LoginValues) {
+  async function onSubmit(values: ResetConfirmValues) {
     try {
-      const { error } = await authClient.signIn.email({
-        email: values.email,
-        password: values.password,
+      const { error } = await authClient.resetPassword({
+        newPassword: values.password,
+        token,
       });
 
       if (error) {
         toast.error(
-          error.message ?? "Could not sign in. Check your email and password.",
+          error.message ??
+            "This reset link is invalid or has expired. Request a new one.",
         );
         return;
       }
 
-      router.push("/dashboard");
-      router.refresh();
+      toast.success("Password updated. You can sign in now.");
+      router.push("/login");
     } catch {
       toast.error("Something went wrong. Please try again.");
     }
@@ -65,9 +68,9 @@ export default function LoginForm() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sign in</CardTitle>
+        <CardTitle>Set a new password</CardTitle>
         <CardDescription>
-          Welcome back. Enter your credentials to continue.
+          Choose a new password for your account.
         </CardDescription>
       </CardHeader>
       <Form {...form}>
@@ -78,15 +81,14 @@ export default function LoginForm() {
           <CardContent className="flex flex-col gap-4">
             <FormField
               control={form.control}
-              name="email"
+              name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>New password</FormLabel>
                   <FormControl>
                     <Input
-                      type="email"
-                      placeholder="you@example.com"
-                      autoComplete="email"
+                      type="password"
+                      autoComplete="new-password"
                       {...field}
                     />
                   </FormControl>
@@ -96,22 +98,14 @@ export default function LoginForm() {
             />
             <FormField
               control={form.control}
-              name="password"
+              name="confirmPassword"
               render={({ field }) => (
                 <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Password</FormLabel>
-                    <Link
-                      href="/reset"
-                      className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
+                  <FormLabel>Confirm new password</FormLabel>
                   <FormControl>
                     <Input
                       type="password"
-                      autoComplete="current-password"
+                      autoComplete="new-password"
                       {...field}
                     />
                   </FormControl>
@@ -120,19 +114,10 @@ export default function LoginForm() {
               )}
             />
           </CardContent>
-          <CardFooter className="flex flex-col gap-4">
+          <CardFooter>
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in…" : "Sign in"}
+              {isSubmitting ? "Updating…" : "Update password"}
             </Button>
-            <p className="text-sm text-muted-foreground">
-              Don&apos;t have an account?{" "}
-              <Link
-                href="/signup"
-                className="font-medium text-foreground underline-offset-4 hover:underline"
-              >
-                Get started
-              </Link>
-            </p>
           </CardFooter>
         </form>
       </Form>
