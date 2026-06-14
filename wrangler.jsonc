@@ -13,7 +13,17 @@
 	"hyperdrive": [
 		{
 			"binding": "HYPERDRIVE",
-			"id": "86417a117a96464e947d5005e56f2a21"
+			"id": "86417a117a96464e947d5005e56f2a21",
+			// localConnectionString is ONLY used by Miniflare's local Hyperdrive
+			// emulation — never in production (the deployed worker connects via the
+			// `id` above). It is required because `opennextjs-cloudflare deploy`
+			// boots a local platform proxy to read env, and that proxy refuses to
+			// construct a Hyperdrive binding with no local connection string,
+			// failing the CI deploy before upload. This placeholder satisfies that
+			// check; the deploy never opens a connection to it. For real local
+			// Hyperdrive testing via `npm run preview`, point this at a Postgres
+			// you actually run locally (and keep any real value out of git).
+			"localConnectionString": "postgresql://user:password@localhost:5432/db"
 		}
 	],
 	// Public, client-safe Supabase config. NOTE: BETTER_AUTH_SECRET and
