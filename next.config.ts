@@ -1,5 +1,11 @@
 import path from "node:path";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 import type { NextConfig } from "next";
+
+// Makes `getCloudflareContext()` (used by the auth guards via the Hyperdrive
+// binding) work under `next dev`. No-op in production builds; required so the
+// per-request Cloudflare env is available during local development.
+initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
   // Pin the workspace root to this project so a stray lockfile in a parent

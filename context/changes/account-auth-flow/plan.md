@@ -311,31 +311,31 @@ None — no schema or data migration. `BETTER_AUTH_SECRET`/`BETTER_AUTH_URL` alr
 
 #### Automated
 
-- [x] 2.1 Build passes: `npm run build`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Route `/dashboard` is emitted in the build output
+- [x] 2.1 Build passes: `npm run build` — f029e00
+- [x] 2.2 Linting passes: `npm run lint` — f029e00
+- [x] 2.3 Route `/dashboard` is emitted in the build output — f029e00
 
 #### Manual
 
-- [ ] 2.4 Unauthenticated `/dashboard` redirects to `/login`
-- [ ] 2.5 With a session, `/dashboard` renders the stub + authenticated header
-- [ ] 2.6 Sign-out button visible in the authenticated header
-- [ ] 2.7 While signed in, `/login` / `/signup` / `/reset` redirect to `/dashboard`
+- [x] 2.4 Unauthenticated `/dashboard` redirects to `/login` — f029e00
+- [x] 2.5 With a session, `/dashboard` renders the stub + authenticated header — f029e00
+- [x] 2.6 Sign-out button visible in the authenticated header — f029e00
+- [x] 2.7 While signed in, `/login` / `/signup` / `/reset` redirect to `/dashboard` — f029e00
 
 ### Phase 3: Sign-in + sign-up forms
 
 #### Automated
 
-- [ ] 3.1 Build passes: `npm run build`
-- [ ] 3.2 Linting passes: `npm run lint`
+- [x] 3.1 Build passes: `npm run build`
+- [x] 3.2 Linting passes: `npm run lint`
 
 #### Manual
 
-- [ ] 3.3 Signup (name+email+password+match) creates user, auto-signs-in, lands `/dashboard`
-- [ ] 3.4 Mismatched confirm shows inline error and blocks submit
-- [ ] 3.5 Duplicate-email signup shows a toast error, no crash
-- [ ] 3.6 Sign-in with correct creds lands `/dashboard`; wrong password shows toast error
-- [ ] 3.7 Sign-out returns to `/login` and `/dashboard` is no longer accessible
+- [x] 3.3 Signup (name+email+password+match) creates user, auto-signs-in, lands `/dashboard`
+- [x] 3.4 Mismatched confirm shows inline error and blocks submit
+- [x] 3.5 Duplicate-email signup shows a toast error, no crash
+- [x] 3.6 Sign-in with correct creds lands `/dashboard`; wrong password shows toast error
+- [x] 3.7 Sign-out returns to `/login` and `/dashboard` is no longer accessible
 
 ### Phase 4: Password reset flow
 
