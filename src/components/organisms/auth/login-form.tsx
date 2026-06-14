@@ -40,20 +40,24 @@ export default function LoginForm() {
   });
 
   async function onSubmit(values: LoginValues) {
-    const { error } = await authClient.signIn.email({
-      email: values.email,
-      password: values.password,
-    });
+    try {
+      const { error } = await authClient.signIn.email({
+        email: values.email,
+        password: values.password,
+      });
 
-    if (error) {
-      toast.error(
-        error.message ?? "Could not sign in. Check your email and password.",
-      );
-      return;
+      if (error) {
+        toast.error(
+          error.message ?? "Could not sign in. Check your email and password.",
+        );
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   const isSubmitting = form.formState.isSubmitting;

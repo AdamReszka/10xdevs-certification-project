@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { cache } from "react";
 import { getDb } from "@/lib/db";
 import * as schema from "@/db/schema";
 
@@ -58,8 +59,8 @@ export function createAuth(env?: AuthEnv) {
       },
     },
     session: {
-      // Cookie cache keeps the optimistic proxy check off the DB; full validation
-      // (auth.api.getSession) still hits the DB in gated server components.
+      // Cookie cache keeps the optimistic middleware check off the DB; full
+      // validation (auth.api.getSession) still hits the DB in gated components.
       cookieCache: { enabled: true, maxAge: 300 },
     },
   });
@@ -73,35 +74,42 @@ export function createAuth(env?: AuthEnv) {
 export const auth = createAuth();
 
 /**
- * Authoritative session guard for gated server components/layouts (consumed by
- * S-01's gated layout). Does a full DB-backed validation via
- * `auth.api.getSession` — the real security boundary behind the optimistic
- * cookie check in `proxy.ts` (defense-in-depth; CVE-2025-29927). Redirects to
- * `/login` when there is no valid session.
+ * Non-fatal, full DB-backed session lookup for gated server components/layouts.
+ * Returns the session on success, or `null` both when there is no session AND
+ * when validation errors (fail-closed: a DB/Hyperdrive blip is treated as "no
+ * session" so callers never surface an error page — PRD guardrail).
+ *
+ * Wrapped in React `cache()` so multiple callers in one request render (e.g. the
+ * `(app)` layout guard + the dashboard page reading `user.name`) share a single
+ * `getSession` call instead of each hitting the DB.
  *
  * Request-only modules are imported lazily so the static `auth` export above
  * stays safe to import from the Node build / schema-gen CLI.
  */
-export async function requireSession() {
+export const getOptionalSession = cache(async () => {
   const { getCloudflareContext } = await import("@opennextjs/cloudflare");
   const { headers } = await import("next/headers");
-  const { redirect } = await import("next/navigation");
 
   const { env } = getCloudflareContext();
 
-  let session;
   try {
-    session = await createAuth(env).api.getSession({
-      headers: await headers(),
-    });
+    return await createAuth(env).api.getSession({ headers: await headers() });
   } catch (error) {
-    // Fail closed: a DB/Hyperdrive blip during validation must not surface an
-    // error page on a gated route — treat it as "no valid session" and send the
-    // user to /login (PRD guardrail: never a white screen on API failure). The
-    // redirect() throw (NEXT_REDIRECT) is intentionally outside this try.
-    console.error("[auth] requireSession: getSession failed", error);
-    redirect("/login");
+    console.error("[auth] getOptionalSession: getSession failed", error);
+    return null;
   }
+});
+
+/**
+ * Authoritative session guard for gated server components/layouts (consumed by
+ * S-01's gated `(app)` layout). The real security boundary behind the optimistic
+ * cookie check in `middleware.ts` (defense-in-depth; CVE-2025-29927). Redirects
+ * to `/login` when there is no valid session.
+ */
+export async function requireSession() {
+  const { redirect } = await import("next/navigation");
+
+  const session = await getOptionalSession();
 
   if (!session) {
     redirect("/login");

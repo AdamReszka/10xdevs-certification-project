@@ -45,19 +45,23 @@ export default function SignupForm() {
   });
 
   async function onSubmit(values: SignupValues) {
-    const { error } = await authClient.signUp.email({
-      name: values.name,
-      email: values.email,
-      password: values.password,
-    });
+    try {
+      const { error } = await authClient.signUp.email({
+        name: values.name,
+        email: values.email,
+        password: values.password,
+      });
 
-    if (error) {
-      toast.error(error.message ?? "Could not create your account.");
-      return;
+      if (error) {
+        toast.error(error.message ?? "Could not create your account.");
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     }
-
-    router.push("/dashboard");
-    router.refresh();
   }
 
   const isSubmitting = form.formState.isSubmitting;

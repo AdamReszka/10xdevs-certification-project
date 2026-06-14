@@ -42,21 +42,25 @@ export default function ResetPasswordForm({ token }: { token: string }) {
   });
 
   async function onSubmit(values: ResetConfirmValues) {
-    const { error } = await authClient.resetPassword({
-      newPassword: values.password,
-      token,
-    });
+    try {
+      const { error } = await authClient.resetPassword({
+        newPassword: values.password,
+        token,
+      });
 
-    if (error) {
-      toast.error(
-        error.message ??
-          "This reset link is invalid or has expired. Request a new one.",
-      );
-      return;
+      if (error) {
+        toast.error(
+          error.message ??
+            "This reset link is invalid or has expired. Request a new one.",
+        );
+        return;
+      }
+
+      toast.success("Password updated. You can sign in now.");
+      router.push("/login");
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     }
-
-    toast.success("Password updated. You can sign in now.");
-    router.push("/login");
   }
 
   const isSubmitting = form.formState.isSubmitting;

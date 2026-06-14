@@ -44,19 +44,23 @@ export default function ResetForm() {
   });
 
   async function onSubmit(values: ResetRequestValues) {
-    const { error } = await authClient.requestPasswordReset({
-      email: values.email,
-      redirectTo: "/reset/confirm",
-    });
+    try {
+      const { error } = await authClient.requestPasswordReset({
+        email: values.email,
+        redirectTo: "/reset/confirm",
+      });
 
-    if (error) {
-      toast.error(
-        error.message ?? "Could not send the reset link. Please try again.",
-      );
-      return;
+      if (error) {
+        toast.error(
+          error.message ?? "Could not send the reset link. Please try again.",
+        );
+        return;
+      }
+
+      setSubmitted(true);
+    } catch {
+      toast.error("Something went wrong. Please try again.");
     }
-
-    setSubmitted(true);
   }
 
   if (submitted) {

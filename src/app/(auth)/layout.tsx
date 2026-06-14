@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import Brand from "@/components/atoms/brand";
-import { createAuth } from "@/lib/auth";
+import { getOptionalSession } from "@/lib/auth";
 
 // The redirect-if-authenticated check reads the per-request session (Cloudflare
 // context + headers), so the auth routes must render dynamically.
@@ -14,30 +14,18 @@ export const dynamic = "force-dynamic";
  * middleware.ts public prefixes).
  *
  * Inverse of the `(app)` guard: a signed-in user has no business on the auth
- * pages, so redirect them to /dashboard. The session check is non-fatal — on a
- * DB/Hyperdrive error we fall through and render the auth page rather than
- * trapping the user out of login (the redirect() throw is kept outside the try).
+ * pages, so redirect them to /dashboard. Uses the shared, non-fatal
+ * getOptionalSession() (fail-open: on a DB error it returns null and we render
+ * the auth page rather than trapping the user out of login).
  */
 export default async function AuthLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const { getCloudflareContext } = await import("@opennextjs/cloudflare");
-  const { headers } = await import("next/headers");
   const { redirect } = await import("next/navigation");
 
-  const { env } = getCloudflareContext();
-
-  let session;
-  try {
-    session = await createAuth(env).api.getSession({
-      headers: await headers(),
-    });
-  } catch (error) {
-    console.error("[auth] AuthLayout: getSession failed", error);
-    session = null;
-  }
+  const session = await getOptionalSession();
 
   if (session) {
     redirect("/dashboard");
