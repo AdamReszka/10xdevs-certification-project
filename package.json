@@ -10,6 +10,8 @@
     "preview": "npm run build:cf && npx wrangler dev",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
@@ -52,6 +54,7 @@
     "supabase": "^2.101.0",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vitest": "^4.1.9",
     "wrangler": "^4.94.0"
   }
 }
