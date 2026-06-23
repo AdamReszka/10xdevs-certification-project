@@ -480,30 +480,30 @@ workflow is the first file in `.github/workflows/`.
 
 #### Automated
 
-- [x] 1.1 Vitest installs cleanly: `npm install` exits 0
-- [x] 1.2 Test runner executes: `npm test` exits 0 with the smoke test passing
-- [x] 1.3 Alias resolves: the smoke test's `@/lib/*` import does not error
-- [x] 1.4 Typecheck script runs: `npm run typecheck` exits 0
-- [x] 1.5 Lint still passes: `npm run lint` exits 0
+- [x] 1.1 Vitest installs cleanly: `npm install` exits 0 — 5a66d05
+- [x] 1.2 Test runner executes: `npm test` exits 0 with the smoke test passing — 5a66d05
+- [x] 1.3 Alias resolves: the smoke test's `@/lib/*` import does not error — 5a66d05
+- [x] 1.4 Typecheck script runs: `npm run typecheck` exits 0 — 5a66d05
+- [x] 1.5 Lint still passes: `npm run lint` exits 0 — 5a66d05
 
 #### Manual
 
-- [x] 1.6 `npm test` output shows Vitest running in the node environment
-- [x] 1.7 Breaking the alias in `vitest.config.ts` makes the smoke test fail
+- [x] 1.6 `npm test` output shows Vitest running in the node environment — 5a66d05
+- [x] 1.7 Breaking the alias in `vitest.config.ts` makes the smoke test fail — 5a66d05
 
 ### Phase 2: Crypto-Envelope Unit Suite
 
 #### Automated
 
-- [ ] 2.1 Full suite passes: `npm test` exits 0 with all seven families green
-- [ ] 2.2 Typecheck clean: `npm run typecheck` exits 0
-- [ ] 2.3 Lint clean: `npm run lint` exits 0
-- [ ] 2.4 Suite passes with `TOKEN_ENCRYPTION_KEY` unset (in-test key injection works)
+- [x] 2.1 Full suite passes: `npm test` exits 0 with all seven families green
+- [x] 2.2 Typecheck clean: `npm run typecheck` exits 0
+- [x] 2.3 Lint clean: `npm run lint` exits 0
+- [x] 2.4 Suite passes with `TOKEN_ENCRYPTION_KEY` unset (in-test key injection works)
 
 #### Manual
 
-- [ ] 2.5 Weakening `crypto.ts` AAD check fails the AAD-isolation + tamper tests
-- [ ] 2.6 Surfacing the GCM message fails the error-opacity assertion
+- [x] 2.5 Weakening `crypto.ts` AAD check fails the AAD-isolation + tamper tests
+- [x] 2.6 Surfacing the GCM message fails the error-opacity assertion
 
 ### Phase 3: CI Gate + Cookbook + Rollout Bookkeeping
 
