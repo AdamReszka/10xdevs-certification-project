@@ -495,25 +495,25 @@ workflow is the first file in `.github/workflows/`.
 
 #### Automated
 
-- [x] 2.1 Full suite passes: `npm test` exits 0 with all seven families green
-- [x] 2.2 Typecheck clean: `npm run typecheck` exits 0
-- [x] 2.3 Lint clean: `npm run lint` exits 0
-- [x] 2.4 Suite passes with `TOKEN_ENCRYPTION_KEY` unset (in-test key injection works)
+- [x] 2.1 Full suite passes: `npm test` exits 0 with all seven families green — b89d245
+- [x] 2.2 Typecheck clean: `npm run typecheck` exits 0 — b89d245
+- [x] 2.3 Lint clean: `npm run lint` exits 0 — b89d245
+- [x] 2.4 Suite passes with `TOKEN_ENCRYPTION_KEY` unset (in-test key injection works) — b89d245
 
 #### Manual
 
-- [x] 2.5 Weakening `crypto.ts` AAD check fails the AAD-isolation + tamper tests
-- [x] 2.6 Surfacing the GCM message fails the error-opacity assertion
+- [x] 2.5 Weakening `crypto.ts` AAD check fails the AAD-isolation + tamper tests — b89d245
+- [x] 2.6 Surfacing the GCM message fails the error-opacity assertion — b89d245
 
 ### Phase 3: CI Gate + Cookbook + Rollout Bookkeeping
 
 #### Automated
 
-- [ ] 3.1 CI workflow runs on a PR and passes (lint + typecheck + test green in CI)
-- [ ] 3.2 The workflow uses no repository secrets on the test path
-- [ ] 3.3 The workflow pins Node via `.nvmrc` (`node-version-file` present; no hardcoded version)
-- [ ] 3.4 test-plan §6.1 no longer contains "TBD" for the unit-test row
-- [ ] 3.5 test-plan §5 splits the gate into unit-after-Phase-1 + integration-after-S-02
+- [x] 3.1 CI workflow runs on a PR and passes (lint + typecheck + test green in CI)
+- [x] 3.2 The workflow uses no repository secrets on the test path
+- [x] 3.3 The workflow pins Node via `.nvmrc` (`node-version-file` present; no hardcoded version)
+- [x] 3.4 test-plan §6.1 no longer contains "TBD" for the unit-test row
+- [x] 3.5 test-plan §5 splits the gate into unit-after-Phase-1 + integration-after-S-02
 
 #### Manual
 

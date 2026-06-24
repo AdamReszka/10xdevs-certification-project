@@ -80,13 +80,21 @@ feature slices (S-06, then S-05/S-07) are built.
 
 | # | Phase name | Goal (one line) | Risks covered | Test types | Status | Change folder |
 |---|------------|-----------------|---------------|------------|--------|---------------|
-| 1 | Harness bootstrap + credential security | Stand up the test runner; defend token leakage and cross-account isolation at the cheapest layer | #3, #4 | unit + integration | change opened | context/changes/testing-harness-credential-security/ |
+| 1 | Harness bootstrap + credential security | Stand up the test runner; defend token leakage and cross-account isolation at the cheapest layer | #3, #4 | unit (integration → S-02) [^p1] | complete | context/changes/testing-harness-credential-security/ |
 | 2 | Detection engine — thresholds & correlation | Per-rule positive/negative coverage for all 8 anomalies, SP-aware boundary cases, and the Jira↔GitHub correlation join | #1, #2 | unit + integration | not started | — |
 | 3 | Sync integrity + pipeline consistency | Partial sync never shown as complete; graceful degradation (cached + banner, no crash/storm); anomaly-attribute parity DB→UI→email | #5, #6 | integration + targeted e2e | not started | — |
 | 4 | Quality-gates wiring | Lock the floor in CI (none exists yet): lint + typecheck + unit/integration gate; e2e smoke on the US-01 north-star flow | cross-cutting | gates | not started | — |
 
 **Status vocabulary** (fixed — parser literals): `not started` →
 `change opened` → `researched` → `planned` → `implementing` → `complete`.
+
+[^p1]: Phase 1 delivered the Vitest harness + the credential-crypto unit suite
+(`src/lib/crypto.test.ts`) — the only surfaces that existed in code. The two
+literal integration assertions the risks name — #3 "token absent from response
+body / log line" and #4 "Account B cannot read Account A's row by id" — have no
+target until **S-02** (`setup-github-integration`) builds the connect/validate
+route and the first owner-scoped query. They are recorded there as required test
+sub-phases (see §6.6 and `context/changes/setup-github-integration/change.md`).
 
 ## 4. Stack
 
@@ -120,8 +128,9 @@ phase lands; before that, the gate is `planned`.
 
 | Gate | Where | Required? | Catches |
 |------|-------|-----------|---------|
-| lint + typecheck | local + CI | required (lint exists locally via `npm run lint`; CI wired by §3 Phase 4) | syntactic / type drift |
-| unit + integration | local + CI | required after §3 Phase 1 | logic regressions (detection, crypto, isolation) |
+| lint + typecheck | local + CI | required (local via `npm run lint` / `npm run typecheck`; CI wired by §3 Phase 1 minimal workflow, extended by §3 Phase 4) | syntactic / type drift |
+| unit | local + CI | required after §3 Phase 1 | logic regressions (crypto now; detection per §3 Phase 2) |
+| integration | local + CI | required after S-02 | credential leak / IDOR against real Postgres (#3, #4); sync/pipeline per §3 Phase 3 |
 | e2e on critical flows (US-01) | CI on PR | required after §3 Phase 3 | broken north-star user path |
 | post-edit hook | local (agent loop) | recommended (configured in a later Module 3 lesson, not here) | regressions at edit time |
 | visual diff (deterministic) | CI on PR | optional | rendering regressions on the 1–3 dashboard screens |
@@ -134,11 +143,38 @@ relevant rollout phase ships; before that, it reads "TBD — see §3 Phase N."
 
 ### 6.1 Adding a unit test
 
-- TBD — see §3 Phase 1 (harness bootstrap establishes location, naming, run command) and §3 Phase 2 (per-rule detection-engine pattern: anomalous + healthy fixture, oracle from FR-009).
+- **Runner**: Vitest, node environment. Config is `vitest.config.ts` at the repo
+  root — `test.environment: "node"`, include glob `src/**/*.test.ts`, and an `@`
+  alias to `./src` mirroring `tsconfig.json` `paths` (no trailing slash on the
+  alias value).
+- **Location & naming**: co-locate the test beside the unit as `<name>.test.ts`
+  (e.g. `src/lib/crypto.test.ts` next to `src/lib/crypto.ts`).
+- **Run**: `npm test` (`vitest run`, non-watch). Pair with `npm run lint` and
+  `npm run typecheck`.
+- **Reference test**: `src/lib/crypto.test.ts` — the credential-envelope suite
+  (round-trip, tamper, AAD isolation, malformed/version, key validation, IV
+  uniqueness, error opacity).
+- **Hermetic env/secrets**: never depend on a shell/CI secret. Generate what the
+  unit needs in-test and inject it via the unit's `env` arg — the crypto suite
+  makes a 32-byte key with `randomBytes(32).toString("base64")` and passes
+  `{ TOKEN_ENCRYPTION_KEY }`. The suite must pass with the real env var unset.
+- **Signal check**: a unit test should go red when the behavior it guards is
+  weakened (verified for crypto by dropping the AAD owner-binding and by leaking
+  the GCM message — both turn specific tests red). If weakening the code doesn't
+  fail a test, the test isn't asserting the risk.
+- Detection-engine per-rule pattern (anomalous + healthy fixture, oracle
+  hand-derived from FR-009, never lifted from engine output) — TBD, see §3 Phase 2.
 
 ### 6.2 Adding an integration test
 
-- TBD — see §3 Phase 1 (credential write/read: assert no token in response body or logs + account-scoped query) and §3 Phase 3 (sync partial-failure + graceful-degradation pattern).
+- No integration harness exists yet — §3 Phase 1 shipped **unit-only** (the
+  credential-leak and IDOR surfaces have no code until S-02). The first
+  integration tests land with **S-02** (`setup-github-integration`) as required
+  sub-phases: assert the connect/validate response body + log lines never carry
+  the token (#3), and that Account B's session cannot read Account A's row by id
+  (#4) — run against **real Postgres** (local Supabase `:54322` via
+  `getDb`/`DATABASE_URL` in Node, *not* `vitest-pool-workers`), never a mocked
+  DB. The sync partial-failure + graceful-degradation pattern is TBD, see §3 Phase 3.
 
 ### 6.3 Adding an e2e test
 
@@ -146,7 +182,11 @@ relevant rollout phase ships; before that, it reads "TBD — see §3 Phase N."
 
 ### 6.4 Adding a test for a new API endpoint
 
-- TBD — see §3 Phase 1 (the credential-connection route is the reference: request → response shape AND side-effect, with the GitHub/Jira HTTP edge mocked, plus the negative IDOR case).
+- No product route exists yet (the app's only handler is the Better Auth
+  catch-all). The reference endpoint test lands with **S-02**'s connect/validate
+  route: request → response shape AND side-effect, with the GitHub/Jira HTTP edge
+  mocked via MSW (never internal modules), plus the negative IDOR case (Account
+  B's session + Account A's id → 404 / empty). TBD until S-02.
 
 ### 6.5 Adding a test for a new anomaly detection rule
 
@@ -156,6 +196,18 @@ relevant rollout phase ships; before that, it reads "TBD — see §3 Phase N."
 
 (Optional. After each phase lands, `/10x-implement` appends a 2–3 line note
 here capturing anything surprising the rollout phase taught.)
+
+- **Phase 1 (harness + credential security, 2026-06-23).** The risk-first plan
+  and the build order were one slice apart: the crypto envelope and the
+  account-scoped schema existed, but the route/payload/log surface (#3) and the
+  first owner-scoped query (#4) did not. Phase 1 shipped the Vitest harness +
+  the crypto unit suite (the only grounded surface) and **deferred both literal
+  integration assertions to S-02** as required test sub-phases — see
+  `context/changes/setup-github-integration/change.md`. CI landed early (minimal
+  lint+typecheck+unit on PRs, Node pinned via `.nvmrc`); §3 Phase 4 extends it
+  rather than rebuilding. Lesson: when the defense ships ahead of its consumer,
+  test the defense now and bind the edge assertions to the slice that builds the
+  edge — don't fake them against code that doesn't exist.
 
 ## 7. What We Deliberately Don't Test
 
