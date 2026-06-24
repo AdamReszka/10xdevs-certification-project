@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins": [
+    "@stryker-mutator/vitest-runner",
+    "@stryker-mutator/typescript-checker"
+  ],
+  "vitest": { "configFile": "vitest.config.ts" },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "coverageAnalysis": "perTest",
+  "mutate": ["src/lib/crypto.ts"],
+  "reporters": ["progress", "clear-text", "html"],
+  "concurrency": 4,
+  "thresholds": { "high": 80, "low": 60, "break": null }
+}
