@@ -1,0 +1,23 @@
+name: CI
+
+# Minimal gate (test-plan §3 Phase 1 / §5): lint + typecheck + unit tests on
+# every PR. Node is pinned via .nvmrc so CI tracks local dev. Phase 4 extends
+# this with e2e + the full gate matrix by adding jobs alongside `test` — it does
+# not rebuild this workflow. No secrets: the crypto suite generates its own key.
+
+on:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test

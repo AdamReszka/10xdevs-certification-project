@@ -10,6 +10,9 @@
     "preview": "npm run build:cf && npx wrangler dev",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:mutation": "stryker run",
+    "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   },
@@ -40,6 +43,9 @@
   },
   "devDependencies": {
     "@opennextjs/cloudflare": "^1.19.11",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
@@ -52,6 +58,7 @@
     "supabase": "^2.101.0",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vitest": "^4.1.9",
     "wrangler": "^4.94.0"
   }
 }

@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-05-26
+updated: 2026-06-14
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -32,7 +32,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | F-01 | auth-provider-scaffold    | (foundation) auth scaffold landed; session middleware; gated routes redirect to /login       | —                  | FR-001, Access Control                          | done     |
 | F-02 | data-schema-baseline      | (foundation) Drizzle schema + Supabase migration for all product entities                    | —                  | FR-002–FR-007, FR-009–FR-013, FR-018–FR-020     | done     |
 | F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | done     |
-| S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | proposed |
+| S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | done     |
 | S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | proposed |
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | proposed |
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | proposed |
@@ -132,7 +132,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** First slice to exercise the full F-01 + F-02 + F-03 stack together; if Workers crypto or the shadcn/ui integration surfaced issues in the foundations, they will show here first — treat this slice as a system-wide integration test for the foundation set.
-- **Status:** proposed
+- **Status:** done
 
 ---
 
@@ -337,9 +337,9 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | done                   | ✅ Implemented & reviewed — PR #27 |
 | F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | done                   | ✅ Implemented (branch F-02) |
 | F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | done                   | ✅ Implemented (branch F-03, PR #30) |
-| S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | no                     | Awaits F-01, F-02, F-03 |
-| S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | no                     | Awaits S-01; parallel with S-03 |
-| S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | no                     | Awaits S-01; parallel with S-02 |
+| S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | done                   | ✅ Implemented & reviewed — PR #34 |
+| S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | yes                    | Prereqs S-01, F-02 done; parallel with S-03 |
+| S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | yes                    | Prereqs S-01, F-02 done; parallel with S-02 |
 | S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | no                     | Awaits S-02, S-03 |
 | S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | no                     | Awaits S-04 |
 | S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | no                     | Awaits S-05 |
@@ -349,7 +349,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix             | no                     | Awaits S-05, S-07; parallel with S-08, S-11–S-14 |
 | S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | no                     | Awaits S-06, S-07; parallel with S-08, S-10, S-13, S-14 |
 | S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | no                     | Awaits S-11 |
-| S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | no                     | Awaits S-01, F-02; runs in parallel with most of Stream A |
+| S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; runs in parallel with most of Stream A |
 | S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | no                     | Awaits S-06, S-07; parallel with S-08–S-13 |
 
 ## Open Roadmap Questions
