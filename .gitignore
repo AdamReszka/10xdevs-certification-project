@@ -1,4 +1,6 @@
-.claude/
+# Claude Code: track shared hook/permission config, keep everything else local
+.claude/*
+!.claude/settings.json
 
 # from next
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.

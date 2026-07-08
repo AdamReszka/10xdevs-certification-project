@@ -1,0 +1,48 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(node *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git status *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Bash(git stash *)",
+      "Read",
+      "Edit",
+      "Write"
+    ],
+    "ask": [
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(git push *)",
+      "Bash(git push)"
+    ],
+    "deny": [
+      "Bash(rm -rf *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.tool_input.file_path'); case \"$FILE\" in *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs) npx eslint --fix \"$FILE\" --quiet || exit 2 ;; *) exit 0 ;; esac",
+            "timeout": 10000
+          },
+          {
+            "type": "command",
+            "command": "FILE=$(jq -r '.tool_input.file_path'); AI_AGENT=1 npx vitest related \"$FILE\" --run || exit 2",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

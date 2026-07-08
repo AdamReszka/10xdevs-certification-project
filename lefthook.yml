@@ -1,0 +1,20 @@
+# Pre-commit git hook (Lekcja 3 — warstwa "pre-commit").
+# Łapie to, co ominęło hooki per-edit: ręczne edycje, pliki zmienione
+# poza agentem, oraz checki zbyt wolne na per-edit (pełny typecheck).
+# Działa na plikach ze stage'a ({staged_files}).
+pre-commit:
+  parallel: true
+  commands:
+    # Pełny typecheck całego projektu — świadomie tutaj, nie w per-edit:
+    # tsc --noEmit potrzebuje całego tsconfig, a jest za wolny na każdą edycję.
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: npx tsc --noEmit
+    # Lint tylko plików ze stage'a (bez --fix — commit gate ma blokować, nie edytować stage).
+    lint:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs}"
+      run: npx eslint {staged_files}
+    # Scoped testy powiązane ze zmienionymi plikami.
+    test:
+      glob: "*.{ts,tsx}"
+      run: npx vitest related {staged_files} --run
