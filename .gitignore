@@ -18,6 +18,13 @@
 # testing
 /coverage
 
+# playwright
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+/playwright/.auth
+
 # stryker mutation testing
 /reports
 /.stryker-tmp
