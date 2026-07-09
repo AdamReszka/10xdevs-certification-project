@@ -307,14 +307,14 @@ No schema migration — `githubCredential`/`monitoredRepo` already exist (F-02).
 ### Phase 1: GitHub client, validations, primitives & key provisioning
 
 #### Automated
-- [ ] 1.1 `github.ts` unit tests pass (validate parse, likelyFineGrained, 401 GithubAuthError, non-401 GithubUnavailableError, Link pagination, token absent from errors)
-- [ ] 1.2 Type checking passes (`npm run typecheck`)
-- [ ] 1.3 Linting passes (`npm run lint`)
+- [x] 1.1 `github.ts` unit tests pass (validate parse, likelyFineGrained, 401 GithubAuthError, non-401 GithubUnavailableError, Link pagination, token absent from errors)
+- [x] 1.2 Type checking passes (`npm run typecheck`)
+- [x] 1.3 Linting passes (`npm run lint`)
 
 #### Manual
-- [ ] 1.4 Server Action spike runs in `npm run dev` (session + DB select), then removed
-- [ ] 1.5 `TOKEN_ENCRYPTION_KEY` provisioned; encrypt/decrypt round-trip verified
-- [ ] 1.6 shadcn `checkbox`/`scroll-area`/`alert` render with no style regression
+- [x] 1.4 Server Action spike runs in `npm run dev` (session + DB select), then removed
+- [x] 1.5 `TOKEN_ENCRYPTION_KEY` provisioned; encrypt/decrypt round-trip verified
+- [x] 1.6 shadcn `checkbox`/`scroll-area`/`alert` render with no style regression
 
 ### Phase 2: Setup wizard shell + GitHub connect step
 
