@@ -110,14 +110,14 @@ Cloudflare Workers via `@opennextjs/cloudflare`, shadcn/ui).
 | unit + integration | Vitest | TBD | none yet — installed by §3 Phase 1; pairs with the Vite/TS toolchain already in the repo |
 | Workers-env integration | `@cloudflare/vitest-pool-workers` | TBD | none yet — verify at Phase 1 research for testing code that touches the `HYPERDRIVE` binding / Workers runtime |
 | API mocking | MSW (or `undici` interceptors) | TBD | none yet — mock the GitHub/Jira HTTP edge only; never mock internal modules |
-| e2e | Playwright | TBD | none yet — added in §3 Phase 3/4 for the US-01 smoke path only |
+| e2e | Playwright | `^1.61.1` | **installed** (PR #37) — `playwright.config.ts` at repo root (`testDir: ./e2e`, setup + chromium projects, `webServer` boots `npm run dev`); harness + `seed.spec.ts` + auth-boundary specs live in `e2e/`. US-01 Dashboard smoke path still lands with §3 Phase 3/4 once S-07 is built. See §6.3. |
 | accessibility | axe-core (via Playwright) | TBD | optional; selective, not per-page |
 | (optional) AI-native | LLM-as-judge eval for FR-020 Refinement Helper — checked: 2026-06-16 | n/a | **When NOT to use:** any deterministic assertion. Reserve for grading whether generated DOR questions reference the story's *specific* actors/gaps vs generic templates — a property classic tests cannot cheaply assert. Not a critical-path phase; defer until S-13 ships. |
 
 **Stack grounding tools (current session):**
 - Docs: Context7 — available; not yet queried (Vitest/Better Auth/Drizzle/Workers test setup to be grounded at Phase 1 `/10x-research`); checked: 2026-06-16
 - Search: Exa.ai — available; not used yet; checked: 2026-06-16
-- Runtime/browser: Playwright MCP — not detected this session; Playwright itself is a candidate e2e tool for Phase 3/4; checked: 2026-06-16
+- Runtime/browser: Playwright — **installed** `^1.61.1` and driven via the Playwright **CLI** (screenshot + single-spec runs); harness landed in PR #37 via `/10x-e2e`. Playwright MCP not required for the CLI path; checked: 2026-07-09
 - Provider/platform: Supabase MCP + `gh` CLI — available; relevant for verifying isolation model (Data API off) and CI wiring in Phase 4; checked: 2026-06-16
 
 ## 5. Quality Gates
@@ -131,7 +131,7 @@ phase lands; before that, the gate is `planned`.
 | lint + typecheck | local + CI | required (local via `npm run lint` / `npm run typecheck`; CI wired by §3 Phase 1 minimal workflow, extended by §3 Phase 4) | syntactic / type drift |
 | unit | local + CI | required after §3 Phase 1 | logic regressions (crypto now; detection per §3 Phase 2) |
 | integration | local + CI | required after S-02 | credential leak / IDOR against real Postgres (#3, #4); sync/pipeline per §3 Phase 3 |
-| e2e on critical flows (US-01) | CI on PR | required after §3 Phase 3 | broken north-star user path |
+| e2e on critical flows (US-01) | CI on PR | required after §3 Phase 3 — harness now in place (PR #37: `e2e/` + Playwright config; auth-boundary specs green); still `planned` in CI until §3 Phase 4 wires it and S-07 builds the US-01 flow | broken north-star user path |
 | post-edit hook | local (agent loop) | recommended (configured in a later Module 3 lesson, not here) | regressions at edit time |
 | visual diff (deterministic) | CI on PR | optional | rendering regressions on the 1–3 dashboard screens |
 | pre-prod smoke | between merge + prod | optional | Workers environment-specific failures (subrequest/rate-limit) |
@@ -178,7 +178,55 @@ relevant rollout phase ships; before that, it reads "TBD — see §3 Phase N."
 
 ### 6.3 Adding an e2e test
 
-- TBD — see §3 Phase 3 / Phase 4 (Playwright smoke on the US-01 Dashboard "Today" flow).
+- **Workflow first**: use the `/10x-e2e` skill — it's the single source of truth
+  (risk → seed test + rules → generate → review against the five anti-patterns →
+  re-prompt → verify). Don't hand-write E2E from scratch; start from the risk the
+  phase/`test-plan.md` names.
+- **When E2E is the right layer**: only for a risk that crosses several system
+  boundaries (auth, routing, API, DB) or exists only in the rendered UI. If an
+  isolated function or an integration test can prove it, use §6.1/§6.2 instead —
+  E2E is the most expensive, most flake-prone layer (§1 cost × signal).
+- **Runner**: Playwright. Config is `playwright.config.ts` at the repo root —
+  `testDir: "./e2e"`, a `setup` project + a `chromium` project that loads
+  `storageState`, and a `webServer` block that boots `npm run dev` so tests hit
+  the real app (real routing, Better Auth, Postgres).
+- **Location & naming**: `e2e/<feature>.spec.ts`, one test per file. Use the
+  `.spec.ts` suffix (not `.test.ts`) — it keeps E2E out of Vitest's
+  `src/**/*.test.ts` glob so the two runners never overlap.
+- **Run**: `npm run test:e2e` (headless) or `npm run test:e2e:ui` (UI mode); a
+  single spec via `npx playwright test <name>`. Requires local Supabase up on
+  `:54322` (`next dev` connects there) — `npx supabase start` first.
+- **Auth**: never log in through the UI per test. `e2e/auth.setup.ts` signs up a
+  fresh user once and saves `storageState`; the `chromium` project starts
+  authenticated from it. For a signed-OUT test, override:
+  `test.use({ storageState: { cookies: [], origins: [] } })`.
+- **Reference tests**: `e2e/seed.spec.ts` is the exemplar every generated test is
+  modeled on (role-based locators, test independence, wait-for-state,
+  risk-tied names). `e2e/login-invalid-credentials.spec.ts` is a worked negative
+  boundary (wrong credentials never mint a session). Rules block lives in
+  `e2e/README.md`.
+- **Locators & waits (hard rules)**: `getByRole` / `getByLabel` / `getByText`
+  first, `getByTestId` only when accessibility attributes are ambiguous; never
+  CSS/XPath. Never `page.waitForTimeout()` — wait for state (`toBeVisible()`,
+  `waitForURL()`, `waitForResponse()`). Note: shadcn `CardTitle` renders a
+  `<div>`, not a heading — target the form's button/label, not a `heading` role.
+- **Real vs mocked**: internal boundaries (auth, routing, DB) stay **real** —
+  that's where integration risk hides. Mock only expensive/non-deterministic
+  **external** APIs (GitHub, Jira, the LLM) at the network layer. Caveat: for an
+  API the app calls **server-side**, browser-level `page.route()` won't intercept
+  it — mock where the server actually calls out.
+- **Signal check (deliberate break)**: after the test is green, temporarily
+  invert or weaken the production behavior the risk targets, re-run, and confirm
+  the test goes **red** — then revert immediately (never commit the break). If it
+  stays green after you break the thing it guards, the assertion protects nothing.
+  Verified for the auth boundary by disabling credential rejection in
+  `login-form.tsx` and confirming the spec caught it.
+- **Cleanup**: use unique identifiers (timestamp suffix) for test data so
+  parallel runs / re-runs don't collide; tear down in `afterEach` once a delete
+  path exists. A failed-auth test persists nothing, so it needs no teardown.
+- US-01 Dashboard "Today" smoke (the north-star flow) lands with §3 Phase 3/4
+  once that slice (S-07) is built — the feature must exist before a browser can
+  drive it.
 
 ### 6.4 Adding a test for a new API endpoint
 
@@ -221,7 +269,7 @@ contributors should respect these unless the underlying assumption changes.
 ## 8. Freshness Ledger
 
 - Strategy (§1–§5) last reviewed: 2026-06-16
-- Stack versions last verified: 2026-06-16
+- Stack versions last verified: 2026-07-09 (Playwright `^1.61.1` installed via PR #37; §4 e2e row + §5 e2e gate + §6.3 cookbook updated)
 - AI-native tool references last verified: 2026-06-16
 
 Refresh (`/10x-test-plan --refresh`) when:
