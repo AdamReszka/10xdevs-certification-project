@@ -319,29 +319,31 @@ No schema migration — `githubCredential`/`monitoredRepo` already exist (F-02).
 ### Phase 2: Setup wizard shell + GitHub connect step
 
 #### Automated
-- [x] 2.1 Type checking passes (`npm run typecheck`)
-- [x] 2.2 Linting passes (`npm run lint`)
-- [x] 2.3 `npm test` still green (no regressions)
+- [x] 2.1 Type checking passes (`npm run typecheck`) — 4972e34
+- [x] 2.2 Linting passes (`npm run lint`) — 4972e34
+- [x] 2.3 `npm test` still green (no regressions) — 4972e34
 
 #### Manual
-- [x] 2.4 `/setup` redirects to `/setup/github`, wizard chrome shows "Step 1 of 4"
+- [x] 2.4 `/setup` redirects to `/setup/github`, wizard chrome shows "Step 1 of 4" — 4972e34
 - [ ] 2.5 Valid PAT lists real repos; invalid PAT errors and stores nothing
 - [ ] 2.6 Missing-`repo`/fine-grained PAT shows inline non-blocking warning; public repos still savable
 - [ ] 2.7 Save persists credential + repos; reload shows "Connected as …" card
 - [ ] 2.8 Disconnect clears credential + repos; connect form returns
-- [x] 2.9 Unauthenticated `/setup/github` redirects to `/login`
+- [x] 2.9 Unauthenticated `/setup/github` redirects to `/login` — 4972e34
 
 > Manual 2.5–2.8 (valid-PAT connect → pick → save → disconnect) deferred to a human PAT round-trip before PR #38 merge — they require a real classic GitHub PAT. 2.4 + 2.9 verified against the running dev server (authed session via API sign-up; `Setup progress: step 1 of 4`, `/setup`→`/setup/github` 307, unauth→`/login` 307).
 
 ### Phase 3: Security test surface (integration + e2e)
 
 #### Automated
-- [ ] 3.1 Integration #3 no-leak (success + failure paths) + re-connect FK integrity pass via `npm run test:integration` against real Postgres
-- [ ] 3.2 Integration #4 cross-account IDOR (read + disconnect isolation) passes; unit `npm test` stays green + DB-free
-- [ ] 3.3 Happy-path e2e passes (`npm run test:e2e`)
-- [ ] 3.4 Lint + typecheck clean
+- [x] 3.1 Integration #3 no-leak (success + failure paths) + re-connect FK integrity pass via `npm run test:integration` against real Postgres — abcf861
+- [x] 3.2 Integration #4 cross-account IDOR (read + disconnect isolation) passes; unit `npm test` stays green + DB-free — abcf861
+- [x] 3.3 Happy-path e2e passes (`npm run test:e2e`) — abcf861
+- [x] 3.4 Lint + typecheck clean — abcf861
 
 #### Manual
-- [ ] 3.5 Deliberate-break check #3 (leak token → test red) → reverted
-- [ ] 3.6 Deliberate-break check #4 (drop ownerId predicate → test red) → reverted
-- [ ] 3.7 E2E signal check (weaken validation → reflected) → reverted
+- [x] 3.5 Deliberate-break check #3 (leak token → test red) → reverted — abcf861
+- [x] 3.6 Deliberate-break check #4 (drop ownerId predicate → test red) → reverted — abcf861
+- [x] 3.7 E2E signal check (weaken validation → reflected) → reverted — abcf861
+
+> Phase 3 landed the repo's first integration-test harness: `vitest.integration.config.ts` + `test/integration/setup.ts` (loads `.env.local`, refuses any DB but local `:54322`), `npm run test:integration`, and `*.integration.test.ts` excluded from the unit glob so `npm test` stays hermetic. E2E mocks GitHub server-side via `e2e/github-fixture-server.mjs` + `GITHUB_API_BASE_URL` (page.route can't reach a server-side fetch). All 3 deliberate-break checks confirmed the tests bite (leak→#3 red, drop-ownerId→#4 red, fixture 401→e2e red at the repo-picker stage); every break reverted. Prereq for the integration + e2e suites: `npx supabase start`.
