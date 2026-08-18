@@ -336,14 +336,14 @@ No schema migration — `githubCredential`/`monitoredRepo` already exist (F-02).
 ### Phase 3: Security test surface (integration + e2e)
 
 #### Automated
-- [x] 3.1 Integration #3 no-leak (success + failure paths) + re-connect FK integrity pass via `npm run test:integration` against real Postgres — abcf861
-- [x] 3.2 Integration #4 cross-account IDOR (read + disconnect isolation) passes; unit `npm test` stays green + DB-free — abcf861
-- [x] 3.3 Happy-path e2e passes (`npm run test:e2e`) — abcf861
-- [x] 3.4 Lint + typecheck clean — abcf861
+- [x] 3.1 Integration #3 no-leak (success + failure paths) + re-connect FK integrity pass via `npm run test:integration` against real Postgres — 50f8423
+- [x] 3.2 Integration #4 cross-account IDOR (read + disconnect isolation) passes; unit `npm test` stays green + DB-free — 50f8423
+- [x] 3.3 Happy-path e2e passes (`npm run test:e2e`) — 50f8423
+- [x] 3.4 Lint + typecheck clean — 50f8423
 
 #### Manual
-- [x] 3.5 Deliberate-break check #3 (leak token → test red) → reverted — abcf861
-- [x] 3.6 Deliberate-break check #4 (drop ownerId predicate → test red) → reverted — abcf861
-- [x] 3.7 E2E signal check (weaken validation → reflected) → reverted — abcf861
+- [x] 3.5 Deliberate-break check #3 (leak token → test red) → reverted — 50f8423
+- [x] 3.6 Deliberate-break check #4 (drop ownerId predicate → test red) → reverted — 50f8423
+- [x] 3.7 E2E signal check (weaken validation → reflected) → reverted — 50f8423
 
 > Phase 3 landed the repo's first integration-test harness: `vitest.integration.config.ts` + `test/integration/setup.ts` (loads `.env.local`, refuses any DB but local `:54322`), `npm run test:integration`, and `*.integration.test.ts` excluded from the unit glob so `npm test` stays hermetic. E2E mocks GitHub server-side via `e2e/github-fixture-server.mjs` + `GITHUB_API_BASE_URL` (page.route can't reach a server-side fetch). All 3 deliberate-break checks confirmed the tests bite (leak→#3 red, drop-ownerId→#4 red, fixture 401→e2e red at the repo-picker stage); every break reverted. Prereq for the integration + e2e suites: `npx supabase start`.
