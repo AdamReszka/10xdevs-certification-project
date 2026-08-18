@@ -17,6 +17,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
+// The GitHub API fixture the setup e2e points the app's SERVER-SIDE fetch at.
+// `page.route()` can't intercept a server-side fetch, so the app is booted with
+// GITHUB_API_BASE_URL pointing here (see the webServer array below).
+const GITHUB_FIXTURE_PORT = 3099;
+const GITHUB_FIXTURE_URL = `http://localhost:${GITHUB_FIXTURE_PORT}`;
+
 // Authenticated browser state produced by e2e/auth.setup.ts and reused by the
 // main project. Written under playwright/.auth/ (git-ignored).
 export const STORAGE_STATE = "playwright/.auth/user.json";
@@ -46,12 +52,27 @@ export default defineConfig({
     },
   ],
 
-  // Boot the real app for the duration of the run. Reuse an already-running dev
-  // server locally; always start a fresh one in CI.
-  webServer: {
-    command: "npm run dev",
-    url: baseURL,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-  },
+  // Boot the real app + the GitHub fixture for the duration of the run. The app
+  // is launched with GITHUB_API_BASE_URL pointing at the fixture so the setup
+  // e2e's server-side GitHub calls resolve to canned data (test-plan §6.3).
+  //
+  // NOTE: with `reuseExistingServer` on (local), an app already listening on
+  // :3000 is reused AS-IS — so a dev server started WITHOUT the fixture env will
+  // not be mocked. For the setup e2e, let Playwright own the app (stop any
+  // manual `npm run dev` first) or run in CI where a fresh server is forced.
+  webServer: [
+    {
+      command: "node e2e/github-fixture-server.mjs",
+      port: GITHUB_FIXTURE_PORT,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: "npm run dev",
+      url: baseURL,
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: { GITHUB_API_BASE_URL: GITHUB_FIXTURE_URL },
+    },
+  ],
 });
