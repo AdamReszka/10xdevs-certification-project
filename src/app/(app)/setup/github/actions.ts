@@ -1,0 +1,202 @@
+"use server";
+
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+
+import { requireSession } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import {
+  GithubAuthError,
+  type GithubClientOpts,
+  GithubUnavailableError,
+} from "@/lib/github";
+import {
+  disconnectGithub as disconnectGithubService,
+  storeGithubIntegration as storeGithubIntegrationService,
+  validateAndListRepos,
+} from "@/lib/integrations/github-store";
+import {
+  githubTokenSchema,
+  repoSelectionSchema,
+} from "@/lib/validations/github";
+
+/**
+ * The first product mutations (S-02) — deliberately thin. Each action does only
+ * `requireSession()` + `getCloudflareContext().env` + `getDb(env)` (inside the
+ * body, never at module scope — same discipline as `src/lib/auth.ts`), then
+ * delegates to the request-context-free service core with
+ * `ownerId = session.user.id`. No business logic lives here.
+ *
+ * SECURITY: no action return type or `console.*` may include the raw token; the
+ * validate action returns repos + scopes but NEVER the token, and the store
+ * action returns only non-secret meta (Phase 3 assertion #3).
+ */
+
+/** Repo shape handed to the client repo-picker (ids as strings for the DOM). */
+export type ClientRepo = { id: string; fullName: string };
+
+/**
+ * Shared token-free failure shape. Both actions map every error through this;
+ * `no_repos` only ever arises on the store path but lives in the common union so
+ * one `toFailure` helper serves both (the client reads `message` regardless).
+ */
+export type ActionFailure = {
+  ok: false;
+  error: "invalid_token" | "unavailable" | "bad_format" | "no_repos";
+  message: string;
+};
+
+export type ValidateResult =
+  | {
+      ok: true;
+      login: string;
+      likelyFineGrained: boolean;
+      hasRepoScope: boolean;
+      repos: ClientRepo[];
+    }
+  | ActionFailure;
+
+export type StoreResult =
+  | { ok: true; login: string; tokenLast4: string; repoCount: number }
+  | ActionFailure;
+
+/**
+ * Build the GitHub client opts from env. `GITHUB_API_BASE_URL` lets the
+ * Playwright e2e point the server-side fetch at a local fixture server
+ * (`page.route()` can't intercept a server-side fetch — test-plan §6.3);
+ * unset in normal runs ⇒ the client defaults to `https://api.github.com`.
+ */
+function githubOptsFromEnv(): GithubClientOpts | undefined {
+  const baseUrl = process.env.GITHUB_API_BASE_URL;
+  return baseUrl ? { baseUrl } : undefined;
+}
+
+/**
+ * Validate the pasted PAT and return the account login + repos for the picker.
+ * No DB write, no token in the return — FR-002 "validate before store".
+ */
+export async function validateGithubToken(
+  token: string,
+): Promise<ValidateResult> {
+  await requireSession();
+
+  const parsed = githubTokenSchema.safeParse({ token });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: "bad_format",
+      message:
+        parsed.error.issues[0]?.message ??
+        "That does not look like a classic GitHub token.",
+    };
+  }
+
+  try {
+    const { login, scopes, likelyFineGrained, repos } =
+      await validateAndListRepos({
+        token: parsed.data.token,
+        opts: githubOptsFromEnv(),
+      });
+
+    return {
+      ok: true,
+      login,
+      likelyFineGrained,
+      hasRepoScope: scopes.includes("repo"),
+      repos: repos.map((r) => ({ id: String(r.githubRepoId), fullName: r.fullName })),
+    };
+  } catch (err) {
+    return toFailure(err);
+  }
+}
+
+/**
+ * Persist the credential + selected repos. Re-validates the token server-side
+ * (defense-in-depth) via the service core, which encrypts before any DB write.
+ */
+export async function storeGithubIntegration(
+  token: string,
+  selectedRepoIds: string[],
+): Promise<StoreResult> {
+  const session = await requireSession();
+
+  const tokenParsed = githubTokenSchema.safeParse({ token });
+  if (!tokenParsed.success) {
+    return {
+      ok: false,
+      error: "bad_format",
+      message: tokenParsed.error.issues[0]?.message ?? "Invalid token format.",
+    };
+  }
+  const selectionParsed = repoSelectionSchema.safeParse({ selectedRepoIds });
+  if (!selectionParsed.success) {
+    return {
+      ok: false,
+      error: "bad_format",
+      message:
+        selectionParsed.error.issues[0]?.message ??
+        "Select at least one repository to monitor.",
+    };
+  }
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const { login, tokenLast4, repoCount } = await storeGithubIntegrationService({
+      db,
+      ownerId: session.user.id,
+      token: tokenParsed.data.token,
+      selectedRepoIds: selectionParsed.data.selectedRepoIds,
+      opts: githubOptsFromEnv(),
+    });
+    return { ok: true, login, tokenLast4, repoCount };
+  } catch (err) {
+    return toFailure(err);
+  }
+}
+
+/** Clear the credential + its repos for the signed-in account. */
+export async function disconnectGithub(): Promise<{ ok: true }> {
+  const session = await requireSession();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  await disconnectGithubService({ db, ownerId: session.user.id });
+  return { ok: true };
+}
+
+/**
+ * Map a service/client error to a typed, token-free failure result. Ordering
+ * matters: `GithubAuthError` (401) is the only "invalid token" verdict; every
+ * other failure — 403/5xx/network (`GithubUnavailableError`) or the "no repos"
+ * guard — is treated as retryable/unavailable so a valid token is never
+ * mislabeled as invalid (F5, PRD graceful-degradation).
+ */
+function toFailure(err: unknown): ActionFailure {
+  if (err instanceof GithubAuthError) {
+    return {
+      ok: false,
+      error: "invalid_token",
+      message: "GitHub rejected that token. Check it and try again.",
+    };
+  }
+  if (err instanceof GithubUnavailableError) {
+    return {
+      ok: false,
+      error: "unavailable",
+      message: "Couldn't reach GitHub right now. Please try again in a moment.",
+    };
+  }
+  if (err instanceof Error && err.message.includes("selected repositories")) {
+    return {
+      ok: false,
+      error: "no_repos",
+      message: "None of the selected repositories were found. Re-validate and try again.",
+    };
+  }
+  return {
+    ok: false,
+    error: "unavailable",
+    message: "Something went wrong. Please try again.",
+  };
+}

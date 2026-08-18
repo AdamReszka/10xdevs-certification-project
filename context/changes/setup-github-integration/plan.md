@@ -307,29 +307,31 @@ No schema migration — `githubCredential`/`monitoredRepo` already exist (F-02).
 ### Phase 1: GitHub client, validations, primitives & key provisioning
 
 #### Automated
-- [x] 1.1 `github.ts` unit tests pass (validate parse, likelyFineGrained, 401 GithubAuthError, non-401 GithubUnavailableError, Link pagination, token absent from errors)
-- [x] 1.2 Type checking passes (`npm run typecheck`)
-- [x] 1.3 Linting passes (`npm run lint`)
+- [x] 1.1 `github.ts` unit tests pass (validate parse, likelyFineGrained, 401 GithubAuthError, non-401 GithubUnavailableError, Link pagination, token absent from errors) — 2fd4f58
+- [x] 1.2 Type checking passes (`npm run typecheck`) — 2fd4f58
+- [x] 1.3 Linting passes (`npm run lint`) — 2fd4f58
 
 #### Manual
-- [x] 1.4 Server Action spike runs in `npm run dev` (session + DB select), then removed
-- [x] 1.5 `TOKEN_ENCRYPTION_KEY` provisioned; encrypt/decrypt round-trip verified
-- [x] 1.6 shadcn `checkbox`/`scroll-area`/`alert` render with no style regression
+- [x] 1.4 Server Action spike runs in `npm run dev` (session + DB select), then removed — 2fd4f58
+- [x] 1.5 `TOKEN_ENCRYPTION_KEY` provisioned; encrypt/decrypt round-trip verified — 2fd4f58
+- [x] 1.6 shadcn `checkbox`/`scroll-area`/`alert` render with no style regression — 2fd4f58
 
 ### Phase 2: Setup wizard shell + GitHub connect step
 
 #### Automated
-- [ ] 2.1 Type checking passes (`npm run typecheck`)
-- [ ] 2.2 Linting passes (`npm run lint`)
-- [ ] 2.3 `npm test` still green (no regressions)
+- [x] 2.1 Type checking passes (`npm run typecheck`)
+- [x] 2.2 Linting passes (`npm run lint`)
+- [x] 2.3 `npm test` still green (no regressions)
 
 #### Manual
-- [ ] 2.4 `/setup` redirects to `/setup/github`, wizard chrome shows "Step 1 of 4"
+- [x] 2.4 `/setup` redirects to `/setup/github`, wizard chrome shows "Step 1 of 4"
 - [ ] 2.5 Valid PAT lists real repos; invalid PAT errors and stores nothing
 - [ ] 2.6 Missing-`repo`/fine-grained PAT shows inline non-blocking warning; public repos still savable
 - [ ] 2.7 Save persists credential + repos; reload shows "Connected as …" card
 - [ ] 2.8 Disconnect clears credential + repos; connect form returns
-- [ ] 2.9 Unauthenticated `/setup/github` redirects to `/login`
+- [x] 2.9 Unauthenticated `/setup/github` redirects to `/login`
+
+> Manual 2.5–2.8 (valid-PAT connect → pick → save → disconnect) deferred to a human PAT round-trip before PR #38 merge — they require a real classic GitHub PAT. 2.4 + 2.9 verified against the running dev server (authed session via API sign-up; `Setup progress: step 1 of 4`, `/setup`→`/setup/github` 307, unauth→`/login` 307).
 
 ### Phase 3: Security test surface (integration + e2e)
 
