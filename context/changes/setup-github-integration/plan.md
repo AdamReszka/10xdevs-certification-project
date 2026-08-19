@@ -325,10 +325,10 @@ No schema migration — `githubCredential`/`monitoredRepo` already exist (F-02).
 
 #### Manual
 - [x] 2.4 `/setup` redirects to `/setup/github`, wizard chrome shows "Step 1 of 4" — 4972e34
-- [ ] 2.5 Valid PAT lists real repos; invalid PAT errors and stores nothing
-- [ ] 2.6 Missing-`repo`/fine-grained PAT shows inline non-blocking warning; public repos still savable
-- [ ] 2.7 Save persists credential + repos; reload shows "Connected as …" card
-- [ ] 2.8 Disconnect clears credential + repos; connect form returns
+- [x] 2.5 Valid PAT lists real repos; invalid PAT errors and stores nothing
+- [x] 2.6 Missing-`repo`/fine-grained PAT shows inline non-blocking warning; public repos still savable
+- [x] 2.7 Save persists credential + repos; reload shows "Connected as …" card
+- [x] 2.8 Disconnect clears credential + repos; connect form returns
 - [x] 2.9 Unauthenticated `/setup/github` redirects to `/login` — 4972e34
 
 > Manual 2.5–2.8 (valid-PAT connect → pick → save → disconnect) deferred to a human PAT round-trip before PR #38 merge — they require a real classic GitHub PAT. 2.4 + 2.9 verified against the running dev server (authed session via API sign-up; `Setup progress: step 1 of 4`, `/setup`→`/setup/github` 307, unauth→`/login` 307).
