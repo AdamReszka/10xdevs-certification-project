@@ -1,10 +1,10 @@
 ---
 change_id: ci-workflow
 title: Add GitHub Actions CI workflow running lint, typecheck, and unit tests
-status: implemented
+status: archived
 created: 2026-08-19
 updated: 2026-08-19
-archived_at: null
+archived_at: 2026-08-19T20:45:36Z
 ---
 
 ## Notes
