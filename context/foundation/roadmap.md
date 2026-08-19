@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-06-14
+updated: 2026-08-19
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -33,7 +33,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | F-02 | data-schema-baseline      | (foundation) Drizzle schema + Supabase migration for all product entities                    | —                  | FR-002–FR-007, FR-009–FR-013, FR-018–FR-020     | done     |
 | F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | done     |
 | S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | done     |
-| S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | proposed |
+| S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | done     |
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | proposed |
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | proposed |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | proposed |
@@ -147,7 +147,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - GitHub PAT scope requirements (which scopes are needed to read commits, PRs, and reviews across the selected repos) — Owner: TBD. Block: no (verify during implementation against GitHub REST API docs).
 - **Risk:** Credential encryption must satisfy the PRD security guardrail ("never logged, never in client payloads"); audit the API route and the DB write path before merging to confirm no token appears in logs or response bodies.
-- **Status:** proposed
+- **Status:** done
 
 ---
 
@@ -375,3 +375,5 @@ Foundations below assume these are present and do NOT re-scaffold them.
 ## Done
 
 (Empty on first generation. `/10x-archive` appends an entry here — and flips that item's `Status` to `done` — when a change whose `Change ID` matches the item is archived.)
+
+- **S-02: user can connect a GitHub Personal Access Token, select which repositories to monitor, and have the token validated against the GitHub API before it is stored encrypted; setup wizard step 1 of 4 complete.** — Archived 2026-08-19 → `context/archive/2026-06-14-setup-github-integration/`. Lesson: —.
