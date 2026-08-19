@@ -15,3 +15,17 @@
 - **Problem**: Turbopack detects a stray lockfile in a parent dir, infers the wrong workspace root, and recursively file-watches the entire parent tree → runaway memory → OS OOM → the Mac powered itself off (crashed ~3 times before diagnosis).
 - **Rule**: Always pin `turbopack.root` to the project dir in next.config.ts, keep parent dirs free of stray lockfiles, and run dev/build with a hard Node memory cap (NODE_OPTIONS="--max-old-space-size=2048") so a runaway watch self-kills before the OS OOMs.
 - **Applies to**: implement, impl-review
+
+## Request-scoped pg.Pool must be closed at request end, not leaked per invocation
+
+- **Context**: src/lib/db.ts:7-11 — getDb(env) builds `new Pool({ max: 1 })` per call; consumed by auth.ts (createAuth/getOptionalSession), the S-02 Server Actions, and gated page components.
+- **Problem**: The per-request pool is never `.end()`ed. On Workers each request/action/render opens a Hyperdrive-backed connection that lives for the isolate's lifetime → under sustained traffic, connection exhaustion. A naive `ctx.waitUntil(pool.end())` inside getDb is WRONG — pool.end() fires immediately and closes the pool before the caller's queries run.
+- **Rule**: On Cloudflare Workers, a per-request DB pool must be torn down exactly when the request ends — reuse one pool per request (cached on request context) and close it via the request's after-hook / `ctx.waitUntil` scheduled to run AFTER the handler, never at pool-construction time. Don't expose the pool to call sites for manual closing (createAuth holds it for the instance's lifetime).
+- **Applies to**: src/lib/db.ts and every getDb consumer; any Workers request path that opens a TCP-backed resource (pg Pool over Hyperdrive).
+
+## Cap and origin-check server-directed pagination loops that carry a secret
+
+- **Context**: src/lib/github.ts:183-207 — listRepos follows the GitHub `Link: rel="next"` URL verbatim, refetching each page with the PAT in the Authorization header.
+- **Problem**: The loop has no iteration cap and no origin check against the configured baseUrl. Against real api.github.com it's fine, but a hostile/misconfigured base host could return a self-referential or cross-host `next` link → unbounded loop (DoS) and/or the secret forwarded to an arbitrary host.
+- **Rule**: When following a server-provided next-link (Link rel=next, HAL, etc.) while attaching a credential, always (a) cap the iteration count to a sane bound, and (b) verify each next URL's origin equals the configured base origin before refetching. Never send a secret to a host the response chose without validation.
+- **Applies to**: src/lib/github.ts and any Workers HTTP client following server-directed pagination with a token attached (S-05 GitHub/Jira sync reuses this pattern).

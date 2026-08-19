@@ -66,6 +66,9 @@ export type StoreResult =
  * unset in normal runs ⇒ the client defaults to `https://api.github.com`.
  */
 function githubOptsFromEnv(): GithubClientOpts | undefined {
+  // Test-only seam: never honor a base-URL override in production, so a stray or
+  // hostile GITHUB_API_BASE_URL can't redirect users' PATs to another host.
+  if (process.env.NODE_ENV === "production") return undefined;
   const baseUrl = process.env.GITHUB_API_BASE_URL;
   return baseUrl ? { baseUrl } : undefined;
 }
@@ -148,6 +151,7 @@ export async function storeGithubIntegration(
       token: tokenParsed.data.token,
       selectedRepoIds: selectionParsed.data.selectedRepoIds,
       opts: githubOptsFromEnv(),
+      env,
     });
     return { ok: true, login, tokenLast4, repoCount };
   } catch (err) {
@@ -194,6 +198,10 @@ function toFailure(err: unknown): ActionFailure {
       message: "None of the selected repositories were found. Re-validate and try again.",
     };
   }
+  // Log the unexpected error for ops visibility. Safe: GitHub errors are handled
+  // above; only DB/crypto errors reach here and none carry the plaintext token
+  // (the token lives in a local var, never in these error objects) — F5.
+  console.error("[setup/github] unexpected integration error:", err);
   return {
     ok: false,
     error: "unavailable",

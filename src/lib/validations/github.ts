@@ -20,6 +20,9 @@ export const githubTokenSchema = z.object({
   token: z
     .string()
     .min(1, "Paste your GitHub personal access token")
+    // Classic PATs are ~40 chars; cap well above that so an oversized string
+    // never reaches GitHub or encryptToken (F6).
+    .max(255, "That does not look like a GitHub token.")
     .regex(/^gh[ps]_/, "That does not look like a classic GitHub token (ghp_…)"),
 });
 
