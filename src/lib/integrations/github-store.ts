@@ -32,6 +32,17 @@ import {
 /** The AAD provider string — MUST match the `integration` pgEnum + crypto.test.ts. */
 const PROVIDER = "GITHUB";
 
+/**
+ * Env surface for the encryption key. Mirrors `auth.ts`'s `AuthEnv` trick: the
+ * shared `HYPERDRIVE` prop is what makes the Worker `CloudflareEnv` structurally
+ * assignable here, while `TOKEN_ENCRYPTION_KEY` is the field `crypto.ts` reads.
+ * Threading it (not relying on `process.env`) matches `getDb(env)`/`createAuth(env)`.
+ */
+type StoreEnv = {
+  HYPERDRIVE?: { connectionString: string };
+  TOKEN_ENCRYPTION_KEY?: string;
+};
+
 /** Concrete drizzle instance type, matching what `getDb()` returns. */
 type Db = ReturnType<typeof getDb>;
 
@@ -86,12 +97,15 @@ export async function storeGithubIntegration({
   token,
   selectedRepoIds,
   opts,
+  env,
 }: {
   db: Db;
   ownerId: string;
   token: string;
   selectedRepoIds: string[];
   opts?: GithubClientOpts;
+  /** Workers `env` for the encryption key; falls back to `process.env` when omitted. */
+  env?: StoreEnv;
 }): Promise<StoreGithubIntegrationResult> {
   const { login, scopes, repos } = await validateAndListRepos({ token, opts });
 
@@ -106,7 +120,7 @@ export async function storeGithubIntegration({
     throw new Error("None of the selected repositories were found on GitHub.");
   }
 
-  const encryptedToken = encryptToken(token, { ownerId, provider: PROVIDER });
+  const encryptedToken = encryptToken(token, { ownerId, provider: PROVIDER }, env);
   const tokenLast4 = redactToken(token);
   const scopesValue = scopes.length > 0 ? scopes.join(",") : null;
   const validatedAt = new Date();

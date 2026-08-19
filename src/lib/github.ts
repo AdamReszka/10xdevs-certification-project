@@ -147,6 +147,9 @@ export async function validatePat(
   return { login: body.login, scopes, likelyFineGrained };
 }
 
+/** Hard cap on repo pages followed — defends against an unbounded `Link` chain (100/page ⇒ ≤2000 repos). */
+const MAX_REPO_PAGES = 20;
+
 /** Parse the `rel="next"` URL out of a GitHub `Link` header, if present. */
 function nextLink(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
@@ -179,8 +182,15 @@ export async function listRepos(
 
   let url: string | null = `${baseUrl}/user/repos?${params.toString()}`;
   const repos: GithubRepo[] = [];
+  const baseOrigin = new URL(baseUrl).origin;
+  let pageCount = 0;
 
   while (url) {
+    if (++pageCount > MAX_REPO_PAGES) {
+      throw new GithubUnavailableError(
+        `GitHub repository list exceeded ${MAX_REPO_PAGES} pages. Please try again.`,
+      );
+    }
     const res: Response = await githubGet(url, token, opts);
     if (!res.ok) {
       throw new GithubUnavailableError(
@@ -203,7 +213,15 @@ export async function listRepos(
       }
     }
 
-    url = nextLink(res.headers.get("link"));
+    // Pin each next-link to the base origin: never chase a cross-host
+    // `Link: rel="next"` while carrying the token (F4).
+    const next = nextLink(res.headers.get("link"));
+    if (next !== null && new URL(next, baseUrl).origin !== baseOrigin) {
+      throw new GithubUnavailableError(
+        "GitHub returned a cross-origin pagination link. Please try again.",
+      );
+    }
+    url = next;
   }
 
   return repos;

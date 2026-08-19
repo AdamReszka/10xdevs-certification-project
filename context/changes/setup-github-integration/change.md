@@ -1,7 +1,7 @@
 ---
 change_id: setup-github-integration
 title: Setup wizard — GitHub integration (S-02)
-status: implemented
+status: impl_reviewed
 created: 2026-06-14
 updated: 2026-08-19
 archived_at: null
