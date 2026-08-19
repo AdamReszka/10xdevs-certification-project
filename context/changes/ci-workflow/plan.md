@@ -164,6 +164,6 @@ No application or DB migration. The only artifact is the CI workflow edit. `npm 
 
 #### Manual
 
-- [ ] 1.6 PR Checks show two green jobs; integration log shows PG@54322 + migrations + 4 tests
-- [ ] 1.7 No new repository Secret required (key generated in-job)
-- [ ] 1.8 End-to-end chain visible: plan → implement → PR → CI run → merge
+- [x] 1.6 PR Checks show two green jobs; integration log shows PG@54322 + migrations + 4 tests
+- [x] 1.7 No new repository Secret required (key generated in-job)
+- [x] 1.8 End-to-end chain visible: plan → implement → PR → CI run → merge
