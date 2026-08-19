@@ -21,3 +21,35 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+
+  # Credential-security integration suite against a REAL Postgres (mirrors the
+  # local `supabase start` → `db:migrate` → `test:integration` flow). Runs in
+  # parallel with `test` under the same PR trigger. Secret-free: the encryption
+  # key is generated per-run. Ordering (start → migrate → test) is load-bearing.
+  integration:
+    runs-on: ubuntu-latest
+    env:
+      # Exact host/port the suite's setup.ts guard demands (127.0.0.1:54322) —
+      # also the db:migrate target. Any other host/port fails fast by design.
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      # Boot Postgres only: the suite hits it directly via a pg pool, so every
+      # non-db service is excluded to cut cold-start and failure surface.
+      - name: Start Postgres (supabase)
+        run: supabase start -x gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      # Supabase snapshot is infra-only (0 tables) — drizzle owns the schema.
+      - name: Apply schema
+        run: npm run db:migrate
+      - name: Integration tests
+        run: |
+          export TOKEN_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+          npm run test:integration

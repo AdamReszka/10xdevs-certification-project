@@ -156,11 +156,11 @@ No application or DB migration. The only artifact is the CI workflow edit. `npm 
 
 #### Automated
 
-- [ ] 1.1 `ci.yml` valid YAML with both `test` and `integration` jobs (parse / actionlint)
+- [x] 1.1 `ci.yml` valid YAML with both `test` and `integration` jobs (parse / actionlint)
 - [ ] 1.2 PR `integration` job green: supabase start -x → db:migrate → test:integration (4 tests)
 - [ ] 1.3 PR `test` job stays green
-- [ ] 1.4 Local sanity: `npm run test:integration` + `npm test` green, no regressions
-- [ ] 1.5 `dotenv` declared in `package.json` devDependencies; `npm ci` + `npm test` green
+- [x] 1.4 Local sanity: `npm run test:integration` + `npm test` green, no regressions
+- [x] 1.5 `dotenv` declared in `package.json` devDependencies; `npm ci` + `npm test` green
 
 #### Manual
 
