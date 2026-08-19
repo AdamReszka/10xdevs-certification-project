@@ -41,7 +41,9 @@ jobs:
       - run: npm ci
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned (not `latest`) for reproducible CI — kept in step with the
+          # `supabase` devDependency (^2.101.0) so local + CI CLI stay aligned.
+          version: 2.101.0
       # Boot Postgres only: the suite hits it directly via a pg pool, so every
       # non-db service is excluded to cut cold-start and failure surface.
       - name: Start Postgres (supabase)
