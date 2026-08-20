@@ -389,9 +389,9 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [x] 3.1 Lint + build pass
-- [x] 3.2 `setup/team/actions.integration.test.ts`: happy-path import+save (roster & cadence), `invalid_input`, `githubDegraded` surfaced, `decrypt_failed`
-- [x] 3.3 Test asserts no token string appears in captured `console.error`
+- [x] 3.1 Lint + build pass — ec25222
+- [x] 3.2 `setup/team/actions.integration.test.ts`: happy-path import+save (roster & cadence), `invalid_input`, `githubDegraded` surfaced, `decrypt_failed` — ec25222
+- [x] 3.3 Test asserts no token string appears in captured `console.error` — ec25222
 
 #### Manual
 
@@ -401,8 +401,8 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [ ] 4.1 Lint + build pass
-- [ ] 4.2 Any component/organism tests present pass
+- [x] 4.1 Lint + build pass
+- [x] 4.2 Any component/organism tests present pass
 
 #### Manual
 
