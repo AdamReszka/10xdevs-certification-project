@@ -360,6 +360,11 @@ export const syncState = pgTable(
     lastError: text("last_error"),
     // Incremental Jira status-history delta cursor (FR-012).
     jiraHistoryCursor: text("jira_history_cursor"),
+    // Overlap guard (S-05): a sync run leases this (owner, integration) row until
+    // this instant; a later cron fire skips the row while the lease is still fresh.
+    // Nullable — an unclaimed row is immediately eligible. Stale leases self-recover
+    // once this timestamp passes.
+    claimedUntil: timestamp("claimed_until"),
     freshnessWindowMinutes: integer("freshness_window_minutes")
       .default(15)
       .notNull(),
