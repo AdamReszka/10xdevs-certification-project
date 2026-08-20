@@ -338,9 +338,9 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | done                   | ✅ Implemented (branch F-02) |
 | F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | done                   | ✅ Implemented (branch F-03, PR #30) |
 | S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | done                   | ✅ Implemented & reviewed — PR #34 |
-| S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | yes                    | Prereqs S-01, F-02 done; parallel with S-03 |
-| S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | yes                    | Prereqs S-01, F-02 done; parallel with S-02 |
-| S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | no                     | Awaits S-02, S-03 |
+| S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | done                   | ✅ Implemented, reviewed & archived (2026-08-19) |
+| S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | done                   | ✅ Implemented, reviewed & archived — PR #41 (2026-08-20) |
+| S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | yes                    | Prereqs S-02, S-03 done; next in Stream A |
 | S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | no                     | Awaits S-04 |
 | S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | no                     | Awaits S-05 |
 | S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox + panels (north star milestone)      | no                     | Awaits S-06; validates the core product hypothesis |
