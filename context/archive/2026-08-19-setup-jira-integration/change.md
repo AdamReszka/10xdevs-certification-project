@@ -1,10 +1,10 @@
 ---
 change_id: setup-jira-integration
 title: Setup wizard — Jira integration (S-03)
-status: impl_reviewed
+status: archived
 created: 2026-08-19
 updated: 2026-08-20
-archived_at: null
+archived_at: 2026-08-20T06:39:06Z
 ---
 
 ## Notes

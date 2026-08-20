@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-19
+updated: 2026-08-20
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -34,7 +34,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | F-03 | ui-component-foundation   | (foundation) shadcn/ui installed; base layout + auth page shells                             | —                  | FR-001, FR-016, FR-017, NFR                     | done     |
 | S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | done     |
 | S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | done     |
-| S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | proposed |
+| S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | done     |
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | proposed |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | proposed |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | proposed |
@@ -163,7 +163,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - Jira REST API v3 endpoint for listing projects + workflow statuses for a given workspace — Owner: TBD. Block: no (standard API; verify pagination handling during implementation).
   - PRD Open Question #2: should MVP keep 5 status categories or add a 6th "Blocked" bucket? — Owner: user. Block: no (MVP ships with 5 categories; "Blocked" is phase 2; does not block FR-005 implementation).
 - **Risk:** Users with non-standard or overlapping Jira workflow statuses will struggle with the 5-category mapping; a hint in the UI ("map 'Waiting for QA' to Testing") reduces first-time friction.
-- **Status:** proposed
+- **Status:** done
 
 ---
 
@@ -377,3 +377,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 (Empty on first generation. `/10x-archive` appends an entry here — and flips that item's `Status` to `done` — when a change whose `Change ID` matches the item is archived.)
 
 - **S-02: user can connect a GitHub Personal Access Token, select which repositories to monitor, and have the token validated against the GitHub API before it is stored encrypted; setup wizard step 1 of 4 complete.** — Archived 2026-08-19 → `context/archive/2026-06-14-setup-github-integration/`. Lesson: —.
+- **S-03: user can connect a Jira API token + workspace URL, select a single Jira project to monitor, have the credentials validated against Jira before storing encrypted, and map the project's workflow statuses onto the 5 standard categories (To Do / In Progress / Code Review / Testing / Done); setup wizard step 2 of 4 complete.** — Archived 2026-08-20 → `context/archive/2026-08-19-setup-jira-integration/`. Lesson: —.
