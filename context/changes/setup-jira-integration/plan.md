@@ -643,9 +643,9 @@ only.
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npm run typecheck`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Build passes: `npm run build`
+- [x] 2.1 Type checking passes: `npm run typecheck` — 421c435
+- [x] 2.2 Linting passes: `npm run lint` — 421c435
+- [x] 2.3 Build passes: `npm run build` — 421c435
 
 #### Manual
 
@@ -660,10 +660,10 @@ only.
 
 #### Automated
 
-- [ ] 3.1 Integration tests pass: `npm run test:integration`
+- [x] 3.1 Integration tests pass: `npm run test:integration`
 - [ ] 3.2 Jira e2e passes: `npm run test:e2e`
-- [ ] 3.3 Full unit suite still green: `npm run test`
-- [ ] 3.4 `npm run lint` and `npm run typecheck` pass
+- [x] 3.3 Full unit suite still green: `npm run test`
+- [x] 3.4 `npm run lint` and `npm run typecheck` pass
 
 #### Manual
 
