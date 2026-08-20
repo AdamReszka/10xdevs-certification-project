@@ -1,7 +1,7 @@
 ---
 change_id: setup-team-roster-cadence
 title: Setup wizard — team roster + sprint cadence (S-04)
-status: implementing
+status: implemented
 created: 2026-08-20
 updated: 2026-08-20
 archived_at: null
