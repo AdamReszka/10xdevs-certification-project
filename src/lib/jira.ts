@@ -21,6 +21,8 @@
  */
 
 const API_VERSION_PATH = "/rest/api/3";
+/** Jira Agile (Software) API — same host + Basic auth as v3, different base path (S-04 cadence). */
+const AGILE_API_PATH = "/rest/agile/1.0";
 
 /** Injectable transport, so the client is unit- and e2e-mockable. */
 export type JiraClientOpts = {
@@ -70,6 +72,42 @@ export type JiraIdentity = {
   accountId: string;
   emailAddress?: string;
   displayName?: string;
+  /**
+   * The authenticated owner's IANA time zone (e.g. `Europe/Warsaw`), read from
+   * `/myself` (F3). This is the canonical source for cadence weekday derivation —
+   * NOT `assignable/search`, whose email join key is unreliable/withheld and would
+   * silently drop most owners to the UTC fallback.
+   */
+  timeZone?: string;
+};
+
+/** A Jira Agile board (S-04 cadence). Only `type == "scrum"` boards carry sprints. */
+export type JiraBoard = {
+  id: number;
+  name: string;
+  type: string;
+};
+
+/**
+ * A Jira Agile sprint. `startDate`/`endDate` are ISO strings, reliably populated
+ * only for `active`/`closed` sprints — the cadence derivation treats them as raw
+ * UTC inputs.
+ */
+export type JiraSprint = {
+  id: number;
+  state: string;
+  name: string;
+  startDate?: string;
+  endDate?: string;
+};
+
+/** A member of the monitored Jira project (S-04 roster seed). */
+export type JiraProjectMember = {
+  accountId: string;
+  displayName: string;
+  emailAddress?: string;
+  active: boolean;
+  timeZone?: string;
 };
 
 export type JiraProjectSummary = {
@@ -173,7 +211,12 @@ export async function validateCredentials(
     );
   }
 
-  let body: { accountId?: unknown; emailAddress?: unknown; displayName?: unknown };
+  let body: {
+    accountId?: unknown;
+    emailAddress?: unknown;
+    displayName?: unknown;
+    timeZone?: unknown;
+  };
   try {
     body = (await res.json()) as typeof body;
   } catch {
@@ -193,6 +236,7 @@ export async function validateCredentials(
       typeof body.emailAddress === "string" ? body.emailAddress : undefined,
     displayName:
       typeof body.displayName === "string" ? body.displayName : undefined,
+    timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
   };
 }
 
@@ -370,4 +414,233 @@ export function suggestCategory(status: JiraStatus): StatusCategory {
     default:
       return "TODO";
   }
+}
+
+/** Hard cap on Agile/user pages followed — mirrors the project-list cap. */
+const MAX_AGILE_PAGES = 20;
+
+/**
+ * List the **scrum** boards attached to a project via the Agile API
+ * (`GET {AGILE_API_PATH}/board?projectKeyOrId=…`). Kanban boards carry no
+ * sprints and are filtered out here, so callers receive only cadence-capable
+ * boards. Offset pagination over `{startAt, maxResults, total, isLast, values}`
+ * (no server-directed `nextPage` — the URL is self-constructed from `baseUrl`,
+ * so there is no cross-origin link to chase). Capped at `MAX_AGILE_PAGES`.
+ *
+ * Runs only after `validateCredentials` accepted the creds, so a 401 here is an
+ * availability blip → `JiraUnavailableError`.
+ */
+export async function listBoards(
+  baseUrl: string,
+  creds: JiraCreds,
+  projectKeyOrId: string,
+  opts?: JiraClientOpts,
+): Promise<JiraBoard[]> {
+  const boards: JiraBoard[] = [];
+  const maxResults = 50;
+  let startAt = 0;
+  let pageCount = 0;
+
+  for (;;) {
+    if (++pageCount > MAX_AGILE_PAGES) {
+      throw new JiraUnavailableError(
+        `Jira board list exceeded ${MAX_AGILE_PAGES} pages. Please try again.`,
+      );
+    }
+    const params = new URLSearchParams({
+      projectKeyOrId,
+      startAt: String(startAt),
+      maxResults: String(maxResults),
+    });
+    const res = await jiraGet(
+      `${baseUrl}${AGILE_API_PATH}/board?${params.toString()}`,
+      creds,
+      opts,
+    );
+    if (!res.ok) {
+      throw new JiraUnavailableError(
+        `Jira responded with ${res.status} while listing boards. Please try again.`,
+      );
+    }
+
+    let page: {
+      isLast?: unknown;
+      values?: Array<{ id?: unknown; name?: unknown; type?: unknown }>;
+    };
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new JiraUnavailableError(
+        "Jira returned an unreadable board list. Please try again.",
+      );
+    }
+
+    const values = page.values ?? [];
+    for (const board of values) {
+      if (
+        (typeof board.id === "string" || typeof board.id === "number") &&
+        typeof board.name === "string" &&
+        typeof board.type === "string" &&
+        board.type === "scrum"
+      ) {
+        boards.push({ id: Number(board.id), name: board.name, type: board.type });
+      }
+    }
+
+    // Terminate on the server's `isLast` flag or a short/empty page.
+    if (page.isLast === true || values.length < maxResults || values.length === 0) {
+      break;
+    }
+    startAt += values.length;
+  }
+
+  return boards;
+}
+
+/**
+ * Return the board's active sprint, or `null` if none is active
+ * (`GET {AGILE_API_PATH}/board/{boardId}/sprint?state=active`). A team onboarding
+ * between sprints legitimately has no active sprint → `null`, which the cadence
+ * importer treats as the no-active-sprint degradation path. Returns the first
+ * active sprint (a scrum board has at most one).
+ */
+export async function getActiveSprint(
+  baseUrl: string,
+  creds: JiraCreds,
+  boardId: number,
+  opts?: JiraClientOpts,
+): Promise<JiraSprint | null> {
+  const params = new URLSearchParams({ state: "active", maxResults: "50" });
+  const res = await jiraGet(
+    `${baseUrl}${AGILE_API_PATH}/board/${boardId}/sprint?${params.toString()}`,
+    creds,
+    opts,
+  );
+  if (!res.ok) {
+    throw new JiraUnavailableError(
+      `Jira responded with ${res.status} while reading the active sprint. Please try again.`,
+    );
+  }
+
+  let page: {
+    values?: Array<{
+      id?: unknown;
+      state?: unknown;
+      name?: unknown;
+      startDate?: unknown;
+      endDate?: unknown;
+    }>;
+  };
+  try {
+    page = (await res.json()) as typeof page;
+  } catch {
+    throw new JiraUnavailableError(
+      "Jira returned an unreadable sprint list. Please try again.",
+    );
+  }
+
+  for (const sprint of page.values ?? []) {
+    if (
+      (typeof sprint.id === "string" || typeof sprint.id === "number") &&
+      typeof sprint.state === "string" &&
+      typeof sprint.name === "string"
+    ) {
+      return {
+        id: Number(sprint.id),
+        state: sprint.state,
+        name: sprint.name,
+        startDate:
+          typeof sprint.startDate === "string" ? sprint.startDate : undefined,
+        endDate: typeof sprint.endDate === "string" ? sprint.endDate : undefined,
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * List the project's assignable users (roster seed) via
+ * `GET {API_VERSION_PATH}/user/assignable/search?project={KEY}`. The response is
+ * a **plain array** (not a `PageBean`): offset-page until an **empty** array — a
+ * short page is NOT end-of-list on this endpoint. Capped at `MAX_AGILE_PAGES`.
+ * Filters to `accountType == "atlassian"` to drop app/bot accounts. `timeZone`
+ * and `emailAddress` are surfaced when present (email is often withheld — never
+ * relied on for dedup).
+ */
+export async function listAssignableUsers(
+  baseUrl: string,
+  creds: JiraCreds,
+  projectKey: string,
+  opts?: JiraClientOpts,
+): Promise<JiraProjectMember[]> {
+  const members: JiraProjectMember[] = [];
+  const maxResults = 50;
+  let startAt = 0;
+  let pageCount = 0;
+
+  for (;;) {
+    if (++pageCount > MAX_AGILE_PAGES) {
+      throw new JiraUnavailableError(
+        `Jira assignable-user list exceeded ${MAX_AGILE_PAGES} pages. Please try again.`,
+      );
+    }
+    const params = new URLSearchParams({
+      project: projectKey,
+      startAt: String(startAt),
+      maxResults: String(maxResults),
+    });
+    const res = await jiraGet(
+      `${baseUrl}${API_VERSION_PATH}/user/assignable/search?${params.toString()}`,
+      creds,
+      opts,
+    );
+    if (!res.ok) {
+      throw new JiraUnavailableError(
+        `Jira responded with ${res.status} while listing project members. Please try again.`,
+      );
+    }
+
+    let page: Array<{
+      accountId?: unknown;
+      accountType?: unknown;
+      displayName?: unknown;
+      emailAddress?: unknown;
+      active?: unknown;
+      timeZone?: unknown;
+    }>;
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new JiraUnavailableError(
+        "Jira returned an unreadable member list. Please try again.",
+      );
+    }
+
+    if (!Array.isArray(page) || page.length === 0) {
+      break;
+    }
+
+    for (const user of page) {
+      if (
+        typeof user.accountId === "string" &&
+        user.accountId.length > 0 &&
+        user.accountType === "atlassian"
+      ) {
+        members.push({
+          accountId: user.accountId,
+          displayName:
+            typeof user.displayName === "string" ? user.displayName : user.accountId,
+          emailAddress:
+            typeof user.emailAddress === "string" ? user.emailAddress : undefined,
+          active: user.active === true,
+          timeZone:
+            typeof user.timeZone === "string" ? user.timeZone : undefined,
+        });
+      }
+    }
+
+    startAt += page.length;
+  }
+
+  return members;
 }

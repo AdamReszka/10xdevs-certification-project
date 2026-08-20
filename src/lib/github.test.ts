@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GithubAuthError,
   GithubUnavailableError,
+  listCollaborators,
   listRepos,
   validatePat,
 } from "@/lib/github";
@@ -218,6 +219,118 @@ describe("listRepos", () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
 
     const err = await listRepos(TOKEN, { baseUrl: BASE, fetchImpl }).catch((e) => e);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("listCollaborators", () => {
+  it("maps login/id/type/role_name and requests affiliation=all", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse([
+        { login: "octocat", id: 1, type: "User", role_name: "admin" },
+        { login: "hubot", id: 2, type: "Bot" },
+      ]),
+    ]);
+
+    const people = await listCollaborators(TOKEN, "octocat/hello", {
+      baseUrl: BASE,
+      fetchImpl,
+    });
+
+    expect(people).toEqual([
+      { login: "octocat", id: 1, type: "User", roleName: "admin" },
+      { login: "hubot", id: 2, type: "Bot", roleName: undefined },
+    ]);
+    expect(calls[0]).toBe(
+      `${BASE}/repos/octocat/hello/collaborators?affiliation=all&per_page=100`,
+    );
+  });
+
+  it("follows Link rel=\"next\" and assembles multi-page results", async () => {
+    const page2Url = `${BASE}/repos/o/r/collaborators?page=2`;
+    const { fetchImpl, calls } = seqFetch([
+      new Response(JSON.stringify([{ login: "a", id: 1, type: "User" }]), {
+        status: 200,
+        headers: { link: `<${page2Url}>; rel="next"` },
+      }),
+      new Response(JSON.stringify([{ login: "b", id: 2, type: "User" }]), {
+        status: 200,
+      }),
+    ]);
+
+    const people = await listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl });
+
+    expect(people.map((p) => p.login)).toEqual(["a", "b"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(page2Url);
+  });
+
+  it("rejects a cross-origin next-link without refetching it", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      new Response(JSON.stringify([{ login: "a", id: 1, type: "User" }]), {
+        status: 200,
+        headers: {
+          link: `<https://evil.example.com/collaborators?page=2>; rel="next"`,
+        },
+      }),
+    ]);
+
+    await expect(
+      listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+    // The hostile page was never refetched with the token.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("caps the page count on an unbounded next-link chain", async () => {
+    const selfNext = `${BASE}/repos/o/r/collaborators?page=self`;
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify([{ login: "a", id: 1, type: "User" }]), {
+        status: 200,
+        headers: { link: `<${selfNext}>; rel="next"` },
+      })) as unknown as typeof fetch;
+
+    await expect(
+      listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+
+  it("throws GithubAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 403 (missing read:org scope)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Forbidden" }, { status: 403 }));
+
+    await expect(
+      listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+
+  it("skips malformed rows without a login or id", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([
+        { login: "a", id: 1, type: "User" },
+        { login: "b" },
+        { id: 3, type: "User" },
+      ]),
+    );
+
+    const people = await listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl });
+
+    expect(people).toEqual([{ login: "a", id: 1, type: "User", roleName: undefined }]);
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }).catch(
+      (e) => e,
+    );
     expect(String(err)).not.toContain(TOKEN);
   });
 });

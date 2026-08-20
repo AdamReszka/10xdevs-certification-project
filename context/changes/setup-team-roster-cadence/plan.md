@@ -360,10 +360,10 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [ ] 1.1 Lint passes: `npm run lint`
-- [ ] 1.2 Type checking passes (via `npm run build`)
-- [ ] 1.3 Unit tests for `listCollaborators` pass (pagination cap + cross-origin rejection + 401/403 mapping)
-- [ ] 1.4 Unit tests for `listBoards`/`getActiveSprint`/`listAssignableUsers` pass (offset pagination, scrum-filter, atlassian-filter, empty-array termination, active-sprint-null)
+- [x] 1.1 Lint passes: `npm run lint`
+- [x] 1.2 Type checking passes (via `npm run build`)
+- [x] 1.3 Unit tests for `listCollaborators` pass (pagination cap + cross-origin rejection + 401/403 mapping)
+- [x] 1.4 Unit tests for `listBoards`/`getActiveSprint`/`listAssignableUsers` pass (offset pagination, scrum-filter, atlassian-filter, empty-array termination, active-sprint-null)
 
 #### Manual
 
