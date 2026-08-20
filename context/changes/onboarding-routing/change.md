@@ -47,3 +47,25 @@ remaining scope is unchanged and still owns:
 
 Note: the Continue buttons render only on each step's **connected** card, and the
 "next" target after Jira is a placeholder (`/dashboard`) until S-04 lands.
+
+## Coordination — onboarding-complete predicate (from S-04, 2026-08-20)
+
+S-04 (`setup-team-roster-cadence`) **defines** the "onboarding complete?" signal
+this change consumes. Pinned contract (agreed at S-04 plan review, finding F1):
+
+- **Name / location:** `isOnboardingComplete({ db, ownerId }): Promise<boolean>`
+  in `src/lib/onboarding.ts` (new file, derived helper — no new DB column).
+- **Shape:** true iff the owner has `github_credential` + ≥1 `monitored_repo` +
+  `jira_credential` + `jira_project` + ≥1 `status_mapping` + ≥1 `team_member`.
+  Owner-scoped queries only.
+- **Sprint/cadence is deliberately NOT part of the predicate.** A team onboarding
+  between sprints has no active sprint and therefore no `sprint` row
+  (`sprint.jiraSprintId` is `NOT NULL`), so requiring cadence would block
+  completion for a legitimate state. Cadence is best-effort and re-pulls on the
+  next sync (FR-007). This change's first-run routing must treat onboarding as
+  complete **without** waiting on cadence.
+
+When wiring first-run routing, import this helper as-is — do not re-derive the
+condition inline (single source of truth). If the shape needs to change, change it
+in `src/lib/onboarding.ts` and update this note. Still holds: do NOT add a
+standalone "Setup" nav item.
