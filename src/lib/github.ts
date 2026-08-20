@@ -325,3 +325,375 @@ export async function listCollaborators(
 
   return collaborators;
 }
+
+// ============================================================================
+// S-05 sync fetch methods — commits, pull requests, PR detail, reviews.
+//
+// Each mirrors the fixed client pattern: `githubGet` transport (token never in a
+// thrown error), the `MAX_*_PAGES` cap + cross-origin `Link` guard (lesson #4),
+// and the injectable `baseUrl`/`fetchImpl` seam. These run on the cron/on-demand
+// sync path, AFTER `validatePat` already accepted the token, so a 401 here means
+// the token was revoked/expired mid-life → `GithubAuthError` (the sync records it
+// as an integration ERROR); every other non-OK status → `GithubUnavailableError`.
+// ============================================================================
+
+/** Parse an ISO-8601 timestamp to a Date, or null when absent/unparseable. */
+function parseGithubDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** A commit as consumed by the sync store. `branch`/`additions`/`deletions` are
+ * intentionally absent — the commits *list* endpoint omits per-commit `stats` and
+ * carries no per-commit branch label, and fetching them would need a per-commit
+ * GET that multiplies subrequests beyond even per-PR detail (plan F4). Those
+ * columns stay NULL in MVP; no anomaly rule uses per-commit size. */
+export type GithubCommitData = {
+  sha: string;
+  authorGithubUsername: string | null;
+  authoredAt: Date | null;
+  message: string | null;
+};
+
+/** A pull request from the *list* endpoint. `additions`/`deletions`/`changedFiles`
+ * are absent here (list "Pull Request Simple" omits them) — the store fills them
+ * from {@link getPullRequestDetail}. `branch`/`title`/`body` carry the text the
+ * PR↔ticket link parser (S-06 correlation) scans; they are not all persisted. */
+export type GithubPullRequestData = {
+  githubPrId: number;
+  number: number;
+  title: string | null;
+  body: string | null;
+  authorGithubUsername: string | null;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  branch: string | null;
+  isDraft: boolean;
+  openedAt: Date | null;
+  mergedAt: Date | null;
+  closedAt: Date | null;
+  updatedAt: Date | null;
+  sourceUrl: string | null;
+};
+
+/** Per-PR size, from the PR *detail* endpoint (the list omits these). */
+export type GithubPullRequestDetail = {
+  additions: number | null;
+  deletions: number | null;
+  changedFiles: number | null;
+};
+
+/** A submitted review whose verdict maps onto the `review_state` enum. PENDING
+ * (never submitted) and DISMISSED (no column to hold it) are skipped by the
+ * caller — see {@link listReviews}. */
+export type GithubReviewData = {
+  githubReviewId: number;
+  reviewerGithubUsername: string | null;
+  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED";
+  submittedAt: Date | null;
+};
+
+/** Hard caps on server-directed pagination — same rationale as `MAX_REPO_PAGES`
+ * (defend against an unbounded `Link` chain while carrying the token, lesson #4). */
+const MAX_COMMIT_PAGES = 20;
+const MAX_PR_PAGES = 20;
+const MAX_REVIEW_PAGES = 10;
+
+/** login off a GitHub user sub-object (`author`/`user`), or null when detached. */
+function loginOf(user: unknown): string | null {
+  if (user && typeof user === "object" && "login" in user) {
+    const login = (user as { login?: unknown }).login;
+    if (typeof login === "string" && login.length > 0) return login;
+  }
+  return null;
+}
+
+/**
+ * List commits on `repoFullName` authored at/after `since`, following
+ * `Link: rel="next"` with the cap + cross-origin guard. `since` is passed to
+ * GitHub as the ISO `since` query param so the server bounds the scan; the cursor
+ * lets a backlog drain across sync cycles.
+ */
+export async function listCommits(
+  token: string,
+  repoFullName: string,
+  since: Date,
+  opts?: GithubClientOpts,
+): Promise<GithubCommitData[]> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const params = new URLSearchParams({
+    per_page: "100",
+    since: since.toISOString(),
+  });
+
+  let url: string | null = `${baseUrl}/repos/${repoFullName}/commits?${params.toString()}`;
+  const commits: GithubCommitData[] = [];
+  const baseOrigin = new URL(baseUrl).origin;
+  let pageCount = 0;
+
+  while (url) {
+    if (++pageCount > MAX_COMMIT_PAGES) {
+      throw new GithubUnavailableError(
+        `GitHub commit list exceeded ${MAX_COMMIT_PAGES} pages. Please try again.`,
+      );
+    }
+    const res: Response = await githubGet(url, token, opts);
+    if (res.status === 401) {
+      throw new GithubAuthError();
+    }
+    if (!res.ok) {
+      throw new GithubUnavailableError(
+        `GitHub responded with ${res.status} while listing commits. Please try again.`,
+      );
+    }
+
+    let page: Array<{
+      sha?: unknown;
+      commit?: { author?: { date?: unknown }; message?: unknown };
+      author?: unknown;
+    }>;
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new GithubUnavailableError(
+        "GitHub returned an unreadable commit list. Please try again.",
+      );
+    }
+
+    for (const row of page) {
+      if (typeof row.sha !== "string") continue;
+      commits.push({
+        sha: row.sha,
+        authorGithubUsername: loginOf(row.author),
+        authoredAt: parseGithubDate(row.commit?.author?.date),
+        message: typeof row.commit?.message === "string" ? row.commit.message : null,
+      });
+    }
+
+    const next = nextLink(res.headers.get("link"));
+    if (next !== null && new URL(next, baseUrl).origin !== baseOrigin) {
+      throw new GithubUnavailableError(
+        "GitHub returned a cross-origin pagination link. Please try again.",
+      );
+    }
+    url = next;
+  }
+
+  return commits;
+}
+
+/** Map GitHub's `state` (open|closed) + `merged_at` onto the `pr_state` enum. */
+function mapPrState(state: unknown, mergedAt: Date | null): "OPEN" | "CLOSED" | "MERGED" {
+  if (mergedAt !== null) return "MERGED";
+  if (state === "closed") return "CLOSED";
+  return "OPEN";
+}
+
+/**
+ * List pull requests updated at/after `since`, newest-updated first. GitHub has
+ * no `since` param on `/pulls`, so we sort `updated` desc and stop as soon as a
+ * page crosses the cutoff (and drop the sub-cutoff tail of the crossing page).
+ * The list endpoint omits size fields — the caller fetches {@link getPullRequestDetail}
+ * per PR within the per-cycle cap.
+ */
+export async function listPullRequests(
+  token: string,
+  repoFullName: string,
+  since: Date,
+  opts?: GithubClientOpts,
+): Promise<GithubPullRequestData[]> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const params = new URLSearchParams({
+    state: "all",
+    sort: "updated",
+    direction: "desc",
+    per_page: "100",
+  });
+
+  let url: string | null = `${baseUrl}/repos/${repoFullName}/pulls?${params.toString()}`;
+  const pulls: GithubPullRequestData[] = [];
+  const baseOrigin = new URL(baseUrl).origin;
+  let pageCount = 0;
+  const sinceMs = since.getTime();
+
+  while (url) {
+    if (++pageCount > MAX_PR_PAGES) {
+      throw new GithubUnavailableError(
+        `GitHub pull-request list exceeded ${MAX_PR_PAGES} pages. Please try again.`,
+      );
+    }
+    const res: Response = await githubGet(url, token, opts);
+    if (res.status === 401) {
+      throw new GithubAuthError();
+    }
+    if (!res.ok) {
+      throw new GithubUnavailableError(
+        `GitHub responded with ${res.status} while listing pull requests. Please try again.`,
+      );
+    }
+
+    let page: Array<Record<string, unknown>>;
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new GithubUnavailableError(
+        "GitHub returned an unreadable pull-request list. Please try again.",
+      );
+    }
+
+    let crossedCutoff = false;
+    for (const row of page) {
+      const updatedAt = parseGithubDate(row.updated_at);
+      // Sorted updated-desc: the first PR older than the cutoff ends the scan.
+      if (updatedAt !== null && updatedAt.getTime() < sinceMs) {
+        crossedCutoff = true;
+        break;
+      }
+      if (typeof row.id !== "number" || typeof row.number !== "number") continue;
+      const mergedAt = parseGithubDate(row.merged_at);
+      const head = row.head as { ref?: unknown } | undefined;
+      pulls.push({
+        githubPrId: row.id,
+        number: row.number,
+        title: typeof row.title === "string" ? row.title : null,
+        body: typeof row.body === "string" ? row.body : null,
+        authorGithubUsername: loginOf(row.user),
+        state: mapPrState(row.state, mergedAt),
+        branch: typeof head?.ref === "string" ? head.ref : null,
+        isDraft: row.draft === true,
+        openedAt: parseGithubDate(row.created_at),
+        mergedAt,
+        closedAt: parseGithubDate(row.closed_at),
+        updatedAt,
+        sourceUrl: typeof row.html_url === "string" ? row.html_url : null,
+      });
+    }
+    if (crossedCutoff) break;
+
+    const next = nextLink(res.headers.get("link"));
+    if (next !== null && new URL(next, baseUrl).origin !== baseOrigin) {
+      throw new GithubUnavailableError(
+        "GitHub returned a cross-origin pagination link. Please try again.",
+      );
+    }
+    url = next;
+  }
+
+  return pulls;
+}
+
+/**
+ * Fetch one PR's size fields (`additions`/`deletions`/`changed_files`) — omitted
+ * by the list endpoint, so this is a per-PR GET (the dominant subrequest
+ * multiplier that drives the per-cycle PR cap).
+ */
+export async function getPullRequestDetail(
+  token: string,
+  repoFullName: string,
+  prNumber: number,
+  opts?: GithubClientOpts,
+): Promise<GithubPullRequestDetail> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const res = await githubGet(
+    `${baseUrl}/repos/${repoFullName}/pulls/${prNumber}`,
+    token,
+    opts,
+  );
+  if (res.status === 401) {
+    throw new GithubAuthError();
+  }
+  if (!res.ok) {
+    throw new GithubUnavailableError(
+      `GitHub responded with ${res.status} while fetching PR #${prNumber}. Please try again.`,
+    );
+  }
+
+  let body: { additions?: unknown; deletions?: unknown; changed_files?: unknown };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    throw new GithubUnavailableError(
+      "GitHub returned an unreadable pull-request detail. Please try again.",
+    );
+  }
+
+  return {
+    additions: typeof body.additions === "number" ? body.additions : null,
+    deletions: typeof body.deletions === "number" ? body.deletions : null,
+    changedFiles: typeof body.changed_files === "number" ? body.changed_files : null,
+  };
+}
+
+/**
+ * List a PR's submitted reviews, following `Link: rel="next"` with the cap +
+ * cross-origin guard. Only verdicts on the `review_state` enum
+ * (APPROVED/CHANGES_REQUESTED/COMMENTED) are returned — PENDING reviews are never
+ * submitted and DISMISSED has no column, so both are skipped.
+ */
+export async function listReviews(
+  token: string,
+  repoFullName: string,
+  prNumber: number,
+  opts?: GithubClientOpts,
+): Promise<GithubReviewData[]> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const params = new URLSearchParams({ per_page: "100" });
+
+  let url: string | null = `${baseUrl}/repos/${repoFullName}/pulls/${prNumber}/reviews?${params.toString()}`;
+  const reviews: GithubReviewData[] = [];
+  const baseOrigin = new URL(baseUrl).origin;
+  let pageCount = 0;
+
+  while (url) {
+    if (++pageCount > MAX_REVIEW_PAGES) {
+      throw new GithubUnavailableError(
+        `GitHub review list exceeded ${MAX_REVIEW_PAGES} pages. Please try again.`,
+      );
+    }
+    const res: Response = await githubGet(url, token, opts);
+    if (res.status === 401) {
+      throw new GithubAuthError();
+    }
+    if (!res.ok) {
+      throw new GithubUnavailableError(
+        `GitHub responded with ${res.status} while listing reviews. Please try again.`,
+      );
+    }
+
+    let page: Array<{ id?: unknown; user?: unknown; state?: unknown; submitted_at?: unknown }>;
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new GithubUnavailableError(
+        "GitHub returned an unreadable review list. Please try again.",
+      );
+    }
+
+    for (const row of page) {
+      if (typeof row.id !== "number") continue;
+      if (
+        row.state !== "APPROVED" &&
+        row.state !== "CHANGES_REQUESTED" &&
+        row.state !== "COMMENTED"
+      ) {
+        continue;
+      }
+      reviews.push({
+        githubReviewId: row.id,
+        reviewerGithubUsername: loginOf(row.user),
+        state: row.state,
+        submittedAt: parseGithubDate(row.submitted_at),
+      });
+    }
+
+    const next = nextLink(res.headers.get("link"));
+    if (next !== null && new URL(next, baseUrl).origin !== baseOrigin) {
+      throw new GithubUnavailableError(
+        "GitHub returned a cross-origin pagination link. Please try again.",
+      );
+    }
+    url = next;
+  }
+
+  return reviews;
+}

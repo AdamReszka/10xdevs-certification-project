@@ -3,8 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   GithubAuthError,
   GithubUnavailableError,
+  getPullRequestDetail,
   listCollaborators,
+  listCommits,
+  listPullRequests,
   listRepos,
+  listReviews,
   validatePat,
 } from "@/lib/github";
 
@@ -331,6 +335,315 @@ describe("listCollaborators", () => {
     const err = await listCollaborators(TOKEN, "o/r", { baseUrl: BASE, fetchImpl }).catch(
       (e) => e,
     );
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+const SINCE = new Date("2026-08-01T00:00:00Z");
+
+describe("listCommits", () => {
+  it("maps sha, author login, authored date, message and sends the since param", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse([
+        {
+          sha: "abc123",
+          author: { login: "octocat" },
+          commit: { author: { date: "2026-08-05T10:00:00Z" }, message: "fix bug" },
+        },
+        // detached author (no GitHub account linked) ⇒ null username, still kept.
+        {
+          sha: "def456",
+          author: null,
+          commit: { author: { date: "2026-08-06T10:00:00Z" }, message: "chore" },
+        },
+      ]),
+    ]);
+
+    const commits = await listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl });
+
+    expect(commits).toEqual([
+      {
+        sha: "abc123",
+        authorGithubUsername: "octocat",
+        authoredAt: new Date("2026-08-05T10:00:00Z"),
+        message: "fix bug",
+      },
+      {
+        sha: "def456",
+        authorGithubUsername: null,
+        authoredAt: new Date("2026-08-06T10:00:00Z"),
+        message: "chore",
+      },
+    ]);
+    expect(calls[0]).toBe(
+      `${BASE}/repos/o/r/commits?per_page=100&since=2026-08-01T00%3A00%3A00.000Z`,
+    );
+  });
+
+  it("skips rows without a sha", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([{ sha: "keep", commit: {} }, { commit: { message: "no sha" } }]),
+    );
+
+    const commits = await listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl });
+
+    expect(commits.map((c) => c.sha)).toEqual(["keep"]);
+  });
+
+  it("follows Link rel=\"next\" across pages", async () => {
+    const page2 = `${BASE}/repos/o/r/commits?page=2`;
+    const { fetchImpl, calls } = seqFetch([
+      new Response(JSON.stringify([{ sha: "one", commit: {} }]), {
+        status: 200,
+        headers: { link: `<${page2}>; rel="next"` },
+      }),
+      new Response(JSON.stringify([{ sha: "two", commit: {} }]), { status: 200 }),
+    ]);
+
+    const commits = await listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl });
+
+    expect(commits.map((c) => c.sha)).toEqual(["one", "two"]);
+    expect(calls[1]).toBe(page2);
+  });
+
+  it("rejects a cross-origin next-link without refetching it", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      new Response(JSON.stringify([{ sha: "one", commit: {} }]), {
+        status: 200,
+        headers: { link: `<https://evil.example.com/commits?page=2>; rel="next"` },
+      }),
+    ]);
+
+    await expect(
+      listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("caps the page count on an unbounded next-link chain", async () => {
+    const self = `${BASE}/repos/o/r/commits?page=self`;
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify([{ sha: "x", commit: {} }]), {
+        status: 200,
+        headers: { link: `<${self}>; rel="next"` },
+      })) as unknown as typeof fetch;
+
+    await expect(
+      listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+
+  it("throws GithubAuthError on 401 (token revoked mid-life)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 5xx", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 503 }));
+
+    await expect(
+      listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await listCommits(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }).catch(
+      (e) => e,
+    );
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("listPullRequests", () => {
+  it("maps fields and derives MERGED/CLOSED/OPEN state", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse([
+        {
+          id: 10,
+          number: 1,
+          title: "feat: X",
+          body: "closes ABC-1",
+          user: { login: "octocat" },
+          state: "closed",
+          merged_at: "2026-08-10T12:00:00Z",
+          closed_at: "2026-08-10T12:00:00Z",
+          created_at: "2026-08-09T09:00:00Z",
+          updated_at: "2026-08-10T12:00:00Z",
+          draft: false,
+          head: { ref: "feature/ABC-1" },
+          html_url: "https://gh/pr/1",
+        },
+        {
+          id: 11,
+          number: 2,
+          title: "wip",
+          state: "open",
+          merged_at: null,
+          created_at: "2026-08-08T09:00:00Z",
+          updated_at: "2026-08-09T09:00:00Z",
+          draft: true,
+          head: { ref: "wip" },
+          html_url: "https://gh/pr/2",
+        },
+        {
+          id: 12,
+          number: 3,
+          state: "closed",
+          merged_at: null,
+          updated_at: "2026-08-09T00:00:00Z",
+          head: {},
+        },
+      ]),
+    ]);
+
+    const pulls = await listPullRequests(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl });
+
+    expect(pulls[0]).toMatchObject({
+      githubPrId: 10,
+      number: 1,
+      state: "MERGED",
+      branch: "feature/ABC-1",
+      isDraft: false,
+      mergedAt: new Date("2026-08-10T12:00:00Z"),
+      sourceUrl: "https://gh/pr/1",
+    });
+    expect(pulls[1]).toMatchObject({ number: 2, state: "OPEN", isDraft: true, branch: "wip" });
+    expect(pulls[2]).toMatchObject({ number: 3, state: "CLOSED", branch: null });
+    expect(calls[0]).toBe(
+      `${BASE}/repos/o/r/pulls?state=all&sort=updated&direction=desc&per_page=100`,
+    );
+  });
+
+  it("stops at the first PR older than since and drops the sub-cutoff tail", async () => {
+    const page2 = `${BASE}/repos/o/r/pulls?page=2`;
+    const { fetchImpl, calls } = seqFetch([
+      new Response(
+        JSON.stringify([
+          { id: 1, number: 1, state: "open", updated_at: "2026-08-15T00:00:00Z", head: {} },
+          // older than SINCE (2026-08-01) ⇒ scan ends here, this row is dropped.
+          { id: 2, number: 2, state: "open", updated_at: "2026-07-20T00:00:00Z", head: {} },
+        ]),
+        { status: 200, headers: { link: `<${page2}>; rel="next"` } },
+      ),
+    ]);
+
+    const pulls = await listPullRequests(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl });
+
+    expect(pulls.map((p) => p.number)).toEqual([1]);
+    // The crossing page ended the scan — page 2 was never fetched.
+    expect(calls).toHaveLength(1);
+  });
+
+  it("throws GithubAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      listPullRequests(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 5xx and never leaks the token", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 502 }));
+
+    const err = await listPullRequests(TOKEN, "o/r", SINCE, { baseUrl: BASE, fetchImpl }).catch(
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(GithubUnavailableError);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("getPullRequestDetail", () => {
+  it("returns additions/deletions/changed_files from the detail endpoint", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ additions: 120, deletions: 30, changed_files: 7 }),
+    ]);
+
+    const detail = await getPullRequestDetail(TOKEN, "o/r", 5, { baseUrl: BASE, fetchImpl });
+
+    expect(detail).toEqual({ additions: 120, deletions: 30, changedFiles: 7 });
+    expect(calls[0]).toBe(`${BASE}/repos/o/r/pulls/5`);
+  });
+
+  it("nulls missing size fields rather than throwing", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ additions: 10 }));
+
+    const detail = await getPullRequestDetail(TOKEN, "o/r", 5, { baseUrl: BASE, fetchImpl });
+
+    expect(detail).toEqual({ additions: 10, deletions: null, changedFiles: null });
+  });
+
+  it("throws GithubAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      getPullRequestDetail(TOKEN, "o/r", 5, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 5xx", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    await expect(
+      getPullRequestDetail(TOKEN, "o/r", 5, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+});
+
+describe("listReviews", () => {
+  it("maps enum-valid verdicts and skips PENDING/DISMISSED", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse([
+        { id: 1, user: { login: "rev1" }, state: "APPROVED", submitted_at: "2026-08-11T00:00:00Z" },
+        { id: 2, user: { login: "rev2" }, state: "CHANGES_REQUESTED", submitted_at: "2026-08-12T00:00:00Z" },
+        { id: 3, user: { login: "rev3" }, state: "COMMENTED", submitted_at: "2026-08-13T00:00:00Z" },
+        { id: 4, user: { login: "rev4" }, state: "DISMISSED", submitted_at: "2026-08-14T00:00:00Z" },
+        { id: 5, user: { login: "rev5" }, state: "PENDING" },
+      ]),
+    ]);
+
+    const reviews = await listReviews(TOKEN, "o/r", 9, { baseUrl: BASE, fetchImpl });
+
+    expect(reviews).toEqual([
+      { githubReviewId: 1, reviewerGithubUsername: "rev1", state: "APPROVED", submittedAt: new Date("2026-08-11T00:00:00Z") },
+      { githubReviewId: 2, reviewerGithubUsername: "rev2", state: "CHANGES_REQUESTED", submittedAt: new Date("2026-08-12T00:00:00Z") },
+      { githubReviewId: 3, reviewerGithubUsername: "rev3", state: "COMMENTED", submittedAt: new Date("2026-08-13T00:00:00Z") },
+    ]);
+    expect(calls[0]).toBe(`${BASE}/repos/o/r/pulls/9/reviews?per_page=100`);
+  });
+
+  it("rejects a cross-origin next-link without refetching it", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      new Response(JSON.stringify([{ id: 1, state: "APPROVED" }]), {
+        status: 200,
+        headers: { link: `<https://evil.example.com/reviews?page=2>; rel="next"` },
+      }),
+    ]);
+
+    await expect(
+      listReviews(TOKEN, "o/r", 9, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("throws GithubAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      listReviews(TOKEN, "o/r", 9, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 5xx and never leaks the token", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await listReviews(TOKEN, "o/r", 9, { baseUrl: BASE, fetchImpl }).catch((e) => e);
+    expect(err).toBeInstanceOf(GithubUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
   });
 });

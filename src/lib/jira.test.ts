@@ -10,6 +10,8 @@ import {
   listProjects,
   listProjectStatuses,
   normalizeWorkspaceUrl,
+  resolveStoryPointFieldId,
+  searchSprintIssues,
   suggestCategory,
   validateCredentials,
 } from "@/lib/jira";
@@ -574,6 +576,257 @@ describe("listAssignableUsers", () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
 
     const err = await listAssignableUsers(BASE, CREDS, "SF", { fetchImpl }).catch((e) => e);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+const SP_FIELD = "customfield_10016";
+
+describe("searchSprintIssues", () => {
+  it("maps issue fields + story points and parses status changelog", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({
+        issues: [
+          {
+            id: "1001",
+            key: "SF-1",
+            fields: {
+              summary: "Build sync",
+              status: { id: "3", name: "In Progress" },
+              assignee: { accountId: "acc-1" },
+              created: "2026-08-02T09:00:00.000+0000",
+              [SP_FIELD]: 5,
+            },
+            changelog: {
+              histories: [
+                {
+                  id: "9001",
+                  created: "2026-08-03T10:00:00.000+0000",
+                  items: [
+                    { field: "status", from: "1", fromString: "To Do", to: "3", toString: "In Progress" },
+                    { field: "assignee", from: null, to: "acc-1" },
+                  ],
+                },
+                {
+                  id: "9002",
+                  created: "2026-08-04T10:00:00.000+0000",
+                  items: [{ field: "summary", fromString: "old", toString: "Build sync" }],
+                },
+              ],
+            },
+          },
+        ],
+        nextPageToken: null,
+      }),
+    ]);
+
+    const issues = await searchSprintIssues(
+      BASE,
+      CREDS,
+      { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+      { fetchImpl },
+    );
+
+    expect(issues).toEqual([
+      {
+        issueId: "1001",
+        jiraKey: "SF-1",
+        summary: "Build sync",
+        storyPoints: 5,
+        currentStatusId: "3",
+        currentStatusName: "In Progress",
+        assigneeJiraAccountId: "acc-1",
+        createdAt: new Date("2026-08-02T09:00:00.000+0000"),
+        statusHistory: [
+          {
+            changelogId: "9001",
+            changedAt: new Date("2026-08-03T10:00:00.000+0000"),
+            fromStatusId: "1",
+            fromStatusName: "To Do",
+            toStatusId: "3",
+            toStatusName: "In Progress",
+          },
+        ],
+      },
+    ]);
+    // First page carries no nextPageToken param; JQL is the sprint+project query.
+    // URLSearchParams encodes spaces as `+`, which decodeURIComponent leaves as-is,
+    // so normalize `+`→space before matching the human-readable JQL.
+    const jql0 = decodeURIComponent(calls[0].replace(/\+/g, " "));
+    expect(calls[0]).toContain(`${BASE}/rest/api/3/search/jql?`);
+    expect(calls[0]).toContain("expand=changelog");
+    expect(jql0).toContain('project = "SF" AND sprint = 42');
+    expect(jql0).toContain(SP_FIELD);
+  });
+
+  it("follows nextPageToken across pages and passes it on the next request", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({
+        issues: [{ id: "1", key: "SF-1", fields: { status: { id: "1", name: "To Do" } } }],
+        nextPageToken: "TOKEN_PAGE_2",
+      }),
+      jsonResponse({
+        issues: [{ id: "2", key: "SF-2", fields: { status: { id: "1", name: "To Do" } } }],
+        nextPageToken: null,
+      }),
+    ]);
+
+    const issues = await searchSprintIssues(
+      BASE,
+      CREDS,
+      { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+      { fetchImpl },
+    );
+
+    expect(issues.map((i) => i.jiraKey)).toEqual(["SF-1", "SF-2"]);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).not.toContain("nextPageToken");
+    expect(calls[1]).toContain("nextPageToken=TOKEN_PAGE_2");
+  });
+
+  it("adds an updated>= delta clause when a cursor is given", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ issues: [], nextPageToken: null }),
+    ]);
+
+    await searchSprintIssues(
+      BASE,
+      CREDS,
+      {
+        projectKey: "SF",
+        sprintId: 42,
+        storyPointFieldId: SP_FIELD,
+        updatedSince: new Date("2026-08-10T14:30:00Z"),
+      },
+      { fetchImpl },
+    );
+
+    expect(decodeURIComponent(calls[0].replace(/\+/g, " "))).toContain(
+      'updated >= "2026-08-10 14:30"',
+    );
+  });
+
+  it("omits the story-point field from the request when unresolved", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({
+        issues: [{ id: "1", key: "SF-1", fields: { status: { id: "1", name: "To Do" } } }],
+        nextPageToken: null,
+      }),
+    ]);
+
+    const issues = await searchSprintIssues(
+      BASE,
+      CREDS,
+      { projectKey: "SF", sprintId: 42, storyPointFieldId: null },
+      { fetchImpl },
+    );
+
+    expect(issues[0].storyPoints).toBeNull();
+    expect(decodeURIComponent(calls[0])).toContain("fields=summary,status,assignee,created");
+  });
+
+  it("caps the page count on an unbounded nextPageToken chain", async () => {
+    const fetchImpl = (async () =>
+      jsonResponse({
+        issues: [{ id: "1", key: "SF-1", fields: {} }],
+        nextPageToken: "always-more",
+      })) as unknown as typeof fetch;
+
+    await expect(
+      searchSprintIssues(
+        BASE,
+        CREDS,
+        { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+        { fetchImpl },
+      ),
+    ).rejects.toBeInstanceOf(JiraUnavailableError);
+  });
+
+  it("throws JiraAuthError on 401 (credentials revoked mid-life)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Unauthorized" }, { status: 401 }));
+
+    await expect(
+      searchSprintIssues(
+        BASE,
+        CREDS,
+        { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+        { fetchImpl },
+      ),
+    ).rejects.toBeInstanceOf(JiraAuthError);
+  });
+
+  it("throws JiraUnavailableError on 5xx and never leaks the token", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 503 }));
+
+    const err = await searchSprintIssues(
+      BASE,
+      CREDS,
+      { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+      { fetchImpl },
+    ).catch((e) => e);
+    expect(err).toBeInstanceOf(JiraUnavailableError);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("resolveStoryPointFieldId", () => {
+  it("picks the custom field by greenhopper schema", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([
+        { id: "summary", name: "Summary", custom: false, schema: { system: "summary" } },
+        {
+          id: "customfield_10016",
+          name: "Story Points",
+          custom: true,
+          schema: { custom: "com.pyxis.greenhopper.jira:jsw-story-points" },
+        },
+      ]),
+    );
+
+    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+
+    expect(id).toBe("customfield_10016");
+  });
+
+  it("falls back to matching the field name when schema is uninformative", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([
+        { id: "customfield_20000", name: "Story point estimate", custom: true, schema: {} },
+      ]),
+    );
+
+    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+
+    expect(id).toBe("customfield_20000");
+  });
+
+  it("ignores system fields and returns null when no story-point field exists", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([
+        // A system field literally named to try to fool the name match.
+        { id: "story", name: "Story Points", custom: false },
+        { id: "customfield_1", name: "Severity", custom: true, schema: { custom: "x:y" } },
+      ]),
+    );
+
+    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+
+    expect(id).toBeNull();
+  });
+
+  it("throws JiraAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Unauthorized" }, { status: 401 }));
+
+    await expect(
+      resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraAuthError);
+  });
+
+  it("throws JiraUnavailableError on 5xx and never leaks the token", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }).catch((e) => e);
+    expect(err).toBeInstanceOf(JiraUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
   });
 });

@@ -30,5 +30,12 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Custom Cloudflare Worker entry (S-05): a thin wrapper that imports the
+    // OpenNext build artifact `.open-next/worker.js`, which tsc can't resolve
+    // (it may be absent on a fresh clone). wrangler/esbuild bundles + checks it
+    // at build time; keep it out of the app typecheck surface.
+    "src/worker.ts"
+  ]
 }
