@@ -340,8 +340,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | done                   | ✅ Implemented & reviewed — PR #34 |
 | S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | done                   | ✅ Implemented, reviewed & archived (2026-08-19) |
 | S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | done                   | ✅ Implemented, reviewed & archived — PR #41 (2026-08-20) |
-| S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | in review              | 🚧 Implemented & impl-reviewed (APPROVED) — PR #42 (draft), awaiting merge + archive |
-| S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | no                     | Awaits S-04 (in review, PR #42); plannable once S-04 merges |
+| S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | done                   | ✅ Implemented, reviewed & archived — PR #42 (2026-08-20) |
+| S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | yes                    | Prereqs S-04 done; next in Stream A toward S-07 |
 | S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | no                     | Awaits S-05 |
 | S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox + panels (north star milestone)      | no                     | Awaits S-06; validates the core product hypothesis |
 | S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | no                     | Awaits S-04, S-06; parallel with S-10–S-14 |
