@@ -644,3 +644,287 @@ export async function listAssignableUsers(
 
   return members;
 }
+
+// ============================================================================
+// S-05 sync fetch methods — active-sprint issues + status-change history delta,
+// via the NON-deprecated enhanced-search endpoint, plus story-point field
+// resolution.
+//
+// `GET /rest/api/3/search` (PageBean `startAt`) is deprecated and being removed;
+// this uses `GET /rest/api/3/search/jql` with **token pagination**
+// (`nextPageToken`). Because that token is opaque and the request URL is always
+// re-built from `baseUrl` (never a server-chosen absolute URL, unlike
+// `listProjects`' `nextPage`), there is no cross-origin link to chase here — the
+// page cap alone bounds the loop (lesson #4 origin-check is N/A by construction).
+//
+// These run on the cron/on-demand sync path, AFTER `validateCredentials` accepted
+// the creds, so a 401 here means the token was revoked/expired mid-life →
+// `JiraAuthError` (the sync records it as an integration ERROR); every other
+// non-OK status → `JiraUnavailableError`.
+// ============================================================================
+
+/** A status transition parsed from an issue's changelog. `changelogId` is the
+ * NOT NULL dedup half of `jira_status_history`'s unique key (lesson #1) — Jira's
+ * own history id, stable across re-syncs. Status id→category mapping and
+ * `lastStatusChangeAt` are the store's job (it owns the per-owner statusMapping). */
+export type JiraStatusChange = {
+  changelogId: string;
+  changedAt: Date | null;
+  fromStatusId: string | null;
+  fromStatusName: string | null;
+  toStatusId: string | null;
+  toStatusName: string | null;
+};
+
+/** An active-sprint issue as consumed by the sync store. Raw status id/name and
+ * `createdAt` are returned so the store can map categories (via statusMapping) and
+ * derive `addedAfterSprintStart` (created vs sprint start) — kept out of the pure
+ * client. */
+export type JiraSprintIssue = {
+  issueId: string;
+  jiraKey: string;
+  summary: string | null;
+  storyPoints: number | null;
+  currentStatusId: string | null;
+  currentStatusName: string | null;
+  assigneeJiraAccountId: string | null;
+  createdAt: Date | null;
+  statusHistory: JiraStatusChange[];
+};
+
+export type SearchSprintIssuesParams = {
+  projectKey: string;
+  sprintId: number;
+  /** Resolved `customfield_*` id for story points, or null when unresolved. */
+  storyPointFieldId: string | null;
+  /** Delta cursor: only pull issues updated at/after this instant (FR-012). Null
+   * on the first sync pulls the whole active sprint. */
+  updatedSince?: Date | null;
+};
+
+/** Hard cap on enhanced-search token pages — bounds an unbounded `nextPageToken`
+ * chain (100/page ⇒ ≤2000 issues, ample for one active sprint). */
+const MAX_SEARCH_PAGES = 20;
+
+/** Parse an ISO-8601 timestamp to a Date, or null when absent/unparseable. */
+function parseJiraDate(value: unknown): Date | null {
+  if (typeof value !== "string") return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Format a Date as a JQL datetime literal (`"yyyy-MM-dd HH:mm"`, UTC). Exactness
+ * isn't required — an overlapping window only re-fetches idempotent rows. */
+function toJqlDateTime(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+/** Extract the status-change entries from one issue's expanded changelog. */
+function parseStatusHistory(changelog: unknown): JiraStatusChange[] {
+  const histories =
+    changelog && typeof changelog === "object" && "histories" in changelog
+      ? (changelog as { histories?: unknown }).histories
+      : undefined;
+  if (!Array.isArray(histories)) return [];
+
+  const changes: JiraStatusChange[] = [];
+  for (const history of histories) {
+    if (!history || typeof history !== "object") continue;
+    const h = history as { id?: unknown; created?: unknown; items?: unknown };
+    if (typeof h.id !== "string" && typeof h.id !== "number") continue;
+    if (!Array.isArray(h.items)) continue;
+    for (const item of h.items) {
+      if (!item || typeof item !== "object") continue;
+      const it = item as {
+        field?: unknown;
+        from?: unknown;
+        fromString?: unknown;
+        to?: unknown;
+        toString?: unknown;
+      };
+      if (it.field !== "status") continue;
+      changes.push({
+        changelogId: String(h.id),
+        changedAt: parseJiraDate(h.created),
+        fromStatusId: it.from != null ? String(it.from) : null,
+        fromStatusName: typeof it.fromString === "string" ? it.fromString : null,
+        toStatusId: it.to != null ? String(it.to) : null,
+        toStatusName: typeof it.toString === "string" ? it.toString : null,
+      });
+    }
+  }
+  return changes;
+}
+
+/** Read the story-point value off an issue's `fields` under the resolved custom
+ * field id. Jira returns it as a number (or null when unset). */
+function extractStoryPoints(
+  fields: Record<string, unknown>,
+  storyPointFieldId: string | null,
+): number | null {
+  if (storyPointFieldId === null) return null;
+  const raw = fields[storyPointFieldId];
+  return typeof raw === "number" ? raw : null;
+}
+
+/**
+ * Fetch the active sprint's issues (with expanded status-change history) for the
+ * monitored project, incrementally via `updatedSince` (the delta cursor) and
+ * paginated by `nextPageToken`. Maps each issue to {@link JiraSprintIssue}; leaves
+ * category mapping + sprint-start derivation to the store.
+ */
+export async function searchSprintIssues(
+  baseUrl: string,
+  creds: JiraCreds,
+  params: SearchSprintIssuesParams,
+  opts?: JiraClientOpts,
+): Promise<JiraSprintIssue[]> {
+  const { projectKey, sprintId, storyPointFieldId, updatedSince } = params;
+
+  // JQL: this sprint's issues in the monitored project, optionally only those
+  // touched since the last sync. String literals are quoted; project key is
+  // constrained to Jira's key charset so it needs no escaping.
+  let jql = `project = "${projectKey}" AND sprint = ${sprintId}`;
+  if (updatedSince) {
+    jql += ` AND updated >= "${toJqlDateTime(updatedSince)}"`;
+  }
+  jql += " ORDER BY updated ASC";
+
+  const fields = ["summary", "status", "assignee", "created"];
+  if (storyPointFieldId !== null) fields.push(storyPointFieldId);
+
+  const issues: JiraSprintIssue[] = [];
+  let nextPageToken: string | null = null;
+  let pageCount = 0;
+
+  for (;;) {
+    if (++pageCount > MAX_SEARCH_PAGES) {
+      throw new JiraUnavailableError(
+        `Jira issue search exceeded ${MAX_SEARCH_PAGES} pages. Please try again.`,
+      );
+    }
+    const query = new URLSearchParams({
+      jql,
+      fields: fields.join(","),
+      expand: "changelog",
+      maxResults: "100",
+    });
+    if (nextPageToken !== null) query.set("nextPageToken", nextPageToken);
+
+    const res = await jiraGet(
+      `${baseUrl}${API_VERSION_PATH}/search/jql?${query.toString()}`,
+      creds,
+      opts,
+    );
+    if (res.status === 401) {
+      throw new JiraAuthError();
+    }
+    if (!res.ok) {
+      throw new JiraUnavailableError(
+        `Jira responded with ${res.status} while searching issues. Please try again.`,
+      );
+    }
+
+    let page: {
+      issues?: Array<{
+        id?: unknown;
+        key?: unknown;
+        fields?: Record<string, unknown>;
+        changelog?: unknown;
+      }>;
+      nextPageToken?: unknown;
+    };
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new JiraUnavailableError(
+        "Jira returned an unreadable issue search. Please try again.",
+      );
+    }
+
+    for (const issue of page.issues ?? []) {
+      if (
+        (typeof issue.id !== "string" && typeof issue.id !== "number") ||
+        typeof issue.key !== "string"
+      ) {
+        continue;
+      }
+      const f = issue.fields ?? {};
+      const status = f.status as { id?: unknown; name?: unknown } | undefined;
+      const assignee = f.assignee as { accountId?: unknown } | undefined;
+      issues.push({
+        issueId: String(issue.id),
+        jiraKey: issue.key,
+        summary: typeof f.summary === "string" ? f.summary : null,
+        storyPoints: extractStoryPoints(f, storyPointFieldId),
+        currentStatusId:
+          status?.id != null ? String(status.id) : null,
+        currentStatusName: typeof status?.name === "string" ? status.name : null,
+        assigneeJiraAccountId:
+          typeof assignee?.accountId === "string" ? assignee.accountId : null,
+        createdAt: parseJiraDate(f.created),
+        statusHistory: parseStatusHistory(issue.changelog),
+      });
+    }
+
+    nextPageToken =
+      typeof page.nextPageToken === "string" && page.nextPageToken.length > 0
+        ? page.nextPageToken
+        : null;
+    if (nextPageToken === null) break;
+  }
+
+  return issues;
+}
+
+/**
+ * Resolve the site-specific `customfield_*` id for Story Points via
+ * `GET /rest/api/3/field`. The id varies per Jira site, so it is discovered, not
+ * hard-coded. Matches a custom field whose Greenhopper schema or name identifies
+ * it as story points (covers both classic "Story Points" and next-gen "Story
+ * point estimate"). Returns null when none is found — the sync then leaves
+ * `storyPoints` NULL rather than failing.
+ */
+export async function resolveStoryPointFieldId(
+  baseUrl: string,
+  creds: JiraCreds,
+  opts?: JiraClientOpts,
+): Promise<string | null> {
+  const res = await jiraGet(`${baseUrl}${API_VERSION_PATH}/field`, creds, opts);
+  if (res.status === 401) {
+    throw new JiraAuthError();
+  }
+  if (!res.ok) {
+    throw new JiraUnavailableError(
+      `Jira responded with ${res.status} while listing fields. Please try again.`,
+    );
+  }
+
+  let fields: Array<{
+    id?: unknown;
+    name?: unknown;
+    custom?: unknown;
+    schema?: { custom?: unknown };
+  }>;
+  try {
+    fields = (await res.json()) as typeof fields;
+  } catch {
+    throw new JiraUnavailableError(
+      "Jira returned an unreadable field list. Please try again.",
+    );
+  }
+
+  for (const field of fields ?? []) {
+    if (typeof field.id !== "string" || field.custom !== true) continue;
+    const schemaCustom =
+      typeof field.schema?.custom === "string"
+        ? field.schema.custom.toLowerCase()
+        : "";
+    const name = typeof field.name === "string" ? field.name.toLowerCase() : "";
+    if (schemaCustom.includes("story-point") || /story point/.test(name)) {
+      return field.id;
+    }
+  }
+  return null;
+}

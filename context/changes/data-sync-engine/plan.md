@@ -513,9 +513,9 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [x] 2.1 Unit tests per new method (happy/cap/origin/401/5xx)
-- [x] 2.2 Type checking passes
-- [x] 2.3 Linting passes
+- [x] 2.1 Unit tests per new method (happy/cap/origin/401/5xx) — 466872b
+- [x] 2.2 Type checking passes — 466872b
+- [x] 2.3 Linting passes — 466872b
 
 #### Manual
 
@@ -525,10 +525,10 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [ ] 3.1 Unit tests: token pagination, cap, origin rejection, changelog expand, 401/5xx
-- [ ] 3.2 Unit test: story-point field resolution
-- [ ] 3.3 Type checking passes
-- [ ] 3.4 Linting passes
+- [x] 3.1 Unit tests: token pagination, cap, origin rejection, changelog expand, 401/5xx
+- [x] 3.2 Unit test: story-point field resolution
+- [x] 3.3 Type checking passes
+- [x] 3.4 Linting passes
 
 #### Manual
 
