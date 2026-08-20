@@ -500,22 +500,22 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [x] 1.1 Migration generates cleanly and matches schema
-- [x] 1.2 Migration applies cleanly to local Supabase
-- [x] 1.3 Type checking passes
-- [x] 1.4 Linting passes
+- [x] 1.1 Migration generates cleanly and matches schema — 77bd291
+- [x] 1.2 Migration applies cleanly to local Supabase — 77bd291
+- [x] 1.3 Type checking passes — 77bd291
+- [x] 1.4 Linting passes — 77bd291
 
 #### Manual
 
-- [ ] 1.5 `claimed_until` column present on `sync_state`; existing rows NULL
+- [x] 1.5 `claimed_until` column present on `sync_state`; existing rows NULL — 77bd291
 
 ### Phase 2: GitHub client fetch methods
 
 #### Automated
 
-- [ ] 2.1 Unit tests per new method (happy/cap/origin/401/5xx)
-- [ ] 2.2 Type checking passes
-- [ ] 2.3 Linting passes
+- [x] 2.1 Unit tests per new method (happy/cap/origin/401/5xx)
+- [x] 2.2 Type checking passes
+- [x] 2.3 Linting passes
 
 #### Manual
 
