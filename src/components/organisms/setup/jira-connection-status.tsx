@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckCircle2Icon } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -77,7 +78,7 @@ export default function JiraConnectionStatus({
           {mappedCount === 1 ? "status" : "statuses"} mapped.
         </p>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex items-center justify-between gap-3">
         <Button
           type="button"
           variant="outline"
@@ -85,6 +86,14 @@ export default function JiraConnectionStatus({
           disabled={isDisconnecting}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+        </Button>
+        {/* Step 3 (S-04 roster/cadence) isn't built yet, so "Continue" lands on
+            the dashboard for now. The full wizard sequencing is onboarding-routing's. */}
+        <Button asChild>
+          <Link href="/dashboard">
+            Continue
+            <ArrowRightIcon />
+          </Link>
         </Button>
       </CardFooter>
     </Card>

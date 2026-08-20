@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckCircle2Icon } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -70,7 +71,7 @@ export default function GithubConnectionStatus({
           {repoCount === 1 ? "repository" : "repositories"}.
         </p>
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex items-center justify-between gap-3">
         <Button
           type="button"
           variant="outline"
@@ -78,6 +79,12 @@ export default function GithubConnectionStatus({
           disabled={isDisconnecting}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
+        </Button>
+        <Button asChild>
+          <Link href="/setup/jira">
+            Continue to Jira
+            <ArrowRightIcon />
+          </Link>
         </Button>
       </CardFooter>
     </Card>
