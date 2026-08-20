@@ -525,10 +525,10 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [x] 3.1 Unit tests: token pagination, cap, origin rejection, changelog expand, 401/5xx
-- [x] 3.2 Unit test: story-point field resolution
-- [x] 3.3 Type checking passes
-- [x] 3.4 Linting passes
+- [x] 3.1 Unit tests: token pagination, cap, origin rejection, changelog expand, 401/5xx — c3f6502
+- [x] 3.2 Unit test: story-point field resolution — c3f6502
+- [x] 3.3 Type checking passes — c3f6502
+- [x] 3.4 Linting passes — c3f6502
 
 #### Manual
 
@@ -538,11 +538,11 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [ ] 4.1 Unit test: `linkTicketKey` project-scoped match / foreign reject / null
-- [ ] 4.2 Unit tests: `syncOwner` per-integration independence, cursor advance, PR cap
-- [ ] 4.3 Unit test: fresh lease causes concurrent entry to skip
-- [ ] 4.4 Type checking passes
-- [ ] 4.5 Linting passes
+- [x] 4.1 Unit test: `linkTicketKey` project-scoped match / foreign reject / null
+- [x] 4.2 Unit tests: `syncOwner` per-integration independence, cursor advance, PR cap
+- [x] 4.3 Unit test: fresh lease causes concurrent entry to skip
+- [x] 4.4 Type checking passes
+- [x] 4.5 Linting passes
 
 #### Manual
 
