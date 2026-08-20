@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { disconnectGithub } from "@/app/(app)/setup/github/actions";
+import { disconnectJira } from "@/app/(app)/setup/jira/actions";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,19 +18,23 @@ import {
 } from "@/components/ui/card";
 
 /**
- * Connected-status card (S-02). Renders "Connected as {login} (ghp_••••{last4})"
- * from the stored NON-secret columns — no token decryption — plus a Disconnect
- * action that clears the credential and its repos, then refreshes the server
- * component back to the connect form.
+ * Connected-status card (S-03). Renders "Connected to {workspace} as {email}"
+ * from the stored NON-secret columns — no token decryption — plus the monitored
+ * project key and the mapped-status count, and a Disconnect action that clears
+ * the credential (project + mappings cascade) and refreshes back to the form.
  */
-export default function GithubConnectionStatus({
-  login,
+export default function JiraConnectionStatus({
+  workspaceUrl,
+  email,
   tokenLast4,
-  repoCount,
+  projectKey,
+  mappedCount,
 }: {
-  login: string | null;
+  workspaceUrl: string;
+  email: string;
   tokenLast4: string | null;
-  repoCount: number;
+  projectKey: string | null;
+  mappedCount: number;
 }) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -38,8 +42,8 @@ export default function GithubConnectionStatus({
   async function handleDisconnect() {
     setIsDisconnecting(true);
     try {
-      await disconnectGithub();
-      toast.success("GitHub disconnected.");
+      await disconnectJira();
+      toast.success("Jira disconnected.");
       router.refresh();
     } catch {
       toast.error("Couldn't disconnect. Please try again.");
@@ -47,28 +51,31 @@ export default function GithubConnectionStatus({
     }
   }
 
-  const masked = tokenLast4 ? `ghp_••••${tokenLast4}` : "ghp_••••";
+  const masked = tokenLast4 ? `••••${tokenLast4}` : "••••";
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <CheckCircle2Icon className="size-5 text-primary" />
-          GitHub connected
+          Jira connected
         </CardTitle>
         <CardDescription>
-          Connected as{" "}
-          <span className="font-medium text-foreground">
-            {login ?? "your GitHub account"}
-          </span>{" "}
-          (<span className="font-mono">{masked}</span>)
+          Connected to{" "}
+          <span className="font-medium text-foreground">{workspaceUrl}</span> as{" "}
+          <span className="font-medium text-foreground">{email}</span> (
+          <span className="font-mono">{masked}</span>)
         </CardDescription>
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground">
-          Monitoring{" "}
-          <span className="font-medium text-foreground">{repoCount}</span>{" "}
-          {repoCount === 1 ? "repository" : "repositories"}.
+          Monitoring project{" "}
+          <span className="font-medium text-foreground">
+            {projectKey ?? "—"}
+          </span>{" "}
+          with{" "}
+          <span className="font-medium text-foreground">{mappedCount}</span>{" "}
+          {mappedCount === 1 ? "status" : "statuses"} mapped.
         </p>
       </CardContent>
       <CardFooter className="flex items-center justify-between gap-3">
@@ -80,9 +87,11 @@ export default function GithubConnectionStatus({
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
+        {/* Step 3 (S-04 roster/cadence) isn't built yet, so "Continue" lands on
+            the dashboard for now. The full wizard sequencing is onboarding-routing's. */}
         <Button asChild>
-          <Link href="/setup/jira">
-            Continue to Jira
+          <Link href="/dashboard">
+            Continue
             <ArrowRightIcon />
           </Link>
         </Button>

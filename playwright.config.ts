@@ -23,6 +23,13 @@ const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 const GITHUB_FIXTURE_PORT = 3099;
 const GITHUB_FIXTURE_URL = `http://localhost:${GITHUB_FIXTURE_PORT}`;
 
+// The Jira API fixture the setup e2e points the app's SERVER-SIDE fetch at
+// (S-03). Same rationale as the GitHub fixture: a server-side fetch is
+// unreachable by `page.route()`, so the app is booted with JIRA_API_BASE_URL
+// pointing here (see the webServer array below).
+const JIRA_FIXTURE_PORT = 3098;
+const JIRA_FIXTURE_URL = `http://localhost:${JIRA_FIXTURE_PORT}`;
+
 // Authenticated browser state produced by e2e/auth.setup.ts and reused by the
 // main project. Written under playwright/.auth/ (git-ignored).
 export const STORAGE_STATE = "playwright/.auth/user.json";
@@ -68,11 +75,20 @@ export default defineConfig({
       timeout: 30_000,
     },
     {
+      command: "node e2e/jira-fixture-server.mjs",
+      port: JIRA_FIXTURE_PORT,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
       command: "npm run dev",
       url: baseURL,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
-      env: { GITHUB_API_BASE_URL: GITHUB_FIXTURE_URL },
+      env: {
+        GITHUB_API_BASE_URL: GITHUB_FIXTURE_URL,
+        JIRA_API_BASE_URL: JIRA_FIXTURE_URL,
+      },
     },
   ],
 });

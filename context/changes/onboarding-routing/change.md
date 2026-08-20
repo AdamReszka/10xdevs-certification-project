@@ -3,7 +3,7 @@ change_id: onboarding-routing
 title: First-run routing into the setup wizard + entry point for returning users
 status: new
 created: 2026-08-19
-updated: 2026-08-19
+updated: 2026-08-20
 archived_at: null
 ---
 
@@ -27,3 +27,23 @@ Result: `/setup` is orphaned in the UI today — you reach it only by hand-typin
 Do NOT add "Setup" as a standalone nav item — that contradicts the onboarding-flow intent. Prefer post-signup routing + a "Complete setup" prompt on the dashboard until onboarding is done.
 
 Related: S-04 (`setup-team-roster-cadence`) completes the wizard; S-07 (`dashboard-today`) builds the real dashboard; S-14 (`anomaly-settings-page`) is the anomaly settings surface (not integration management).
+
+## Update — 2026-08-20 (partial intra-wizard nav shipped early in S-03)
+
+While implementing S-03 (`setup-jira-integration`), a **minimal intra-wizard
+forward navigation** was delivered at the user's request (commit `1feb05e` on the
+S-03 branch / PR #41), ahead of this change:
+
+- **GitHub connected card → "Continue to Jira →"** (`/setup/jira`).
+- **Jira connected card → "Continue →"** (`/dashboard`, until the S-04 roster step
+  exists).
+
+These are the "Continue to next step" links this change's scope had reserved.
+`onboarding-routing` should therefore **build on them, not redo them** — its
+remaining scope is unchanged and still owns:
+1. First-run routing (post-signup → `/setup`; the "onboarding complete?" signal).
+2. The returning-user entry to integration management (persistent Settings/nav
+   surface — still undecided).
+
+Note: the Continue buttons render only on each step's **connected** card, and the
+"next" target after Jira is a placeholder (`/dashboard`) until S-04 lands.
