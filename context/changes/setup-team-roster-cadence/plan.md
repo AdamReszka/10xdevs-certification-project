@@ -373,12 +373,12 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [x] 2.1 Lint + build pass
-- [x] 2.2 `deriveCadence` unit tests pass (length rounding, TZ weekday incl. off-by-one boundary, working-days default)
-- [x] 2.3 `roster-store` integration test: fresh import seeds both sources; re-import preserves user edits + never touches MANUAL rows
-- [x] 2.4 `roster-store` integration test: `importCadence` persists `boardId` + upserts `sprint` when active; no-active-sprint returns defaults, persists `boardId`, writes **no** `sprint` row
-- [x] 2.5 `roster-store` integration test: cadence override preserved on re-import (`cadenceOverridden = true` survives; only metadata refreshed)
-- [x] 2.6 Integration test: GitHub 403 yields `githubDegraded` marker (no throw), Jira members still persist
+- [x] 2.1 Lint + build pass — 49e9a18
+- [x] 2.2 `deriveCadence` unit tests pass (length rounding, TZ weekday incl. off-by-one boundary, working-days default) — 49e9a18
+- [x] 2.3 `roster-store` integration test: fresh import seeds both sources; re-import preserves user edits + never touches MANUAL rows — 49e9a18
+- [x] 2.4 `roster-store` integration test: `importCadence` persists `boardId` + upserts `sprint` when active; no-active-sprint returns defaults, persists `boardId`, writes **no** `sprint` row — 49e9a18
+- [x] 2.5 `roster-store` integration test: cadence override preserved on re-import (`cadenceOverridden = true` survives; only metadata refreshed) — 49e9a18
+- [x] 2.6 Integration test: GitHub 403 yields `githubDegraded` marker (no throw), Jira members still persist — 49e9a18
 
 #### Manual
 
@@ -389,9 +389,9 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [ ] 3.1 Lint + build pass
-- [ ] 3.2 `setup/team/actions.integration.test.ts`: happy-path import+save (roster & cadence), `invalid_input`, `githubDegraded` surfaced, `decrypt_failed`
-- [ ] 3.3 Test asserts no token string appears in captured `console.error`
+- [x] 3.1 Lint + build pass
+- [x] 3.2 `setup/team/actions.integration.test.ts`: happy-path import+save (roster & cadence), `invalid_input`, `githubDegraded` surfaced, `decrypt_failed`
+- [x] 3.3 Test asserts no token string appears in captured `console.error`
 
 #### Manual
 
