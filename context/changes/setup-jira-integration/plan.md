@@ -636,8 +636,8 @@ only.
 
 #### Manual
 
-- [ ] 1.5 `suggestCategory` produces sensible seeds on a real project's statuses
-- [ ] 1.6 Workspace URL normalizes across the three input shapes
+- [x] 1.5 `suggestCategory` produces sensible seeds on a real project's statuses
+- [x] 1.6 Workspace URL normalizes across the three input shapes
 
 ### Phase 2: Setup wizard Jira step, service core & Server Actions
 
@@ -649,23 +649,23 @@ only.
 
 #### Manual
 
-- [ ] 2.4 `/setup/jira` shows the credentials form when no credential exists
-- [ ] 2.5 Valid token advances through project pick → mapping and persists on save
-- [ ] 2.6 Invalid token shows a persistent alert and writes nothing
-- [ ] 2.7 Save stays disabled until every status has a category
-- [ ] 2.8 Disconnect clears credential, project, and mappings
-- [ ] 2.9 Re-connecting to a different project replaces old project + mappings
+- [x] 2.4 `/setup/jira` shows the credentials form when no credential exists
+- [x] 2.5 Valid token advances through project pick → mapping and persists on save
+- [x] 2.6 Invalid token shows a persistent alert and writes nothing
+- [x] 2.7 Save stays disabled until every status has a category
+- [x] 2.8 Disconnect clears credential, project, and mappings
+- [x] 2.9 Re-connecting to a different project replaces old project + mappings
 
 ### Phase 3: Credential-security test surface (integration + e2e)
 
 #### Automated
 
 - [x] 3.1 Integration tests pass: `npm run test:integration` — f8c4f1e
-- [ ] 3.2 Jira e2e passes: `npm run test:e2e`
+- [x] 3.2 Jira e2e passes: `npm run test:e2e` — f8c4f1e
 - [x] 3.3 Full unit suite still green: `npm run test` — f8c4f1e
 - [x] 3.4 `npm run lint` and `npm run typecheck` pass — f8c4f1e
 
 #### Manual
 
-- [ ] 3.5 Grep test output + server logs for the fixture token → zero occurrences
-- [ ] 3.6 e2e deterministic across two consecutive runs
+- [x] 3.5 Grep test output + server logs for the fixture token → zero occurrences
+- [x] 3.6 e2e deterministic across two consecutive runs
