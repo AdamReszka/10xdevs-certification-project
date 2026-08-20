@@ -360,10 +360,10 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [x] 1.1 Lint passes: `npm run lint`
-- [x] 1.2 Type checking passes (via `npm run build`)
-- [x] 1.3 Unit tests for `listCollaborators` pass (pagination cap + cross-origin rejection + 401/403 mapping)
-- [x] 1.4 Unit tests for `listBoards`/`getActiveSprint`/`listAssignableUsers` pass (offset pagination, scrum-filter, atlassian-filter, empty-array termination, active-sprint-null)
+- [x] 1.1 Lint passes: `npm run lint` — 4f478b7
+- [x] 1.2 Type checking passes (via `npm run build`) — 4f478b7
+- [x] 1.3 Unit tests for `listCollaborators` pass (pagination cap + cross-origin rejection + 401/403 mapping) — 4f478b7
+- [x] 1.4 Unit tests for `listBoards`/`getActiveSprint`/`listAssignableUsers` pass (offset pagination, scrum-filter, atlassian-filter, empty-array termination, active-sprint-null) — 4f478b7
 
 #### Manual
 
@@ -373,12 +373,12 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [ ] 2.1 Lint + build pass
-- [ ] 2.2 `deriveCadence` unit tests pass (length rounding, TZ weekday incl. off-by-one boundary, working-days default)
-- [ ] 2.3 `roster-store` integration test: fresh import seeds both sources; re-import preserves user edits + never touches MANUAL rows
-- [ ] 2.4 `roster-store` integration test: `importCadence` persists `boardId` + upserts `sprint` when active; no-active-sprint returns defaults, persists `boardId`, writes **no** `sprint` row
-- [ ] 2.5 `roster-store` integration test: cadence override preserved on re-import (`cadenceOverridden = true` survives; only metadata refreshed)
-- [ ] 2.6 Integration test: GitHub 403 yields `githubDegraded` marker (no throw), Jira members still persist
+- [x] 2.1 Lint + build pass
+- [x] 2.2 `deriveCadence` unit tests pass (length rounding, TZ weekday incl. off-by-one boundary, working-days default)
+- [x] 2.3 `roster-store` integration test: fresh import seeds both sources; re-import preserves user edits + never touches MANUAL rows
+- [x] 2.4 `roster-store` integration test: `importCadence` persists `boardId` + upserts `sprint` when active; no-active-sprint returns defaults, persists `boardId`, writes **no** `sprint` row
+- [x] 2.5 `roster-store` integration test: cadence override preserved on re-import (`cadenceOverridden = true` survives; only metadata refreshed)
+- [x] 2.6 Integration test: GitHub 403 yields `githubDegraded` marker (no throw), Jira members still persist
 
 #### Manual
 
