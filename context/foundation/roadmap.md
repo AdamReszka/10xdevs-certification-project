@@ -36,7 +36,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | done     |
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | done     |
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | done     |
-| S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | proposed |
+| S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | done |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | proposed |
 | S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default, Sprint Pulse / Activity / KPI tabs one click away; freshness timestamp + error banner | S-06, F-03 | FR-015, FR-016, US-01 | proposed |
 | S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window | S-04, S-06 | FR-010                                    | proposed |
@@ -194,7 +194,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - Background sync mechanism: Cloudflare Cron Trigger (native Workers, already in `wrangler.toml`) vs. embedded node-cron — Owner: TBD. Block: no (Cron Trigger is the native Workers approach; confirm at `/10x-plan` time).
   - PRD Open Question #3: GitHub cache TTL default (15-min at 5,000 req/h PAT; multi-user may require a higher TTL) — Owner: implementation planning. Block: no (implement with 15-min default; tune after first real-team trial).
 - **Risk:** Workers subrequest limit (10,000/invocation) — a sprint with 20+ PRs across 3 repos with paginated API calls can approach the ceiling; design the sync to batch GitHub calls and use Jira incremental delta-pull from day one to stay under budget (documented risk in `infrastructure.md`).
-- **Status:** proposed
+- **Status:** done
 
 ---
 
@@ -379,3 +379,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-02: user can connect a GitHub Personal Access Token, select which repositories to monitor, and have the token validated against the GitHub API before it is stored encrypted; setup wizard step 1 of 4 complete.** — Archived 2026-08-19 → `context/archive/2026-06-14-setup-github-integration/`. Lesson: —.
 - **S-03: user can connect a Jira API token + workspace URL, select a single Jira project to monitor, have the credentials validated against Jira before storing encrypted, and map the project's workflow statuses onto the 5 standard categories (To Do / In Progress / Code Review / Testing / Done); setup wizard step 2 of 4 complete.** — Archived 2026-08-20 → `context/archive/2026-08-19-setup-jira-integration/`. Lesson: —.
 - **S-04: user can review and edit the auto-imported team roster (names, GitHub usernames, Jira account IDs, roles, SP capacity, technology tracks); sprint cadence (length, start day, working days) is auto-pulled from the Jira project's active sprint and is overridable; setup wizard step 3 of 3 complete (the wizard reconciled to 3 steps — GitHub/Jira/Team — during implementation, F4).** — Archived 2026-08-20 → `context/archive/2026-08-20-setup-team-roster-cadence/`. Lesson: —.
+- **S-05: system pulls GitHub commit, PR, and review data (15-min cycle by default) and Jira active-sprint tickets + status-change history (incremental delta since last successful sync) for the configured team and repositories; sync results stored in DB; last-sync timestamp per integration stored and readable by the dashboard.** — Archived 2026-08-20 → `context/archive/2026-08-20-data-sync-engine/`. Lesson: —.
