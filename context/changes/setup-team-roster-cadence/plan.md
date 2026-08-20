@@ -401,8 +401,8 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [x] 4.1 Lint + build pass
-- [x] 4.2 Any component/organism tests present pass
+- [x] 4.1 Lint + build pass — ad2b201
+- [x] 4.2 Any component/organism tests present pass — ad2b201
 
 #### Manual
 
@@ -415,10 +415,10 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Automated
 
-- [ ] 5.1 Lint + build pass
-- [ ] 5.2 `isOnboardingComplete` test: false on any missing piece, true on full set (cadence NOT required — F1)
-- [ ] 5.3 Grep confirms no `href="/dashboard"` remains in `jira-connection-status.tsx`
-- [ ] 5.4 Shell `totalSteps` default is `3`; no test asserts the literal "of 4" (F4)
+- [x] 5.1 Lint + build pass
+- [x] 5.2 `isOnboardingComplete` test: false on any missing piece, true on full set (cadence NOT required — F1)
+- [x] 5.3 Grep confirms no `href="/dashboard"` remains in `jira-connection-status.tsx`
+- [x] 5.4 Shell `totalSteps` default is `3`; no test asserts the literal "of 4" (F4)
 
 #### Manual
 

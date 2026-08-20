@@ -2,16 +2,19 @@ import type { ReactNode } from "react";
 
 /**
  * Step-agnostic setup-wizard chrome (S-02). Renders the wizard title, a
- * "Step N of 4" label, a progress bar, and a content slot. Lives under the
+ * "Step N of 3" label, a progress bar, and a content slot. Lives under the
  * gated `(app)` group so it inherits `requireSession()` — no new gating layer.
  *
  * Built step-agnostic on purpose: S-03 (Jira), S-04 (roster/cadence) slot in by
  * rendering their own page inside this shell with a different `step`/`title`.
  * Parallels `src/components/templates/app-shell.tsx`.
+ *
+ * The wizard has exactly 3 steps — GitHub(1) → Jira(2) → Team(3) — so the default
+ * `totalSteps` is 3; step 3's "Save & finish" reaches 100% (F4).
  */
 export default function SetupWizardShell({
   step,
-  totalSteps = 4,
+  totalSteps = 3,
   title,
   description,
   children,

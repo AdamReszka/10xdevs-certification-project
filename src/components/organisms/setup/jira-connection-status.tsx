@@ -87,10 +87,10 @@ export default function JiraConnectionStatus({
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
-        {/* Step 3 (S-04 roster/cadence) isn't built yet, so "Continue" lands on
-            the dashboard for now. The full wizard sequencing is onboarding-routing's. */}
+        {/* Forward to step 3 (S-04 roster/cadence), the final wizard step. The
+            returning-user routing (skip a completed wizard) is onboarding-routing's. */}
         <Button asChild>
-          <Link href="/dashboard">
+          <Link href="/setup/team">
             Continue
             <ArrowRightIcon />
           </Link>
