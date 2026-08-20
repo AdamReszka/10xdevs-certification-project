@@ -519,7 +519,7 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Manual
 
-- [ ] 2.4 Real-repo shape correct; cap holds; no token in error/log
+- [x] 2.4 Real-repo shape correct; cap holds; no token in error/log — 466872b
 
 ### Phase 3: Jira client fetch methods
 
@@ -532,34 +532,34 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Manual
 
-- [ ] 3.5 Real Jira project: issues + changelog correct; cursor pulls only delta
+- [x] 3.5 Real Jira project: issues + changelog correct; cursor pulls only delta — c3f6502
 
 ### Phase 4: Sync store layer
 
 #### Automated
 
-- [x] 4.1 Unit test: `linkTicketKey` project-scoped match / foreign reject / null
-- [x] 4.2 Unit tests: `syncOwner` per-integration independence, cursor advance, PR cap
-- [x] 4.3 Unit test: fresh lease causes concurrent entry to skip
-- [x] 4.4 Type checking passes
-- [x] 4.5 Linting passes
+- [x] 4.1 Unit test: `linkTicketKey` project-scoped match / foreign reject / null — aa6c53b
+- [x] 4.2 Unit tests: `syncOwner` per-integration independence, cursor advance, PR cap — aa6c53b
+- [x] 4.3 Unit test: fresh lease causes concurrent entry to skip — aa6c53b
+- [x] 4.4 Type checking passes — aa6c53b
+- [x] 4.5 Linting passes — aa6c53b
 
 #### Manual
 
-- [ ] 4.6 Real owner: five tables populate; `linkedTicketKey` set; per-integration OK + fresh timestamps
+- [x] 4.6 Real owner: five tables populate; `linkedTicketKey` set; per-integration OK + fresh timestamps — aa6c53b
 
 ### Phase 5: Cron + on-demand wiring
 
 #### Automated
 
-- [ ] 5.1 Build succeeds with custom worker entry; `fetch` path preserved
-- [ ] 5.2 `wrangler.jsonc` has `triggers.crons */15` and `main` → custom entry
-- [ ] 5.3 Unit test: `runScheduledSync` iterates, skips fresh lease, isolates per-owner throw, schedules teardown
-- [ ] 5.4 Type checking passes
-- [ ] 5.5 Linting passes
+- [x] 5.1 Build succeeds with custom worker entry; `fetch` path preserved
+- [x] 5.2 `wrangler.jsonc` has `triggers.crons */15` and `main` → custom entry
+- [x] 5.3 Unit test: `runScheduledSync` iterates, skips fresh lease, isolates per-owner throw, schedules teardown
+- [x] 5.4 Type checking passes
+- [x] 5.5 Linting passes
 
 #### Manual
 
-- [ ] 5.6 Post-setup `syncNow` populates tables + `syncState` in one call
-- [ ] 5.7 Scheduled path stamps `lastSuccessfulSyncAt`; second fire skips leased owner
-- [ ] 5.8 No pooled connection left open after repeated fires
+- [x] 5.6 Post-setup `syncNow` populates tables + `syncState` in one call
+- [x] 5.7 Scheduled path stamps `lastSuccessfulSyncAt`; second fire skips leased owner
+- [x] 5.8 No pooled connection left open after repeated fires

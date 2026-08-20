@@ -1,11 +1,17 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "10xdevs-certification-project",
-	"main": ".open-next/worker.js",
+	// Custom entry (S-05): wraps OpenNext's generated `.open-next/worker.js` fetch
+	// handler + DO classes and adds the `scheduled` cron handler below.
+	"main": "src/worker.ts",
 	// nodejs_compat is required for Better Auth's native node:crypto scrypt path
 	// (F-01). compatibility_date must stay 2025+ for the fully-native crypto build.
 	"compatibility_date": "2026-05-23",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	// 15-min sync loop (FR-011/012). Fires the `scheduled` handler in src/worker.ts.
+	"triggers": {
+		"crons": ["*/15 * * * *"]
+	},
 	"assets": {
 		"directory": ".open-next/assets",
 		"binding": "ASSETS"
