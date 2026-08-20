@@ -660,10 +660,10 @@ only.
 
 #### Automated
 
-- [x] 3.1 Integration tests pass: `npm run test:integration`
+- [x] 3.1 Integration tests pass: `npm run test:integration` — f8c4f1e
 - [ ] 3.2 Jira e2e passes: `npm run test:e2e`
-- [x] 3.3 Full unit suite still green: `npm run test`
-- [x] 3.4 `npm run lint` and `npm run typecheck` pass
+- [x] 3.3 Full unit suite still green: `npm run test` — f8c4f1e
+- [x] 3.4 `npm run lint` and `npm run typecheck` pass — f8c4f1e
 
 #### Manual
 
