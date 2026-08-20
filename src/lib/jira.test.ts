@@ -4,6 +4,9 @@ import {
   JiraAuthError,
   JiraUnavailableError,
   type JiraStatus,
+  getActiveSprint,
+  listAssignableUsers,
+  listBoards,
   listProjects,
   listProjectStatuses,
   normalizeWorkspaceUrl,
@@ -94,6 +97,24 @@ describe("validateCredentials", () => {
     expect(result.accountId).toBe("5b10a2");
     expect(result.emailAddress).toBe("mia@example.com");
     expect(result.displayName).toBe("Mia Krystof");
+  });
+
+  it("surfaces the owner timeZone from /myself (F3 cadence source)", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({ accountId: "5b10a2", timeZone: "Europe/Warsaw" }),
+    );
+
+    const result = await validateCredentials(BASE, CREDS, { fetchImpl });
+
+    expect(result.timeZone).toBe("Europe/Warsaw");
+  });
+
+  it("leaves timeZone undefined when /myself omits it", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ accountId: "5b10a2" }));
+
+    const result = await validateCredentials(BASE, CREDS, { fetchImpl });
+
+    expect(result.timeZone).toBeUndefined();
   });
 
   it("sends HTTP Basic auth + JSON accept to {base}/rest/api/3/myself", async () => {
@@ -335,5 +356,224 @@ describe("suggestCategory", () => {
 
   it("defaults to TODO when neither name nor native category is informative (F3)", () => {
     expect(suggestCategory(withName("Zzz"))).toBe("TODO");
+  });
+});
+
+describe("listBoards", () => {
+  it("keeps only scrum boards and maps id/name/type", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        isLast: true,
+        values: [
+          { id: 1, name: "SF Scrum", type: "scrum" },
+          { id: 2, name: "SF Kanban", type: "kanban" },
+          { id: "3", name: "Other Scrum", type: "scrum" },
+        ],
+      }),
+    );
+
+    const boards = await listBoards(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(boards).toEqual([
+      { id: 1, name: "SF Scrum", type: "scrum" },
+      { id: 3, name: "Other Scrum", type: "scrum" },
+    ]);
+  });
+
+  it("queries the Agile base path with projectKeyOrId", async () => {
+    const { fetchImpl, calls } = seqFetch([jsonResponse({ isLast: true, values: [] })]);
+
+    await listBoards(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(calls[0]).toBe(
+      `${BASE}/rest/agile/1.0/board?projectKeyOrId=SF&startAt=0&maxResults=50`,
+    );
+  });
+
+  it("offset-paginates until isLast and assembles pages", async () => {
+    const full = Array.from({ length: 50 }, (_, i) => ({
+      id: i + 1,
+      name: `b${i + 1}`,
+      type: "scrum",
+    }));
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ isLast: false, values: full }),
+      jsonResponse({ isLast: true, values: [{ id: 51, name: "b51", type: "scrum" }] }),
+    ]);
+
+    const boards = await listBoards(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(boards).toHaveLength(51);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]).toBe(
+      `${BASE}/rest/agile/1.0/board?projectKeyOrId=SF&startAt=50&maxResults=50`,
+    );
+  });
+
+  it("caps the page count on an unbounded chain", async () => {
+    // Always a full page with isLast:false → the cap must break the loop.
+    const full = Array.from({ length: 50 }, (_, i) => ({
+      id: i + 1,
+      name: `b${i + 1}`,
+      type: "scrum",
+    }));
+    const fetchImpl = (async () =>
+      jsonResponse({ isLast: false, values: full })) as unknown as typeof fetch;
+
+    await expect(listBoards(BASE, CREDS, "SF", { fetchImpl })).rejects.toBeInstanceOf(
+      JiraUnavailableError,
+    );
+  });
+
+  it("throws JiraUnavailableError on a non-OK status", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    await expect(listBoards(BASE, CREDS, "SF", { fetchImpl })).rejects.toBeInstanceOf(
+      JiraUnavailableError,
+    );
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await listBoards(BASE, CREDS, "SF", { fetchImpl }).catch((e) => e);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("getActiveSprint", () => {
+  it("returns the first active sprint mapped to id/state/name/dates", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        values: [
+          {
+            id: 42,
+            state: "active",
+            name: "Sprint 7",
+            startDate: "2026-08-18T08:00:00.000Z",
+            endDate: "2026-09-01T08:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    const sprint = await getActiveSprint(BASE, CREDS, 1, { fetchImpl });
+
+    expect(sprint).toEqual({
+      id: 42,
+      state: "active",
+      name: "Sprint 7",
+      startDate: "2026-08-18T08:00:00.000Z",
+      endDate: "2026-09-01T08:00:00.000Z",
+    });
+  });
+
+  it("queries board/{id}/sprint?state=active", async () => {
+    const { fetchImpl, calls } = seqFetch([jsonResponse({ values: [] })]);
+
+    await getActiveSprint(BASE, CREDS, 7, { fetchImpl });
+
+    expect(calls[0]).toBe(
+      `${BASE}/rest/agile/1.0/board/7/sprint?state=active&maxResults=50`,
+    );
+  });
+
+  it("returns null when no sprint is active (between-sprints team)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ values: [] }));
+
+    const sprint = await getActiveSprint(BASE, CREDS, 1, { fetchImpl });
+
+    expect(sprint).toBeNull();
+  });
+
+  it("throws JiraUnavailableError on a non-OK status", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 503 }));
+
+    await expect(getActiveSprint(BASE, CREDS, 1, { fetchImpl })).rejects.toBeInstanceOf(
+      JiraUnavailableError,
+    );
+  });
+});
+
+describe("listAssignableUsers", () => {
+  it("filters to accountType=atlassian and maps the member shape", async () => {
+    // A short page (2 < 50) still requires a following empty page to terminate.
+    const { fetchImpl } = seqFetch([
+      jsonResponse([
+        {
+          accountId: "a1",
+          accountType: "atlassian",
+          displayName: "Mia",
+          emailAddress: "mia@example.com",
+          active: true,
+          timeZone: "Europe/Warsaw",
+        },
+        { accountId: "bot1", accountType: "app", displayName: "Automation" },
+      ]),
+      jsonResponse([]),
+    ]);
+
+    const members = await listAssignableUsers(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(members).toEqual([
+      {
+        accountId: "a1",
+        displayName: "Mia",
+        emailAddress: "mia@example.com",
+        active: true,
+        timeZone: "Europe/Warsaw",
+      },
+    ]);
+  });
+
+  it("offset-pages until an empty array (short page is NOT end-of-list)", async () => {
+    // A short first page (1 < 50) followed by more, terminated by an empty page.
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse([{ accountId: "a1", accountType: "atlassian", displayName: "A", active: true }]),
+      jsonResponse([{ accountId: "a2", accountType: "atlassian", displayName: "B", active: true }]),
+      jsonResponse([]),
+    ]);
+
+    const members = await listAssignableUsers(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(members.map((m) => m.accountId)).toEqual(["a1", "a2"]);
+    expect(calls).toHaveLength(3);
+    expect(calls[1]).toBe(
+      `${BASE}/rest/api/3/user/assignable/search?project=SF&startAt=1&maxResults=50`,
+    );
+  });
+
+  it("defaults displayName to accountId and active to false when absent", async () => {
+    const { fetchImpl } = seqFetch([
+      jsonResponse([{ accountId: "a1", accountType: "atlassian" }]),
+      jsonResponse([]),
+    ]);
+
+    const members = await listAssignableUsers(BASE, CREDS, "SF", { fetchImpl });
+
+    expect(members).toEqual([
+      {
+        accountId: "a1",
+        displayName: "a1",
+        emailAddress: undefined,
+        active: false,
+        timeZone: undefined,
+      },
+    ]);
+  });
+
+  it("throws JiraUnavailableError on a non-OK status", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    await expect(
+      listAssignableUsers(BASE, CREDS, "SF", { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraUnavailableError);
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await listAssignableUsers(BASE, CREDS, "SF", { fetchImpl }).catch((e) => e);
+    expect(String(err)).not.toContain(TOKEN);
   });
 });

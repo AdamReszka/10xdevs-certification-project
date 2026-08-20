@@ -62,6 +62,20 @@ export type GithubRepo = {
   fullName: string;
 };
 
+/**
+ * A collaborator on a monitored repo (S-04 roster seed). `login`/`id` are the
+ * stable identity; `type` distinguishes `User` from `Bot`; `role_name` is the
+ * repo permission role. Name/email are unreliable on the collaborators endpoint
+ * (frequently withheld), so they are intentionally absent — roster dedup is a
+ * manual GitHub↔Jira mapping, never an email join (plan: What We're NOT Doing).
+ */
+export type GithubCollaborator = {
+  login: string;
+  id: number;
+  type: string;
+  roleName?: string;
+};
+
 /** Headers common to every authenticated GitHub REST call. */
 function githubHeaders(token: string): HeadersInit {
   return {
@@ -225,4 +239,89 @@ export async function listRepos(
   }
 
   return repos;
+}
+
+/** Hard cap on collaborator pages followed — mirrors `MAX_REPO_PAGES` (100/page ⇒ ≤2000 people). */
+const MAX_COLLABORATOR_PAGES = 20;
+
+/**
+ * List a repo's collaborators, following `Link: rel="next"` pagination with the
+ * same cap + cross-origin guard as `listRepos` (lesson 4: never chase a
+ * cross-host next-link while carrying the token).
+ *
+ * Requires a classic PAT with `read:org` AND `repo` (a scope escalation over
+ * S-02's read-only PAT). A missing scope surfaces as 403 → `GithubUnavailableError`;
+ * the roster importer catches that and degrades to Jira-seeded + manual entry
+ * rather than aborting the step (PRD graceful-degradation guardrail).
+ * - 401 → `GithubAuthError`.
+ * - anything else (403/scope, 5xx, network) → `GithubUnavailableError`.
+ */
+export async function listCollaborators(
+  token: string,
+  repoFullName: string,
+  opts?: GithubClientOpts,
+): Promise<GithubCollaborator[]> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const params = new URLSearchParams({
+    affiliation: "all",
+    per_page: "100",
+  });
+
+  let url: string | null = `${baseUrl}/repos/${repoFullName}/collaborators?${params.toString()}`;
+  const collaborators: GithubCollaborator[] = [];
+  const baseOrigin = new URL(baseUrl).origin;
+  let pageCount = 0;
+
+  while (url) {
+    if (++pageCount > MAX_COLLABORATOR_PAGES) {
+      throw new GithubUnavailableError(
+        `GitHub collaborator list exceeded ${MAX_COLLABORATOR_PAGES} pages. Please try again.`,
+      );
+    }
+    const res: Response = await githubGet(url, token, opts);
+    if (res.status === 401) {
+      throw new GithubAuthError();
+    }
+    if (!res.ok) {
+      throw new GithubUnavailableError(
+        `GitHub responded with ${res.status} while listing collaborators. Please try again.`,
+      );
+    }
+
+    let page: Array<{
+      login?: unknown;
+      id?: unknown;
+      type?: unknown;
+      role_name?: unknown;
+    }>;
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new GithubUnavailableError(
+        "GitHub returned an unreadable collaborator list. Please try again.",
+      );
+    }
+
+    for (const person of page) {
+      if (typeof person.login === "string" && typeof person.id === "number") {
+        collaborators.push({
+          login: person.login,
+          id: person.id,
+          type: typeof person.type === "string" ? person.type : "User",
+          roleName:
+            typeof person.role_name === "string" ? person.role_name : undefined,
+        });
+      }
+    }
+
+    const next = nextLink(res.headers.get("link"));
+    if (next !== null && new URL(next, baseUrl).origin !== baseOrigin) {
+      throw new GithubUnavailableError(
+        "GitHub returned a cross-origin pagination link. Please try again.",
+      );
+    }
+    url = next;
+  }
+
+  return collaborators;
 }

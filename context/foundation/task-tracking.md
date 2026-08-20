@@ -199,18 +199,18 @@ Done. `S-15` is the stable name in every doc, conversation, and future reference
 
 Snapshot of what we will be mirroring.
 
-- **18 open issues** in scope: 17 roadmap children (`#8`–`#24`) + 1 parent tracker (`#25`). All `state: OPEN`, all assigned to `AdamReszka`, all on milestone `MVP`.
+- **18 issues** in scope: 17 roadmap children (`#8`–`#24`) + 1 parent tracker (`#25`), all assigned to `AdamReszka`, all on milestone `MVP`. As of **2026-08-20**: **6 closed** (`#8`–`#13` — F-01/F-02/F-03/S-01/S-02/S-03) and **12 open** (`#14`–`#25`). The Status column below reflects current **roadmap** status (canonical), not the original mirror-creation snapshot.
 - **Roadmap children:**
 
   | GH # | Roadmap ID | Title | Kind | Status | Stream |
   |------|------------|-------|------|--------|--------|
-  | #8   | F-01 | auth-provider-scaffold | foundation | ready | A |
-  | #9   | F-02 | data-schema-baseline | foundation | ready | A |
-  | #10  | F-03 | ui-component-foundation | foundation | ready | A |
-  | #11  | S-01 | account-auth-flow | slice | proposed | A |
-  | #12  | S-02 | setup-github-integration | slice | proposed | A |
-  | #13  | S-03 | setup-jira-integration | slice | proposed | A |
-  | #14  | S-04 | setup-team-roster-cadence | slice | proposed | A |
+  | #8   | F-01 | auth-provider-scaffold | foundation | done | A |
+  | #9   | F-02 | data-schema-baseline | foundation | done | A |
+  | #10  | F-03 | ui-component-foundation | foundation | done | A |
+  | #11  | S-01 | account-auth-flow | slice | done | A |
+  | #12  | S-02 | setup-github-integration | slice | done | A |
+  | #13  | S-03 | setup-jira-integration | slice | done | A |
+  | #14  | S-04 | setup-team-roster-cadence | slice | in review | A |
   | #15  | S-05 | data-sync-engine | slice | proposed | A |
   | #16  | S-06 | anomaly-detection-engine | slice | proposed | A |
   | #17  | S-07 | dashboard-today ⭐ north-star | slice | proposed | A |
@@ -222,6 +222,8 @@ Snapshot of what we will be mirroring.
   | #23  | S-13 | refinement-helper-ai | slice | proposed | D |
   | #24  | S-14 | anomaly-settings-page | slice | proposed | B |
   | #25  | —    | MVP Roadmap parent tracker | — | — | — |
+
+  > Status legend: `done` = merged/archived (GH issue closed); `in review` = implemented, PR open, not yet merged; `proposed` = ready or awaiting prerequisites; `blocked` = gated on an open decision. Closed GH issues: `#8`–`#13`.
 
 - **Labels in use** (10 distinct):
   - kind: `roadmap`, `foundation`, `slice`, `north-star`
