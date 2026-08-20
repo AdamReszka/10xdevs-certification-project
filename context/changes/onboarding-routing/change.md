@@ -5,6 +5,7 @@ status: new
 created: 2026-08-19
 updated: 2026-08-20
 archived_at: null
+depends_on: setup-team-roster-cadence (S-04 — in review, PR #42)
 ---
 
 ## Notes
@@ -69,3 +70,21 @@ When wiring first-run routing, import this helper as-is — do not re-derive the
 condition inline (single source of truth). If the shape needs to change, change it
 in `src/lib/onboarding.ts` and update this note. Still holds: do NOT add a
 standalone "Setup" nav item.
+
+## Update — 2026-08-20 (S-04 implemented; predicate + final Continue link now live)
+
+S-04 has shipped (implemented, impl-reviewed APPROVED, PR #42 draft). Two items
+this change was tracking as pending are now DONE in code:
+
+- **`isOnboardingComplete({ db, ownerId })` exists** in `src/lib/onboarding.ts`
+  exactly as the contract above pins it (predicate + integration tests). Import it
+  as-is for first-run routing.
+- **The Jira connected card's "Continue →" now targets `/setup/team`** (the real
+  step-3 route), not the `/dashboard` placeholder noted earlier. The wizard now
+  sequences GitHub(1) → Jira(2) → Team(3) → finish → `/dashboard`, and the shell
+  reads "of 3" (F4).
+
+Remaining scope for this change is unchanged: (1) first-run post-signup routing to
+`/setup` using the predicate, landing in `/dashboard` once complete; (2) the
+returning-user entry to integration management (persistent Settings surface —
+still undecided). Both are plannable once S-04 merges.
