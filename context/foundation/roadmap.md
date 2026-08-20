@@ -35,7 +35,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-01 | account-auth-flow         | sign up, sign in, sign out, and reset password by email+password                             | F-01, F-02, F-03   | FR-001, US-01                                   | done     |
 | S-02 | setup-github-integration  | connect GitHub PAT + choose repos to monitor (token validated before storing)                | S-01, F-02         | FR-002, FR-004                                  | done     |
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | done     |
-| S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | in review |
+| S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | done     |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | proposed |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | proposed |
 | S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default, Sprint Pulse / Activity / KPI tabs one click away; freshness timestamp + error banner | S-06, F-03 | FR-015, FR-016, US-01 | proposed |
@@ -178,7 +178,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - ~~GitHub Collaborators API and Jira project members API may return users not present on both systems; roster deduplication strategy (match by email or by manual mapping) needs a decision~~ — **RESOLVED (S-04):** manual GitHub↔Jira mapping only (email is unreliable/withheld on both sides); import merges by stable key (`githubUsername` / `jiraAccountId`), the user maps two rows into one via the editor's Merge control.
 - **Risk:** Auto-import quality depends on both S-02 and S-03 having valid, validated tokens; test with a real GitHub repo + real Jira project in a dev environment before marking this slice done. (Automated coverage green: 89 unit + 22 integration; the live-credential walkthrough remains as pending manual verification on PR #42.)
-- **Status:** in review — implemented & impl-reviewed (APPROVED); PR #42 (draft) open, awaiting merge + `/10x-archive`.
+- **Status:** done
 
 ---
 
@@ -378,3 +378,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 - **S-02: user can connect a GitHub Personal Access Token, select which repositories to monitor, and have the token validated against the GitHub API before it is stored encrypted; setup wizard step 1 of 4 complete.** — Archived 2026-08-19 → `context/archive/2026-06-14-setup-github-integration/`. Lesson: —.
 - **S-03: user can connect a Jira API token + workspace URL, select a single Jira project to monitor, have the credentials validated against Jira before storing encrypted, and map the project's workflow statuses onto the 5 standard categories (To Do / In Progress / Code Review / Testing / Done); setup wizard step 2 of 4 complete.** — Archived 2026-08-20 → `context/archive/2026-08-19-setup-jira-integration/`. Lesson: —.
+- **S-04: user can review and edit the auto-imported team roster (names, GitHub usernames, Jira account IDs, roles, SP capacity, technology tracks); sprint cadence (length, start day, working days) is auto-pulled from the Jira project's active sprint and is overridable; setup wizard step 3 of 3 complete (the wizard reconciled to 3 steps — GitHub/Jira/Team — during implementation, F4).** — Archived 2026-08-20 → `context/archive/2026-08-20-setup-team-roster-cadence/`. Lesson: —.
