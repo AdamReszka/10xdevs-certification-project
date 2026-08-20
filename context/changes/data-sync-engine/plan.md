@@ -552,14 +552,14 @@ Follows the `src/app/(app)/setup/*/actions.ts` convention.
 
 #### Automated
 
-- [x] 5.1 Build succeeds with custom worker entry; `fetch` path preserved
-- [x] 5.2 `wrangler.jsonc` has `triggers.crons */15` and `main` → custom entry
-- [x] 5.3 Unit test: `runScheduledSync` iterates, skips fresh lease, isolates per-owner throw, schedules teardown
-- [x] 5.4 Type checking passes
-- [x] 5.5 Linting passes
+- [x] 5.1 Build succeeds with custom worker entry; `fetch` path preserved — 8d64310
+- [x] 5.2 `wrangler.jsonc` has `triggers.crons */15` and `main` → custom entry — 8d64310
+- [x] 5.3 Unit test: `runScheduledSync` iterates, skips fresh lease, isolates per-owner throw, schedules teardown — 8d64310
+- [x] 5.4 Type checking passes — 8d64310
+- [x] 5.5 Linting passes — 8d64310
 
 #### Manual
 
-- [x] 5.6 Post-setup `syncNow` populates tables + `syncState` in one call
-- [x] 5.7 Scheduled path stamps `lastSuccessfulSyncAt`; second fire skips leased owner
-- [x] 5.8 No pooled connection left open after repeated fires
+- [x] 5.6 Post-setup `syncNow` populates tables + `syncState` in one call — 8d64310
+- [x] 5.7 Scheduled path stamps `lastSuccessfulSyncAt`; second fire skips leased owner — 8d64310
+- [x] 5.8 No pooled connection left open after repeated fires — 8d64310
