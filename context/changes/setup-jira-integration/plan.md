@@ -122,6 +122,11 @@ and the Jira e2e all pass.
   returning-user settings entry) is owned by the in-flight `onboarding-routing`
   change. S-03 ships `/setup/jira` reachable exactly the way `/setup/github` is
   today (by URL / server redirect), no more.
+  > **Exception (delivered 2026-08-20, commit `1feb05e`):** at the user's request
+  > a *minimal* forward nav shipped anyway — "Continue to Jira →" on the GitHub
+  > connected card and "Continue →" (→ `/dashboard`) on the Jira connected card.
+  > Scope reconciled in `context/changes/onboarding-routing/change.md`; the rest
+  > of cross-step navigation + first-run routing remains onboarding-routing's.
 - **No `boardId` / Agile API (`/rest/agile/1.0/board`) discovery** — deferred to
   S-04 (sprint cadence), per the planning decision. `boardId` stays null.
 - **No sprint / ticket / status-history sync** — that is S-05.
