@@ -28,10 +28,13 @@ type Env = {
 type ExecCtx = { waitUntil: (promise: Promise<unknown>) => void };
 type FetchHandler = (request: Request, env: unknown, ctx: unknown) => Response | Promise<Response>;
 
-const fetchHandler = (generated as { fetch: FetchHandler }).fetch;
+const openNext = generated as { fetch: FetchHandler };
 
 const handler = {
-  fetch: fetchHandler,
+  // Call through the object (not a detached method reference) so the handler
+  // keeps working if a future OpenNext version makes `fetch` `this`-dependent.
+  fetch: (request: Request, env: unknown, ctx: unknown): Response | Promise<Response> =>
+    openNext.fetch(request, env, ctx),
   async scheduled(_controller: unknown, env: Env, ctx: ExecCtx): Promise<void> {
     // Run the whole cycle under waitUntil so the isolate stays alive until the
     // sync (and the pool teardown scheduled inside it) resolves.

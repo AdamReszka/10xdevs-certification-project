@@ -78,8 +78,15 @@ const LEASE_TTL_MS = 10 * 60 * 1000;
 const GITHUB_FIRST_SYNC_LOOKBACK_DAYS = 30;
 
 /** Per-cycle PR cap. PR count is the dominant subrequest multiplier (per-PR
- * detail + reviews); the newest-updated PRs are processed first and any overflow
- * is picked up on a later cycle once those PRs next update. */
+ * detail + reviews); the newest-updated PRs are processed first.
+ *
+ * KNOWN LIMITATION (impl-review F1): because the GitHub cursor advances to `now`
+ * on a successful cycle, PRs beyond the cap are NOT re-listed on the next cycle —
+ * they reappear only when they next update (`updated_at` moves past the new
+ * cursor), not on the immediately following fire. This is a safety valve, not a
+ * routine path: >30 PRs updated within one 15-min window is not expected at the
+ * 3–10-person target scale. True cross-cycle overflow drain (holding the cursor
+ * back to the oldest processed PR) is out of scope for MVP. */
 const DEFAULT_MAX_PRS_PER_SYNC = 30;
 
 export type IntegrationOutcome =

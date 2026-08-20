@@ -1,7 +1,7 @@
 ---
 change_id: data-sync-engine
 title: S-05 data sync engine — 15-min GitHub + Jira sync with incremental Jira delta-pull
-status: implemented
+status: impl_reviewed
 created: 2026-08-20
 updated: 2026-08-20
 archived_at: null

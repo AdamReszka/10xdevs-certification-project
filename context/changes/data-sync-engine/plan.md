@@ -105,6 +105,12 @@ per-integration last-sync state).
   can sync less often than 15 min) via the due-check; a window below the global `*/15` cron
   interval is floored at ~15 min. True sub-15-min freshness (shorter cron / fan-out) is out
   of scope (F5).
+- **No cross-cycle GitHub PR-overflow drain** (impl-review F1). The per-cycle PR cap
+  (`DEFAULT_MAX_PRS_PER_SYNC`) processes the newest-updated PRs first; because the GitHub
+  cursor advances to `now` on success, PRs beyond the cap are re-synced only when they next
+  update, NOT on the immediately following fire. Acceptable at the 3–10-person target scale
+  (a >30-PR burst in one 15-min window is not expected); holding the cursor back to the
+  oldest processed PR to force cross-cycle drain is deferred.
 
 ## Implementation Approach
 
