@@ -629,10 +629,10 @@ only.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `npm run typecheck`
-- [x] 1.2 Linting passes: `npm run lint`
-- [x] 1.3 Jira client unit tests pass: `npm run test` (`src/lib/jira.test.ts`)
-- [x] 1.4 `src/components/ui/select.tsx` exists and `npm run build` succeeds
+- [x] 1.1 Type checking passes: `npm run typecheck` — 9b1d6e5
+- [x] 1.2 Linting passes: `npm run lint` — 9b1d6e5
+- [x] 1.3 Jira client unit tests pass: `npm run test` (`src/lib/jira.test.ts`) — 9b1d6e5
+- [x] 1.4 `src/components/ui/select.tsx` exists and `npm run build` succeeds — 9b1d6e5
 
 #### Manual
 
@@ -643,9 +643,9 @@ only.
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `npm run typecheck`
-- [ ] 2.2 Linting passes: `npm run lint`
-- [ ] 2.3 Build passes: `npm run build`
+- [x] 2.1 Type checking passes: `npm run typecheck`
+- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.3 Build passes: `npm run build`
 
 #### Manual
 
