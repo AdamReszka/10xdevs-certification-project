@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 import {
   githubCommit,
@@ -10,11 +10,11 @@ import {
   jiraStatusHistory,
   jiraTicket,
   monitoredRepo,
-  sprint,
   statusMapping,
   syncState,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
+import { getActiveSprintRow } from "@/lib/sprint";
 import {
   GithubAuthError,
   GithubUnavailableError,
@@ -405,21 +405,7 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
   // Prefer the ACTIVE sprint; else the most recently started. No sprint row is a
   // legitimate between-sprints state → nothing to pull.
-  const [activeSprint] = await db
-    .select({ id: sprint.id, jiraSprintId: sprint.jiraSprintId, startDate: sprint.startDate })
-    .from(sprint)
-    .where(and(eq(sprint.ownerId, ownerId), eq(sprint.state, "ACTIVE")))
-    .limit(1);
-  const chosenSprint =
-    activeSprint ??
-    (
-      await db
-        .select({ id: sprint.id, jiraSprintId: sprint.jiraSprintId, startDate: sprint.startDate })
-        .from(sprint)
-        .where(eq(sprint.ownerId, ownerId))
-        .orderBy(desc(sprint.startDate))
-        .limit(1)
-    )[0];
+  const chosenSprint = await getActiveSprintRow(db, ownerId);
 
   const lease = await acquireLease(db, ownerId, "JIRA", now, args.bypassDueCheck ?? false);
   if (!lease.claimed) return { status: "SKIPPED", reason: lease.reason };

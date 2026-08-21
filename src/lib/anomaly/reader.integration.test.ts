@@ -119,5 +119,10 @@ describe("listAnomaliesForSprint", () => {
     expect(out[0].detectedAt?.toISOString()).toBe("2026-08-10T11:00:00.000Z");
     // RESOLVED excluded.
     expect(out).toHaveLength(4);
+    // S-07 widening: dedupKey is projected as a stable identity/sort-key fallback.
+    expect(out.every((r) => typeof r.dedupKey === "string" && r.dedupKey.length > 0)).toBe(
+      true,
+    );
+    expect(out[0].dedupKey).toBe("high-new");
   });
 });

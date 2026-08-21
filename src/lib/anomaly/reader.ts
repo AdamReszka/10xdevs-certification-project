@@ -29,6 +29,9 @@ export type AnomalyView = Pick<
   | "riskScore"
   | "detectedAt"
   | "relatedTeamMemberId"
+  // Stable, always-present identity/sort-key fallback (S-07): ticket/PR sort +
+  // filter never depend solely on the loosely-typed `context`.
+  | "dedupKey"
 >;
 
 export async function listAnomaliesForSprint(
@@ -48,6 +51,7 @@ export async function listAnomaliesForSprint(
       riskScore: anomaly.riskScore,
       detectedAt: anomaly.detectedAt,
       relatedTeamMemberId: anomaly.relatedTeamMemberId,
+      dedupKey: anomaly.dedupKey,
     })
     .from(anomaly)
     .where(

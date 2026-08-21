@@ -17,7 +17,8 @@
     "test:mutation": "stryker run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed:demo": "node scripts/seed-dashboard.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
