@@ -555,7 +555,7 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Manual
 
-- [ ] 1.6 `anomaly` table shows `dedup_key NOT NULL` + unique index (`\d anomaly`)
+- [x] 1.6 `anomaly` table shows `dedup_key NOT NULL` + unique index (`\d anomaly`)
 
 ### Phase 2: Detectors — 8 rules, risk-score, suggested-action templates
 
@@ -568,7 +568,7 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Manual
 
-- [ ] 2.5 Spot-check one detector output: all 5 FR-014 attributes, real deep-link, grounded action
+- [x] 2.5 Spot-check one detector output: all 5 FR-014 attributes, real deep-link, grounded action
 
 ### Phase 3: Orchestration — loader, reconcile, wiring
 
@@ -581,7 +581,7 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Manual
 
-- [ ] 3.5 `syncNow` in `next dev` produces anomaly rows with stable `detected_at` across two triggers
+- [x] 3.5 `syncNow` in `next dev` produces anomaly rows with stable `detected_at` across two triggers
 
 ### Phase 4: Reader + end-to-end verification
 
@@ -595,4 +595,4 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Manual
 
-- [ ] 4.6 Seeded mixed sprint reads back the expected ordered inbox with working deep-links
+- [x] 4.6 Seeded mixed sprint reads back the expected ordered inbox with working deep-links
