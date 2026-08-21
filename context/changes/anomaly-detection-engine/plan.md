@@ -547,11 +547,11 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [x] 1.1 Migration generates cleanly: `npm run db:generate`
-- [x] 1.2 Migration applies to local Supabase: `npm run db:migrate`
-- [x] 1.3 Type checking passes: `npx tsc --noEmit`
-- [x] 1.4 Linting passes: `npm run lint`
-- [x] 1.5 Unit tests pass (link-ticket refactor still green): `npm run test`
+- [x] 1.1 Migration generates cleanly: `npm run db:generate` — dc458cc
+- [x] 1.2 Migration applies to local Supabase: `npm run db:migrate` — dc458cc
+- [x] 1.3 Type checking passes: `npx tsc --noEmit` — dc458cc
+- [x] 1.4 Linting passes: `npm run lint` — dc458cc
+- [x] 1.5 Unit tests pass (link-ticket refactor still green): `npm run test` — dc458cc
 
 #### Manual
 
@@ -561,10 +561,10 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass — positive + negative per rule, risk-score, suggested-action: `npm run test`
-- [ ] 2.2 Mutation testing passes threshold on detectors: `npm run test:mutation`
-- [ ] 2.3 Type checking passes: `npx tsc --noEmit`
-- [ ] 2.4 Linting passes: `npm run lint`
+- [x] 2.1 Unit tests pass — positive + negative per rule, risk-score, suggested-action: `npm run test`
+- [x] 2.2 Mutation testing passes threshold on detectors: `npm run test:mutation`
+- [x] 2.3 Type checking passes: `npx tsc --noEmit`
+- [x] 2.4 Linting passes: `npm run lint`
 
 #### Manual
 

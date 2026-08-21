@@ -1,0 +1,18 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "S-06: mutation testing scoped to the anomaly detection correctness core (pure detectors + risk score + suggested-action templates). Runs the DB-free unit project via the vitest runner; the typescript checker discards mutants that don't compile. `break` fails CI when the mutation score drops below threshold.",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": { "configFile": "vitest.config.ts" },
+  "checkers": ["typescript"],
+  "tsconfigFile": "tsconfig.json",
+  "mutate": [
+    "src/lib/anomaly/rules/**/*.ts",
+    "src/lib/anomaly/risk-score.ts",
+    "src/lib/anomaly/suggested-action.ts",
+    "!src/lib/anomaly/**/*.test.ts"
+  ],
+  "reporters": ["progress", "clear-text"],
+  "thresholds": { "high": 85, "low": 70, "break": 70 },
+  "concurrency": 4
+}
