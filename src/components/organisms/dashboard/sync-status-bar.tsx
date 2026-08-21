@@ -24,6 +24,12 @@ const STATUS_LABEL: Record<"ERROR" | "RATE_LIMITED", string> = {
   RATE_LIMITED: "rate-limited",
 };
 
+/** Friendly, non-leaking guidance per failure status (no raw sync-error text). */
+const STATUS_MESSAGE: Record<"ERROR" | "RATE_LIMITED", string> = {
+  ERROR: "the connection failed — check that its token is still valid",
+  RATE_LIMITED: "the API is rate-limited — SprintFlow will retry automatically",
+};
+
 /** UTC `YYYY-MM-DD HH:mm` — deterministic across server render + hydration. */
 function formatSyncedAt(iso: string | null): string {
   if (!iso) return "never synced";
@@ -62,11 +68,12 @@ export default function SyncStatusBar({
             {LABEL[s.integration]} sync {STATUS_LABEL[s.status as "ERROR" | "RATE_LIMITED"]}
           </AlertTitle>
           <AlertDescription>
+            {LABEL[s.integration]}: {STATUS_MESSAGE[s.status as "ERROR" | "RATE_LIMITED"]}.
             Showing the last successfully cached data
             {s.lastSuccessfulSyncAt
               ? ` from ${formatSyncedAt(s.lastSuccessfulSyncAt)}`
               : ""}
-            .{s.lastError ? ` (${s.lastError})` : ""}
+            .
           </AlertDescription>
         </Alert>
       ))}

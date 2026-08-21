@@ -35,6 +35,9 @@ export default async function DashboardPage() {
     listRoster(db, ownerId),
   ]);
 
+  // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
+  // deactivated member still resolves its name; the filter dropdown (below) uses
+  // only the active subset.
   const memberNameById = new Map(roster.map((m) => [m.id, m.name]));
 
   const anomalies: InboxAnomaly[] = rows.map((r) => {
@@ -61,23 +64,25 @@ export default async function DashboardPage() {
   });
 
   const syncState: InboxSyncState = {
+    // Raw `lastError` is intentionally NOT forwarded to the client — see
+    // InboxIntegrationState. The banner renders a friendly message from `status`.
     GITHUB: {
       integration: "GITHUB",
       lastSuccessfulSyncAt:
         syncStateRaw.GITHUB.lastSuccessfulSyncAt?.toISOString() ?? null,
       status: syncStateRaw.GITHUB.status,
-      lastError: syncStateRaw.GITHUB.lastError,
     },
     JIRA: {
       integration: "JIRA",
       lastSuccessfulSyncAt:
         syncStateRaw.JIRA.lastSuccessfulSyncAt?.toISOString() ?? null,
       status: syncStateRaw.JIRA.status,
-      lastError: syncStateRaw.JIRA.lastError,
     },
   };
 
-  const rosterMembers = roster.map((m) => ({ id: m.id, name: m.name }));
+  const rosterMembers = roster
+    .filter((m) => m.isActive)
+    .map((m) => ({ id: m.id, name: m.name }));
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-12 sm:px-6">

@@ -1,7 +1,7 @@
 ---
 change_id: dashboard-today
 title: Dashboard "Today" — Anomaly Inbox default view + panels, freshness, error banner
-status: implementing
+status: impl_reviewed
 created: 2026-08-21
 updated: 2026-08-21
 archived_at: null

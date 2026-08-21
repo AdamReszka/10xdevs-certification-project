@@ -1,13 +1,16 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { teamMember } from "@/db/schema";
 import type { getDb } from "@/lib/db";
 
 /**
- * Owner's active team roster (S-07). Feeds the inbox member-filter dropdown and
- * maps an anomaly's `relatedTeamMemberId` → display name. Active-only: inactive
- * members no longer belong on the current team's filter. Projection mirrors
- * `setup/team/page.tsx`.
+ * Owner's full team roster (S-07). Returns ALL members (each carrying an
+ * `isActive` flag), NOT active-only, because the dashboard needs two different
+ * slices of it: the member-filter dropdown uses the ACTIVE subset, but an
+ * anomaly's `relatedTeamMemberId` → display-name map must cover EVERY member —
+ * including a deactivated one still referenced by an ACTIVE anomaly (otherwise the
+ * row would mislabel as team-level and escape every filter). The caller partitions
+ * on `isActive`. Projection mirrors `setup/team/page.tsx`.
  */
 
 type Db = ReturnType<typeof getDb>;
@@ -19,6 +22,7 @@ export type RosterMember = {
   jiraAccountId: string | null;
   role: string | null;
   technologyTrack: string | null;
+  isActive: boolean;
 };
 
 export async function listRoster(
@@ -33,7 +37,8 @@ export async function listRoster(
       jiraAccountId: teamMember.jiraAccountId,
       role: teamMember.role,
       technologyTrack: teamMember.technologyTrack,
+      isActive: teamMember.isActive,
     })
     .from(teamMember)
-    .where(and(eq(teamMember.ownerId, ownerId), eq(teamMember.isActive, true)));
+    .where(eq(teamMember.ownerId, ownerId));
 }

@@ -192,7 +192,7 @@ describe("getSyncState", () => {
 });
 
 describe("listRoster", () => {
-  it("returns active members only, owner-scoped", async () => {
+  it("returns ALL members (with isActive flag), owner-scoped", async () => {
     const a = await seedOwner();
     const b = await seedOwner();
     await db.insert(teamMember).values([
@@ -206,7 +206,7 @@ describe("listRoster", () => {
       {
         id: randomUUID(),
         ownerId: a.ownerId,
-        name: "Inactive Dev",
+        name: "Deactivated Dev",
         source: "GITHUB",
         isActive: false,
       },
@@ -220,6 +220,15 @@ describe("listRoster", () => {
     ]);
 
     const roster = await listRoster(db, a.ownerId);
-    expect(roster.map((m) => m.name)).toEqual(["Active Dev"]);
+    // Both of owner a's members returned (name map must cover deactivated
+    // members referenced by anomalies); other owner's member never leaks.
+    expect(roster.map((m) => m.name).sort()).toEqual([
+      "Active Dev",
+      "Deactivated Dev",
+    ]);
+    const deactivated = roster.find((m) => m.name === "Deactivated Dev");
+    expect(deactivated?.isActive).toBe(false);
+    const active = roster.find((m) => m.name === "Active Dev");
+    expect(active?.isActive).toBe(true);
   });
 });

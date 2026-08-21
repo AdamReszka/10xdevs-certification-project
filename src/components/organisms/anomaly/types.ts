@@ -65,7 +65,9 @@ export type InboxIntegrationState = {
   /** ISO-8601 UTC of the last successful sync, or null if never synced. */
   lastSuccessfulSyncAt: string | null;
   status: InboxSyncStatus | null;
-  lastError: string | null;
+  // Raw `lastError` is deliberately NOT surfaced to the client (defense-in-depth
+  // vs. the tokens-never-in-client-payload guardrail) — the banner renders a
+  // friendly per-status message from `status` alone.
 };
 
 export type InboxSyncState = Record<InboxIntegration, InboxIntegrationState>;
