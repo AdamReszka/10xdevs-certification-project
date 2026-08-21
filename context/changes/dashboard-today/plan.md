@@ -372,9 +372,9 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `npm run typecheck`
-- [x] 3.2 Linting passes: `npm run lint`
-- [x] 3.3 Production build passes: `npm run build`
+- [x] 3.1 Type checking passes: `npm run typecheck` — cfba761
+- [x] 3.2 Linting passes: `npm run lint` — cfba761
+- [x] 3.3 Production build passes: `npm run build` — cfba761
 
 #### Manual
 
@@ -386,10 +386,10 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Automated
 
-- [ ] 4.1 Type checking passes: `npm run typecheck`
-- [ ] 4.2 Linting passes: `npm run lint`
-- [ ] 4.3 Production build passes: `npm run build`
-- [ ] 4.4 (If added) Playwright inbox sort/filter e2e passes: `npm run test:e2e`
+- [x] 4.1 Type checking passes: `npm run typecheck`
+- [x] 4.2 Linting passes: `npm run lint`
+- [x] 4.3 Production build passes: `npm run build`
+- [ ] 4.4 (If added) Playwright inbox sort/filter e2e passes: `npm run test:e2e` — N/A (not added; sort/filter covered by inbox-controls unit tests)
 
 #### Manual
 

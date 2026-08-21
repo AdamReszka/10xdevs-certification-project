@@ -2,10 +2,10 @@ import { ExternalLink } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type {
-  InboxAnomaly,
-  InboxAnomalyType,
-  InboxSeverity,
+import {
+  TYPE_LABEL,
+  type InboxAnomaly,
+  type InboxSeverity,
 } from "@/components/organisms/anomaly/types";
 
 const SEVERITY_VARIANT: Record<
@@ -15,17 +15,6 @@ const SEVERITY_VARIANT: Record<
   HIGH: "destructive",
   MEDIUM: "default",
   LOW: "secondary",
-};
-
-const TYPE_LABEL: Record<InboxAnomalyType, string> = {
-  PR_REVIEW_STALLED: "PR review stalled",
-  TICKET_STATUS_AGING: "Ticket status aging",
-  DEVELOPER_INACTIVE: "Developer inactive",
-  TICKET_NO_COMMIT_LINK: "Ticket no-commit link",
-  SPRINT_AT_RISK: "Sprint at risk",
-  PR_TOO_BIG: "PR too big",
-  SCOPE_CREEP: "Scope creep",
-  PR_TICKET_DESYNC: "PR ↔ ticket desync",
 };
 
 /** UTC `YYYY-MM-DD HH:mm` — deterministic across server render + client hydration. */

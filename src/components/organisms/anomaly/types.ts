@@ -45,6 +45,18 @@ export type InboxRosterMember = {
   name: string;
 };
 
+/** Human labels for the 8 anomaly types — shared by the row + the type filter. */
+export const TYPE_LABEL: Record<InboxAnomalyType, string> = {
+  PR_REVIEW_STALLED: "PR review stalled",
+  TICKET_STATUS_AGING: "Ticket status aging",
+  DEVELOPER_INACTIVE: "Developer inactive",
+  TICKET_NO_COMMIT_LINK: "Ticket no-commit link",
+  SPRINT_AT_RISK: "Sprint at risk",
+  PR_TOO_BIG: "PR too big",
+  SCOPE_CREEP: "Scope creep",
+  PR_TICKET_DESYNC: "PR ↔ ticket desync",
+};
+
 export type InboxIntegration = "GITHUB" | "JIRA";
 export type InboxSyncStatus = "OK" | "ERROR" | "RATE_LIMITED";
 
