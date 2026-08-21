@@ -561,10 +561,10 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [x] 2.1 Unit tests pass — positive + negative per rule, risk-score, suggested-action: `npm run test`
-- [x] 2.2 Mutation testing passes threshold on detectors: `npm run test:mutation`
-- [x] 2.3 Type checking passes: `npx tsc --noEmit`
-- [x] 2.4 Linting passes: `npm run lint`
+- [x] 2.1 Unit tests pass — positive + negative per rule, risk-score, suggested-action: `npm run test` — 323c1c5
+- [x] 2.2 Mutation testing passes threshold on detectors: `npm run test:mutation` — 323c1c5
+- [x] 2.3 Type checking passes: `npx tsc --noEmit` — 323c1c5
+- [x] 2.4 Linting passes: `npm run lint` — 323c1c5
 
 #### Manual
 
@@ -574,10 +574,10 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [ ] 3.1 Reconcile lifecycle integration test passes: `npm run test:integration`
-- [ ] 3.2 Existing sync integration tests still pass: `npm run test:integration`
-- [ ] 3.3 Type checking passes: `npx tsc --noEmit`
-- [ ] 3.4 Linting passes: `npm run lint`
+- [x] 3.1 Reconcile lifecycle integration test passes: `npm run test:integration`
+- [x] 3.2 Existing sync integration tests still pass: `npm run test:integration`
+- [x] 3.3 Type checking passes: `npx tsc --noEmit`
+- [x] 3.4 Linting passes: `npm run lint`
 
 #### Manual
 

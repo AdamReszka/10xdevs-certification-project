@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { githubCredential, jiraProject } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
+import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner } from "@/lib/integrations/sync/run-sync";
 
 /**
@@ -62,11 +63,13 @@ export async function runScheduledSync(
   deps?: {
     getDbWithPool?: typeof getDbWithPool;
     syncOwner?: typeof syncOwner;
+    detectAnomalies?: typeof detectAnomalies;
     now?: Date;
   },
 ): Promise<ScheduledSyncResult> {
   const { db, pool } = (deps?.getDbWithPool ?? getDbWithPool)(env);
   const runOwner = deps?.syncOwner ?? syncOwner;
+  const runDetect = deps?.detectAnomalies ?? detectAnomalies;
   const now = deps?.now ?? new Date();
 
   try {
@@ -78,6 +81,9 @@ export async function runScheduledSync(
     for (const ownerId of batch) {
       try {
         await runOwner({ db, ownerId, env, now });
+        // Detection runs on best-available cached data, after the sync. A detection
+        // throw counts the owner as failed but must not abort the batch.
+        await runDetect({ db, ownerId, now });
         synced += 1;
       } catch (err) {
         // One owner's throw must never abort the loop. The error carries no
