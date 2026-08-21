@@ -40,7 +40,16 @@ export async function syncNow(): Promise<SyncNowResult> {
       bypassDueCheck: true,
     });
     // Detect on the freshly-synced (best-available) data before pool teardown.
-    await detectAnomalies({ db, ownerId: session.user.id, now });
+    // Best-effort: a detection failure must not fail the user's sync/setup finish
+    // (the cron loop isolates detection per owner the same way).
+    try {
+      await detectAnomalies({ db, ownerId: session.user.id, now });
+    } catch (err) {
+      console.error(
+        "[detect] syncNow detection failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return { github: result.github, jira: result.jira };
   } finally {
     // The queries have already resolved (syncOwner is awaited), so closing now is

@@ -1,7 +1,7 @@
 ---
 change_id: anomaly-detection-engine
 title: Anomaly detection engine — detect all 8 anomaly types with default thresholds
-status: implementing
+status: impl_reviewed
 created: 2026-08-20
 updated: 2026-08-21
 archived_at: null

@@ -85,14 +85,24 @@ export async function detectAnomalies(args: DetectArgs): Promise<DetectResult> {
       };
       const prev = byKey.get(d.dedupKey);
       if (!prev) {
-        await tx.insert(anomaly).values({
-          id: randomUUID(),
-          ownerId,
-          sprintId,
-          dedupKey: d.dedupKey,
-          detectedAt: now,
-          ...mutable,
-        });
+        // onConflictDoUpdate makes the insert race-safe: two concurrent detection
+        // runs (cron + syncNow) with a stale existing-set converge instead of
+        // violating the unique key. `detectedAt` is intentionally NOT in the
+        // conflict `set`, so a concurrent create keeps its original clock.
+        await tx
+          .insert(anomaly)
+          .values({
+            id: randomUUID(),
+            ownerId,
+            sprintId,
+            dedupKey: d.dedupKey,
+            detectedAt: now,
+            ...mutable,
+          })
+          .onConflictDoUpdate({
+            target: [anomaly.ownerId, anomaly.sprintId, anomaly.dedupKey],
+            set: mutable,
+          });
         inserted += 1;
       } else {
         await tx
