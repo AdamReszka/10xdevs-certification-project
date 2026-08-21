@@ -587,11 +587,11 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [x] 4.1 Reader ordering + ACTIVE-only test passes: `npm run test` / `npm run test:integration`
-- [x] 4.2 Full suite green: `npm run test && npm run test:integration`
-- [x] 4.3 Type checking passes: `npx tsc --noEmit`
-- [x] 4.4 Linting passes: `npm run lint`
-- [x] 4.5 Production build passes: `npm run build`
+- [x] 4.1 Reader ordering + ACTIVE-only test passes: `npm run test` / `npm run test:integration` — 0fbcece
+- [x] 4.2 Full suite green: `npm run test && npm run test:integration` — 0fbcece
+- [x] 4.3 Type checking passes: `npx tsc --noEmit` — 0fbcece
+- [x] 4.4 Linting passes: `npm run lint` — 0fbcece
+- [x] 4.5 Production build passes: `npm run build` — 0fbcece
 
 #### Manual
 
