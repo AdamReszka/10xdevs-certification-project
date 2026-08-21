@@ -346,10 +346,10 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `npm run typecheck`
-- [x] 1.2 Linting passes: `npm run lint`
-- [x] 1.3 Unit tests pass: `npm run test`
-- [x] 1.4 Integration tests (readers + collapsed sync/detect paths) pass: `npm run test:integration`
+- [x] 1.1 Type checking passes: `npm run typecheck` — c7c3e85
+- [x] 1.2 Linting passes: `npm run lint` — c7c3e85
+- [x] 1.3 Unit tests pass: `npm run test` — c7c3e85
+- [x] 1.4 Integration tests (readers + collapsed sync/detect paths) pass: `npm run test:integration` — c7c3e85
 
 #### Manual
 
@@ -359,10 +359,10 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `npm run typecheck`
-- [ ] 2.2 Linting passes: `npm run lint`
-- [ ] 2.3 Unit tests pass: `npm run test`
-- [ ] 2.4 Reader integration test (order + `dedupKey`) passes: `npm run test:integration`
+- [x] 2.1 Type checking passes: `npm run typecheck`
+- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.3 Unit tests pass: `npm run test`
+- [x] 2.4 Reader integration test (order + `dedupKey`) passes: `npm run test:integration`
 
 #### Manual
 
