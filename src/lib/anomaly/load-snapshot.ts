@@ -1,14 +1,14 @@
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, eq, gte } from "drizzle-orm";
 
 import {
   githubCommit,
   githubPullRequest,
   githubReview,
   jiraTicket,
-  sprint,
   teamMember,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
+import { getActiveSprintRow } from "@/lib/sprint";
 import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types";
 
 /**
@@ -31,22 +31,7 @@ export async function loadSprintSnapshot(
   ownerId: string,
   now: Date,
 ): Promise<SprintSnapshot | null> {
-  const [active] = await db
-    .select()
-    .from(sprint)
-    .where(and(eq(sprint.ownerId, ownerId), eq(sprint.state, "ACTIVE")))
-    .limit(1);
-
-  const chosen =
-    active ??
-    (
-      await db
-        .select()
-        .from(sprint)
-        .where(eq(sprint.ownerId, ownerId))
-        .orderBy(desc(sprint.startDate))
-        .limit(1)
-    )[0];
+  const chosen = await getActiveSprintRow(db, ownerId);
 
   if (!chosen) return null;
 
