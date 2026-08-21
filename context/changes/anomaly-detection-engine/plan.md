@@ -574,10 +574,10 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [x] 3.1 Reconcile lifecycle integration test passes: `npm run test:integration`
-- [x] 3.2 Existing sync integration tests still pass: `npm run test:integration`
-- [x] 3.3 Type checking passes: `npx tsc --noEmit`
-- [x] 3.4 Linting passes: `npm run lint`
+- [x] 3.1 Reconcile lifecycle integration test passes: `npm run test:integration` — bbdeb40
+- [x] 3.2 Existing sync integration tests still pass: `npm run test:integration` — bbdeb40
+- [x] 3.3 Type checking passes: `npx tsc --noEmit` — bbdeb40
+- [x] 3.4 Linting passes: `npm run lint` — bbdeb40
 
 #### Manual
 
@@ -587,11 +587,11 @@ has no rows before this slice. Generated via `npm run db:generate`, applied via
 
 #### Automated
 
-- [ ] 4.1 Reader ordering + ACTIVE-only test passes: `npm run test` / `npm run test:integration`
-- [ ] 4.2 Full suite green: `npm run test && npm run test:integration`
-- [ ] 4.3 Type checking passes: `npx tsc --noEmit`
-- [ ] 4.4 Linting passes: `npm run lint`
-- [ ] 4.5 Production build passes: `npm run build`
+- [x] 4.1 Reader ordering + ACTIVE-only test passes: `npm run test` / `npm run test:integration`
+- [x] 4.2 Full suite green: `npm run test && npm run test:integration`
+- [x] 4.3 Type checking passes: `npx tsc --noEmit`
+- [x] 4.4 Linting passes: `npm run lint`
+- [x] 4.5 Production build passes: `npm run build`
 
 #### Manual
 
