@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { linkTicketKey } from "@/lib/integrations/sync/link-ticket";
+import {
+  extractTicketKey,
+  linkTicketKey,
+} from "@/lib/integrations/sync/link-ticket";
 
 /**
  * Unit suite for the pure PR↔ticket link parser. Asserts project-scoped matching
@@ -64,5 +67,28 @@ describe("linkTicketKey", () => {
 
   it("returns null for an empty project key", () => {
     expect(linkTicketKey({ ...empty, branch: "SF-1" }, "")).toBeNull();
+  });
+});
+
+describe("extractTicketKey", () => {
+  it("extracts a project-scoped key from a commit message", () => {
+    expect(extractTicketKey("SF-123: wire the detector", "SF")).toBe("SF-123");
+  });
+
+  it("canonicalizes a lowercased key to uppercase", () => {
+    expect(extractTicketKey("fix sf-9 flake", "SF")).toBe("SF-9");
+  });
+
+  it("ignores a foreign project's key", () => {
+    expect(extractTicketKey("OTHER-5 unrelated", "SF")).toBeNull();
+  });
+
+  it("does not match a key that is a suffix of a longer token", () => {
+    expect(extractTicketKey("bump XSF-1", "SF")).toBeNull();
+  });
+
+  it("returns null for null text or empty project key", () => {
+    expect(extractTicketKey(null, "SF")).toBeNull();
+    expect(extractTicketKey("SF-1", "")).toBeNull();
   });
 });

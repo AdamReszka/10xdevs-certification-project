@@ -3,7 +3,9 @@
  * `suggestCategory` — that extracts the monitored project's Jira key from a PR's
  * branch / title / body so `github_pull_request.linked_ticket_key` is populated
  * when the row is written. S-06 anomaly detection then reads correlated rows
- * without a detection-time join.
+ * without a detection-time join, and reuses `extractTicketKey` to correlate
+ * commit messages → tickets (`TICKET_NO_COMMIT_LINK`) since commit `branch` is
+ * not synced.
  *
  * No I/O, no DB — trivially unit-testable in isolation.
  */
@@ -23,23 +25,35 @@ function escapeRegExp(value: string): string {
 }
 
 /**
+ * Return the first `{projectKey}-{number}` reference in a single text surface —
+ * scoped to the monitored project's key so a foreign project's key is ignored —
+ * or null when absent. The match is case-insensitive (branches / commit messages
+ * often lowercase the key) but the returned key is canonicalized to the uppercase
+ * project-key form Jira uses. `\b…\b` keeps it project-scoped: `XSF-1` never
+ * matches project `SF`.
+ */
+export function extractTicketKey(
+  text: string | null,
+  projectKey: string,
+): string | null {
+  if (!projectKey || !text) return null;
+  const re = new RegExp(`\\b${escapeRegExp(projectKey)}-(\\d+)\\b`, "i");
+  const match = text.match(re);
+  return match ? `${projectKey.toUpperCase()}-${match[1]}` : null;
+}
+
+/**
  * Return the first `{projectKey}-{number}` reference found across the PR's
- * branch, title, then body — scoped to the monitored project's key so a foreign
- * project's key is ignored — or null when none is present. The match is
- * case-insensitive (branches often lowercase the key) but the returned key is
- * canonicalized to the uppercase project key form Jira uses.
+ * branch, title, then body, or null when none is present.
  */
 export function linkTicketKey(
   pr: LinkablePullRequest,
   projectKey: string,
 ): string | null {
   if (!projectKey) return null;
-  // \b…\b keeps the key project-scoped: `XSF-1` never matches project `SF`.
-  const re = new RegExp(`\\b${escapeRegExp(projectKey)}-(\\d+)\\b`, "i");
   for (const text of [pr.branch, pr.title, pr.body]) {
-    if (!text) continue;
-    const match = text.match(re);
-    if (match) return `${projectKey.toUpperCase()}-${match[1]}`;
+    const key = extractTicketKey(text, projectKey);
+    if (key) return key;
   }
   return null;
 }
