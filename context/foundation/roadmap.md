@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-20
+updated: 2026-08-21
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -37,7 +37,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-03 | setup-jira-integration    | connect Jira token + choose project + map workflow statuses onto 5 categories                | S-01, F-02         | FR-003, FR-004, FR-005                          | done     |
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | done     |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | done     |
-| S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | proposed |
+| S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | done     |
 | S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default, Sprint Pulse / Activity / KPI tabs one click away; freshness timestamp + error banner | S-06, F-03 | FR-015, FR-016, US-01 | proposed |
 | S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window | S-04, S-06 | FR-010                                    | proposed |
 | S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07   | FR-008, US-02                                   | blocked  |
@@ -209,7 +209,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - Absence records from S-08 are not yet available at this point — `DEVELOPER_INACTIVE` suppression for absent devs and `SPRINT_AT_RISK` absence-weight are wired in S-08; this slice ships with absence = empty (no suppressions). Owner: TBD. Block: no (graceful default; S-08 adds the suppression logic on top).
 - **Risk:** Each of the 8 rules is independently testable — plan positive and negative test cases per rule before shipping this slice; a detection rule that never fires (or fires on healthy data) breaks the product's core promise and will not be caught by a build pipeline.
-- **Status:** proposed
+- **Status:** done
 
 ---
 
@@ -380,3 +380,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-03: user can connect a Jira API token + workspace URL, select a single Jira project to monitor, have the credentials validated against Jira before storing encrypted, and map the project's workflow statuses onto the 5 standard categories (To Do / In Progress / Code Review / Testing / Done); setup wizard step 2 of 4 complete.** — Archived 2026-08-20 → `context/archive/2026-08-19-setup-jira-integration/`. Lesson: —.
 - **S-04: user can review and edit the auto-imported team roster (names, GitHub usernames, Jira account IDs, roles, SP capacity, technology tracks); sprint cadence (length, start day, working days) is auto-pulled from the Jira project's active sprint and is overridable; setup wizard step 3 of 3 complete (the wizard reconciled to 3 steps — GitHub/Jira/Team — during implementation, F4).** — Archived 2026-08-20 → `context/archive/2026-08-20-setup-team-roster-cadence/`. Lesson: —.
 - **S-05: system pulls GitHub commit, PR, and review data (15-min cycle by default) and Jira active-sprint tickets + status-change history (incremental delta since last successful sync) for the configured team and repositories; sync results stored in DB; last-sync timestamp per integration stored and readable by the dashboard.** — Archived 2026-08-20 → `context/archive/2026-08-20-data-sync-engine/`. Lesson: —.
+- **S-06: system detects all 8 anomaly types (`PR_REVIEW_STALLED`, `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`, `TICKET_NO_COMMIT_LINK`, `SPRINT_AT_RISK`, `PR_TOO_BIG`, `SCOPE_CREEP`, `PR_TICKET_DESYNC`) by correlating synced Jira + GitHub data against configurable thresholds (FR-009 defaults); each anomaly carries severity, description, contextual data, one-line suggested action, and source deep-link; inbox ordered by raw severity (high → medium → low, then recency); severity-weighted sprint-risk score computed and stored per anomaly.** — Archived 2026-08-21 → `context/archive/2026-08-20-anomaly-detection-engine/`. Lesson: —.
