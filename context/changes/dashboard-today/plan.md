@@ -401,7 +401,7 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Automated
 
-- [x] 5.1 Full suite green: `npm run typecheck && npm run lint && npm run test && npm run test:integration && npm run build`
+- [x] 5.1 Full suite green: `npm run typecheck && npm run lint && npm run test && npm run test:integration && npm run build` — 61a53a7
 
 #### Manual
 
