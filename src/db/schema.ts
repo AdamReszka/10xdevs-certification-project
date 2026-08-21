@@ -591,6 +591,11 @@ export const anomaly = pgTable(
     sprintId: text("sprint_id")
       .notNull()
       .references(() => sprint.id, { onDelete: "cascade" }),
+    // Stable per-anomaly identity within (owner, sprint) — the idempotent-upsert
+    // dedup key (S-06). NOT NULL by lessons.md #1: a nullable column in a UNIQUE
+    // dedup key defeats deduplication (Postgres treats NULLs as distinct).
+    // Shape is rule-specific, e.g. `PR_REVIEW_STALLED:pr:<githubPrId>`.
+    dedupKey: text("dedup_key").notNull(),
     type: anomalyType("type").notNull(),
     severity: severity("severity").notNull(),
     description: text("description"),
@@ -608,6 +613,11 @@ export const anomaly = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
+    unique("anomaly_owner_sprint_dedup_uq").on(
+      table.ownerId,
+      table.sprintId,
+      table.dedupKey,
+    ),
     index("anomaly_owner_sprint_idx").on(table.ownerId, table.sprintId),
     index("anomaly_type_idx").on(table.type),
     index("anomaly_severity_idx").on(table.severity),

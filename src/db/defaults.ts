@@ -3,14 +3,16 @@ import { anomalyType, severity } from "@/db/schema";
 /**
  * FR-009 sensible default thresholds + default severity for every anomaly rule.
  *
- * This is a typed constant only — F-02 does NOT seed `anomaly_settings` rows.
- * S-06 reads this to write the per-account default rows (and the user re-tunes
- * thresholds/severity from the settings page). The `Record<AnomalyTypeValue, …>`
+ * This is a typed constant only — neither F-02 nor S-06 seeds `anomaly_settings`
+ * rows. S-06 reads this as the fallback: the effective per-rule config is
+ * `stored anomaly_settings override ?? this default` (see
+ * `src/lib/anomaly/thresholds.ts`), and a settings row is written only when the
+ * user overrides a rule from the S-14 settings page. The `Record<AnomalyTypeValue, …>`
  * shape forces this map to stay exhaustive over the 8 enum values at compile
  * time; severities are checked against the `severity` enum.
  *
  * `thresholds` bodies are intentionally rule-specific (open shape) — each rule's
- * detector (S-07…) owns the precise interpretation.
+ * detector (S-06) owns the precise interpretation.
  */
 
 type AnomalyTypeValue = (typeof anomalyType.enumValues)[number];

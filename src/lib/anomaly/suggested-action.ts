@@ -1,0 +1,37 @@
+import { CATEGORY_LABEL } from "@/lib/anomaly/rules/helpers";
+
+/**
+ * FR-014 one-line suggested actions (S-06). One deterministic template per rule,
+ * interpolating the anomaly's own context so the line is grounded in specifics
+ * (not a generic template). Reused verbatim by the Daily Recap email (S-11) so
+ * the dashboard and email never diverge. Pure string builders — no AI.
+ */
+
+export const suggestedAction = {
+  prReviewStalled: (p: { number: number; hours: number }) =>
+    `Ping a reviewer for PR #${p.number} — ${p.hours}h with no review yet.`,
+
+  ticketStatusAging: (p: { key: string; category: string; label?: string }) =>
+    `Unblock ${p.key} — it has sat in ${p.label ?? CATEGORY_LABEL[p.category] ?? p.category} past the team's aging threshold.`,
+
+  developerInactive: (p: { name: string; days: number }) =>
+    `Check in with ${p.name} — an active ticket with no commits in ${p.days}d.`,
+
+  ticketNoCommitLink: (p: { key: string; days: number }) =>
+    `Confirm work on ${p.key} — In Progress ${p.days}d with no linked commit.`,
+
+  sprintAtRiskParallel: (p: { name: string; count: number; label: string; limit: number }) =>
+    `Rebalance ${p.label} work — ${p.name} holds ${p.count} in parallel (guideline ${p.limit}).`,
+
+  sprintAtRiskTodoNearEnd: (p: { count: number; hours: number }) =>
+    `Pull ${p.count} To Do ticket(s) into progress or drop them — ${p.hours}h left in the sprint.`,
+
+  prTooBig: (p: { number: number; lines: number; limit: number }) =>
+    `Consider splitting PR #${p.number} — ${p.lines} lines changed is over the ${p.limit} guideline.`,
+
+  scopeCreep: (p: { addedSp: number; percent: number }) =>
+    `Review mid-sprint additions — ${p.addedSp} SP (${p.percent}%) added after sprint start.`,
+
+  prTicketDesync: (p: { number: number; key: string; category: string; label?: string }) =>
+    `Move ${p.key} out of ${p.label ?? CATEGORY_LABEL[p.category] ?? p.category} — its PR #${p.number} is already merged.`,
+} as const;

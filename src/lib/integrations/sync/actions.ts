@@ -4,6 +4,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { requireSession } from "@/lib/auth";
 import { getDbWithPool } from "@/lib/db";
+import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner, type IntegrationOutcome } from "@/lib/integrations/sync/run-sync";
 
 /**
@@ -27,14 +28,28 @@ export async function syncNow(): Promise<SyncNowResult> {
   const session = await requireSession();
   const { env, ctx } = getCloudflareContext();
   const { db, pool } = getDbWithPool(env);
+  // One clock shared by sync and detection for this cycle.
+  const now = new Date();
 
   try {
     const result = await syncOwner({
       db,
       ownerId: session.user.id,
       env,
+      now,
       bypassDueCheck: true,
     });
+    // Detect on the freshly-synced (best-available) data before pool teardown.
+    // Best-effort: a detection failure must not fail the user's sync/setup finish
+    // (the cron loop isolates detection per owner the same way).
+    try {
+      await detectAnomalies({ db, ownerId: session.user.id, now });
+    } catch (err) {
+      console.error(
+        "[detect] syncNow detection failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
     return { github: result.github, jira: result.jira };
   } finally {
     // The queries have already resolved (syncOwner is awaited), so closing now is
