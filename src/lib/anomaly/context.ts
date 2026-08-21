@@ -150,3 +150,75 @@ export function anomalyIdentity(anomaly: {
       return { kind: null, label: null, sortKey: "" };
   }
 }
+
+const CATEGORY_LABEL: Record<StatusCategoryValue, string> = {
+  TODO: "To Do",
+  IN_PROGRESS: "In Progress",
+  CODE_REVIEW: "Code Review",
+  TESTING: "Testing",
+  DONE: "Done",
+};
+
+/**
+ * Pre-format an anomaly's typed context into human contextual-data chips (FR-014:
+ * "which ticket, which PR, who, how long"). Runs server-side so the client organism
+ * receives plain strings — no `unknown`, no schema import. Deterministic, no locale
+ * / timezone dependence (dates rendered as UTC `YYYY-MM-DD`).
+ */
+export function anomalyContextChips(anomaly: {
+  type: AnomalyTypeValue;
+  context: unknown;
+}): string[] {
+  switch (anomaly.type) {
+    case "PR_REVIEW_STALLED": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      return [`${c.ageHours}h open`, `threshold ${c.thresholdHours}h`];
+    }
+    case "TICKET_STATUS_AGING": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      const chips = [CATEGORY_LABEL[c.category] ?? c.category];
+      if (c.storyPoints != null) chips.push(`${c.storyPoints} SP`);
+      chips.push(`since ${c.sinceIso.slice(0, 10)}`);
+      return chips;
+    }
+    case "DEVELOPER_INACTIVE": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      const chips = [`${c.noCommitDays}d no commits`];
+      if (c.githubUsername) chips.push(`@${c.githubUsername}`);
+      return chips;
+    }
+    case "TICKET_NO_COMMIT_LINK": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      return [`${c.daysInProgress}d in progress`, `${c.noCommitDays}d no commits`];
+    }
+    case "SPRINT_AT_RISK": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      if (c.condition === "max_parallel") {
+        return [`${c.count}/${c.limit} in ${CATEGORY_LABEL[c.category] ?? c.category}`];
+      }
+      return [`${c.todoCount} to-do (${c.todoSp} SP)`, `${c.hoursLeft}h left`];
+    }
+    case "PR_TOO_BIG": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      return [`${c.lines} lines`, `max ${c.maxLines}`];
+    }
+    case "SCOPE_CREEP": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      return [
+        `+${c.addedSp} SP`,
+        `${c.actualPercent}% (threshold ${c.thresholdPercent}%)`,
+      ];
+    }
+    case "PR_TICKET_DESYNC": {
+      const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
+      const chips: string[] = [];
+      if (c.linkedTicketKey) chips.push(`ticket ${c.linkedTicketKey}`);
+      if (c.ticketCategory) {
+        chips.push(CATEGORY_LABEL[c.ticketCategory] ?? c.ticketCategory);
+      }
+      return chips;
+    }
+    default:
+      return [];
+  }
+}

@@ -2,10 +2,10 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-// Placeholder destinations — Dashboard (S-07) and Refinement (S-13) land in
-// later slices, so these are inert `#` anchors for now.
+// Dashboard is live (S-07); Refinement (S-13) lands later, so it stays an inert
+// `#` anchor for now.
 const NAV_ITEMS: { label: string; href: string }[] = [
-  { label: "Dashboard", href: "#" },
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Refinement", href: "#" },
 ];
 
