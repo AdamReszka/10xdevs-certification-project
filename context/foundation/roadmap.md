@@ -342,8 +342,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | done                   | ✅ Implemented, reviewed & archived — PR #41 (2026-08-20) |
 | S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | done                   | ✅ Implemented, reviewed & archived — PR #42 (2026-08-20) |
 | S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | done                   | ✅ Implemented, reviewed & archived — PR #43 (2026-08-20) |
-| S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | yes                    | Prereqs S-05 done; next in Stream A toward S-07 |
-| S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox + panels (north star milestone)      | no                     | Awaits S-06; validates the core product hypothesis |
+| S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | done                   | ✅ Implemented, reviewed & archived — PR #44 (2026-08-21) |
+| S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox + panels (north star milestone)      | yes                    | Prereqs S-06, F-03 done; north star — validates the core product hypothesis |
 | S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | no                     | Awaits S-04, S-06; parallel with S-10–S-14 |
 | S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | Blocked — resolve Open Question #1 (demo↔real interaction) first |
 | S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix             | no                     | Awaits S-05, S-07; parallel with S-08, S-11–S-14 |
