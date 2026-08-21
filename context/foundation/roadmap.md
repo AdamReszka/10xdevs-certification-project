@@ -38,7 +38,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | done     |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | done     |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | done     |
-| S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default, Sprint Pulse / Activity / KPI tabs one click away; freshness timestamp + error banner | S-06, F-03 | FR-015, FR-016, US-01 | proposed |
+| S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default (render + sort/filter), Reliability KPI tab; freshness timestamp + error banner; real-data smoke-test. Burndown + Yesterday's Activity panels deferred to S-10 (aggregation overlap) | S-06, F-03 | FR-015, FR-016, US-01 | done     |
 | S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window | S-04, S-06 | FR-010                                    | proposed |
 | S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07   | FR-008, US-02                                   | blocked  |
 | S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns       | S-05, S-07         | FR-017                                          | proposed |
@@ -213,16 +213,17 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ---
 
-### S-07: Dashboard "Today" — Anomaly Inbox + panels
+### S-07: Dashboard "Today" — Anomaly Inbox (north-star core)
 
-- **Outcome:** user can open Dashboard "Today" and see the Anomaly Inbox as the default view (all detected anomalies, each with 5 attributes, sorted by severity); Sprint Pulse / Yesterday's Activity / Reliability KPI tabs sit one click away; last-sync timestamp per integration is always visible; error banner shown when the most recent sync returned an error (last successfully cached state shown, not a blank screen); user can re-sort or filter the inbox by severity, age, ticket, team member, and anomaly type.
+- **Outcome:** user can open Dashboard "Today" and see the Anomaly Inbox as the default view (all detected anomalies, each with 5 attributes, sorted by severity → recency); user can re-sort (severity, age, ticket, team member) and filter (anomaly type, team member) the inbox; the Reliability KPI (committed vs delivered SP, already on the sprint row) sits one click away; last-sync timestamp per integration is always visible; error banner shown when the most recent sync returned an error (last successfully cached state shown, not a blank screen).
 - **Change ID:** dashboard-today
 - **PRD refs:** FR-015, FR-016, US-01 (all acceptance criteria)
 - **Prerequisites:** S-06 (anomaly data), F-03 (UI component foundation)
 - **Parallel with:** S-13
 - **Blockers:** —
+- **Scope note (frame.md 2026-08-21):** S-07 was narrowed to the *hypothesis-proving core*. The inbox + freshness + error banner are render-ready over `listAnomaliesForSprint` (S-06) and `sync_state` (S-05); the slice also adds a shared `getActiveSprint(ownerId)` resolver (extract the logic duplicated in `run-sync.ts` / `load-snapshot.ts`) and a roster reader for the member filter. The **Sprint Pulse burndown** and **Yesterday's Activity** panels are *deferred to S-10* — both are new read-side aggregators that overlap S-10's Activity Matrix and sub-burndowns, and neither validates the US-01 hypothesis (which the inbox proves on its own). Reliability KPI rides along because it is near-free (existing `committedSp`/`completedSp` columns).
 - **Unknowns:** —
-- **Risk:** This slice delivers the north star — the complete end-to-end experience for US-01. Validate against every US-01 acceptance criterion (inbox empty only when zero anomalies; all 5 attributes visible; sync timestamp visible; error banner works) before calling it done; smoke-test with at least one real GitHub repo + real Jira project.
+- **Risk:** This slice delivers the north star — the end-to-end experience for US-01. Validate against every US-01 acceptance criterion (inbox empty only when zero anomalies; all 5 attributes visible; sync timestamp visible; error banner works) before calling it done; **smoke-test with at least one real GitHub repo + real Jira project** (part of the north-star proof, per frame).
 - **Status:** proposed
 
 ---
@@ -265,7 +266,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Parallel with:** S-08, S-09, S-11, S-13, S-14
 - **Blockers:** —
 - **Unknowns:** —
-- **Risk:** The aging report requires cumulative time-in-each-status per ticket — verify that S-05's schema captures the full status-change history per ticket (not just the current status) before implementing S-10's queries, otherwise a backfill migration is needed.
+- **Scope note (frame.md 2026-08-21):** S-10 also absorbs the two data panels deferred from S-07 — the **Sprint Pulse burndown** and **Yesterday's Activity** (per-dev commit/PR/review activity). Both are new read-side aggregators in the same family as S-10's Activity Matrix and sub-burndowns, so they are built here rather than duplicated in the north-star slice. (Reliability KPI stays in S-07 — it is near-free from existing SP columns.)
+- **Risk:** The aging report requires cumulative time-in-each-status per ticket — verify that S-05's schema captures the full status-change history per ticket (not just the current status) before implementing S-10's queries, otherwise a backfill migration is needed. The burndown series likewise must be derived from `jiraStatusHistory` transitions × SP (the `sprint` row holds only `committedSp`/`completedSp` snapshots, not a daily series).
 - **Status:** proposed
 
 ---
@@ -343,14 +345,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | done                   | ✅ Implemented, reviewed & archived — PR #42 (2026-08-20) |
 | S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | done                   | ✅ Implemented, reviewed & archived — PR #43 (2026-08-20) |
 | S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | done                   | ✅ Implemented, reviewed & archived — PR #44 (2026-08-21) |
-| S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox + panels (north star milestone)      | yes                    | Prereqs S-06, F-03 done; north star — validates the core product hypothesis |
-| S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | no                     | Awaits S-04, S-06; parallel with S-10–S-14 |
-| S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | Blocked — resolve Open Question #1 (demo↔real interaction) first |
-| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix             | no                     | Awaits S-05, S-07; parallel with S-08, S-11–S-14 |
-| S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | no                     | Awaits S-06, S-07; parallel with S-08, S-10, S-13, S-14 |
+| S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox (north-star core)                    | done                   | ✅ Implemented, reviewed & archived — PR #45 (2026-08-21); US-01 inbox-core (Sprint Pulse + Yesterday's Activity deferred to S-10) |
+| S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | yes                    | Prereqs S-04, S-06 done; parallel with S-10–S-14 |
+| S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | S-07 prereq done, but still blocked on Open Question #1 (demo↔real interaction) |
+| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | yes                    | Prereqs S-05, S-07 done; parallel with S-08, S-11–S-14 |
+| S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | yes                    | Prereqs S-06, S-07 done; parallel with S-08, S-10, S-13, S-14 |
 | S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | no                     | Awaits S-11 |
 | S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; runs in parallel with most of Stream A |
-| S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | no                     | Awaits S-06, S-07; parallel with S-08–S-13 |
+| S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | yes                    | Prereqs S-06, S-07 done; parallel with S-08–S-13 |
 
 ## Open Roadmap Questions
 
