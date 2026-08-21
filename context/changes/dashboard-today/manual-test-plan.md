@@ -18,7 +18,26 @@ klliknięcia ręcznie.
 
 > W trybie `next dev` inbox pokaże anomalie tylko, jeśli w bazie są wiersze w
 > tabeli `anomaly` dla aktywnego sprintu. Jeśli baza jest pusta, użyj fazy 5
-> (realny sync) albo ręcznie zseeduj kilka wierszy, żeby przetestować fazy 3–4.
+> (realny sync) albo zseeduj dane demo (poniżej), żeby przetestować fazy 3–4.
+
+### Seed danych demo (fazy 3–4 bez realnych API)
+
+Aby przeklikać inbox bez podłączania Jiry/GitHuba: załóż konto przez UI (albo
+`POST /api/auth/sign-up/email`), potem zseeduj przez ownera:
+
+```
+EMAIL=<twój-email> npm run db:seed:demo      # lookup ownera po mailu
+# albo: OWNER_ID=<user.id> npm run db:seed:demo
+```
+
+Wstawia ACTIVE „Sprint 24" + 5-osobowy zespół + `sync_state` (Jira OK, GitHub w
+błędzie → demo bannera) + **9 anomalii pokrywających wszystkie 8 typów** (oba
+warianty `SPRINT_AT_RISK`), z rozłożoną severity i częścią bez przypisanego
+członka (bucket „Unassigned / team-level"). Skrypt jest idempotentny — ponowne
+uruchomienie resetuje demo. Warianty empty-state:
+
+- „No anomalies detected" (zdrowy): `delete from anomaly where owner_id='<id>';`
+- „No active sprint": dodatkowo `delete from sprint where owner_id='<id>';`
 
 ---
 
