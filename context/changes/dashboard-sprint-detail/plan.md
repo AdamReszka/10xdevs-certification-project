@@ -551,10 +551,10 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 2.1 Unit tests pass (day bucketing, time-in-status, burndown, activity grid)
-- [x] 2.2 Integration tests pass (three readers + cross-account isolation)
-- [x] 2.3 Type checking passes
-- [x] 2.4 Linting passes
+- [x] 2.1 Unit tests pass (day bucketing, time-in-status, burndown, activity grid) — 9e73c40
+- [x] 2.2 Integration tests pass (three readers + cross-account isolation) — 9e73c40
+- [x] 2.3 Type checking passes — 9e73c40
+- [x] 2.4 Linting passes — 9e73c40
 
 #### Manual
 
@@ -565,10 +565,10 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [ ] 3.1 Production build passes
-- [ ] 3.2 Workers build passes
-- [ ] 3.3 Type checking passes
-- [ ] 3.4 Linting passes
+- [x] 3.1 Production build passes
+- [x] 3.2 Workers build passes
+- [x] 3.3 Type checking passes
+- [x] 3.4 Linting passes
 
 #### Manual
 
