@@ -1105,11 +1105,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 10.1 Unit tests pass
-- [x] 10.2 Integration tests pass (one integration ERRORs, the other still completes; testConnection reports `credential_unreadable`)
-- [x] 10.3 Type checking passes
-- [x] 10.4 Linting passes
-- [x] 10.5 Production build and Workers build pass
+- [x] 10.1 Unit tests pass — d970e93
+- [x] 10.2 Integration tests pass (one integration ERRORs, the other still completes; testConnection reports `credential_unreadable`) — d970e93
+- [x] 10.3 Type checking passes — d970e93
+- [x] 10.4 Linting passes — d970e93
+- [x] 10.5 Production build and Workers build pass — d970e93
 
 #### Manual
 
