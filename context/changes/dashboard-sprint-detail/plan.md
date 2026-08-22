@@ -535,11 +535,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 1.1 Migration generates and applies cleanly
-- [x] 1.2 Unit tests pass (getCommitDetail paths)
-- [x] 1.3 Integration tests pass (time zone write, churn write, dedup skip, over-cap NULL, sprint SP scalars incl. empty-delta cycle)
-- [x] 1.4 Type checking passes
-- [x] 1.5 Linting passes
+- [x] 1.1 Migration generates and applies cleanly — b420ea5
+- [x] 1.2 Unit tests pass (getCommitDetail paths) — b420ea5
+- [x] 1.3 Integration tests pass (time zone write, churn write, dedup skip, over-cap NULL, sprint SP scalars incl. empty-delta cycle) — b420ea5
+- [x] 1.4 Type checking passes — b420ea5
+- [x] 1.5 Linting passes — b420ea5
 
 #### Manual
 
@@ -551,10 +551,10 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass (day bucketing, time-in-status, burndown, activity grid)
-- [ ] 2.2 Integration tests pass (three readers + cross-account isolation)
-- [ ] 2.3 Type checking passes
-- [ ] 2.4 Linting passes
+- [x] 2.1 Unit tests pass (day bucketing, time-in-status, burndown, activity grid)
+- [x] 2.2 Integration tests pass (three readers + cross-account isolation)
+- [x] 2.3 Type checking passes
+- [x] 2.4 Linting passes
 
 #### Manual
 
