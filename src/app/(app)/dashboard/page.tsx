@@ -1,10 +1,19 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import AnomalyInbox from "@/components/organisms/anomaly/anomaly-inbox";
+import DashboardTodayTabs from "@/components/organisms/dashboard/today-tabs";
+import ReliabilityKpi from "@/components/organisms/dashboard/reliability-kpi";
+import SprintPulse from "@/components/organisms/dashboard/sprint-pulse";
+import SyncStatusBar from "@/components/organisms/dashboard/sync-status-bar";
+import YesterdayActivity from "@/components/organisms/dashboard/yesterday-activity";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listAnomaliesForSprint } from "@/lib/anomaly/reader";
 import { anomalyContextChips, anomalyIdentity } from "@/lib/anomaly/context";
+import { getActivityRollup } from "@/lib/dashboard/activity";
+import { getBurndownSeries } from "@/lib/dashboard/burndown";
+import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
 import { listRoster } from "@/lib/roster";
@@ -12,6 +21,7 @@ import type {
   InboxAnomaly,
   InboxSyncState,
 } from "@/components/organisms/anomaly/types";
+import type { BurndownSeries } from "@/lib/dashboard/burndown-series";
 
 /**
  * Dashboard "Today" (S-07, US-01) — the Anomaly Inbox headline. Gated server
@@ -28,11 +38,28 @@ export default async function DashboardPage() {
   const db = getDb(env);
   const ownerId = session.user.id;
 
+  const now = new Date();
   const sprint = await getActiveSprintRow(db, ownerId);
-  const [rows, syncStateRaw, roster] = await Promise.all([
+
+  // "Yesterday" is a calendar day in the TEAM's zone, not a UTC one — resolving
+  // it needs the zone up front, before the rollup's range can be built.
+  const timeZone = await getJiraTimeZone(db, ownerId);
+  const yesterdayKey = dayKeyInTimeZone(
+    new Date(now.getTime() - 24 * 60 * 60 * 1000),
+    timeZone,
+  );
+  const yesterdayRange = dayRangeInTimeZone(yesterdayKey, timeZone);
+
+  // ONE Promise.all on the SAME `db` handle — no second pool, no second fan-out
+  // (lessons.md #3). The two S-10 reads join the existing three.
+  const [rows, syncStateRaw, roster, burndown, yesterdayGrid] = await Promise.all([
     sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
     getSyncState(db, ownerId),
     listRoster(db, ownerId),
+    sprint
+      ? getBurndownSeries(db, ownerId, sprint.id, now)
+      : Promise.resolve(EMPTY_BURNDOWN),
+    getActivityRollup(db, ownerId, yesterdayRange),
   ]);
 
   // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
@@ -93,12 +120,42 @@ export default async function DashboardPage() {
           on today.
         </p>
       </div>
-      <AnomalyInbox
-        anomalies={anomalies}
-        roster={rosterMembers}
-        syncState={syncState}
-        hasActiveSprint={sprint != null}
+      {/* Outside the tabs on purpose: freshness and the error banner must stay
+          visible whichever panel the lead is looking at. */}
+      <SyncStatusBar syncState={syncState} />
+      <DashboardTodayTabs
+        inbox={
+          <AnomalyInbox
+            anomalies={anomalies}
+            roster={rosterMembers}
+            hasActiveSprint={sprint != null}
+          />
+        }
+        pulse={<SprintPulse series={burndown} />}
+        yesterday={<YesterdayActivity grid={yesterdayGrid} dayKey={yesterdayKey} />}
+        reliability={
+          <ReliabilityKpi
+            committedSp={sprint?.committedSp ?? null}
+            completedSp={sprint?.completedSp ?? null}
+          />
+        }
       />
     </div>
   );
 }
+
+/** The no-sprint shape, so Sprint Pulse renders its own empty state uniformly. */
+const EMPTY_BURNDOWN: BurndownSeries = {
+  days: [],
+  committedSp: null,
+  total: [],
+  byTrack: { FRONTEND: [], BACKEND: [], MOBILE: [], QA: [], UNKNOWN: [] },
+  byCategory: {
+    TODO: 0,
+    IN_PROGRESS: 0,
+    CODE_REVIEW: 0,
+    TESTING: 0,
+    DONE: 0,
+    UNKNOWN: 0,
+  },
+};

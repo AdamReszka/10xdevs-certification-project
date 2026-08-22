@@ -579,10 +579,10 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 4.1 Unit tests pass (aging controls, matrix view)
-- [x] 4.2 Type checking passes
-- [x] 4.3 Linting passes
-- [x] 4.4 Production build passes
+- [x] 4.1 Unit tests pass (aging controls, matrix view) — 7d79be6
+- [x] 4.2 Type checking passes — 7d79be6
+- [x] 4.3 Linting passes — 7d79be6
+- [x] 4.4 Production build passes — 7d79be6
 
 #### Manual
 
@@ -598,11 +598,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass (inbox-controls unchanged and green)
-- [ ] 5.2 Integration tests pass
-- [ ] 5.3 Type checking passes
-- [ ] 5.4 Linting passes
-- [ ] 5.5 Production build and Workers build pass
+- [x] 5.1 Unit tests pass (inbox-controls unchanged and green)
+- [x] 5.2 Integration tests pass
+- [x] 5.3 Type checking passes
+- [x] 5.4 Linting passes
+- [x] 5.5 Production build and Workers build pass
 
 #### Manual
 

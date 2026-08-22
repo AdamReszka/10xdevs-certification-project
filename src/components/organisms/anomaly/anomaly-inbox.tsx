@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import AnomalyRow from "@/components/organisms/anomaly/anomaly-row";
-import SyncStatusBar from "@/components/organisms/dashboard/sync-status-bar";
 import {
   distinctTypes,
   filterAnomalies,
@@ -31,7 +30,6 @@ import {
   TYPE_LABEL,
   type InboxAnomaly,
   type InboxRosterMember,
-  type InboxSyncState,
 } from "@/components/organisms/anomaly/types";
 
 const SORT_LABEL: Record<SortKey, string> = {
@@ -45,20 +43,23 @@ const SORT_LABEL: Record<SortKey, string> = {
  * Anomaly Inbox (S-07) — the Dashboard "Today" headline surface. Renders the
  * server-provided `anomalies` in their default FR-015 order (severity → recency),
  * with client-side re-sort (severity / age / ticket / developer) and filter (type;
- * team member incl. an "Unassigned / team-level" bucket). Above it, the per-
- * integration freshness bar + error banner. Three distinct empty states: no active
- * sprint, active sprint with zero anomalies (healthy), and filtered-to-empty — the
- * inbox is empty ONLY because zero were detected, never because a fetch failed.
+ * team member incl. an "Unassigned / team-level" bucket). Three distinct empty
+ * states: no active sprint, active sprint with zero anomalies (healthy), and
+ * filtered-to-empty — the inbox is empty ONLY because zero were detected, never
+ * because a fetch failed.
+ *
+ * The per-integration freshness bar + error banner used to render here. S-10 put
+ * the inbox behind a tab shell, so the bar moved UP to the page, outside the
+ * tabs — freshness has to stay visible on all four panels, and keeping it here
+ * would have rendered it twice on this one. Same position on screen, same copy.
  */
 export default function AnomalyInbox({
   anomalies,
   roster,
-  syncState,
   hasActiveSprint,
 }: {
   anomalies: InboxAnomaly[];
   roster: InboxRosterMember[];
-  syncState: InboxSyncState;
   hasActiveSprint: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>("severity");
@@ -148,7 +149,6 @@ export default function AnomalyInbox({
 
   return (
     <div className="flex flex-col gap-4">
-      <SyncStatusBar syncState={syncState} />
       <Card>
         <CardHeader>
           <CardTitle>Anomaly Inbox</CardTitle>
