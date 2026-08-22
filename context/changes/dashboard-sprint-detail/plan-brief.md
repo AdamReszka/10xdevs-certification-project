@@ -10,7 +10,7 @@ S-10 keeps its one-slice framing because the five read surfaces genuinely collap
 
 ## Starting Point
 
-The read-side convention is uniform and easy to extend: `(db, ownerId, …) → serializable` readers in `src/lib/*`, rendered by server components under `src/app/(app)/`. The roadmap's flagged top risk — a status-history backfill — **does not exist**: `run-sync.ts:493-513` already writes every transition incrementally and idempotently. Two smaller gaps do exist and were missed by the roadmap: per-commit `additions`/`deletions` columns exist but are never written, and the owner's Jira IANA time zone is fetched on every credential validation but never persisted. Today is a single-column page with the Anomaly Inbox; there is no tabs primitive and no Reliability KPI, contrary to what the roadmap records for S-07.
+The read-side convention is uniform and easy to extend: `(db, ownerId, …) → serializable` readers in `src/lib/*`, rendered by server components under `src/app/(app)/`. The roadmap's flagged top risk — a status-history backfill — **does not exist**: `run-sync.ts:493-513` already writes every transition incrementally and idempotently. Three smaller gaps do exist and were missed by the roadmap: per-commit `additions`/`deletions` columns exist but are never written; the owner's Jira IANA time zone is fetched on every credential validation but never persisted; and `sprint.committed_sp`/`completed_sp` are written by nothing except the demo seed (`roster-store.ts:435-465` omits them, `run-sync.ts` never updates the sprint row), so the Reliability KPI would ship as a permanent empty state while every seed-backed check passed green. Today is a single-column page with the Anomaly Inbox; there is no tabs primitive and no Reliability KPI, contrary to what the roadmap records for S-07.
 
 ## Desired End State
 
@@ -27,7 +27,7 @@ A lead opens `/dashboard` and lands on the Anomaly Inbox, with Sprint Pulse, Yes
 | Unattributed SP | Explicit `UNKNOWN` track | Makes `Σ byTrack === total` hold and the lossy value-join visible | Research |
 | Between-sprints | Render on the last sprint | Matches Today and the detection pipeline; label only | Research |
 | D + E placement | Retrofit Today with tabs | Only option literally matching FR-016; closes the S-07 debt | Plan |
-| Reliability KPI | In scope for S-10 | Data is already in `sprint` scalars; marginal cost near zero once tabs exist | Plan |
+| Reliability KPI | In scope for S-10, with its data write | The `sprint` scalars exist but nothing writes them — the sync must derive both before the surface means anything | Plan review F1 |
 | Time zone | New `jira_project.time_zone` column, written each sync | `/myself` already returns it and `weekdayInTimeZone` already consumes it — only persistence was missing | Plan |
 | Matrix rendering | Metric switcher, one number per cell | Four values × 14 columns is unreadable at the 10-inch NFR floor | Plan |
 | Aging rendering | Five numeric columns | Exactly what FR-017 describes; avoids the design risk FR-017 deferred | Plan |
@@ -35,7 +35,7 @@ A lead opens `/dashboard` and lands on the Anomaly Inbox, with Sprint Pulse, Yes
 
 ## Scope
 
-**In scope:** three reducers (M1 SP-over-time, M2 per-dev-per-day rollup, M3 time-in-status); the `/dashboard/sprint-detail` route with aging report, activity matrix, sub-burndowns; the Today retrofit with Sprint Pulse, Yesterday's Activity, Reliability KPI; `tabs` + `chart` primitives; per-commit churn in the sync; `jira_project.time_zone`; seed extension; E2E coverage.
+**In scope:** three reducers (M1 SP-over-time, M2 per-dev-per-day rollup, M3 time-in-status); the `/dashboard/sprint-detail` route with aging report, activity matrix, sub-burndowns; the Today retrofit with Sprint Pulse, Yesterday's Activity, Reliability KPI; `tabs` + `chart` primitives; per-commit churn in the sync; `jira_project.time_zone`; `sprint.committed_sp`/`completed_sp` derivation in the sync; seed extension; E2E coverage.
 
 **Out of scope:** per-status heatmap (FR-017 defers to phase 2); churn backfill; `timestamptz` migration of sprint dates; a "no active sprint" gate; inter-sprint KPI history (S-12); active-link nav styling; any second connection pool or caching layer.
 
@@ -62,7 +62,7 @@ Server components fetch and serialize; one `"use client"` organism per interacti
 
 | Phase | What it delivers | Key risk |
 |---|---|---|
-| 1. Data prerequisites | `time_zone` column + write; per-commit churn in sync | Subrequest budget on first-sync bursts — mitigated by dedup-aware skip + cap 30 |
+| 1. Data prerequisites | `time_zone` column + write; per-commit churn in sync; `committedSp`/`completedSp` write | Subrequest budget on first-sync bursts — mitigated by dedup-aware skip + a cap of 30 **per repo** (so 30 × N per cycle; verify against the Workers limit) |
 | 2. Three reducers | M1/M2/M3 readers + pure folds + tests | Time math (re-opens, DST, open final interval) is where silent wrongness hides |
 | 3. Primitives | `tabs` + `chart`, chart theming convention | Recharts bundle size / Workers build |
 | 4. Sprint Detail route | Aging report, activity matrix, sub-burndowns | Readability at the 10-inch tablet floor |

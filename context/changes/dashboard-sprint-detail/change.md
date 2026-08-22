@@ -1,7 +1,7 @@
 ---
 change_id: dashboard-sprint-detail
 title: Dashboard "Sprint Detail" — aging report, activity matrix, sub-burndowns (+ deferred S-07 panels)
-status: planned
+status: plan_reviewed
 created: 2026-08-21
 updated: 2026-08-22
 archived_at: null
@@ -23,3 +23,5 @@ Both are new read-side aggregators in the same family as the Activity Matrix and
 PRD ref: FR-017. Prereqs S-05, S-07 (both done).
 
 Key risk (roadmap): aging report needs cumulative time-in-each-status per ticket — verify S-05's schema captures full jiraStatusHistory transitions (not just current status) before writing queries, else a backfill migration is needed. Burndown series must be derived from jiraStatusHistory transitions × SP (the `sprint` row holds only committedSp/completedSp snapshots, not a daily series).
+
+Both halves of that risk resolved during planning: the backfill is NOT needed (`run-sync.ts:493-513` already writes every transition idempotently), and the `sprint` row does not in fact hold committedSp/completedSp snapshots at all — nothing but the demo seed writes those columns, so S-10 adds the derivation to the sync (plan review F1).

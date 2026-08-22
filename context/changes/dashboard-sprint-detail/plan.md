@@ -13,7 +13,7 @@ Deliver the five read surfaces that close FR-017 (and the FR-016 remainder S-07 
 | E | Yesterday's Activity | Today (tab) | M2 activity rollup |
 | F | Reliability KPI (committed vs delivered SP) | Today (tab) | none — `sprint` scalars |
 
-Two data-side prerequisites land first, because without them two UI columns would be empty or wrong: per-commit `additions`/`deletions` (never written by the sync today) and the owner's Jira IANA time zone (fetched today, never persisted).
+Three data-side prerequisites land first, because without them UI columns would be empty or wrong: per-commit `additions`/`deletions` (never written by the sync today), the owner's Jira IANA time zone (fetched today, never persisted), and `sprint.committedSp`/`completedSp` (columns exist, nothing writes them — surface F would be a permanent empty state).
 
 ## Current State Analysis
 
@@ -28,7 +28,9 @@ Two data-side prerequisites land first, because without them two UI columns woul
 - **No tabs primitive exists** — no `src/components/ui/tabs.tsx`, and Today is a single column (`dashboard/page.tsx:87-101`). **No Reliability KPI exists** either. The roadmap's claim that S-07 shipped both is wrong.
 - `radix-ui@1.4.3` is installed, so `shadcn add tabs`/`chart` add no new Radix dependency. Chart OKLCH tokens `--chart-1..5` are already defined for both themes (`globals.css:25-29,67-71,101-105`).
 
-**What's missing:** all three reducers, the Sprint Detail route, the tabs primitive, the chart primitive, the two data-side writes above.
+- **`sprint.committedSp`/`completedSp` are never written.** The columns exist (`schema.ts:334-335`) and three consumers read them (`scope-creep.ts:13`, `sprint-at-risk.ts:83`, both with `?? 0`), but the only writer in the repo is the seed script (`scripts/seed-dashboard.mjs:78`). `roster-store.ts:435-465` omits both from the sprint insert *and* the conflict-update; `run-sync.ts` never updates the sprint row at all. Surface F and the burndown's ideal line would read NULL for every real owner — and every plan check would still pass green against the seed.
+
+**What's missing:** all three reducers, the Sprint Detail route, the tabs primitive, the chart primitive, the three data-side writes above.
 
 ## Desired End State
 
@@ -53,7 +55,7 @@ A tech lead with a synced team can:
 - **No per-status heatmap** — FR-017 defers it to phase 2; the aging report uses numeric columns.
 - **No backfill of historical commit churn** — `additions`/`deletions` are forward-only (research Q3). Pre-existing commits keep NULL and the matrix renders them as "—".
 - **No `timestamptz` migration** of `sprint.startDate`/`endDate` — the zone is captured on `jira_project` instead; the existing bare `timestamp` columns are untouched.
-- **No "no active sprint" gate on Sprint Detail** — it renders against whatever `getActiveSprintRow` returns, matching Today and the detection pipeline (research Q4). A CLOSED sprint gets a label, not a different data path.
+- **No between-sprints gate on Sprint Detail** — a CLOSED sprint gets a label, not a different data path; the route renders against whatever `getActiveSprintRow` *row* returns, matching Today and the detection pipeline (research Q4). This is **not** the same as the `null` case: that reader returns `SelectSprint | null` (`sprint.ts:22,36`), and an owner with no sprint row at all still needs the empty state Today already renders — see Phase 4 §1.
 - **No inter-sprint history** on the Reliability KPI — current sprint only; the trend view is S-12 territory.
 - **No active-link styling in the nav** — `main-nav.tsx` stays a static server component; `usePathname` is out of scope.
 - **No second connection pool** and no caching layer.
@@ -112,7 +114,24 @@ Close the two data gaps that would otherwise leave the Activity Matrix with an e
 
 **Intent**: Enrich only the commits that are actually new, newest-first, under a hard per-cycle cap.
 
-**Contract**: Add `const DEFAULT_MAX_COMMIT_STATS_PER_SYNC = 30;` beside `DEFAULT_MAX_PRS_PER_SYNC` (`:90`), with a comment recording the one-way cursor consequence. After `listCommits` and **before** the transaction: select the already-persisted SHAs for this repo from `githubCommit`, drop them from the candidate set, sort the remainder by `authoredAt` descending, take the first 30, and `getCommitDetail` each. Add `additions`/`deletions` to the commit insert `.values(...)` (`:291-299`); keep `.onConflictDoNothing`. Commits beyond the cap are still inserted — with NULL churn.
+**Contract**: Add `const DEFAULT_MAX_COMMIT_STATS_PER_REPO = 30;` beside `DEFAULT_MAX_PRS_PER_SYNC` (`:91`), with a comment recording the one-way cursor consequence **and the cap's unit**. The name says `PER_REPO` deliberately (F5): the enrichment sits inside the `for (const repo of repos)` loop, so the real per-cycle ceiling is `30 × N` — the same looseness `DEFAULT_MAX_PRS_PER_SYNC` already has, where "per-cycle" in its comment (`:81-90`) actually means per-repo (applied at `:229`, consumed at `:273`). Record the arithmetic: each repo already costs ~2 list calls + 30 PRs × (detail + reviews) ≈ 62 subrequests, and this adds up to 30 more, so 5 repos moves a cycle from ~310 to ~460. Confirm that clears the Workers subrequest limit on the deployment plan in use before shipping; if it doesn't, the fix is a shared budget decremented across repos, not a smaller per-repo cap. After `listCommits` and **before** the transaction: select the already-persisted SHAs for this repo from `githubCommit`, drop them from the candidate set, sort the remainder by `authoredAt` descending, take the first 30, and `getCommitDetail` each. Add `additions`/`deletions` to the commit insert `.values(...)` (`:291-299`); keep `.onConflictDoNothing`. Commits beyond the cap are still inserted — with NULL churn. "Commit 31+" in the tests and criteria below means the 31st *new* commit **in one repo**, not across the cycle.
+
+#### 3. Sprint commitment scalars (`committedSp` / `completedSp`)
+
+**File**: `src/lib/integrations/sync/run-sync.ts`
+
+**Intent**: Give the Reliability KPI and the burndown baseline real values. Both columns exist (`schema.ts:334-335`) but **nothing writes them** — `roster-store.ts:435-465` omits them from the sprint insert *and* its conflict-update, and the sync never touches the sprint row. Only `scripts/seed-dashboard.mjs:78` sets them, so every real owner reads NULL.
+
+**Contract**: After the per-issue upsert loop and **inside** the same Jira transaction (`:447`), aggregate over `jiraTicket` for `(ownerId, sprintId = chosenSprint.id)` and `UPDATE sprint SET committed_sp, completed_sp`:
+
+- `committedSp` = `SUM(story_points)` where `added_after_sprint_start IS NOT TRUE` (NULL counts as committed — it means "we couldn't tell", and `sprintStart` is only absent on rows that predate cadence import).
+- `completedSp` = `SUM(story_points)` where `current_category = 'DONE'`.
+
+Aggregate from the **table**, never from the in-memory `issues` array: `searchSprintIssues` is an incremental delta pull (`updatedSince`, `:422-437`), so `issues` holds only the tickets that changed this cycle. `SUM` over an empty set yields NULL — coalesce to 0 so a sprint with no estimated tickets reads 0 rather than "unknown".
+
+`committedSp` is **recomputed every cycle**, so it tracks mid-sprint estimate edits rather than freezing at sprint start. That is the accepted tradeoff: freezing would need a first-sync-wins guard and a story for what happens when the first sync lands mid-sprint. Record it in a comment beside the update.
+
+Side effect worth knowing: `scope-creep.ts:13` and `sprint-at-risk.ts:83` both read `snapshot.sprint.committedSp ?? 0` and have therefore been dividing by zero-substitutes since S-06. This write makes those rules correct too — expect their anomaly output to change on real data.
 
 ### Success Criteria
 
@@ -120,13 +139,14 @@ Close the two data gaps that would otherwise leave the Activity Matrix with an e
 
 - Migration generates and applies cleanly: `npm run db:generate && npm run db:migrate`
 - Unit tests pass: `npm run test` — covers `getCommitDetail` success / 401 / non-OK / unparseable-body paths in `src/lib/github.test.ts`
-- Integration tests pass: `npm run test:integration` — `run-sync.integration.test.ts` asserts (a) `jira_project.time_zone` is written from the `/myself` fixture, (b) new commits land with `additions`/`deletions`, (c) an already-persisted SHA triggers no detail fetch, (d) commit 31+ in one cycle is inserted with NULL churn
+- Integration tests pass: `npm run test:integration` — `run-sync.integration.test.ts` asserts (a) `jira_project.time_zone` is written from the `/myself` fixture, (b) new commits land with `additions`/`deletions`, (c) an already-persisted SHA triggers no detail fetch, (d) commit 31+ in one cycle is inserted with NULL churn, (e) `sprint.committed_sp`/`completed_sp` are written from the ticket table — including a delta-pull cycle whose `issues` array is empty, which must still recompute both scalars
 - Type checking passes: `npm run typecheck`
 - Linting passes: `npm run lint`
 
 #### Manual Verification
 
 - A real sync cycle against the dev Jira project populates `jira_project.time_zone` with a plausible IANA string
+- The same cycle populates `sprint.committed_sp`/`completed_sp` with values that match a manual count of the sprint's tickets in Jira
 - Worker logs show no token value and no raw error text (PRD guardrail)
 
 ---
@@ -145,7 +165,9 @@ Three owner-scoped readers in a new `src/lib/dashboard/` folder, each paired wit
 
 **Intent**: Convert an instant to a calendar-day key in the team's zone, so a 22:30 Warsaw commit counts as that day rather than the next UTC one.
 
-**Contract**: `dayKeyInTimeZone(date: Date, timeZone?: string): string` → `YYYY-MM-DD`, and `enumerateDayKeys(start: Date, end: Date, timeZone?: string): string[]` → the inclusive ordered day axis. Use `Intl.DateTimeFormat` with `en-CA` (which formats as `YYYY-MM-DD` directly) and mirror the invalid/absent-zone → UTC fallback of `weekdayInTimeZone` (`cadence.ts:50-58`) — fall back, never throw.
+**Contract**: `dayKeyInTimeZone(date: Date, timeZone?: string): string` → `YYYY-MM-DD`, and `enumerateDayKeys(start: Date, end: Date, timeZone?: string): string[]` → the inclusive ordered day axis. Use `Intl.DateTimeFormat` with `en-CA` (which formats as `YYYY-MM-DD` directly) and the invalid/absent-zone → UTC fallback — fall back, never throw.
+
+Rather than mirroring that fallback (F8), **extract it once**: `cadence.ts:50` declares `weekdayInTimeZone` without `export`, and its try/catch-retry-in-UTC is the same three lines `day-bucket.ts` needs. Export a `safeZone(timeZone?: string): string` (or an equivalent formatter wrapper) from `cadence.ts` — or lift it to a shared module if that reads better — and have both consume it, carrying the DST rationale from `cadence.ts:6-11` with it. Two independent copies drift; `cadence.test.ts` must stay green through the refactor.
 
 #### 2. M3 — time in status (aging report)
 
@@ -153,7 +175,14 @@ Three owner-scoped readers in a new `src/lib/dashboard/` folder, each paired wit
 
 **Intent**: Fold one ticket's ordered transitions into cumulative time per category.
 
-**Contract**: `foldTimeInStatus(transitions, { currentCategory, lastStatusChangeAt, now }) → { byCategory: Record<StatusCategory, number>, sinceLastMoveMs: number }`, all values in ms. Each `(changedAt[i], changedAt[i+1])` interval accrues to `toCategory[i]`; the final open interval runs from the last `changedAt` (or `lastStatusChangeAt` when history is empty) to `now` and accrues to `currentCategory`. Every one of the five categories is present in the output, zero-valued when never entered. Pure — `now` is a parameter.
+**Contract**: `foldTimeInStatus(transitions, { currentCategory, lastStatusChangeAt, now }) → { byCategory: Record<CategoryKey, number>, sinceLastMoveMs: number }`, all values in ms, `CategoryKey = StatusCategory | "UNKNOWN"`. Each `(changedAt[i], changedAt[i+1])` interval accrues to `toCategory[i]`; the final open interval runs from the last `changedAt` (or `lastStatusChangeAt` when history is empty) to `now` and accrues to `currentCategory`. Every one of the five categories is present in the output, zero-valued when never entered. Pure — `now` is a parameter.
+
+**Null handling (F4), load-bearing.** `jiraStatusHistory.toCategory`/`fromCategory`/`changedAt` and `jiraTicket.currentCategory` are all nullable (`schema.ts:534,564-566`), and `run-sync.ts:504-506` writes `categoryOf.get(...) ?? null` — so *any* Jira status the owner never mapped in FR-005 lands as NULL, as does every history row written before a mapping edit. Two rules, applied here and mirrored in §3:
+
+- A transition with a null `changedAt` is **dropped** before the fold (it can't be ordered, so it can't bound an interval).
+- A null category accrues to the `UNKNOWN` bucket — never to a `null` key. Same reasoning as M1's `UNKNOWN` track and M2's `UNKNOWN` row: the FR-005 mapping gap is made visible, not silently absorbed into a real category.
+
+Both rules get their own unit test.
 
 **File**: `src/lib/dashboard/aging.ts`
 
@@ -167,7 +196,7 @@ Three owner-scoped readers in a new `src/lib/dashboard/` folder, each paired wit
 
 **Intent**: Derive a daily remaining-SP series, overall and per technology track, from DONE transitions.
 
-**Contract**: `buildBurndownSeries({ tickets, transitions, sprintStart, sprintEnd, timeZone, now }) → BurndownSeries` where `BurndownSeries = { days: string[]; committedSp: number; total: BurndownPoint[]; byTrack: Record<TrackKey, BurndownPoint[]> }` and `TrackKey = "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | "UNKNOWN"`. A ticket's SP is burned on the day of its **first** transition into `toCategory = DONE` (a later re-open then re-close must not double-burn). Days run from `sprintStart` to `min(sprintEnd, now)` via `enumerateDayKeys`. Per research Q1, SP whose assignee is unmapped or whose `technologyTrack` is null goes to `UNKNOWN`, so `Σ byTrack === total` at every point — the lossy join is visible rather than silently dropped. Tickets with null `storyPoints` contribute 0.
+**Contract**: `buildBurndownSeries({ tickets, transitions, sprintStart, sprintEnd, timeZone, now }) → BurndownSeries` where `BurndownSeries = { days: string[]; committedSp: number | null; total: BurndownPoint[]; byTrack: Record<TrackKey, BurndownPoint[]>; byCategory: Record<CategoryKey, number> }`, `TrackKey = "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | "UNKNOWN"`, and `CategoryKey = StatusCategory | "UNKNOWN"`. `byCategory` is the **ticket count** per current category at `now` — FR-016's "per-status ticket distribution" for Sprint Pulse (F3), folded from the same `tickets` array the series already consumes, so it costs no extra query. All five categories are always present, zero-valued when empty; tickets whose `currentCategory` is NULL count under `UNKNOWN` (§2's null-category rule). A ticket's SP is burned on the day of its **first** transition into `toCategory = DONE` (a later re-open then re-close must not double-burn). Per §2's null rules, transitions with a null `changedAt` are dropped, and a null `toCategory` is **not** DONE — so a ticket completed through an unmapped status never burns. That under-reporting is deliberate but must not be invisible: surface it by counting those tickets under `byCategory.UNKNOWN`, which is what makes the FR-005 mapping gap legible on Sprint Pulse. Days run from `sprintStart` to `min(sprintEnd, now)` via `enumerateDayKeys`. The series baseline is **Σ SP over all sprint tickets**, which is deliberately *not* the same as `committedSp` (Phase 1 §3 excludes `addedAfterSprintStart` tickets from that scalar). They diverge exactly when scope crept — which is the point, and is why `committedSp` is carried on the output as a separate field for the ideal line rather than used as the series' day-0 value. Per research Q1, SP whose assignee is unmapped or whose `technologyTrack` is null goes to `UNKNOWN`, so `Σ byTrack === total` at every point — the lossy join is visible rather than silently dropped. Tickets with null `storyPoints` contribute 0.
 
 **File**: `src/lib/dashboard/burndown.ts`
 
@@ -201,14 +230,14 @@ Three owner-scoped readers in a new `src/lib/dashboard/` folder, each paired wit
 
 #### Automated Verification
 
-- Unit tests pass: `npm run test` — day bucketing across a DST boundary and an invalid zone; `foldTimeInStatus` with empty history, a single transition, and a re-open; burndown non-double-burn on re-open and `Σ byTrack === total`; grid null-churn vs summed-churn and the `UNKNOWN` row
+- Unit tests pass: `npm run test` — day bucketing across a DST boundary and an invalid zone; `foldTimeInStatus` with empty history, a single transition, a re-open, a null `changedAt`, and a null category; burndown non-double-burn on re-open, `Σ byTrack === total`, and `Σ byCategory === ticket count`; grid null-churn vs summed-churn and the `UNKNOWN` row
 - Integration tests pass: `npm run test:integration` — all three readers, each with a cross-account isolation assertion
 - Type checking passes: `npm run typecheck`
 - Linting passes: `npm run lint`
 
 #### Manual Verification
 
-- Against seeded data, the burndown's day-0 remaining SP equals the sprint's `committedSp`
+- Against seeded data, the burndown's day-0 remaining SP equals Σ SP over the sprint's tickets, and equals `committedSp` exactly when no ticket carries `addedAfterSprintStart`
 - Sub-burndown series visibly sum to the total series (spot-check one day)
 
 ---
@@ -269,6 +298,10 @@ The new dashboard. Built first because a regression here costs nothing — Today
 
 **Contract**: Clone the boot sequence of `dashboard/page.tsx:26-36` — `requireSession()` → `getCloudflareContext().env` → `getDb(env)` → resolve the sprint once → fan out `getTicketAging` / `getActivityRollup` / `getBurndownSeries` / `getSyncState` / `listRoster` in **one** `Promise.all` on the shared handle. Do **not** re-declare `force-dynamic` or `requireSession` (inherited from `(app)/layout.tsx:9,22`). Serialize every `Date` to an ISO string before it crosses the client boundary. Render `<SyncStatusBar>` and the `max-w-6xl` header shell. Per research Q4, when `sprint.state !== "ACTIVE"` render a muted "sprint closed" badge beside the heading — a label only, no data-path change.
 
+**Matrix range (F7).** `getActivityRollup` takes an explicit `{ from, to }` — pass `sprintStart → min(sprintEnd, now)`, the same window `enumerateDayKeys` gives M1, so the matrix columns and the sub-burndown x-axis are one calendar rather than two that nearly agree.
+
+**Null-sprint guard (F2).** `getActiveSprintRow` returns `SelectSprint | null`, and `middleware.ts` gates only on the session cookie — there is no setup gate, so a freshly signed-up owner can reach this route from the nav link with no sprint row at all. Mirror `dashboard/page.tsx:31-33`: resolve the sprint *before* the fan-out and, when it is null, run only the sprint-independent reads (`getSyncState`, `listRoster`) and render the same "no active sprint" empty state Today uses. The three sprint-scoped reducers all take a non-optional `sprintId` — never call them with a null sprint.
+
 **File**: `src/components/molecules/main-nav.tsx`
 
 **Intent**: Make the new route reachable.
@@ -281,7 +314,7 @@ The new dashboard. Built first because a regression here costs nothing — Today
 
 **Intent**: Sortable table of stalled tickets with cumulative time per category inline.
 
-**Contract**: Columns: ticket key (deep-linked), summary, SP, current status, **time since last move** (the default sort, descending), then five numeric columns — To Do / In Progress / Code Review / Testing / Done — each formatted `2d 4h`. Every column sortable; sort state and duration formatting live in the pure `aging-report-controls.ts`, not in the component. The table sits in an `overflow-x-auto` container for the 10-inch tablet floor (NFR).
+**Contract**: Columns: ticket key (deep-linked), summary, SP, current status, **time since last move** (the default sort, descending), then five numeric columns — To Do / In Progress / Code Review / Testing / Done — each formatted `2d 4h`. Per F4 the fold also carries an `UNKNOWN` bucket: render it as a **sixth column only when some ticket in the result has a non-zero value there**, so the common well-mapped case keeps the five columns FR-017 describes and a mapping gap still surfaces instead of vanishing. Every column sortable; sort state and duration formatting live in the pure `aging-report-controls.ts`, not in the component. The table sits in an `overflow-x-auto` container for the 10-inch tablet floor (NFR).
 
 #### 3. Surface B — Team Activity Matrix
 
@@ -319,6 +352,7 @@ The new dashboard. Built first because a regression here costs nothing — Today
 #### Manual Verification
 
 - `/dashboard/sprint-detail` renders all three surfaces on seeded data
+- An owner with no sprint row (fresh sign-up, no setup) gets the empty state rather than an error page
 - Aging report defaults to time-since-last-move descending; every column sorts both ways
 - Matrix switcher changes the rendered metric; a commit without churn shows `—`
 - Sub-burndown lines render in both themes; `UNKNOWN` is visually distinguishable from real tracks
@@ -349,7 +383,7 @@ Put the Anomaly Inbox behind a tab shell and add the three panels FR-016 specifi
 
 **Intent**: The total sprint burndown plus the current status distribution.
 
-**Contract**: Renders `BurndownSeries.total` as a Recharts `AreaChart` leaf against an ideal straight line from `committedSp` to 0, beside a per-category ticket-count summary derived from the same reducer output. Scope-change context is out of scope here — `SCOPE_CREEP` is already an inbox anomaly.
+**Contract**: Renders `BurndownSeries.total` as a Recharts `AreaChart` leaf against an ideal straight line from `committedSp` to 0, beside a per-category ticket-count summary read from `BurndownSeries.byCategory` (F3 — the field exists for exactly this). When `committedSp` is null the ideal line is omitted, not drawn at 0. Scope-change context is out of scope here — `SCOPE_CREEP` is already an inbox anomaly.
 
 #### 3. Surface E — Yesterday's Activity
 
@@ -365,7 +399,7 @@ Put the Anomaly Inbox behind a tab shell and add the three panels FR-016 specifi
 
 **Intent**: Committed SP vs delivered SP for the current sprint.
 
-**Contract**: A two-bar Recharts `BarChart` leaf reading `sprint.committedSp`/`completedSp` directly — no reducer. When either is null, render an explanatory empty state instead of a zero bar. Single sprint only; the historical trend is S-12.
+**Contract**: A two-bar Recharts `BarChart` leaf reading `sprint.committedSp`/`completedSp` directly — no reducer. Phase 1 §3 is what makes these non-NULL; without it this surface is a permanent empty state. When either is still null (an owner whose sprint predates the Phase-1 write and hasn't re-synced), render an explanatory empty state instead of a zero bar. Single sprint only; the historical trend is S-12.
 
 #### 5. Page wiring
 
@@ -391,6 +425,7 @@ Put the Anomaly Inbox behind a tab shell and add the three panels FR-016 specifi
 - All four tabs render; freshness bar and error banner remain visible across tab switches
 - Yesterday's Activity counts match the seeded fixture for the correct calendar day in the team's zone
 - Reliability KPI shows its empty state when `committedSp` is null
+- Today page render latency is acceptable on the `max:1` pool with the widened fan-out (the measurement Performance Considerations defers to this phase)
 
 ---
 
@@ -449,8 +484,8 @@ Prove the two routes work in a browser, then record the slice.
 ### Unit Tests
 
 - `dayKeyInTimeZone` across a DST transition, an invalid zone (falls back to UTC, never throws), and an absent zone
-- `foldTimeInStatus`: empty history, single transition, re-open sequence, open final interval; all five categories always present
-- `buildBurndownSeries`: no double-burn on re-open, `Σ byTrack === total` at every point, null-SP tickets contribute 0, day axis clamped to `min(sprintEnd, now)`
+- `foldTimeInStatus`: empty history, single transition, re-open sequence, open final interval; all five categories always present; a null-`changedAt` transition is dropped; a null-category transition accrues to `UNKNOWN`, never to a `null` key
+- `buildBurndownSeries`: no double-burn on re-open, `Σ byTrack === total` at every point, `Σ byCategory === ticket count` with null categories under `UNKNOWN`, null-SP tickets contribute 0, day axis clamped to `min(sprintEnd, now)`
 - `buildActivityGrid`: null churn stays null when all contributors are null, unmapped authors land in `UNKNOWN`, empty days render as zero cells
 - `aging-report-controls`: sorting across all seven columns, both directions
 - `activity-matrix-view`: metric switching, intensity scaling, `—` for null churn
@@ -502,7 +537,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 - [ ] 1.1 Migration generates and applies cleanly
 - [ ] 1.2 Unit tests pass (getCommitDetail paths)
-- [ ] 1.3 Integration tests pass (time zone write, churn write, dedup skip, over-cap NULL)
+- [ ] 1.3 Integration tests pass (time zone write, churn write, dedup skip, over-cap NULL, sprint SP scalars incl. empty-delta cycle)
 - [ ] 1.4 Type checking passes
 - [ ] 1.5 Linting passes
 
@@ -510,6 +545,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 - [ ] 1.6 Real sync populates `jira_project.time_zone`
 - [ ] 1.7 No token or raw error text in Worker logs
+- [ ] 1.8 Real sync populates `sprint.committed_sp`/`completed_sp` matching a manual Jira count
 
 ### Phase 2: The three reducers (M1 / M2 / M3)
 
@@ -522,7 +558,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Manual
 
-- [ ] 2.5 Burndown day-0 remaining SP equals `committedSp`
+- [ ] 2.5 Burndown day-0 remaining SP equals Σ sprint-ticket SP (and `committedSp` absent scope creep)
 - [ ] 2.6 Sub-burndown series sum to the total series
 
 ### Phase 3: shadcn primitives + chart foundation
@@ -556,6 +592,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 - [ ] 4.8 Sub-burndown legible in both themes; `UNKNOWN` distinguishable
 - [ ] 4.9 Usable at 10-inch tablet width; no page-body horizontal scroll
 - [ ] 4.10 Freshness + error banner present, no raw error text
+- [ ] 4.11 No-sprint owner gets the empty state, not an error page
 
 ### Phase 5: Today retrofit (surfaces D, E, F)
 
