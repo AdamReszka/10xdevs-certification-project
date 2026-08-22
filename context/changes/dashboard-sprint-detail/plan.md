@@ -987,11 +987,28 @@ re-inserts). **Never seed the second one**; it holds real credentials.
 ### Open question to resolve first
 
 `demo@sprintflow.test` reports **GitHub OK and Jira OK, yet synced 0 tickets and
-0 commits.** Either the `FM` sprint genuinely has no issues and
-`AdamLisek/tenexdevs1` no commits in the 30-day first-sync lookback, or something
-upstream is silently matching nothing. Worth five minutes before 1.8 — that row
-asks for `committed_sp` to match a manual Jira count, and it currently reads 0/0,
-which is *consistent* but proves nothing.
+0 commits.**
+
+**0 commits is explained** — the owner confirms `AdamLisek/tenexdevs1` has about
+one commit and no recent activity, so an empty 30-day first-sync window is the
+honest result.
+
+**0 tickets is not.** The owner also confirms tasks are sitting in To Do on the
+board, and a ticket with no activity is still a ticket — nothing in the sync
+filters on activity. The account has a `Sprint 24` row in state `ACTIVE`, so
+`getActiveSprintRow` had something to hand `searchSprintIssues`. The question to
+settle is therefore narrow: **are those To Do tasks actually assigned to that
+sprint, or only sitting in the backlog?**
+
+- Backlog only → 0 tickets is correct, and 1.8's `committed_sp = 0` is a true
+  reading. Move a task into the sprint and re-sync to make the row meaningful.
+- In the sprint → something upstream matches nothing. Likely suspects, in order:
+  `sprint.jiraSprintId` not matching the board's real sprint id (it is imported
+  once at setup), or the JQL in `searchSprintIssues` disagreeing with how that
+  project scopes a sprint.
+
+Settle this before row 1.8 — that row asks `committed_sp` to match a manual Jira
+count, and 0/0 is *consistent with itself* while proving nothing either way.
 
 ### Notes that change what "pass" looks like
 
