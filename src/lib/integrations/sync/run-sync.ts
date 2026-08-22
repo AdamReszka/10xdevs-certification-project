@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import {
   githubCommit,
@@ -10,6 +10,7 @@ import {
   jiraStatusHistory,
   jiraTicket,
   monitoredRepo,
+  sprint,
   statusMapping,
   syncState,
 } from "@/db/schema";
@@ -22,6 +23,7 @@ import {
   type GithubPullRequestData,
   type GithubPullRequestDetail,
   type GithubReviewData,
+  getCommitDetail,
   getPullRequestDetail,
   listCommits,
   listPullRequests,
@@ -33,6 +35,7 @@ import {
   type JiraClientOpts,
   resolveStoryPointFieldId,
   searchSprintIssues,
+  validateCredentials,
 } from "@/lib/jira";
 import {
   MissingCredentialError,
@@ -89,6 +92,22 @@ const GITHUB_FIRST_SYNC_LOOKBACK_DAYS = 30;
  * back to the oldest processed PR) is out of scope for MVP. */
 const DEFAULT_MAX_PRS_PER_SYNC = 30;
 
+/** Per-**repo** cap on per-commit stat fetches (S-10). The name says PER_REPO
+ * deliberately: the enrichment sits inside the `for (const repo of repos)` loop,
+ * so the real per-cycle ceiling is 30 × N, the same looseness
+ * `DEFAULT_MAX_PRS_PER_SYNC` already has. Arithmetic to keep in view: each repo
+ * already costs ~2 list calls + 30 PRs × (detail + reviews) ≈ 62 subrequests, and
+ * this adds up to 30 more, so 5 repos moves a cycle from ~310 to ~460. Confirm
+ * that clears the Workers subrequest limit on the deployment plan in use; if it
+ * doesn't, the fix is a shared budget decremented across repos, not a smaller
+ * per-repo cap.
+ *
+ * ONE-WAY (same cursor semantics as the PR cap above): a commit skipped here is
+ * persisted with NULL churn and is never revisited, because commits are immutable
+ * (`onConflictDoNothing`) and the cursor advances to `now`. NULL therefore means
+ * "not measured", never "zero lines" — every consumer must render it as such. */
+const DEFAULT_MAX_COMMIT_STATS_PER_REPO = 30;
+
 export type IntegrationOutcome =
   | { status: "OK" }
   | { status: "SKIPPED"; reason: "leased" | "not_due" | "not_connected" | "no_sprint" }
@@ -115,6 +134,8 @@ export type SyncOwnerArgs = {
   jiraBaseUrl?: string;
   /** Test override for the per-cycle PR cap. */
   maxPrs?: number;
+  /** Test override for the per-repo commit-stat cap. */
+  maxCommitStats?: number;
 };
 
 /** Acquire the per-`(owner, integration)` lease under a row lock, honoring the
@@ -227,6 +248,7 @@ function classifyError(err: unknown): { status: "ERROR" | "RATE_LIMITED"; error:
 async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutcome> {
   const { db, ownerId, env } = args;
   const maxPrs = args.maxPrs ?? DEFAULT_MAX_PRS_PER_SYNC;
+  const maxCommitStats = args.maxCommitStats ?? DEFAULT_MAX_COMMIT_STATS_PER_REPO;
 
   let token: string;
   try {
@@ -269,6 +291,37 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
     for (const repo of repos) {
       // --- All network reads for this repo complete BEFORE the txn (F1) -----
       const commits = await listCommits(token, repo.fullName, since, opts);
+
+      // Per-commit churn (S-10): the list endpoint omits `stats`, so enrich the
+      // newest *new* commits with a per-commit GET, capped per repo. Already-
+      // persisted SHAs are dropped first so a re-listed window costs nothing.
+      // Anything past the cap keeps NULL churn permanently — see the constant.
+      if (commits.length > 0 && maxCommitStats > 0) {
+        const persisted = await db
+          .select({ sha: githubCommit.sha })
+          .from(githubCommit)
+          .where(
+            and(
+              eq(githubCommit.ownerId, ownerId),
+              eq(githubCommit.repoId, repo.id),
+              inArray(
+                githubCommit.sha,
+                commits.map((c) => c.sha),
+              ),
+            ),
+          );
+        const known = new Set(persisted.map((r) => r.sha));
+        const toEnrich = commits
+          .filter((c) => !known.has(c.sha))
+          .sort((a, b) => (b.authoredAt?.getTime() ?? 0) - (a.authoredAt?.getTime() ?? 0))
+          .slice(0, maxCommitStats);
+        for (const c of toEnrich) {
+          const detail = await getCommitDetail(token, repo.fullName, c.sha, opts);
+          c.additions = detail.additions;
+          c.deletions = detail.deletions;
+        }
+      }
+
       const pulls = await listPullRequests(token, repo.fullName, since, opts);
       const capped = pulls.slice(0, maxPrs);
       const enriched: Array<{
@@ -296,6 +349,8 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
                 authorGithubUsername: c.authorGithubUsername,
                 authoredAt: c.authoredAt,
                 message: c.message,
+                additions: c.additions,
+                deletions: c.deletions,
               })),
             )
             // A commit is immutable once written — nothing to update on conflict.
@@ -424,6 +479,11 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
   try {
     // --- All Jira reads complete BEFORE the txn (F1) ----------------------
     const storyPointFieldId = await resolveStoryPointFieldId(baseUrl, jiraCreds, args.jiraOpts);
+    // +1 subrequest per cycle: the owner's IANA zone, re-read every cycle so it
+    // self-heals when they change their Jira profile. Its JiraAuthError /
+    // JiraUnavailableError throws land in the surrounding catch like any other
+    // Jira read — no second handler.
+    const identity = await validateCredentials(baseUrl, jiraCreds, args.jiraOpts);
     const issues = await searchSprintIssues(
       baseUrl,
       jiraCreds,
@@ -445,6 +505,11 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
     // --- Pure DB writes inside one short transaction ----------------------
     await db.transaction(async (tx) => {
+      await tx
+        .update(jiraProject)
+        .set({ timeZone: identity.timeZone ?? null })
+        .where(eq(jiraProject.id, project.id));
+
       for (const issue of issues) {
         const lastStatusChangeAt = issue.statusHistory.reduce<Date | null>((acc, h) => {
           if (h.changedAt && (!acc || h.changedAt > acc)) return h.changedAt;
@@ -512,6 +577,32 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
             });
         }
       }
+
+      // Sprint commitment scalars (S-10). Aggregated from the **table**, never
+      // from `issues`: searchSprintIssues is an incremental delta pull, so
+      // `issues` holds only what changed this cycle. SUM over an empty set is
+      // NULL — coalesce to 0 so "no estimated tickets" reads as 0, not unknown.
+      //
+      // `committedSp` is recomputed every cycle, so it tracks mid-sprint estimate
+      // edits rather than freezing at sprint start. Accepted tradeoff: freezing
+      // would need a first-sync-wins guard plus a story for a first sync that
+      // lands mid-sprint. A NULL `addedAfterSprintStart` counts as committed —
+      // it means "couldn't tell" (rows predating cadence import).
+      const [totals] = await tx
+        .select({
+          committedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.addedAfterSprintStart} is not true), 0)`,
+          completedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.currentCategory} = 'DONE'), 0)`,
+        })
+        .from(jiraTicket)
+        .where(and(eq(jiraTicket.ownerId, ownerId), eq(jiraTicket.sprintId, chosenSprint.id)));
+
+      await tx
+        .update(sprint)
+        .set({
+          committedSp: Number(totals?.committedSp ?? 0),
+          completedSp: Number(totals?.completedSp ?? 0),
+        })
+        .where(and(eq(sprint.ownerId, ownerId), eq(sprint.id, chosenSprint.id)));
     });
 
     await finalizeSyncState(db, ownerId, "JIRA", {

@@ -36,6 +36,13 @@
       "when": 1787263636045,
       "tag": "0004_complete_midnight",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1787404859480,
+      "tag": "0005_mighty_sleepwalker",
+      "breakpoints": true
     }
   ]
 }

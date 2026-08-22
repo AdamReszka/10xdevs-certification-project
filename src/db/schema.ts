@@ -265,6 +265,9 @@ export const jiraProject = pgTable("jira_project", {
   projectKey: text("project_key").notNull(),
   projectName: text("project_name"),
   boardId: text("board_id"),
+  // Owner's IANA zone from Jira /myself. Nullable is load-bearing: rows created
+  // before this column, and owners whose Jira omits timeZone, fall back to UTC.
+  timeZone: text("time_zone"),
 });
 
 export const statusMapping = pgTable(

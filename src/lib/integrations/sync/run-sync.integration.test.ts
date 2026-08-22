@@ -96,7 +96,13 @@ const PULLS = [
   },
 ];
 
-function githubFetch(opts?: { failStatus?: number }): {
+/** Per-commit `stats`, keyed by sha — the detail endpoint the list omits. */
+const COMMIT_STATS: Record<string, { additions: number; deletions: number }> = {
+  "sha-1": { additions: 42, deletions: 7 },
+  "sha-2": { additions: 100, deletions: 3 },
+};
+
+function githubFetch(opts?: { failStatus?: number; commits?: unknown[] }): {
   fetchImpl: typeof fetch;
   calls: string[];
 } {
@@ -105,6 +111,11 @@ function githubFetch(opts?: { failStatus?: number }): {
     const url = typeof input === "string" ? input : (input as Request).url;
     calls.push(url);
     if (opts?.failStatus) return jsonRes({ message: "Bad credentials" }, opts.failStatus);
+    if (/\/commits\/[^/?]+$/.test(url)) {
+      const sha = url.split("/").pop()!;
+      const stats = COMMIT_STATS[sha];
+      return jsonRes(stats ? { sha, stats } : { sha });
+    }
     if (/\/pulls\/\d+\/reviews/.test(url)) {
       const n = Number(url.match(/\/pulls\/(\d+)\/reviews/)![1]);
       return jsonRes(
@@ -117,7 +128,7 @@ function githubFetch(opts?: { failStatus?: number }): {
       return jsonRes({ additions: 120, deletions: 12, changed_files: 5 });
     }
     if (url.includes("/pulls?")) return jsonRes(PULLS);
-    if (url.includes("/commits?")) return jsonRes(COMMITS);
+    if (url.includes("/commits?")) return jsonRes(opts?.commits ?? COMMITS);
     throw new Error(`unexpected GitHub mock URL: ${url}`);
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -148,7 +159,13 @@ const JIRA_ISSUE = {
   },
 };
 
-function jiraFetch(opts?: { failStatus?: number }): {
+const JIRA_TIME_ZONE = "Europe/Warsaw";
+
+function jiraFetch(opts?: {
+  failStatus?: number;
+  issues?: unknown[];
+  timeZone?: string | null;
+}): {
   fetchImpl: typeof fetch;
   calls: string[];
 } {
@@ -157,6 +174,14 @@ function jiraFetch(opts?: { failStatus?: number }): {
     const url = typeof input === "string" ? input : (input as Request).url;
     calls.push(url);
     if (opts?.failStatus) return jsonRes({ message: "Unauthorized" }, opts.failStatus);
+    if (url.includes("/rest/api/3/myself")) {
+      const zone = opts?.timeZone === undefined ? JIRA_TIME_ZONE : opts.timeZone;
+      return jsonRes({
+        accountId: "acc-lead",
+        emailAddress: "lead@example.com",
+        ...(zone === null ? {} : { timeZone: zone }),
+      });
+    }
     if (url.includes("/rest/api/3/field")) {
       return jsonRes([
         {
@@ -168,7 +193,7 @@ function jiraFetch(opts?: { failStatus?: number }): {
       ]);
     }
     if (url.includes("/rest/api/3/search/jql")) {
-      return jsonRes({ issues: [JIRA_ISSUE], nextPageToken: null });
+      return jsonRes({ issues: opts?.issues ?? [JIRA_ISSUE], nextPageToken: null });
     }
     throw new Error(`unexpected Jira mock URL: ${url}`);
   }) as typeof fetch;
@@ -177,7 +202,12 @@ function jiraFetch(opts?: { failStatus?: number }): {
 
 // --- Seed / cleanup ---------------------------------------------------------
 
-async function seedOwner(): Promise<{ ownerId: string; repoId: string }> {
+async function seedOwner(): Promise<{
+  ownerId: string;
+  repoId: string;
+  sprintId: string;
+  jiraProjectId: string;
+}> {
   const ownerId = randomUUID();
   await db.insert(user).values({ id: ownerId, name: "Sync Test", email: `st-${ownerId}@example.test` });
 
@@ -219,18 +249,21 @@ async function seedOwner(): Promise<{ ownerId: string; repoId: string }> {
     { id: randomUUID(), ownerId, jiraProjectId: proj.id, jiraStatusId: "3", jiraStatusName: "In Progress", category: "IN_PROGRESS" },
   ]);
 
-  await db.insert(sprint).values({
-    id: randomUUID(),
-    ownerId,
-    jiraProjectId: proj.id,
-    jiraSprintId: "42",
-    name: "Sprint 7",
-    state: "ACTIVE",
-    startDate: new Date("2026-08-17T08:00:00.000Z"),
-    endDate: new Date("2026-08-31T08:00:00.000Z"),
-  });
+  const [sprintRow] = await db
+    .insert(sprint)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: proj.id,
+      jiraSprintId: "42",
+      name: "Sprint 7",
+      state: "ACTIVE",
+      startDate: new Date("2026-08-17T08:00:00.000Z"),
+      endDate: new Date("2026-08-31T08:00:00.000Z"),
+    })
+    .returning({ id: sprint.id });
 
-  return { ownerId, repoId: repo.id };
+  return { ownerId, repoId: repo.id, sprintId: sprintRow.id, jiraProjectId: proj.id };
 }
 
 const owners: string[] = [];
@@ -272,8 +305,9 @@ describe("syncOwner — GitHub ingestion + PR↔ticket link", () => {
     const commits = await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId));
     expect(commits).toHaveLength(1);
     expect(commits[0].sha).toBe("sha-1");
-    // F4: per-commit size is not fetched — left NULL in MVP.
-    expect(commits[0].additions).toBeNull();
+    // S-10: per-commit churn now comes from the detail endpoint, under a per-repo cap.
+    expect(commits[0].additions).toBe(42);
+    expect(commits[0].deletions).toBe(7);
 
     const prs = await db.select().from(githubPullRequest).where(eq(githubPullRequest.ownerId, ownerId));
     const pr7 = prs.find((p) => p.number === 7)!;
@@ -342,6 +376,153 @@ describe("syncOwner — Jira ingestion + status history + cursor", () => {
 
     const searchCall = jira2.calls.find((u) => u.includes("/search/jql"))!;
     expect(decodeURIComponent(searchCall.replace(/\+/g, " "))).toContain("updated >=");
+  });
+});
+
+describe("syncOwner — per-commit churn (S-10)", () => {
+  it("skips the detail fetch for an already-persisted sha", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    // Second cycle re-lists the same commit; it is already persisted, so the
+    // per-commit GET must not fire again.
+    const gh2 = githubFetch();
+    await syncOwner({
+      ...baseArgs(ownerId, gh2.fetchImpl, jiraFetch().fetchImpl),
+      bypassDueCheck: true,
+    });
+
+    expect(gh2.calls.some((u) => /\/commits\/sha-1$/.test(u))).toBe(false);
+  });
+
+  it("inserts an over-cap commit with NULL churn, newest-first", async () => {
+    const { ownerId } = await newOwner();
+    // Two new commits, cap of 1 → only the newest (sha-2) is enriched.
+    const gh = githubFetch({
+      commits: [
+        {
+          sha: "sha-1",
+          author: { login: "octocat" },
+          commit: { author: { date: "2026-08-18T09:00:00.000Z" }, message: "older" },
+        },
+        {
+          sha: "sha-2",
+          author: { login: "octocat" },
+          commit: { author: { date: "2026-08-19T09:00:00.000Z" }, message: "newer" },
+        },
+      ],
+    });
+
+    await syncOwner({
+      ...baseArgs(ownerId, gh.fetchImpl, jiraFetch().fetchImpl),
+      maxCommitStats: 1,
+    });
+
+    const commits = await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId));
+    const newer = commits.find((c) => c.sha === "sha-2")!;
+    const older = commits.find((c) => c.sha === "sha-1")!;
+    expect(newer.additions).toBe(100);
+    // Over-cap commit is still persisted — with NULL churn, permanently.
+    expect(older.additions).toBeNull();
+    expect(older.deletions).toBeNull();
+    expect(gh.calls.some((u) => /\/commits\/sha-1$/.test(u))).toBe(false);
+  });
+});
+
+describe("syncOwner — Jira time zone (S-10)", () => {
+  it("persists the owner's IANA zone from /myself", async () => {
+    const { ownerId, jiraProjectId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.timeZone).toBe(JIRA_TIME_ZONE);
+  });
+
+  it("writes NULL when Jira omits timeZone", async () => {
+    const { ownerId, jiraProjectId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ timeZone: null }).fetchImpl),
+    );
+
+    const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.timeZone).toBeNull();
+  });
+});
+
+describe("syncOwner — sprint commitment scalars (S-10)", () => {
+  it("aggregates committed/completed SP from the ticket table, not the delta payload", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+
+    // Pre-existing sprint tickets that this cycle's delta pull will NOT return.
+    await db.insert(jiraTicket).values([
+      {
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-90",
+        storyPoints: 3,
+        currentCategory: "TODO",
+        addedAfterSprintStart: false,
+      },
+      {
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-91",
+        storyPoints: 5,
+        currentCategory: "DONE",
+        addedAfterSprintStart: false,
+      },
+      {
+        // Scope crept in after start → excluded from committed, counted as done.
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-92",
+        storyPoints: 2,
+        currentCategory: "DONE",
+        addedAfterSprintStart: true,
+      },
+      {
+        // NULL addedAfterSprintStart means "couldn't tell" → counts as committed.
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-93",
+        storyPoints: 1,
+        currentCategory: "IN_PROGRESS",
+        addedAfterSprintStart: null,
+      },
+    ]);
+
+    // Empty delta: `issues` is [], so a payload-sourced aggregate would write 0.
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+    );
+    expect(result.jira.status).toBe("OK");
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(row.committedSp).toBe(9); // 3 + 5 + 1 (SF-92 crept in)
+    expect(row.completedSp).toBe(7); // 5 + 2
+  });
+
+  it("writes 0 rather than NULL when the sprint has no estimated tickets", async () => {
+    const { ownerId, sprintId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+    );
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(row.committedSp).toBe(0);
+    expect(row.completedSp).toBe(0);
   });
 });
 

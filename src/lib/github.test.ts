@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   GithubAuthError,
   GithubUnavailableError,
+  getCommitDetail,
   getPullRequestDetail,
   listCollaborators,
   listCommits,
@@ -367,12 +368,16 @@ describe("listCommits", () => {
         authorGithubUsername: "octocat",
         authoredAt: new Date("2026-08-05T10:00:00Z"),
         message: "fix bug",
+        additions: null,
+        deletions: null,
       },
       {
         sha: "def456",
         authorGithubUsername: null,
         authoredAt: new Date("2026-08-06T10:00:00Z"),
         message: "chore",
+        additions: null,
+        deletions: null,
       },
     ]);
     expect(calls[0]).toBe(
@@ -591,6 +596,63 @@ describe("getPullRequestDetail", () => {
 
     await expect(
       getPullRequestDetail(TOKEN, "o/r", 5, { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubUnavailableError);
+  });
+});
+
+describe("getCommitDetail", () => {
+  it("returns additions/deletions from stats on the detail endpoint", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ sha: "abc123", stats: { additions: 42, deletions: 7, total: 49 } }),
+    ]);
+
+    const detail = await getCommitDetail(TOKEN, "o/r", "abc123", { baseUrl: BASE, fetchImpl });
+
+    expect(detail).toEqual({ additions: 42, deletions: 7 });
+    expect(calls[0]).toBe(`${BASE}/repos/o/r/commits/abc123`);
+  });
+
+  it("nulls a missing stats object rather than throwing", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ sha: "abc123" }));
+
+    const detail = await getCommitDetail(TOKEN, "o/r", "abc123", { baseUrl: BASE, fetchImpl });
+
+    expect(detail).toEqual({ additions: null, deletions: null });
+  });
+
+  it("nulls a non-numeric stats field rather than throwing", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ stats: { additions: 5, deletions: "many" } }));
+
+    const detail = await getCommitDetail(TOKEN, "o/r", "abc123", { baseUrl: BASE, fetchImpl });
+
+    expect(detail).toEqual({ additions: 5, deletions: null });
+  });
+
+  it("throws GithubAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "Bad credentials" }, { status: 401 }));
+
+    await expect(
+      getCommitDetail(TOKEN, "o/r", "abc123", { baseUrl: BASE, fetchImpl }),
+    ).rejects.toBeInstanceOf(GithubAuthError);
+  });
+
+  it("throws GithubUnavailableError on 5xx without leaking the token", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
+
+    const err = await getCommitDetail(TOKEN, "o/r", "abc123", {
+      baseUrl: BASE,
+      fetchImpl,
+    }).catch((e: unknown) => e as Error);
+
+    expect(err).toBeInstanceOf(GithubUnavailableError);
+    expect(String(err)).not.toContain(TOKEN);
+  });
+
+  it("throws GithubUnavailableError on an unparseable body", async () => {
+    const fetchImpl = onceFetch(new Response("<html>not json</html>", { status: 200 }));
+
+    await expect(
+      getCommitDetail(TOKEN, "o/r", "abc123", { baseUrl: BASE, fetchImpl }),
     ).rejects.toBeInstanceOf(GithubUnavailableError);
   });
 });
