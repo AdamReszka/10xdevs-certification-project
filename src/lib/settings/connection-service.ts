@@ -9,6 +9,7 @@ import {
   statusMapping,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
+import { TokenCryptoError } from "@/lib/crypto";
 import {
   GithubAuthError,
   GithubUnavailableError,
@@ -66,11 +67,13 @@ type StoreEnv = {
  * `auth` means the stored credential was rejected *right now* — the answer a
  * stale `sync_state` row cannot give. `unavailable` separates "their API is
  * down or throttling" from "your token is dead", because the two need opposite
- * responses from the lead.
+ * responses from the lead. `credential_unreadable` is a third, distinct state:
+ * the envelope itself failed to open (key rotation, restored snapshot, tampered
+ * row), so we never even reached their API — no retry helps, only reconnecting.
  */
 export type ConnectionTestResult =
   | { ok: true; identity: string }
-  | { ok: false; reason: "not_connected" | "auth" | "unavailable" };
+  | { ok: false; reason: "not_connected" | "credential_unreadable" | "auth" | "unavailable" };
 
 export async function testGithubConnection({
   db,
@@ -88,6 +91,8 @@ export async function testGithubConnection({
     token = await loadGithubToken({ db, ownerId, env });
   } catch (err) {
     if (err instanceof MissingCredentialError) return { ok: false, reason: "not_connected" };
+    // The diagnostic tool must not crash on the case it exists to diagnose.
+    if (err instanceof TokenCryptoError) return { ok: false, reason: "credential_unreadable" };
     throw err;
   }
 
@@ -120,6 +125,7 @@ export async function testJiraConnection({
     creds = await loadJiraCredentials({ db, ownerId, env });
   } catch (err) {
     if (err instanceof MissingCredentialError) return { ok: false, reason: "not_connected" };
+    if (err instanceof TokenCryptoError) return { ok: false, reason: "credential_unreadable" };
     throw err;
   }
 

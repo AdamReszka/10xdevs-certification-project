@@ -42,8 +42,13 @@ function formatAt(iso: string | null): string {
   return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }
 
-const TEST_FAILURE_COPY: Record<"not_connected" | "auth" | "unavailable", string> = {
+const TEST_FAILURE_COPY: Record<
+  "not_connected" | "credential_unreadable" | "auth" | "unavailable",
+  string
+> = {
   not_connected: "Nothing is connected yet.",
+  credential_unreadable:
+    "The stored credential could not be decrypted, so we never reached the API. This happens after an encryption-key change or a database restored from another environment — reconnect to store a fresh one.",
   auth: "The stored credential was rejected just now — it needs reconnecting.",
   unavailable: "The API did not respond. That is their side, not your token.",
 };

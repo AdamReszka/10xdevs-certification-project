@@ -674,6 +674,91 @@ describe("syncOwner — attempt history (S-10 Phase 7)", () => {
   });
 });
 
+describe("syncOwner — undecryptable credential (S-10 Phase 10)", () => {
+  /** Corrupt the stored envelope the way a key rotation or a cross-environment
+   * DB restore would — the value is well-formed text, just not our ciphertext. */
+  async function corruptJiraToken(ownerId: string): Promise<void> {
+    await db
+      .update(jiraCredential)
+      .set({ encryptedToken: "not-an-envelope" })
+      .where(eq(jiraCredential.ownerId, ownerId));
+  }
+
+  it("reports ERROR for that integration instead of throwing", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    expect(result.jira.status).toBe("ERROR");
+  });
+
+  it("leaves the OTHER integration's sync intact — the point of separate rows", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    // Before Phase 10 the Jira throw escaped syncOwner, so this whole call
+    // rejected and GitHub's completed work was reported as a 500.
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    expect(result.github.status).toBe("OK");
+    const commits = await db
+      .select()
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    expect(commits).toHaveLength(1);
+  });
+
+  it("stamps sync_state so the owner actually sees the failure", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [jState] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(jState.status).toBe("ERROR");
+    // The lease is released, so the next cycle is not blocked by a stuck claim.
+    expect(jState.claimedUntil).toBeNull();
+  });
+
+  it("records the attempt with a reason that is not an error message", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [attempt] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(attempt.status).toBe("ERROR");
+    expect(attempt.outcome).toBe("credential_unreadable");
+  });
+
+  it("still stamps a status when no sync_state row exists yet (first-ever sync)", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+    // The credential load runs BEFORE acquireLease, which is what creates the
+    // row — without ensureSyncStateRow the stamp would be a silent no-op here.
+    await db.delete(syncState).where(eq(syncState.ownerId, ownerId));
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [jState] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(jState?.status).toBe("ERROR");
+  });
+});
+
 describe("syncOwner — fresh-lease skip", () => {
   it("skips an integration whose lease is still fresh", async () => {
     const { ownerId } = await newOwner();

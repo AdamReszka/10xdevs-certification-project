@@ -799,6 +799,112 @@ in Settings links into `/setup/*` any more.
 
 ---
 
+## Phase 10: An undecryptable credential must not crash the sync
+
+### Overview
+
+**Found while manually testing Phase 9.** "Sync now" returned a 500:
+
+```
+TokenCryptoError: Malformed token envelope.
+  at decryptToken (src/lib/crypto.ts:112)
+  at loadJiraCredentials (src/lib/integrations/credentials.ts:100)
+  at syncJira (src/lib/integrations/sync/run-sync.ts:497)
+```
+
+The immediate trigger was the demo seed, which writes the literal string
+`seed-placeholder-not-a-real-token` into `encrypted_token` — not a valid
+envelope, so `decryptToken` rejects it. But the seed only *exposed* the defect;
+it is not the defect.
+
+**`TokenCryptoError` is caught in exactly one place in the whole repo**
+(`setup/team/actions.ts:239`). The sync path rethrows it:
+
+```ts
+} catch (err) {
+  if (err instanceof MissingCredentialError) return { status: "SKIPPED", … };
+  throw err;                     // ← escapes syncOwner entirely
+}
+```
+
+Three consequences, all of them product bugs:
+
+1. **Unhandled crash** — the throw escapes `syncOwner` → `syncNow` → a 500 in a
+   Server Action. The PRD guardrail is explicit: never an unhandled crash.
+2. **Per-integration independence breaks.** `syncGithub` runs first and commits
+   its work; `syncJira` then throws and the whole action fails, so the owner
+   sees a 500 and no GitHub result. The entire point of separate `sync_state`
+   rows is that one integration's failure cannot take the other down.
+3. **It is reachable in production**, not just from the seed: rotating
+   `TOKEN_ENCRYPTION_KEY`, restoring a DB snapshot across environments, or a
+   tampered row all produce exactly this. The AEAD envelope is *designed* to
+   detect those — and detection currently takes the app down.
+
+### Changes Required
+
+#### 1. Contain it in the sync, per integration
+
+**File**: `src/lib/integrations/sync/run-sync.ts`
+
+**Contract**: In both credential-load catches, treat `TokenCryptoError` as a
+**terminal ERROR for that integration only** — stamp `sync_state` and return
+`{ status: "ERROR" }` rather than rethrowing. The other integration still runs
+and still reports.
+
+The credential load happens *before* `acquireLease`, so the `sync_state` row may
+not exist yet. Extract the row-ensuring upsert `acquireLease` already performs
+into `ensureSyncStateRow` and call it first — otherwise the stamp is a silent
+no-op and the owner sees no status change at all.
+
+Also add `TokenCryptoError` to `classifyError` so it maps to ERROR ("reconnect")
+rather than falling through to the generic "Unknown sync error" branch if it
+ever surfaces from elsewhere in the try block.
+
+`MissingCredentialError` keeps returning `SKIPPED / not_connected` — nothing was
+attempted. An unreadable credential is the opposite: something IS configured and
+it is broken, which the owner must act on.
+
+#### 2. Report it from "Test connection"
+
+**File**: `src/lib/settings/connection-service.ts`
+
+**Contract**: `testGithubConnection` / `testJiraConnection` currently catch only
+`MissingCredentialError`, so a `TokenCryptoError` throws out of the action —
+the diagnostic tool crashes on precisely the case it exists to diagnose. Add a
+`credential_unreadable` reason to `ConnectionTestResult` and surface it with
+copy that names the fix (reconnect), since no retry will help.
+
+#### 3. Stop the seed writing an invalid envelope
+
+**File**: `scripts/seed-dashboard.mjs`
+
+**Contract**: Encrypt the placeholder through `encryptToken()` (as the
+integration tests do) instead of storing raw text. The token value stays fake,
+so a real API call still fails — which is the intended demo state — but it now
+fails as a clean `ERROR` status instead of a crash, and the demo exercises the
+same code path a real owner does.
+
+### Success Criteria
+
+#### Automated Verification
+
+- Unit tests pass: `npm run test`
+- Integration tests pass: `npm run test:integration` — a corrupted
+  `encrypted_token` yields `ERROR` for that integration while the OTHER
+  integration still completes; `testConnection` returns `credential_unreadable`
+  rather than throwing
+- Type checking passes: `npm run typecheck`
+- Linting passes: `npm run lint`
+- Production build and Workers build pass
+
+#### Manual Verification
+
+- "Sync now" against the seeded account returns a result instead of a 500
+- The failing integration's card shows a reason; the healthy one is unaffected
+- Re-running the seed produces a decryptable (but still fake) credential
+
+---
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -994,6 +1100,22 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 - [ ] 9.8 Same for Jira, including the project + mapping stages
 - [ ] 9.9 The wizard at `/setup/*` is unchanged (stepper + Continue CTA present)
 - [ ] 9.10 Reconnect replaces an existing credential without disconnecting first
+
+### Phase 10: An undecryptable credential must not crash the sync
+
+#### Automated
+
+- [x] 10.1 Unit tests pass
+- [x] 10.2 Integration tests pass (one integration ERRORs, the other still completes; testConnection reports `credential_unreadable`)
+- [x] 10.3 Type checking passes
+- [x] 10.4 Linting passes
+- [x] 10.5 Production build and Workers build pass
+
+#### Manual
+
+- [ ] 10.6 "Sync now" returns a result instead of a 500 on the seeded account
+- [ ] 10.7 The failing integration shows a reason; the healthy one is unaffected
+- [ ] 10.8 Re-running the seed produces a decryptable (still fake) credential
 
 #### Manual
 

@@ -301,6 +301,20 @@ describe("testGithubConnection", () => {
 
     expect(result).toEqual({ ok: false, reason: "not_connected" });
   });
+
+  it("reports credential_unreadable rather than throwing on a corrupt envelope", async () => {
+    const { ownerId } = await seedOwner();
+    // What a TOKEN_ENCRYPTION_KEY rotation or a cross-environment DB restore
+    // leaves behind. The diagnostic tool must survive the case it diagnoses.
+    await db
+      .update(githubCredential)
+      .set({ encryptedToken: "not-an-envelope" })
+      .where(eq(githubCredential.ownerId, ownerId));
+
+    const result = await testGithubConnection({ db, ownerId });
+
+    expect(result).toEqual({ ok: false, reason: "credential_unreadable" });
+  });
 });
 
 describe("updateMonitoredRepos", () => {

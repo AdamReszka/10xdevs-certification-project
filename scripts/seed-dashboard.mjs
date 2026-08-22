@@ -3,7 +3,9 @@
 // Seeds a realistic ACTIVE sprint + roster + per-integration sync_state + all 8
 // anomaly types (incl. both SPRINT_AT_RISK variants) against an EXISTING owner —
 // so the dashboard renders rich data with NO real Jira/GitHub credentials. The
-// dashboard never decrypts tokens, so a placeholder jira_credential is enough.
+// credentials are FAKE but properly encrypted (see encryptSeedToken): the read
+// surfaces never decrypt, and the paths that do — "Sync now", "Test connection" —
+// now fail cleanly against a live API instead of choking on a bad envelope.
 //
 // S-10 adds the upstream rows the read-side reducers need: jira_ticket with
 // story points and assignees, jira_status_history transitions spread across the
@@ -23,8 +25,45 @@
 //
 // Idempotent: clears this owner's seeded rows (credential/project/sprint/roster/
 // sync_state/anomaly) before re-inserting, so re-running resets the demo.
-import { randomUUID } from "node:crypto";
+import { createCipheriv, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
+
+/**
+ * Produce a REAL `v1:iv:ciphertext‖tag` envelope for a fake token.
+ *
+ * Mirrors `encryptToken` in `src/lib/crypto.ts` (this is a plain .mjs script and
+ * cannot import the TS module). Duplicated deliberately and kept small; if the
+ * envelope format ever changes, the seed fails loudly at decrypt time rather
+ * than silently drifting.
+ *
+ * WHY NOT JUST STORE A PLACEHOLDER STRING: it used to, and `decryptToken`
+ * rightly rejected it — which crashed "Sync now" with a TokenCryptoError before
+ * S-10 Phase 10 contained that. The token VALUE stays fake, so a real API call
+ * still fails; it now fails as a clean ERROR status, and the demo exercises the
+ * same decrypt path a real owner does.
+ */
+function encryptSeedToken(plaintext, ownerId, provider) {
+  const encoded = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!encoded) {
+    console.error(
+      "TOKEN_ENCRYPTION_KEY is not set — the seed writes real AES-GCM envelopes.\n" +
+        "Export the same key your dev server uses (see .env.local).",
+    );
+    process.exit(1);
+  }
+  const key = Buffer.from(encoded, "base64");
+  if (key.length !== 32) {
+    console.error(`TOKEN_ENCRYPTION_KEY must decode to 32 bytes (got ${key.length}).`);
+    process.exit(1);
+  }
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  // AAD = utf8(ownerId + NUL + provider), exactly as crypto.ts binds it.
+  cipher.setAAD(Buffer.from(`${ownerId}\0${provider}`, "utf8"));
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  const payload = Buffer.concat([ciphertext, cipher.getAuthTag()]);
+  return `v1:${iv.toString("base64")}:${payload.toString("base64")}`;
+}
 
 const connectionString =
   process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
@@ -79,12 +118,19 @@ for (const t of [
   await client.query(`delete from ${t} where owner_id = $1`, [ownerId]);
 }
 
-// --- Jira credential + project (dashboard never decrypts the token) ---------
+// --- Jira credential + project (fake token, real envelope) ------------------
 const credId = randomUUID();
 await client.query(
   `insert into jira_credential (id, owner_id, encrypted_token, token_last4, workspace_url, jira_email)
    values ($1,$2,$3,$4,$5,$6)`,
-  [credId, ownerId, "seed-placeholder-not-a-real-token", "0000", JIRA_BASE, "demo@sprintflow.test"],
+  [
+    credId,
+    ownerId,
+    encryptSeedToken("jira-seed-token-not-real", ownerId, "JIRA"),
+    "0000",
+    JIRA_BASE,
+    "demo@sprintflow.test",
+  ],
 );
 const projId = randomUUID();
 await client.query(
@@ -284,7 +330,13 @@ const ghCredId = randomUUID();
 await client.query(
   `insert into github_credential (id, owner_id, encrypted_token, token_last4, github_login)
    values ($1,$2,$3,$4,$5)`,
-  [ghCredId, ownerId, "seed-placeholder-not-a-real-token", "0000", "demo-lead"],
+  [
+    ghCredId,
+    ownerId,
+    encryptSeedToken("gh-seed-token-not-real", ownerId, "GITHUB"),
+    "0000",
+    "demo-lead",
+  ],
 );
 const repoId = randomUUID();
 await client.query(

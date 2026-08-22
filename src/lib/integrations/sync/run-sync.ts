@@ -38,6 +38,7 @@ import {
   searchSprintIssues,
   validateCredentials,
 } from "@/lib/jira";
+import { TokenCryptoError } from "@/lib/crypto";
 import {
   MissingCredentialError,
   loadGithubToken,
@@ -138,6 +139,51 @@ export type SyncOwnerArgs = {
   /** Test override for the per-repo commit-stat cap. */
   maxCommitStats?: number;
 };
+
+/**
+ * Ensure the `(owner, integration)` row exists so a status can be stamped onto
+ * it. `acquireLease` performs the same upsert, but a credential failure happens
+ * BEFORE the lease is taken — without this the stamp would be a silent no-op on
+ * a first-ever sync and the owner would see no status change at all.
+ */
+async function ensureSyncStateRow(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+): Promise<void> {
+  await db
+    .insert(syncState)
+    .values({ id: randomUUID(), ownerId, integration })
+    .onConflictDoNothing({ target: [syncState.ownerId, syncState.integration] });
+}
+
+/**
+ * The credential is present but cannot be decrypted (S-10 Phase 10).
+ *
+ * Terminal and owner-actionable: no retry fixes a failed AEAD open. Reachable in
+ * production via a `TOKEN_ENCRYPTION_KEY` rotation, a DB snapshot restored
+ * across environments, or a tampered row — the envelope is designed to detect
+ * exactly those, and detection must not take the sync down with it.
+ *
+ * Contained PER INTEGRATION: the other one still runs and still reports, which
+ * is the whole reason the two own separate `sync_state` rows.
+ */
+async function failUnreadableCredential(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+  now: Date,
+): Promise<IntegrationOutcome> {
+  const error = "Stored credential could not be decrypted. Reconnect the integration.";
+  await ensureSyncStateRow(db, ownerId, integration);
+  await finalizeSyncState(db, ownerId, integration, {
+    status: "ERROR",
+    now,
+    error,
+    outcome: "credential_unreadable",
+  });
+  return { status: "ERROR", error };
+}
 
 /** Acquire the per-`(owner, integration)` lease under a row lock, honoring the
  * freshness due-check. Returns the row's cursor state when claimed, or a skip
@@ -283,6 +329,15 @@ function classifyError(err: unknown): { status: "ERROR" | "RATE_LIMITED"; error:
   if (err instanceof GithubAuthError || err instanceof JiraAuthError) {
     return { status: "ERROR", error: err.message };
   }
+  // Reachable if a decrypt happens anywhere else inside the try block: a failed
+  // AEAD open never recovers on retry, so it is ERROR ("reconnect"), never
+  // RATE_LIMITED ("try later").
+  if (err instanceof TokenCryptoError) {
+    return {
+      status: "ERROR",
+      error: "Stored credential could not be decrypted. Reconnect the integration.",
+    };
+  }
   if (err instanceof GithubUnavailableError || err instanceof JiraUnavailableError) {
     return { status: "RATE_LIMITED", error: err.message };
   }
@@ -306,7 +361,13 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
     token = await loadGithubToken({ db, ownerId, env });
   } catch (err) {
     if (err instanceof MissingCredentialError) {
+      // Nothing configured — nothing was attempted.
       return { status: "SKIPPED", reason: "not_connected" };
+    }
+    if (err instanceof TokenCryptoError) {
+      // Something IS configured and it is broken. The opposite of the above:
+      // the owner must act, so this is a reported ERROR, not a silent skip.
+      return failUnreadableCredential(db, ownerId, "GITHUB", now);
     }
     throw err;
   }
@@ -498,6 +559,9 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
   } catch (err) {
     if (err instanceof MissingCredentialError) {
       return { status: "SKIPPED", reason: "not_connected" };
+    }
+    if (err instanceof TokenCryptoError) {
+      return failUnreadableCredential(db, ownerId, "JIRA", now);
     }
     throw err;
   }
