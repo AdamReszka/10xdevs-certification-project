@@ -374,6 +374,30 @@ Foundations below assume these are present and do NOT re-scaffold them.
   3. **The wizard measure made the editor unusable** — fixed ahead of this slice
      in S-10 (`SetupWizardShell` gained an opt-in `wide`), but it is the reason
      the Remove and Merge controls were reported missing when they existed.
+  4. **Removing a member has no confirmation** (owner request, 2026-08-22). The
+     row's trash icon calls `remove(index)` on the field array immediately — one
+     stray click drops a person from the grid with no undo, and the damage lands
+     on Save because `saveRoster` replaces the whole owner-scoped set
+     (delete-then-insert). Blast radius is worse than it looks:
+     `absence.teamMemberId → teamMember.id` is **`onDelete: cascade`**, so a
+     deleted member takes every recorded absence with them — hand-entered FR-010
+     data that the PRD feeds into three calculations (capacity, `SPRINT_AT_RISK`
+     weighting, `DEVELOPER_INACTIVE` suppression). `anomaly.relatedTeamMemberId`
+     is `set null`, so anomalies survive but silently lose their attribution.
+     Nothing is at risk *today* only because S-08 has not shipped; the FK is
+     already in place, so this gets more dangerous, not less.
+     Asked for: a small confirm dialog on the row action. Worth considering
+     alongside it — a save-time summary naming every member about to be removed,
+     since `saveRoster` applies all removals in one shot and the grid shows no
+     diff between the loaded roster and what is about to replace it.
+  5. **The merge helper's comment does not match its code.**
+     `roster-editor.tsx:161-162` claims "Primary is the row with a name that
+     isn't just a bare login (prefer the Jira displayName); fall back to A", but
+     the implementation is a plain `a.name || b.name`. Both rows always carry a
+     name, so the *first row the user selected* always wins and the stated
+     preference never runs. Either implement the preference or delete the claim —
+     a comment that lies is worse than none. Practical effect today: merging a
+     GitHub row selected first yields the bare login as the member's name.
 - **Risk:** the merge control is the only way to fuse a GitHub-only row with its
   Jira-only counterpart (S-04 resolved dedup as manual mapping — email is
   unreliable on both sides). Any redesign must keep it, and must keep working
