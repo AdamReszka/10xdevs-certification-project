@@ -113,10 +113,14 @@ export default function IntegrationCard({
           <CardTitle>{name}</CardTitle>
           <CardDescription>Not connected.</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Button asChild>
-            <a href={reconnectHref}>Connect {name}</a>
-          </Button>
+        {/* Same bottom-pinning as the connected card, so a not-connected
+            integration still lines its action up with its sibling. */}
+        <CardContent className="flex flex-1 flex-col">
+          <div className="mt-auto">
+            <Button asChild>
+              <a href={reconnectHref}>Connect {name}</a>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     );
@@ -138,7 +142,9 @@ export default function IntegrationCard({
         </CardDescription>
       </CardHeader>
 
-      <CardContent className="flex flex-col gap-4">
+      {/* `flex-1` lets the content absorb the row's spare height so `mt-auto`
+          below has something to push against. */}
+      <CardContent className="flex flex-1 flex-col gap-4">
         {children}
 
         {failure ? (
@@ -167,20 +173,25 @@ export default function IntegrationCard({
           </Alert>
         ) : null}
 
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={handleTest} disabled={testing}>
-            {testing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-            {testing ? "Testing…" : "Test connection"}
-          </Button>
-          <Button variant="outline" asChild>
-            <a href={reconnectHref}>Reconnect</a>
-          </Button>
-          <Button variant="ghost" onClick={handleDisconnect} disabled={disconnecting}>
-            {disconnecting ? "Disconnecting…" : "Disconnect"}
-          </Button>
-        </div>
+        {/* Pinned to the bottom via `mt-auto`. The two cards sit in a grid, so
+            they already share a row height — without this, an alert on one card
+            pushes only ITS actions down and the pair reads as misaligned. */}
+        <div className="mt-auto flex flex-col gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleTest} disabled={testing}>
+              {testing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+              {testing ? "Testing…" : "Test connection"}
+            </Button>
+            <Button variant="outline" asChild>
+              <a href={reconnectHref}>Reconnect</a>
+            </Button>
+            <Button variant="ghost" onClick={handleDisconnect} disabled={disconnecting}>
+              {disconnecting ? "Disconnecting…" : "Disconnect"}
+            </Button>
+          </div>
 
-        {editSlot}
+          {editSlot}
+        </div>
       </CardContent>
     </Card>
   );
