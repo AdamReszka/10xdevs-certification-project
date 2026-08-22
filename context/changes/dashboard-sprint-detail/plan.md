@@ -869,11 +869,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [ ] 8.1 Unit tests pass
-- [ ] 8.2 Type checking passes
-- [ ] 8.3 Linting passes
-- [ ] 8.4 Production build and Workers build pass
-- [ ] 8.5 E2E passes (nav → /settings shows both integrations)
+- [x] 8.1 Unit tests pass
+- [x] 8.2 Type checking passes
+- [x] 8.3 Linting passes
+- [x] 8.4 Production build and Workers build pass
+- [x] 8.5 E2E passes (nav → /settings shows both integrations)
 
 #### Manual
 

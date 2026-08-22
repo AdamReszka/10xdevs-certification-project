@@ -34,6 +34,29 @@ import pg from "pg";
 const DB_URL =
   process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
+const PASSWORD = "Sprint-Flow-1!";
+
+/**
+ * Create a brand-new authenticated browser context, without going through the
+ * login UI.
+ *
+ * Used by the two describes that cannot share the suite's `storageState`
+ * account: one needs an owner with NO sprint and no integrations, the other
+ * seeds its own data. The setup specs connect GitHub and Jira on the shared
+ * account, so under `fullyParallel` any assertion about the unconnected state
+ * is a coin flip there.
+ */
+async function signUpFreshAccount(browser: Browser, email: string): Promise<BrowserContext> {
+  const context = await browser.newContext();
+  const res = await context.request.post("/api/auth/sign-up/email", {
+    // Better Auth rejects a cross-origin-looking POST (MISSING_OR_NULL_ORIGIN);
+    // APIRequestContext sends no Origin by default, so set it explicitly.
+    headers: { origin: baseURL },
+    data: { name: "S10 E2E", email, password: PASSWORD },
+  });
+  expect(res.ok(), `sign-up failed: ${res.status()} ${await res.text()}`).toBeTruthy();
+  return context;
+}
 
 // ---------------------------------------------------------------------------
 // Risks 1 & 2 — run on the suite's shared (unseeded) account.
@@ -115,13 +138,65 @@ test.describe("Sprint Detail — no sprint (plan review F2)", () => {
   });
 });
 
+test.describe("Settings — Connections (S-10 Phase 8)", () => {
+  /**
+   * ISOLATION: this test asserts the NOT-CONNECTED state, so it cannot use the
+   * suite's shared `storageState` account — `setup-github.spec.ts` and
+   * `setup-jira.spec.ts` connect those integrations on that same account, and
+   * under `fullyParallel` they may land first. (They did: this test passed alone
+   * and failed in the full suite until it got its own account.) A fresh sign-up
+   * is unconnected by construction.
+   */
+  let context: BrowserContext;
+
+  test.beforeAll(async ({ browser }) => {
+    context = await signUpFreshAccount(browser, `e2e-s10-settings-${Date.now()}@example.test`);
+  });
+
+  test.afterAll(async () => {
+    await context?.close();
+  });
+
+  /**
+   * Risk-tied: the gap this phase exists to close. Since S-02/S-03 the wizard
+   * has rendered a connected-state card per integration, but NOTHING linked back
+   * to it after first run — a failing integration surfaced only as a dashboard
+   * banner with no route to any detail.
+   *
+   * The assertion chain fails exactly if that regresses: no nav entry, or the
+   * page renders without naming both integrations.
+   */
+  test("Settings is reachable from the nav and reports both integrations", async () => {
+    const page = await context.newPage();
+    await page.goto("/dashboard");
+
+    await page.getByRole("link", { name: "Settings" }).click();
+    // /settings redirects to its first section, mirroring the wizard.
+    await page.waitForURL("**/settings/connections");
+
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+
+    // Both integrations are named, whatever their state.
+    await expect(page.getByText("GitHub", { exact: true })).toBeVisible();
+    await expect(page.getByText("Jira", { exact: true })).toBeVisible();
+
+    // "Sync now" is the control that had no caller before this phase.
+    await expect(page.getByRole("button", { name: "Sync now" })).toBeVisible();
+
+    // Not connected is a route forward, not an error.
+    await expect(page.getByRole("link", { name: "Connect GitHub" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Connect Jira" })).toBeVisible();
+
+    await page.close();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Risk 3 — needs its own seeded owner, isolated from the shared account.
 // ---------------------------------------------------------------------------
 
 test.describe("Sprint Detail — seeded sprint", () => {
   const email = `e2e-s10-${Date.now()}@example.test`;
-  const password = "Sprint-Flow-1!";
 
   let client: pg.Client;
   let ownerId: string;
@@ -129,14 +204,7 @@ test.describe("Sprint Detail — seeded sprint", () => {
 
   /** Sign up through the API (never the UI) and resolve the new owner's id. */
   async function signUpAndResolveOwner(browser: Browser): Promise<void> {
-    context = await browser.newContext();
-    const res = await context.request.post("/api/auth/sign-up/email", {
-      // Better Auth rejects a cross-origin-looking POST (MISSING_OR_NULL_ORIGIN);
-      // APIRequestContext sends no Origin by default, so set it explicitly.
-      headers: { origin: baseURL },
-      data: { name: "S10 E2E", email, password },
-    });
-    expect(res.ok(), `sign-up failed: ${res.status()} ${await res.text()}`).toBeTruthy();
+    context = await signUpFreshAccount(browser, email);
 
     const { rows } = await client.query('select id from "user" where email = $1', [email]);
     expect(rows, "the sign-up did not create a user row").toHaveLength(1);

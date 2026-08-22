@@ -138,6 +138,83 @@ export async function testJiraConnection({
 }
 
 /**
+ * List what the STORED GitHub credential can see, for the edit picker.
+ *
+ * Same shape the wizard's `validateAndListRepos` produces, so the existing
+ * `RepoSelector` renders unchanged — the only difference is where the token
+ * comes from.
+ */
+export async function listAvailableRepos({
+  db,
+  ownerId,
+  opts,
+  env,
+}: {
+  db: Db;
+  ownerId: string;
+  opts?: GithubClientOpts;
+  env?: StoreEnv;
+}): Promise<{
+  login: string;
+  likelyFineGrained: boolean;
+  hasRepoScope: boolean;
+  repos: { githubRepoId: number; fullName: string }[];
+}> {
+  const token = await loadGithubToken({ db, ownerId, env });
+  const { login, scopes, likelyFineGrained } = await validatePat(token, opts);
+  const repos = await listRepos(token, opts);
+  return { login, likelyFineGrained, hasRepoScope: scopes.includes("repo"), repos };
+}
+
+/** List the projects the STORED Jira credential can see, for the edit picker. */
+export async function listAvailableProjects({
+  db,
+  ownerId,
+  baseUrl,
+  opts,
+  env,
+}: {
+  db: Db;
+  ownerId: string;
+  baseUrl?: string;
+  opts?: JiraClientOpts;
+  env?: StoreEnv;
+}): Promise<{ email: string; projects: { jiraProjectId: string; key: string; name: string }[] }> {
+  const creds = await loadJiraCredentials({ db, ownerId, env });
+  const projects = await listProjects(
+    baseUrl ?? creds.baseUrl,
+    { email: creds.email, token: creds.token },
+    opts,
+  );
+  return { email: creds.email, projects };
+}
+
+/** Statuses of one project, for the mapping step of an edit. */
+export async function listStatusesForProject({
+  db,
+  ownerId,
+  projectIdOrKey,
+  baseUrl,
+  opts,
+  env,
+}: {
+  db: Db;
+  ownerId: string;
+  projectIdOrKey: string;
+  baseUrl?: string;
+  opts?: JiraClientOpts;
+  env?: StoreEnv;
+}): Promise<{ jiraStatusId: string; jiraStatusName: string; nativeCategoryKey?: string }[]> {
+  const creds = await loadJiraCredentials({ db, ownerId, env });
+  return listProjectStatuses(
+    baseUrl ?? creds.baseUrl,
+    { email: creds.email, token: creds.token },
+    projectIdOrKey,
+    opts,
+  );
+}
+
+/**
  * Replace the monitored-repo set, reusing the stored credential.
  *
  * The selection is validated against a fresh `listRepos` rather than trusted

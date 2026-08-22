@@ -5,11 +5,16 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import type { GithubClientOpts } from "@/lib/github";
-import type { JiraClientOpts } from "@/lib/jira";
+import { suggestCategory, type JiraClientOpts } from "@/lib/jira";
 import type { StatusMappingEntry } from "@/lib/integrations/jira-store";
+
+type StatusCategory = StatusMappingEntry["category"];
 import {
   testGithubConnection as testGithubConnectionService,
   testJiraConnection as testJiraConnectionService,
+  listAvailableProjects as listAvailableProjectsService,
+  listAvailableRepos as listAvailableReposService,
+  listStatusesForProject as listStatusesForProjectService,
   updateJiraProject as updateJiraProjectService,
   updateMonitoredRepos as updateMonitoredReposService,
   type ConnectionTestResult,
@@ -80,6 +85,123 @@ export async function testJiraConnection(): Promise<ConnectionTestResult> {
 export type UpdateSelectionResult =
   | { ok: true; summary: string }
   | { ok: false; message: string };
+
+/** Repo shape the existing `RepoSelector` expects (ids as strings for the DOM). */
+export type ClientRepo = { id: string; fullName: string };
+
+export type LoadReposResult =
+  | {
+      ok: true;
+      login: string;
+      likelyFineGrained: boolean;
+      hasRepoScope: boolean;
+      repos: ClientRepo[];
+    }
+  | { ok: false; message: string };
+
+/** List what the stored GitHub credential can see, to seed the edit picker. */
+export async function loadAvailableRepos(): Promise<LoadReposResult> {
+  const session = await requireSession();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const result = await listAvailableReposService({
+      db,
+      ownerId: session.user.id,
+      opts: githubOptsFromEnv(),
+      env,
+    });
+    return {
+      ok: true,
+      login: result.login,
+      likelyFineGrained: result.likelyFineGrained,
+      hasRepoScope: result.hasRepoScope,
+      repos: result.repos.map((r) => ({ id: String(r.githubRepoId), fullName: r.fullName })),
+    };
+  } catch {
+    return { ok: false, message: "Could not reach GitHub. Check the connection and try again." };
+  }
+}
+
+export type ClientProject = { id: string; key: string; name: string };
+
+export type LoadProjectsResult =
+  | { ok: true; email: string; projects: ClientProject[] }
+  | { ok: false; message: string };
+
+/** List what the stored Jira credential can see, to seed the project picker. */
+export async function loadAvailableProjects(): Promise<LoadProjectsResult> {
+  const session = await requireSession();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const { email, projects } = await listAvailableProjectsService({
+      db,
+      ownerId: session.user.id,
+      baseUrl: jiraBaseOverride(),
+      opts: NO_JIRA_OPTS,
+      env,
+    });
+    return {
+      ok: true,
+      email,
+      projects: projects.map((p) => ({ id: p.jiraProjectId, key: p.key, name: p.name })),
+    };
+  } catch {
+    return { ok: false, message: "Could not reach Jira. Check the connection and try again." };
+  }
+}
+
+export type ClientStatus = {
+  id: string;
+  name: string;
+  suggestedCategory: StatusCategory;
+};
+
+export type LoadStatusesResult =
+  | { ok: true; statuses: ClientStatus[] }
+  | { ok: false; message: string };
+
+/** Statuses of the chosen project, pre-seeded with the same auto-suggestion the
+ * wizard uses — so an edit does not make the owner re-map from scratch. */
+export async function loadProjectStatuses(
+  projectIdOrKey: string,
+): Promise<LoadStatusesResult> {
+  const session = await requireSession();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const statuses = await listStatusesForProjectService({
+      db,
+      ownerId: session.user.id,
+      projectIdOrKey,
+      baseUrl: jiraBaseOverride(),
+      opts: NO_JIRA_OPTS,
+      env,
+    });
+    return {
+      ok: true,
+      statuses: statuses.map((s) => ({
+        id: s.jiraStatusId,
+        name: s.jiraStatusName,
+        suggestedCategory: suggestCategory({
+          jiraStatusId: s.jiraStatusId,
+          jiraStatusName: s.jiraStatusName,
+          nativeCategoryKey: s.nativeCategoryKey as
+            | "new"
+            | "indeterminate"
+            | "done"
+            | undefined,
+        }),
+      })),
+    };
+  } catch {
+    return { ok: false, message: "Could not load that project's statuses." };
+  }
+}
 
 /** Change which repositories are monitored, without re-entering the token. */
 export async function updateMonitoredRepos(
