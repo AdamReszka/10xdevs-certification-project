@@ -196,7 +196,12 @@ async function acquireLease(
   now: Date,
   bypassDueCheck: boolean,
 ): Promise<
-  | { claimed: true; lastSuccessfulSyncAt: Date | null; jiraHistoryCursor: string | null }
+  | {
+      claimed: true;
+      lastSuccessfulSyncAt: Date | null;
+      jiraHistoryCursor: string | null;
+      jiraCursorSprintId: string | null;
+    }
   | { claimed: false; reason: "leased" | "not_due" }
 > {
   return db.transaction(async (tx) => {
@@ -213,6 +218,7 @@ async function acquireLease(
         lastSuccessfulSyncAt: syncState.lastSuccessfulSyncAt,
         freshnessWindowMinutes: syncState.freshnessWindowMinutes,
         jiraHistoryCursor: syncState.jiraHistoryCursor,
+        jiraCursorSprintId: syncState.jiraCursorSprintId,
       })
       .from(syncState)
       .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, integration)))
@@ -241,6 +247,7 @@ async function acquireLease(
       claimed: true as const,
       lastSuccessfulSyncAt: row.lastSuccessfulSyncAt,
       jiraHistoryCursor: row.jiraHistoryCursor,
+      jiraCursorSprintId: row.jiraCursorSprintId,
     };
   });
 }
@@ -256,6 +263,7 @@ async function finalizeSyncState(
     now: Date;
     error?: string | null;
     jiraHistoryCursor?: string;
+    jiraCursorSprintId?: string;
     /** Skip reason recorded in the attempt log; not stored on `sync_state`. */
     outcome?: string | null;
   },
@@ -269,6 +277,9 @@ async function finalizeSyncState(
       ...(patch.status === "OK" ? { lastSuccessfulSyncAt: patch.now } : {}),
       ...(patch.jiraHistoryCursor !== undefined
         ? { jiraHistoryCursor: patch.jiraHistoryCursor }
+        : {}),
+      ...(patch.jiraCursorSprintId !== undefined
+        ? { jiraCursorSprintId: patch.jiraCursorSprintId }
         : {}),
     })
     .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, integration)));
@@ -591,7 +602,16 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
   const baseUrl = args.jiraBaseUrl ?? env?.JIRA_API_BASE_URL ?? creds.baseUrl;
   const jiraCreds = { email: creds.email, token: creds.token };
-  const updatedSince = lease.jiraHistoryCursor ? new Date(lease.jiraHistoryCursor) : null;
+  // Delta only applies to the sprint the cursor was recorded against. On a
+  // sprint switch the stored cursor describes the PREVIOUS sprint, and reusing
+  // it hides every ticket in the new one that has not been edited since —
+  // silently, with the cycle still reporting OK. Mismatch (or a first-ever
+  // cursor) means pull the sprint in full.
+  const cursorMatchesSprint = lease.jiraCursorSprintId === chosenSprint.id;
+  const updatedSince =
+    cursorMatchesSprint && lease.jiraHistoryCursor
+      ? new Date(lease.jiraHistoryCursor)
+      : null;
 
   try {
     // --- All Jira reads complete BEFORE the txn (F1) ----------------------
@@ -726,6 +746,7 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
       status: "OK",
       now,
       jiraHistoryCursor: now.toISOString(),
+      jiraCursorSprintId: chosenSprint.id,
     });
     return { status: "OK" };
   } catch (err) {

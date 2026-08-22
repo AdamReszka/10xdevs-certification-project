@@ -1,0 +1,1 @@
+ALTER TABLE "sync_state" ADD COLUMN "jira_cursor_sprint_id" text;

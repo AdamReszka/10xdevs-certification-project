@@ -571,6 +571,57 @@ describe("syncOwner — per-cycle PR cap", () => {
   });
 });
 
+describe("syncOwner — the delta cursor is scoped to its sprint", () => {
+  /** JQL of the issue search on the given mock, decoded. */
+  function searchJql(calls: string[]): string {
+    const url = calls.find((u) => u.includes("/search/jql"))!;
+    return decodeURIComponent(url.replace(/\+/g, " "));
+  }
+
+  it("drops the delta clause when the cursor belongs to a different sprint", async () => {
+    const { ownerId, sprintId } = await newOwner();
+    // A cursor left behind by a PREVIOUS sprint — exactly what a sprint switch
+    // (or a corrected sprint row) leaves in place.
+    await db.insert(syncState).values({
+      id: randomUUID(),
+      ownerId,
+      integration: "JIRA",
+      jiraHistoryCursor: "2026-08-20T10:00:00.000Z",
+      jiraCursorSprintId: randomUUID(),
+      lastSuccessfulSyncAt: new Date("2026-08-20T10:00:00.000Z"),
+    });
+
+    const jira = jiraFetch();
+    await syncOwner({ ...baseArgs(ownerId, githubFetch().fetchImpl, jira.fetchImpl) });
+
+    // Without this, every pre-existing ticket in the new sprint stays invisible
+    // while the cycle still reports OK.
+    expect(searchJql(jira.calls)).not.toContain("updated >=");
+    // …and the cursor is re-pointed at the sprint it now describes.
+    const [state] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(state.jiraCursorSprintId).toBe(sprintId);
+  });
+
+  it("keeps the delta clause when the cursor belongs to the sprint being synced", async () => {
+    const { ownerId } = await newOwner();
+
+    // First cycle records the cursor against this sprint…
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    // …so the second one may legitimately ask only for what changed (FR-012).
+    const jira2 = jiraFetch();
+    await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jira2.fetchImpl),
+      bypassDueCheck: true,
+    });
+
+    expect(searchJql(jira2.calls)).toContain("updated >=");
+  });
+});
+
 describe("syncOwner — attempt history (S-10 Phase 7)", () => {
   it("records one attempt per integration per cycle", async () => {
     const { ownerId } = await newOwner();

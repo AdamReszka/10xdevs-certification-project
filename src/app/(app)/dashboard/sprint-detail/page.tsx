@@ -44,7 +44,11 @@ export default async function SprintDetailPage() {
   if (!sprint) {
     const [syncStateRaw] = await Promise.all([getSyncState(db, ownerId)]);
     return (
-      <PageShell syncState={toInboxSyncState(syncStateRaw)} sprintLabel={null}>
+      <PageShell
+        syncState={toInboxSyncState(syncStateRaw)}
+        sprintName={null}
+        stateLabel={null}
+      >
         <EmptyState />
       </PageShell>
     );
@@ -88,7 +92,8 @@ export default async function SprintDetailPage() {
   return (
     <PageShell
       syncState={toInboxSyncState(syncStateRaw)}
-      sprintLabel={sprint.state === "ACTIVE" ? null : (sprint.state ?? "CLOSED")}
+      sprintName={sprint.name}
+      stateLabel={sprint.state === "ACTIVE" ? null : (sprint.state ?? "CLOSED")}
     >
       <SprintDetailTabs
         aging={<AgingReport rows={agingRows} />}
@@ -102,23 +107,31 @@ export default async function SprintDetailPage() {
 /** Shared chrome so the null-sprint path renders the same header and bar. */
 function PageShell({
   syncState,
-  sprintLabel,
+  sprintName,
+  stateLabel,
   children,
 }: {
   syncState: InboxSyncState;
-  sprintLabel: string | null;
+  /** The Jira sprint's own name — which sprint the reader is looking at. */
+  sprintName: string | null;
+  /** Set only when the sprint is NOT active, so a closed one is unmistakable. */
+  stateLabel: string | null;
   children: React.ReactNode;
 }) {
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-12 sm:px-6">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold tracking-tight">
             Dashboard — Sprint Detail
           </h1>
-          {sprintLabel ? (
+          {/* The Jira sprint's own name. Every number on this page is scoped to
+              one sprint, so which one it is belongs in the heading — not only in
+              Jira. Especially once a team has several sprints behind them. */}
+          {sprintName ? <Badge variant="secondary">{sprintName}</Badge> : null}
+          {stateLabel ? (
             <Badge variant="outline" className="text-muted-foreground">
-              Sprint {sprintLabel.toLowerCase()}
+              Sprint {stateLabel.toLowerCase()}
             </Badge>
           ) : null}
         </div>

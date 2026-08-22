@@ -402,6 +402,18 @@ export const syncState = pgTable(
     lastError: text("last_error"),
     // Incremental Jira status-history delta cursor (FR-012).
     jiraHistoryCursor: text("jira_history_cursor"),
+    /**
+     * Which sprint `jiraHistoryCursor` was recorded against.
+     *
+     * The cursor is per-integration but the issue query is per-sprint
+     * (`sprint = N AND updated >= cursor`). Without this, switching the
+     * monitored sprint leaves a cursor from the OLD one in place, and every
+     * ticket in the new sprint that has not been edited since is invisible
+     * forever — the sync reports OK and returns nothing. Observed on a real
+     * project 2026-08-22. When this disagrees with the sprint being synced, the
+     * delta clause is dropped and the cycle pulls the sprint in full.
+     */
+    jiraCursorSprintId: text("jira_cursor_sprint_id"),
     // Overlap guard (S-05): a sync run leases this (owner, integration) row until
     // this instant; a later cron fire skips the row while the lease is still fresh.
     // Nullable — an unclaimed row is immediately eligible. Stale leases self-recover
