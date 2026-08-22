@@ -12,6 +12,7 @@ import {
   monitoredRepo,
   sprint,
   statusMapping,
+  syncAttempt,
   syncState,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
@@ -209,6 +210,8 @@ async function finalizeSyncState(
     now: Date;
     error?: string | null;
     jiraHistoryCursor?: string;
+    /** Skip reason recorded in the attempt log; not stored on `sync_state`. */
+    outcome?: string | null;
   },
 ): Promise<void> {
   await db
@@ -223,6 +226,54 @@ async function finalizeSyncState(
         : {}),
     })
     .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, integration)));
+
+  await recordAttempt(db, ownerId, integration, patch.status, patch.outcome ?? null, patch.now);
+}
+
+/** Newest attempts kept per (owner, integration). See the table's schema note. */
+const SYNC_ATTEMPT_RETENTION = 50;
+
+/**
+ * Append one attempt row and prune the tail (S-10 Phase 7).
+ *
+ * NEVER THROWS. This runs inside the repo's highest-risk path, after the
+ * `sync_state` update has already committed the outcome that matters. A lost log
+ * line is strictly better than a lost sync — so a failure here is swallowed
+ * rather than propagated into the caller's catch, where it would misreport a
+ * successful cycle as an error and stamp the wrong status.
+ *
+ * No error text is stored: the row carries a status enum and an optional skip
+ * reason, both bounded values (see `failure-reason.ts` for the full reasoning).
+ */
+async function recordAttempt(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+  status: "OK" | "ERROR" | "RATE_LIMITED",
+  outcome: string | null,
+  now: Date,
+): Promise<void> {
+  try {
+    await db
+      .insert(syncAttempt)
+      .values({ id: randomUUID(), ownerId, integration, status, outcome, finishedAt: now });
+
+    // Prune in the same call so the table can never grow unbounded, even if a
+    // scheduled cleanup is never built.
+    await db.execute(sql`
+      delete from ${syncAttempt}
+      where ${syncAttempt.id} in (
+        select ${syncAttempt.id} from ${syncAttempt}
+        where ${syncAttempt.ownerId} = ${ownerId}
+          and ${syncAttempt.integration} = ${integration}
+        order by ${syncAttempt.finishedAt} desc
+        offset ${SYNC_ATTEMPT_RETENTION}
+      )
+    `);
+  } catch {
+    // Intentionally swallowed — see the contract above. Not logged either: the
+    // sync path must never emit anything that could carry credential material.
+  }
 }
 
 /** Map a thrown client error to a terminal integration status. An auth failure
@@ -467,8 +518,10 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
   if (!chosenSprint) {
     // Jira is connected but there's no sprint to sync — stamp fresh OK so the
-    // dashboard shows the integration as healthy, not stale.
-    await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now });
+    // dashboard shows the integration as healthy, not stale. The attempt log
+    // records WHY it was a no-op, so "OK but nothing happened" is legible in
+    // the history rather than looking like a normal successful pull.
+    await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now, outcome: "no_sprint" });
     return { status: "SKIPPED", reason: "no_sprint" };
   }
 

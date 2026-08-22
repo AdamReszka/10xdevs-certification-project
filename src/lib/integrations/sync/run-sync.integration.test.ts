@@ -17,6 +17,7 @@ import {
   monitoredRepo,
   sprint,
   statusMapping,
+  syncAttempt,
   syncState,
   user,
 } from "@/db/schema";
@@ -567,6 +568,109 @@ describe("syncOwner — per-cycle PR cap", () => {
     expect(prs[0].number).toBe(7);
     // The capped PR's detail endpoint was never called.
     expect(gh.calls.some((u) => /\/pulls\/8$/.test(u))).toBe(false);
+  });
+});
+
+describe("syncOwner — attempt history (S-10 Phase 7)", () => {
+  it("records one attempt per integration per cycle", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const attempts = await db
+      .select()
+      .from(syncAttempt)
+      .where(eq(syncAttempt.ownerId, ownerId));
+
+    expect(attempts).toHaveLength(2);
+    expect(attempts.map((a) => a.integration).sort()).toEqual(["GITHUB", "JIRA"]);
+    expect(attempts.every((a) => a.status === "OK")).toBe(true);
+  });
+
+  it("records the failing status without storing any error text", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch({ failStatus: 401 }).fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const [gh] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "GITHUB")));
+
+    expect(gh.status).toBe("ERROR");
+    // The table has no error column at all — the row carries a bounded status.
+    expect(Object.keys(gh)).not.toContain("lastError");
+    expect(JSON.stringify(gh)).not.toContain("Unauthorized");
+  });
+
+  it("labels a no-op Jira cycle so 'OK but nothing happened' is legible", async () => {
+    const { ownerId } = await newOwner();
+    // Remove the sprint so Jira reports no_sprint.
+    await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+    expect(result.jira).toEqual({ status: "SKIPPED", reason: "no_sprint" });
+
+    const [jira] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(jira.status).toBe("OK");
+    expect(jira.outcome).toBe("no_sprint");
+  });
+
+  it("prunes to the retention cap so the log cannot grow unbounded", async () => {
+    const { ownerId } = await newOwner();
+
+    // Pre-fill well past the cap, then run one real cycle to trigger the prune.
+    await db.insert(syncAttempt).values(
+      Array.from({ length: 60 }, (_, i) => ({
+        id: randomUUID(),
+        ownerId,
+        integration: "GITHUB" as const,
+        status: "OK" as const,
+        outcome: null,
+        finishedAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      })),
+    );
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const rows = await db
+      .select({ finishedAt: syncAttempt.finishedAt })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "GITHUB")));
+
+    expect(rows).toHaveLength(50);
+    // The survivors are the newest — including the cycle just run.
+    expect(Math.max(...rows.map((r) => r.finishedAt.getTime()))).toBe(NOW.getTime());
+  });
+
+  it("keeps each integration's retention independent", async () => {
+    const { ownerId } = await newOwner();
+    await db.insert(syncAttempt).values(
+      Array.from({ length: 55 }, (_, i) => ({
+        id: randomUUID(),
+        ownerId,
+        integration: "GITHUB" as const,
+        status: "OK" as const,
+        outcome: null,
+        finishedAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      })),
+    );
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const jira = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    // Pruning GitHub must not have touched Jira's single row.
+    expect(jira).toHaveLength(1);
   });
 });
 

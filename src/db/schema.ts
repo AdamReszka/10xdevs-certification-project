@@ -349,6 +349,45 @@ export const sprint = pgTable(
   (table) => [unique("sprint_owner_sprint_uq").on(table.ownerId, table.jiraSprintId)],
 );
 
+/**
+ * Append-only log of terminal sync outcomes (S-10 Phase 7).
+ *
+ * `sync_state` holds exactly ONE row per (owner, integration), overwritten every
+ * cycle — so "why did it fail an hour ago" is unanswerable from it. This table
+ * answers that.
+ *
+ * NO ERROR-TEXT COLUMN, deliberately: same reasoning as `failure-reason.ts`. A
+ * row carries a classifiable status, never a message that was never audited for
+ * secrets.
+ *
+ * RETENTION IS LOAD-BEARING. The PRD bounds *product* data to current + 2 sprints
+ * and says nothing about an operational log, so this table sets its own bound —
+ * the newest `SYNC_ATTEMPT_RETENTION` rows per (owner, integration), pruned as
+ * each row is appended. Unbounded, a 15-minute cron writes ~3.5k rows per owner
+ * per month, forever.
+ */
+export const syncAttempt = pgTable(
+  "sync_attempt",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    integration: integration("integration").notNull(),
+    status: syncStatus("status").notNull(),
+    /** The `IntegrationOutcome` skip reason, when the cycle was skipped. */
+    outcome: text("outcome"),
+    finishedAt: timestamp("finished_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("sync_attempt_owner_integration_idx").on(
+      table.ownerId,
+      table.integration,
+      table.finishedAt,
+    ),
+  ],
+);
+
 export const syncState = pgTable(
   "sync_state",
   {
@@ -851,6 +890,8 @@ export type InsertTeamMember = typeof teamMember.$inferInsert;
 export type SelectSprint = typeof sprint.$inferSelect;
 export type InsertSprint = typeof sprint.$inferInsert;
 export type SelectSyncState = typeof syncState.$inferSelect;
+
+export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;
 export type InsertSyncState = typeof syncState.$inferInsert;
 export type SelectAbsence = typeof absence.$inferSelect;
 export type InsertAbsence = typeof absence.$inferInsert;

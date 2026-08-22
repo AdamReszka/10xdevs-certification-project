@@ -854,11 +854,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [ ] 7.1 Migration generates and applies cleanly (`sync_attempt`)
-- [ ] 7.2 Unit tests pass (classifyFailure; no branch emits stored error text)
-- [ ] 7.3 Integration tests pass (attempt write + prune cap, overview shape + isolation, selection edits replace not duplicate)
-- [ ] 7.4 Type checking passes
-- [ ] 7.5 Linting passes
+- [x] 7.1 Migration generates and applies cleanly (`sync_attempt`)
+- [x] 7.2 Unit tests pass (classifyFailure; no branch emits stored error text)
+- [x] 7.3 Integration tests pass (attempt write + prune cap, overview shape + isolation, selection edits replace not duplicate)
+- [x] 7.4 Type checking passes
+- [x] 7.5 Linting passes
 
 #### Manual
 

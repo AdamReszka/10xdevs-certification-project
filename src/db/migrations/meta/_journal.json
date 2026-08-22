@@ -43,6 +43,13 @@
       "when": 1787404859480,
       "tag": "0005_mighty_sleepwalker",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787412920118,
+      "tag": "0006_high_echo",
+      "breakpoints": true
     }
   ]
 }
