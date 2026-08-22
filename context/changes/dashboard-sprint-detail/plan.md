@@ -993,22 +993,39 @@ re-inserts). **Never seed the second one**; it holds real credentials.
 one commit and no recent activity, so an empty 30-day first-sync window is the
 honest result.
 
-**0 tickets is not.** The owner also confirms tasks are sitting in To Do on the
-board, and a ticket with no activity is still a ticket — nothing in the sync
-filters on activity. The account has a `Sprint 24` row in state `ACTIVE`, so
-`getActiveSprintRow` had something to hand `searchSprintIssues`. The question to
-settle is therefore narrow: **are those To Do tasks actually assigned to that
-sprint, or only sitting in the backlog?**
+**0 tickets was a stale sprint row — root cause found 2026-08-22.** The owner's
+real sprint is **`SCRUM Sprint 1`, holding FM-1, FM-2, FM-3, FM-6.** The
+account's `sprint` row says `name='Sprint 24', jira_sprint_id='1001'` — the demo
+seed's literals. `searchSprintIssues` queries `sprint = 1001`, which does not
+exist in that Jira, so it correctly returns nothing.
 
-- Backlog only → 0 tickets is correct, and 1.8's `committed_sp = 0` is a true
-  reading. Move a task into the sprint and re-sync to make the row meaningful.
-- In the sprint → something upstream matches nothing. Likely suspects, in order:
-  `sprint.jiraSprintId` not matching the board's real sprint id (it is imported
-  once at setup), or the JQL in `searchSprintIssues` disagreeing with how that
-  project scopes a sprint.
+Renaming the sprint in Jira does **not** fix this: every match is on
+`jira_sprint_id`, never on the name.
 
-Settle this before row 1.8 — that row asks `committed_sp` to match a manual Jira
-count, and 0/0 is *consistent with itself* while proving nothing either way.
+Fix: delete the stale row, then re-run the cadence import at `/setup/team`
+(`importCadence` reads the board's real active sprint). Deleting first matters —
+see finding 5 below.
+
+### Two product gaps this exposed (neither is S-10; record before acting)
+
+4. **Nothing refreshes the sprint row after setup.** The only writer is
+   `roster-store.ts:435` (`importCadence`, the `/setup/team` step). `run-sync.ts`
+   contains no `insert(sprint)` at all — it *reads* via `getActiveSprintRow` and
+   never reconciles against Jira. So when the team starts their next sprint,
+   SprintFlow keeps syncing the one captured at setup, forever, until someone
+   re-runs the wizard step. FR-007 says the system "pulls sprint cadence from the
+   monitored Jira project's active-sprint configuration **on each sync**" — as
+   built, that happens once. This is the S-04/S-05 seam, not S-10, but it is the
+   difference between the product working in week 1 and working in week 3.
+
+5. **`getActiveSprintRow` is nondeterministic with two ACTIVE rows.**
+   `sprint.ts:23-27` filters on `state = 'ACTIVE'` with `.limit(1)` and **no
+   `orderBy`**, so with more than one ACTIVE sprint for an owner Postgres may
+   return either. Reachable right now: re-running `importCadence` on this account
+   would INSERT the real sprint (different `jiraSprintId`, so the conflict target
+   does not match) beside the stale ACTIVE one, and the dashboard would then pick
+   arbitrarily between them. Cheap fix: order by `startDate desc`. Ordering the
+   fallback branch is already done at `:34`; the ACTIVE branch was missed.
 
 ### Notes that change what "pass" looks like
 
