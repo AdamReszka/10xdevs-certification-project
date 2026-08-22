@@ -854,11 +854,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 7.1 Migration generates and applies cleanly (`sync_attempt`)
-- [x] 7.2 Unit tests pass (classifyFailure; no branch emits stored error text)
-- [x] 7.3 Integration tests pass (attempt write + prune cap, overview shape + isolation, selection edits replace not duplicate)
-- [x] 7.4 Type checking passes
-- [x] 7.5 Linting passes
+- [x] 7.1 Migration generates and applies cleanly (`sync_attempt`) — f74f336
+- [x] 7.2 Unit tests pass (classifyFailure; no branch emits stored error text) — f74f336
+- [x] 7.3 Integration tests pass (attempt write + prune cap, overview shape + isolation, selection edits replace not duplicate) — f74f336
+- [x] 7.4 Type checking passes — f74f336
+- [x] 7.5 Linting passes — f74f336
 
 #### Manual
 
@@ -869,11 +869,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 8.1 Unit tests pass
-- [x] 8.2 Type checking passes
-- [x] 8.3 Linting passes
-- [x] 8.4 Production build and Workers build pass
-- [x] 8.5 E2E passes (nav → /settings shows both integrations)
+- [x] 8.1 Unit tests pass — 2522397
+- [x] 8.2 Type checking passes — 2522397
+- [x] 8.3 Linting passes — 2522397
+- [x] 8.4 Production build and Workers build pass — 2522397
+- [x] 8.5 E2E passes (nav → /settings shows both integrations) — 2522397
 
 #### Manual
 
