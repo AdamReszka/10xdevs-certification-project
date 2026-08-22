@@ -48,7 +48,7 @@ export default async function ConnectionsSettingsPage() {
           status={gh.health.status}
           lastSuccessfulSyncAt={gh.health.lastSuccessfulSyncAt}
           onTest={testGithubConnection}
-          reconnectHref="/setup/github"
+          reconnectHref="/settings/connections/github"
           onDisconnect={disconnectGithub}
           editSlot={gh.connection.connected ? <RepoSelectionEditor /> : undefined}
         >
@@ -84,7 +84,7 @@ export default async function ConnectionsSettingsPage() {
           status={jira.health.status}
           lastSuccessfulSyncAt={jira.health.lastSuccessfulSyncAt}
           onTest={testJiraConnection}
-          reconnectHref="/setup/jira"
+          reconnectHref="/settings/connections/jira"
           onDisconnect={disconnectJira}
           editSlot={
             jira.connection.connected ? (

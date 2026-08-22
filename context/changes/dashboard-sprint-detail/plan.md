@@ -707,6 +707,98 @@ client boundary. This is the "why did it fail earlier" answer.
 
 ---
 
+## Phase 9: Split the wizard from single-integration connect
+
+### Overview
+
+**Reported after Phase 8 shipped.** Entering GitHub from Settings drops the owner
+into the *wizard*: a "Step 1 of 3" progress bar, and on success a "Continue to
+Jira" CTA pulling them through a flow they never asked for. They came to
+reconnect one integration and should land back in Settings.
+
+Two defects, one root cause — Phase 8 reused the wizard **routes** when it should
+have reused the wizard **forms**:
+
+1. **Wizard chrome leaks into a single-integration task.** `reconnectHref` points
+   at `/setup/github`, which renders `SetupWizardShell step={1}` and, on success,
+   `GithubConnectionStatus` with its "Continue to Jira" link.
+2. **"Reconnect" cannot reconnect.** `/setup/github` renders the connect *form*
+   only when no credential exists (`setup/github/page.tsx:47-53`); with one
+   stored it renders the status card. So the button labelled Reconnect shows a
+   read-only card — there is no way to replace a token short of disconnecting
+   first.
+
+The wizard itself is correct and stays **untouched** — this phase adds a second
+entry point, it does not modify the first.
+
+### Changes Required
+
+#### 1. Make the post-success destination injectable
+
+**File**: `src/components/organisms/setup/github-connect-form.tsx`,
+`src/components/organisms/setup/jira-connect-form.tsx`
+
+**Intent**: Same form, two callers, different "what happens next".
+
+**Contract**: Add an optional `redirectTo?: string`. When set, the success path
+does `router.push(redirectTo)` instead of `router.refresh()`; when absent the
+behavior is **byte-identical to today**, so the wizard is unaffected. A string,
+not a callback — these are client components rendered from server components,
+and a function prop cannot cross that boundary.
+
+The toast stays in both paths: it is the only success signal the owner gets once
+the page navigates away.
+
+#### 2. Settings-scoped connect routes
+
+**File**: `src/app/(app)/settings/connections/github/page.tsx`,
+`src/app/(app)/settings/connections/jira/page.tsx`
+
+**Intent**: One integration, one step, no stepper, back to Settings.
+
+**Contract**: Server components rendering the connect form with
+`redirectTo="/settings/connections"`. **No `SetupWizardShell`** — no step count,
+no progress bar, no cross-integration CTA. They nest under
+`settings/layout.tsx`, so the Settings heading and tab bar stay visible and the
+owner never loses the sense of where they are.
+
+**These always render the FORM, never the status card** — that is the fix for
+defect 2. Status belongs on the Settings card; this route is the single action
+of (re)connecting. When a credential already exists the page says so, so
+"replace the token" is a deliberate act rather than a surprise.
+
+#### 3. Point Settings at the new routes
+
+**File**: `src/components/organisms/settings/integration-card.tsx` (call site in
+`settings/connections/page.tsx`)
+
+**Contract**: `reconnectHref` becomes `/settings/connections/{github,jira}` for
+both the connected ("Reconnect") and not-connected ("Connect X") states. Nothing
+in Settings links into `/setup/*` any more.
+
+### Success Criteria
+
+#### Automated Verification
+
+- Unit tests pass: `npm run test`
+- Type checking passes: `npm run typecheck`
+- Linting passes: `npm run lint`
+- Production build and Workers build pass
+- E2E passes: entering GitHub connect from Settings shows **no** "Step 1 of 3"
+  and no "Continue to Jira"; the wizard's own route still shows both
+
+#### Manual Verification
+
+- Settings → Connect/Reconnect GitHub: single form, no stepper, no progress bar
+- After a successful connect, the browser lands back on `/settings/connections`
+  with the card showing the new state
+- Same for Jira, including the multi-stage project + mapping flow
+- The wizard at `/setup/github` is unchanged: stepper present, "Continue to Jira"
+  present
+- Reconnecting over an existing credential replaces it without a prior disconnect
+
+---
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -884,6 +976,24 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 - [ ] 8.10 Jira project change warns about discarded sprint data first
 - [ ] 8.11 Not-connected state links into the wizard
 - [ ] 8.12 Usable at 10-inch tablet width; legible in dark mode
+
+### Phase 9: Split the wizard from single-integration connect
+
+#### Automated
+
+- [x] 9.1 Unit tests pass
+- [x] 9.2 Type checking passes
+- [x] 9.3 Linting passes
+- [x] 9.4 Production build and Workers build pass
+- [x] 9.5 E2E passes (Settings connect has no stepper; wizard still does)
+
+#### Manual
+
+- [ ] 9.6 Settings → Connect/Reconnect GitHub is a single form, no stepper
+- [ ] 9.7 Successful connect lands back on `/settings/connections`
+- [ ] 9.8 Same for Jira, including the project + mapping stages
+- [ ] 9.9 The wizard at `/setup/*` is unchanged (stepper + Continue CTA present)
+- [ ] 9.10 Reconnect replaces an existing credential without disconnecting first
 
 #### Manual
 
