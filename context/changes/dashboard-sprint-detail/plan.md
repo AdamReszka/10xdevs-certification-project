@@ -616,11 +616,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 6.1 E2E suite passes
-- [x] 6.2 Full unit suite passes
-- [x] 6.3 Full integration suite passes
-- [x] 6.4 Type checking passes
-- [x] 6.5 Linting passes
+- [x] 6.1 E2E suite passes — 4366af9
+- [x] 6.2 Full unit suite passes — 4366af9
+- [x] 6.3 Full integration suite passes — 4366af9
+- [x] 6.4 Type checking passes — 4366af9
+- [x] 6.5 Linting passes — 4366af9
 
 #### Manual
 
