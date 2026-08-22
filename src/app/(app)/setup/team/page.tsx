@@ -82,6 +82,9 @@ export default async function TeamSetupPage() {
   return (
     <SetupWizardShell
       step={3}
+      // The roster grid is eight columns wide and one of them holds a
+      // 43-character Jira account id — it needs the app shell's measure.
+      wide
       title="Team roster & sprint cadence"
       description="Review the team we imported from GitHub and Jira, then confirm your sprint cadence. You can edit everything — SprintFlow keeps your changes."
     >
