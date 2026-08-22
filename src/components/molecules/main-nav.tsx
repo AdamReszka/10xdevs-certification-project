@@ -2,10 +2,11 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-// Dashboard is live (S-07); Refinement (S-13) lands later, so it stays an inert
-// `#` anchor for now.
+// Dashboard (S-07) and Sprint Detail (S-10) are live; Refinement (S-13) lands
+// later, so it stays an inert `#` anchor for now.
 const NAV_ITEMS: { label: string; href: string }[] = [
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Sprint Detail", href: "/dashboard/sprint-detail" },
   { label: "Refinement", href: "#" },
 ];
 
