@@ -953,6 +953,77 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 - S-07 carry-overs: `context/archive/2026-08-21-dashboard-today/reviews/impl-review.md` (F1, F2, F4)
 - Lessons: `context/foundation/lessons.md` #1, #3, #4
 
+## Manual verification runbook
+
+> Written 2026-08-22 so the remaining manual pass can be done cold, without
+> reconstructing any of it from a chat log. `## Progress` stays canonical for
+> what is done; this section is *how* to do what is left.
+
+### Prerequisites
+
+1. Local Supabase up (`npx supabase status`), migrations applied through `0006`.
+2. `npm run dev`.
+3. **Stop `npm run dev` before `npm run test:e2e`.** `playwright.config.ts` has
+   `reuseExistingServer: !CI`, so Playwright adopts a dev server started without
+   `GITHUB_API_BASE_URL` / `JIRA_API_BASE_URL` and the `setup-*` specs then hit
+   the real APIs with a fixture token and fail. This bit twice; it is a
+   documented tradeoff, not a bug.
+
+### Which account for which check
+
+Two accounts exist and they are **not interchangeable** — most of the remaining
+rows fail for the wrong reason if run on the wrong one.
+
+| Account | Credentials | Data | Use it for |
+|---|---|---|---|
+| `adam.reszka85@gmail.com` | **fake** (seed, `last4=0000`) | rich: 11 tickets, 16 transitions, 14 commits (2 with NULL churn), 5 PRs, 4 reviews, `Sprint 24` committed 40 / completed 18, tz `Europe/Warsaw`; GitHub `sync_state` deliberately ERROR | every dashboard-surface row: 2.5, 2.6, 3.5, 4.5–4.10, 5.6–5.10, 6.6, 8.12 |
+| `demo@sprintflow.test` | **real** — GitHub `AdamLisek/tenexdevs1`, Jira `foxmind.atlassian.net` project `FM` | as of 20:11 both integrations OK but **0 tickets, 0 commits** synced | the real-sync rows: 1.7, 1.8, 7.6, 7.7 |
+| a fresh sign-up | none | none | 4.11 (no-sprint empty state), 5.9 (Reliability KPI null state) |
+
+Re-seed the first account with
+`EMAIL=adam.reszka85@gmail.com npm run db:seed:demo` (idempotent — it clears and
+re-inserts). **Never seed the second one**; it holds real credentials.
+
+### Open question to resolve first
+
+`demo@sprintflow.test` reports **GitHub OK and Jira OK, yet synced 0 tickets and
+0 commits.** Either the `FM` sprint genuinely has no issues and
+`AdamLisek/tenexdevs1` no commits in the 30-day first-sync lookback, or something
+upstream is silently matching nothing. Worth five minutes before 1.8 — that row
+asks for `committed_sp` to match a manual Jira count, and it currently reads 0/0,
+which is *consistent* but proves nothing.
+
+### Notes that change what "pass" looks like
+
+- **A successful reconnect does not clear a stale `sync_state`.** After
+  reconnecting, the card keeps showing the previous failure until a sync runs.
+  Known defect, listed under Follow-ups below — do not log it twice.
+- **NULL churn must render `—`, never `0`.** The seeded account has exactly two
+  such commits; that is the case row 4.7 is checking.
+- **A day with zero commits renders blank, not `—`.** The two are different
+  states and the distinction is deliberate.
+- Rows 1.7 and 7.7 are the security spot-checks: watch the **network tab**, not
+  just the DB, for a token or a raw error string in any response.
+
+## Follow-ups not yet planned
+
+Recorded here so they survive a context reset. None block the PR.
+
+1. **Stale sync status after a successful reconnect.** `storeGithubIntegration` /
+   `storeJiraIntegration` replace the credential but leave `sync_state.status`
+   and `last_error` describing the *old* one. The owner reconnects, is told it
+   worked, lands on a card that still says "Failing". Fix: clear both for that
+   integration on a successful store. Observed live on 2026-08-22.
+2. **`lessons.md` candidate.** `TokenCryptoError` was handled at 1 of 4 call
+   sites, and the unhandled ones turned a recoverable credential problem into a
+   500 that also took down the other integration. Rule worth registering: a typed
+   error thrown by a shared helper must be handled at **every** call site, or the
+   helper should not throw it. Run `/10x-lesson` to add it.
+3. **Workers subrequest budget.** The per-commit stat cap is per *repo*, so a
+   cycle costs ~30 × N extra subrequests (~460 at 5 repos, up from ~310). Verify
+   against the limit on the deployment plan before the first deploy; the fix, if
+   needed, is a shared budget decremented across repos, not a smaller cap.
+
 ## Progress
 
 > Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles.
@@ -969,7 +1040,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Manual
 
-- [ ] 1.6 Real sync populates `jira_project.time_zone`
+- [x] 1.6 Real sync populates `jira_project.time_zone` — verified in-session (real Jira sync on demo@sprintflow.test wrote tz=Europe/Warsaw)
 - [ ] 1.7 No token or raw error text in Worker logs
 - [ ] 1.8 Real sync populates `sprint.committed_sp`/`completed_sp` matching a manual Jira count
 
