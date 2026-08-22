@@ -479,6 +479,234 @@ Prove the two routes work in a browser, then record the slice.
 
 ---
 
+## Phase 7: Connections — data, history, and actions
+
+### Overview
+
+**Scope addition (2026-08-22, user request.)** S-10 is FR-016/FR-017 — dashboards.
+A connections surface is FR-002/FR-003/FR-011 territory and does not thematically
+belong to this slice; it is being built here because the owner hit the gap while
+testing S-10 and asked for it on this branch. The roadmap records it as an S-10
+scope extension rather than pretending it was always in scope — the same
+delivered-scope honesty this slice had to apply to the S-07 row.
+
+**The gap.** The setup wizard connects GitHub and Jira and already renders a
+connected-state card with Disconnect for each (`setup/github/page.tsx:47-53`,
+`setup/jira/page.tsx`). But nothing links there after first run — `main-nav.tsx`
+carries Dashboard / Sprint Detail / Refinement only — and no surface shows both
+integrations' sync health side by side. `syncNow()` exists and is fully wired
+(`integrations/sync/actions.ts:27`, its own comment anticipates "a future 'sync
+now' button") but has **no caller anywhere in the app**. So the owner can see a
+red banner saying GitHub failed and has no route to any further detail.
+
+This phase builds the server side; Phase 8 builds the surface.
+
+### Changes Required
+
+#### 1. Failure-reason classification (no raw error text)
+
+**File**: `src/lib/integrations/failure-reason.ts` (+ `.test.ts`)
+
+**Intent**: Turn a stored sync status into something a lead can act on, without
+widening the client payload.
+
+**Contract**: `classifyFailure(status, integration) → { headline, whatToDo }`,
+pure. `ERROR` → the token was rejected, reconnect it; `RATE_LIMITED` → the API is
+throttling, SprintFlow retries automatically. **`sync_state.last_error` is still
+never forwarded to the client** (S-07 impl-review F2 stands): `classifyError`
+(`run-sync.ts:231`) has a fallback branch writing an arbitrary `err.message`,
+which can be a Postgres error or any non-typed throw — an unbounded string that
+has never been audited for secrets. Classification reads `status` only.
+
+#### 2. Live connection test
+
+**File**: `src/app/(app)/settings/connections/actions.ts`
+
+**Intent**: Answer the question the owner actually has — *is my token still
+valid right now?* — which a stale error log cannot.
+
+**Contract**: `testGithubConnection()` and `testJiraConnection()`, both
+`requireSession()` → load the stored credential via the existing
+`loadGithubToken` / `loadJiraCredentials` (`integrations/credentials.ts`) → call
+`validatePat` / `validateCredentials` → return
+`{ ok: true; login|accountId } | { ok: false; reason: "auth" | "unavailable" }`.
+The decrypted token is used for the outbound call and **never returned, logged,
+or placed in the result** — same discipline as the setup actions. A
+`MissingCredentialError` returns a `not_connected` result rather than throwing.
+
+#### 3. Edit the monitored selection without reconnecting
+
+**File**: `src/app/(app)/settings/connections/actions.ts`
+
+**Intent**: Change which repos / which Jira project are monitored without making
+the owner paste their token again.
+
+**Contract**: `updateMonitoredRepos(selectedRepoIds)` and
+`updateJiraProject(jiraProjectId, mappings)`. Both exist because
+`storeGithubIntegration` / `storeJiraIntegration` take a **raw token** and
+re-encrypt it (`github/actions.ts:119`, `jira/actions.ts:199`) — they cannot be
+reused for an edit. These load the stored credential instead, re-list the
+available repos/projects to validate the selection against reality, and replace
+the `monitored_repo` / `jira_project` + `status_mapping` rows in one transaction.
+Owner-scoped on every write.
+
+**Blast radius to respect**: changing the Jira project cascades — `sprint`,
+`jira_ticket`, and `jira_status_history` all hang off `jiraProject.id`. The
+action must state what will be discarded and the UI must confirm before calling
+it (Phase 8).
+
+#### 4. Sync attempt history
+
+**File**: `src/db/schema.ts`, `src/db/migrations/` (generated)
+
+**Intent**: `sync_state` holds exactly one row per `(owner, integration)`,
+overwritten every cycle — so "why did it fail an hour ago" is unanswerable today.
+
+**Contract**: New `sync_attempt` table: `id`, `ownerId` (cascade), `integration`,
+`startedAt`, `finishedAt`, `status` (reuse the `syncStatus` enum), `outcome`
+(text — the `IntegrationOutcome` skip reason where applicable), indexed
+`(ownerId, integration, finishedAt desc)`. **No error text column** — same
+reasoning as §1; the row carries a classifiable status, not a message.
+
+**Retention is load-bearing.** The PRD's retention non-goal bounds product data
+to current + 2 sprints and says nothing about an operational log, so this table
+sets its own bound: keep the newest `SYNC_ATTEMPT_RETENTION = 50` rows per
+`(owner, integration)`, pruned in the same statement that appends. Unbounded, a
+15-minute cron writes ~3.5k rows per owner per month forever.
+
+**File**: `src/lib/integrations/sync/run-sync.ts`
+
+**Intent**: Record every terminal outcome.
+
+**Contract**: Append inside `finalizeSyncState` (`:203`) — the single choke point
+both integrations already funnel through, so no call site changes. This is the
+repo's highest-risk file: the insert must not be able to fail the sync it is
+recording, so it goes **after** the `syncState` update in the same function and
+its failure must not propagate (a lost log line is strictly better than a lost
+sync). Integration test asserts an attempt row per cycle and that the prune keeps
+the cap.
+
+#### 5. Connections reader
+
+**File**: `src/lib/settings/connections.ts` (+ integration test)
+
+**Intent**: One owner-scoped read feeding the whole surface.
+
+**Contract**: `getConnectionsOverview(db, ownerId) → ConnectionsOverview` with,
+per integration: connected (bool), the non-secret identity already shown in the
+wizard (GitHub login + `tokenLast4` + monitored repo list; Jira workspace + email
++ project key + mapping count), `status`, `lastSuccessfulSyncAt`, `lastAttemptAt`,
+and the recent `sync_attempt` rows. Every table filtered on `ownerId` explicitly —
+no RLS behind this. **Never selects `encryptedToken` or `lastError`.**
+
+### Success Criteria
+
+#### Automated Verification
+
+- Migration generates and applies cleanly: `npm run db:generate && npm run db:migrate`
+- Unit tests pass: `npm run test` — `classifyFailure` covers every status, and
+  asserts no branch can emit a stored error string
+- Integration tests pass: `npm run test:integration` — attempt row written per
+  cycle; prune holds the retention cap; `getConnectionsOverview` shape + a
+  two-owner cross-account isolation assertion; `updateMonitoredRepos` /
+  `updateJiraProject` replace rather than duplicate rows
+- Type checking passes: `npm run typecheck`
+- Linting passes: `npm run lint`
+
+#### Manual Verification
+
+- A forced sync writes exactly one attempt row per integration
+- No token, no raw error text in the payload of any new action (inspect the
+  network tab, not just the DB)
+
+---
+
+## Phase 8: `/settings` shell + Connections tab
+
+### Overview
+
+The surface. Built as a **tabbed settings shell** rather than a standalone
+`/connections` route because S-14 (anomaly thresholds) is already on the roadmap
+as "a dedicated settings page" — building the shell now makes S-14 a second tab
+instead of a second route plus a migration.
+
+### Changes Required
+
+#### 1. Route + shell + nav
+
+**File**: `src/app/(app)/settings/layout.tsx`, `src/app/(app)/settings/page.tsx`,
+`src/app/(app)/settings/connections/page.tsx`
+
+**Contract**: `/settings` redirects to `/settings/connections` (mirroring
+`setup/page.tsx:7`, which redirects to its first step). The layout renders the
+`max-w-6xl` header shell plus tab-style navigation; with one tab today it must
+still read as a shell S-14 can extend. Inherits `requireSession()` +
+`force-dynamic` from `(app)/layout.tsx` — do **not** re-declare either. One
+`getDb` handle, `getConnectionsOverview` in a single read.
+
+**File**: `src/components/molecules/main-nav.tsx`
+
+**Contract**: Add `{ label: "Settings", href: "/settings" }`. This is the fix for
+the reported gap — the wizard's connected-state pages have been unreachable since
+S-02/S-03 shipped.
+
+#### 2. Integration cards
+
+**File**: `src/components/organisms/settings/integration-card.tsx` (`"use client"`)
+
+**Contract**: One card per integration showing: connected identity, monitored
+selection, last successful sync, current status badge, and — when failing — the
+Phase 7 §1 classified reason with its suggested action. Actions: **Test
+connection** (§2, inline verdict), **Reconnect** / **Disconnect** (reuse the
+existing wizard forms and `disconnectGithub` / `disconnectJira`), and **Edit
+selection** (§3). The Jira project change is behind a confirmation naming what
+gets discarded, per §3's blast radius.
+
+Not-connected is a first-class state, not an error: it renders a link into the
+wizard, because that is exactly the state a fresh owner is in.
+
+#### 3. Sync now
+
+**File**: `src/components/organisms/settings/sync-now-button.tsx` (`"use client"`)
+
+**Contract**: Calls the existing `syncNow()` (`integrations/sync/actions.ts:27`)
+— no new server code. Disabled while in flight, renders the returned
+per-integration outcome (including `SKIPPED` with its reason, which is a normal
+result the lead should be able to read, not a failure), then refreshes the
+overview. The action already bypasses the freshness due-check.
+
+#### 4. Attempt history
+
+**File**: `src/components/organisms/settings/sync-history.tsx`
+
+**Contract**: A plain server-rendered table of the recent attempts per
+integration — timestamp, outcome, classified reason. No interactivity, so no
+client boundary. This is the "why did it fail earlier" answer.
+
+### Success Criteria
+
+#### Automated Verification
+
+- Unit tests pass: `npm run test`
+- Type checking passes: `npm run typecheck`
+- Linting passes: `npm run lint`
+- Production build passes: `npm run build`; Workers build passes: `npm run build:cf`
+- E2E passes: `npm run test:e2e` — a connected owner reaches `/settings` from the
+  nav and sees both integrations with their status
+
+#### Manual Verification
+
+- `/settings` reachable from the nav on every page
+- A genuinely broken GitHub token shows the classified reason, and **Test
+  connection** reports the live failure
+- **Sync now** runs and the timestamps advance
+- Changing monitored repos persists without re-entering the token
+- Changing the Jira project warns about discarded sprint data before proceeding
+- Not-connected state links into the wizard
+- Usable at 10-inch tablet width; legible in dark mode
+
+---
+
 ## Testing Strategy
 
 ### Unit Tests
@@ -621,6 +849,41 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 - [x] 6.3 Full integration suite passes — 4366af9
 - [x] 6.4 Type checking passes — 4366af9
 - [x] 6.5 Linting passes — 4366af9
+
+### Phase 7: Connections — data, history, and actions
+
+#### Automated
+
+- [ ] 7.1 Migration generates and applies cleanly (`sync_attempt`)
+- [ ] 7.2 Unit tests pass (classifyFailure; no branch emits stored error text)
+- [ ] 7.3 Integration tests pass (attempt write + prune cap, overview shape + isolation, selection edits replace not duplicate)
+- [ ] 7.4 Type checking passes
+- [ ] 7.5 Linting passes
+
+#### Manual
+
+- [ ] 7.6 A forced sync writes exactly one attempt row per integration
+- [ ] 7.7 No token and no raw error text in any new action's network payload
+
+### Phase 8: `/settings` shell + Connections tab
+
+#### Automated
+
+- [ ] 8.1 Unit tests pass
+- [ ] 8.2 Type checking passes
+- [ ] 8.3 Linting passes
+- [ ] 8.4 Production build and Workers build pass
+- [ ] 8.5 E2E passes (nav → /settings shows both integrations)
+
+#### Manual
+
+- [ ] 8.6 `/settings` reachable from the nav on every page
+- [ ] 8.7 Broken token shows the classified reason; Test connection reports the live failure
+- [ ] 8.8 Sync now runs and timestamps advance
+- [ ] 8.9 Monitored repos change without re-entering the token
+- [ ] 8.10 Jira project change warns about discarded sprint data first
+- [ ] 8.11 Not-connected state links into the wizard
+- [ ] 8.12 Usable at 10-inch tablet width; legible in dark mode
 
 #### Manual
 

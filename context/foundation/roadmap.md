@@ -275,6 +275,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   - **Reliability KPI shipped here, not in S-07** (see that row's correction).
   - Three data-side prerequisites the surfaces would otherwise have rendered empty: per-commit `additions`/`deletions` (new `getCommitDetail`, capped per repo and forward-only), `jira_project.time_zone` (migration `0005`, written every Jira cycle), and `sprint.committed_sp`/`completed_sp` (nothing in the repo wrote these outside the demo seed — the sync now derives both from the ticket table).
   - Side effect: `scope-creep` and `sprint-at-risk` had been reading `committedSp ?? 0` since S-06; both now compute against real values.
+- **Scope extension (2026-08-22, owner request — recorded, not back-justified):** S-10 also ships a `/settings` shell with a **Connections** tab. Thematically this is FR-002/FR-003/FR-011, *not* this slice's FR-016/FR-017; it landed here because the owner hit the gap while testing S-10 and asked for it on the same branch. What it closes: the setup wizard connects GitHub and Jira and renders a connected-state card for each, but **nothing has linked back to those pages since S-02/S-03 shipped** — a failing integration surfaced only as a dashboard banner with no route to any detail. Delivered: both integrations' state + sync health in one place, a live "Test connection" against the stored credential, "Sync now" (wiring the already-built `syncNow()` action, which had no caller anywhere in the app), editing monitored repos / the Jira project without re-entering the token, and a retention-bounded `sync_attempt` history. `sync_state.last_error` stays off the client (S-07 impl-review F2) — the surface classifies `status` and offers live re-validation instead. The shell is tabbed so **S-14 becomes a second tab rather than a second route**.
 - **Risk (both halves resolved during planning):** the aging report needs cumulative time-in-each-status per ticket — **no backfill was needed**, `run-sync.ts` already wrote every transition idempotently. The burndown is derived from `jiraStatusHistory` transitions × SP as expected; the second half of the risk was understated — the `sprint` row did not hold usable `committedSp`/`completedSp` snapshots at all, which is why S-10 added the write.
 - **Status:** done
 
@@ -335,6 +336,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Parallel with:** S-08, S-09, S-10, S-11, S-13
 - **Blockers:** —
 - **Unknowns:** —
+- **Head start (S-10, 2026-08-22):** the `/settings` route, its tabbed shell, and the nav entry already exist — S-10 built them for its Connections tab. **S-14 is now a second tab, not a new route.** Scope shrinks to the thresholds/severity form plus its persistence.
 - **Risk:** Threshold overrides must be per-account (not global defaults) — confirm the settings schema in F-02 scopes threshold values to the user's account; a missing account-scope constraint would cause one user's threshold changes to affect all users.
 - **Status:** proposed
 
