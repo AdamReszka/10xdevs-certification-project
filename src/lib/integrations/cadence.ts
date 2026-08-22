@@ -6,10 +6,12 @@
  *
  * TIMEZONE (F3): `startDay` is the weekday of `startDate` AFTER converting UTC →
  * the Jira owner's IANA `timeZone`. Skipping the conversion yields off-by-one
- * weekdays whenever the sprint starts near midnight UTC (a sprint starting
- * `2026-08-17T00:00Z` — Monday UTC — is Sunday 17:00 in `America/Los_Angeles`).
- * When `timeZone` is absent or unrecognized we fall back to UTC rather than throw.
+ * weekdays whenever the sprint starts near midnight UTC. The zone resolution and
+ * its UTC fallback live in `@/lib/time-zone` (shared with the S-10 dashboard
+ * day-bucketing, which needs the identical rule).
  */
+
+import { safeZone } from "@/lib/time-zone";
 
 /** Weekday codes stored in `sprint.start_day` / `sprint.working_days` (jsonb). */
 export type WeekdayCode = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
@@ -44,20 +46,14 @@ const WEEKDAY_BY_SHORT: Record<string, WeekdayCode> = {
 
 /**
  * Weekday of `date` as observed in `timeZone`. Uses `Intl.DateTimeFormat` so the
- * conversion honors DST. Falls back to UTC when `timeZone` is missing or invalid
- * (an unknown zone makes `Intl` throw — we catch and retry in UTC).
+ * conversion honors DST; `safeZone` supplies the UTC fallback for a missing or
+ * unrecognized zone.
  */
 function weekdayInTimeZone(date: Date, timeZone?: string): WeekdayCode {
-  const format = (tz: string) =>
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(
-      date,
-    );
-  let short: string;
-  try {
-    short = format(timeZone && timeZone.length > 0 ? timeZone : "UTC");
-  } catch {
-    short = format("UTC");
-  }
+  const short = new Intl.DateTimeFormat("en-US", {
+    timeZone: safeZone(timeZone),
+    weekday: "short",
+  }).format(date);
   return WEEKDAY_BY_SHORT[short] ?? "MON";
 }
 

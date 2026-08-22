@@ -2,10 +2,15 @@ import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
-// Dashboard is live (S-07); Refinement (S-13) lands later, so it stays an inert
-// `#` anchor for now.
+// Dashboard (S-07), Sprint Detail and Settings (S-10) are live; Refinement
+// (S-13) lands later, so it stays an inert `#` anchor for now.
+//
+// Settings is what makes the setup wizard's connected-state pages reachable
+// after first run — they had no entry point at all between S-02 and S-10.
 const NAV_ITEMS: { label: string; href: string }[] = [
   { label: "Dashboard", href: "/dashboard" },
+  { label: "Sprint Detail", href: "/dashboard/sprint-detail" },
+  { label: "Settings", href: "/settings" },
   { label: "Refinement", href: "#" },
 ];
 

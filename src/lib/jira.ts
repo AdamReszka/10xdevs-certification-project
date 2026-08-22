@@ -89,6 +89,27 @@ export type JiraBoard = {
 };
 
 /**
+ * Board types that can carry sprints, per the Agile API's `type` field.
+ *
+ * `scrum` is what a **company-managed** project reports. A **team-managed**
+ * (next-gen) project reports **`simple`** for its board regardless of whether
+ * the project runs sprints — and team-managed is the default when you create a
+ * project in Jira Cloud today. Filtering on `scrum` alone therefore rejected the
+ * board of most new projects, `listBoards` returned `[]`, and `importCadence`
+ * took its "no scrum board" branch and persisted no sprint at all. Observed on a
+ * real project on 2026-08-22: board `type=simple` holding an `active` sprint
+ * with both dates set.
+ *
+ * `kanban` stays excluded — it genuinely has no sprints.
+ *
+ * Including `simple` is safe for a team-managed *kanban* board: it has no
+ * sprints, so `getActiveSprint` returns null and `importCadence` falls through
+ * to its existing `noActiveSprint` path with editable defaults. The sprint query
+ * is the real discriminator; the board type only narrows the candidates.
+ */
+const SPRINT_CAPABLE_BOARD_TYPES = new Set(["scrum", "simple"]);
+
+/**
  * A Jira Agile sprint. `startDate`/`endDate` are ISO strings, reliably populated
  * only for `active`/`closed` sprints — the cadence derivation treats them as raw
  * UTC inputs.
@@ -481,7 +502,7 @@ export async function listBoards(
         (typeof board.id === "string" || typeof board.id === "number") &&
         typeof board.name === "string" &&
         typeof board.type === "string" &&
-        board.type === "scrum"
+        SPRINT_CAPABLE_BOARD_TYPES.has(board.type)
       ) {
         boards.push({ id: Number(board.id), name: board.name, type: board.type });
       }
