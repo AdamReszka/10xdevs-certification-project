@@ -999,7 +999,7 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 #### Manual
 
 - [ ] 3.5 Chart renders legibly in light and dark theme
-- [ ] 3.6 No Node-API warning attributable to recharts in `build:cf`
+- [x] 3.6 No Node-API warning attributable to recharts in `build:cf` — verified in-session (clean build:cf output)
 
 ### Phase 4: Sprint Detail route (surfaces A, B, C)
 
@@ -1075,12 +1075,12 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Manual
 
-- [ ] 8.6 `/settings` reachable from the nav on every page
-- [ ] 8.7 Broken token shows the classified reason; Test connection reports the live failure
-- [ ] 8.8 Sync now runs and timestamps advance
-- [ ] 8.9 Monitored repos change without re-entering the token
-- [ ] 8.10 Jira project change warns about discarded sprint data first
-- [ ] 8.11 Not-connected state links into the wizard
+- [x] 8.6 `/settings` reachable from the nav on every page — verified manually 2026-08-22
+- [x] 8.7 Broken token shows the classified reason; Test connection reports the live failure — verified manually 2026-08-22
+- [x] 8.8 Sync now runs and timestamps advance — verified manually 2026-08-22
+- [x] 8.9 Monitored repos change without re-entering the token — verified manually 2026-08-22
+- [x] 8.10 Jira project change warns about discarded sprint data first — verified manually 2026-08-22
+- [x] 8.11 Not-connected state links into the wizard — verified manually 2026-08-22
 - [ ] 8.12 Usable at 10-inch tablet width; legible in dark mode
 
 ### Phase 9: Split the wizard from single-integration connect
@@ -1095,11 +1095,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Manual
 
-- [ ] 9.6 Settings → Connect/Reconnect GitHub is a single form, no stepper
-- [ ] 9.7 Successful connect lands back on `/settings/connections`
-- [ ] 9.8 Same for Jira, including the project + mapping stages
-- [ ] 9.9 The wizard at `/setup/*` is unchanged (stepper + Continue CTA present)
-- [ ] 9.10 Reconnect replaces an existing credential without disconnecting first
+- [x] 9.6 Settings → Connect/Reconnect GitHub is a single form, no stepper — verified manually 2026-08-22
+- [x] 9.7 Successful connect lands back on `/settings/connections` — verified manually 2026-08-22
+- [x] 9.8 Same for Jira, including the project + mapping stages — verified manually 2026-08-22
+- [x] 9.9 The wizard at `/setup/*` is unchanged (stepper + Continue CTA present) — verified manually 2026-08-22
+- [x] 9.10 Reconnect replaces an existing credential without disconnecting first — verified manually 2026-08-22
 
 ### Phase 10: An undecryptable credential must not crash the sync
 
@@ -1113,12 +1113,12 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Manual
 
-- [ ] 10.6 "Sync now" returns a result instead of a 500 on the seeded account
-- [ ] 10.7 The failing integration shows a reason; the healthy one is unaffected
-- [ ] 10.8 Re-running the seed produces a decryptable (still fake) credential
+- [x] 10.6 "Sync now" returns a result instead of a 500 on the seeded account — verified manually 2026-08-22
+- [x] 10.7 The failing integration shows a reason; the healthy one is unaffected — verified manually 2026-08-22
+- [x] 10.8 Re-running the seed produces a decryptable (still fake) credential — verified in-session (seed re-run wrote v1: envelopes)
 
 #### Manual
 
 - [ ] 6.6 Seed reset then re-run produces a coherent story across both dashboards
 - [ ] 6.7 `/10x-impl-review` run with findings triaged
-- [ ] 6.8 Roadmap updated, including the corrected S-07 row
+- [x] 6.8 Roadmap updated, including the corrected S-07 row — verified in-session (roadmap corrected in 4366af9)
