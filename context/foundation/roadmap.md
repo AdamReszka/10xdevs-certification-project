@@ -38,10 +38,10 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-04 | setup-team-roster-cadence | review/edit auto-imported team roster; sprint cadence auto-pulled from Jira + overridable    | S-02, S-03         | FR-006, FR-007                                  | done     |
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | done     |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | done     |
-| S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox default (render + sort/filter), Reliability KPI tab; freshness timestamp + error banner; real-data smoke-test. Burndown + Yesterday's Activity panels deferred to S-10 (aggregation overlap) | S-06, F-03 | FR-015, FR-016, US-01 | done     |
+| S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox (render + sort/filter); freshness timestamp + error banner; real-data smoke-test. Burndown, Yesterday's Activity **and the Reliability KPI + tab shell** all shipped in S-10, not here | S-06, F-03 | FR-015, FR-016, US-01 | done     |
 | S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window | S-04, S-06 | FR-010                                    | proposed |
-| S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07   | FR-008, US-02                                   | blocked  |
-| S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns       | S-05, S-07         | FR-017                                          | proposed |
+| S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07, S-10   | FR-008, US-02                             | proposed |
+| S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns; **plus** the Today tab shell with Sprint Pulse, Yesterday's Activity and the Reliability KPI, and the three sync writes they need (commit churn, Jira time zone, sprint SP scalars) | S-05, S-07 | FR-016, FR-017 | done     |
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | proposed |
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
 | S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
@@ -215,13 +215,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-07: Dashboard "Today" — Anomaly Inbox (north-star core)
 
-- **Outcome:** user can open Dashboard "Today" and see the Anomaly Inbox as the default view (all detected anomalies, each with 5 attributes, sorted by severity → recency); user can re-sort (severity, age, ticket, team member) and filter (anomaly type, team member) the inbox; the Reliability KPI (committed vs delivered SP, already on the sprint row) sits one click away; last-sync timestamp per integration is always visible; error banner shown when the most recent sync returned an error (last successfully cached state shown, not a blank screen).
+- **Outcome:** user can open Dashboard "Today" and see the Anomaly Inbox as the default view (all detected anomalies, each with 5 attributes, sorted by severity → recency); user can re-sort (severity, age, ticket, team member) and filter (anomaly type, team member) the inbox; last-sync timestamp per integration is always visible; error banner shown when the most recent sync returned an error (last successfully cached state shown, not a blank screen).
 - **Change ID:** dashboard-today
 - **PRD refs:** FR-015, FR-016, US-01 (all acceptance criteria)
 - **Prerequisites:** S-06 (anomaly data), F-03 (UI component foundation)
 - **Parallel with:** S-13
 - **Blockers:** —
-- **Scope note (frame.md 2026-08-21):** S-07 was narrowed to the *hypothesis-proving core*. The inbox + freshness + error banner are render-ready over `listAnomaliesForSprint` (S-06) and `sync_state` (S-05); the slice also adds a shared `getActiveSprint(ownerId)` resolver (extract the logic duplicated in `run-sync.ts` / `load-snapshot.ts`) and a roster reader for the member filter. The **Sprint Pulse burndown** and **Yesterday's Activity** panels are *deferred to S-10* — both are new read-side aggregators that overlap S-10's Activity Matrix and sub-burndowns, and neither validates the US-01 hypothesis (which the inbox proves on its own). Reliability KPI rides along because it is near-free (existing `committedSp`/`completedSp` columns).
+- **Scope note (frame.md 2026-08-21):** S-07 was narrowed to the *hypothesis-proving core*. The inbox + freshness + error banner are render-ready over `listAnomaliesForSprint` (S-06) and `sync_state` (S-05); the slice also adds a shared `getActiveSprint(ownerId)` resolver (extract the logic duplicated in `run-sync.ts` / `load-snapshot.ts`) and a roster reader for the member filter. The **Sprint Pulse burndown** and **Yesterday's Activity** panels are *deferred to S-10* — both are new read-side aggregators that overlap S-10's Activity Matrix and sub-burndowns, and neither validates the US-01 hypothesis (which the inbox proves on its own). Reliability KPI was expected to ride along as "near-free from existing `committedSp`/`completedSp` columns" — it did **not** ship in S-07, and the assumption behind that estimate was wrong: nothing in the codebase wrote either column outside the demo seed. S-10 added the sync write and the panel (see its scope note).
+- **Delivered-scope correction (S-10 frame, 2026-08-22):** this row previously claimed S-07 shipped a Reliability KPI tab and a tab shell. Neither existed — Today was a single column with no tabs primitive in the repo. Both ship in S-10.
 - **Unknowns:** —
 - **Risk:** This slice delivers the north star — the end-to-end experience for US-01. Validate against every US-01 acceptance criterion (inbox empty only when zero anomalies; all 5 attributes visible; sync timestamp visible; error banner works) before calling it done; **smoke-test with at least one real GitHub repo + real Jira project** (part of the north-star proof, per frame).
 - **Status:** done
@@ -247,13 +248,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Outcome:** user can load a single realistic mixed-state demo dataset (healthy-flow and crisis signals combined) and explore Dashboard "Today" with at least 4 anomaly types from the 8 rules plus Dashboard "Sprint Detail" — all without connecting real Jira or GitHub credentials; "Reset demo data" returns the user to the uninitialized state.
 - **Change ID:** demo-mode
 - **PRD refs:** FR-008, US-02
-- **Prerequisites:** S-07 (both dashboards must be functional before demo data can populate them)
+- **Prerequisites:** S-07 **and S-10** (both dashboards must be functional before demo data can populate them — Sprint Detail landed in S-10, so the prerequisite is now met)
 - **Parallel with:** S-08, S-10, S-11, S-13, S-14
 - **Blockers:** —
 - **Unknowns:**
-  - PRD Open Question #1: Demo data ↔ real integrations interaction — when a user has loaded demo data AND has real Jira + GitHub credentials connected, what does the dashboard show? Mutual exclusion, toggle, or real-data precedence? — Owner: user. Block: yes — this UX decision determines the demo-mode data routing architecture; S-09 cannot be planned until resolved.
+  - PRD Open Question #1: Demo data ↔ real integrations interaction — when a user has loaded demo data AND has real Jira + GitHub credentials connected, what does the dashboard show? Mutual exclusion, toggle, or real-data precedence? — Owner: user. Block: **planning only** — the dashboards are no longer the blocker, this UX decision is; S-09 cannot be *planned* until it is resolved.
 - **Risk:** Demo dataset quality directly determines the product's first impression; the fixture must produce at least 4 distinct anomaly types (medium or high severity) plus healthy-flow signals, and must render realistic Sprint Pulse + Activity numbers.
-- **Status:** blocked
+- **Head start (S-10):** `scripts/seed-dashboard.mjs` now seeds the full upstream set both dashboards read — tickets with SP and assignees, status transitions (incl. a re-open and an unmapped status), commits with and without churn, PRs, and reviews — and stays idempotent. It is a script, not the in-app FR-008 flow, but it is the fixture S-09 can build on.
+- **Status:** proposed — unblocked on dashboards; still gated on Open Question #1
 
 ---
 
@@ -261,14 +263,20 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 - **Outcome:** user can open Dashboard "Sprint Detail" and see: (1) a workflow aging report — tickets sorted by time-since-last-movement with cumulative time-in-each-status shown inline; (2) Team Activity Matrix — Developer × Day with commit, line, PR, and review counts; (3) per-technology sub-burndowns (SP burndown filtered by frontend / backend / mobile / QA track).
 - **Change ID:** dashboard-sprint-detail
-- **PRD refs:** FR-017
+- **PRD refs:** FR-016 (the Today panels S-07 deferred), FR-017
 - **Prerequisites:** S-05 (synced Jira + GitHub data for aging and activity calculations), S-07 (navigation from Dashboard Today; consistent UI shell)
 - **Parallel with:** S-08, S-09, S-11, S-13, S-14
 - **Blockers:** —
 - **Unknowns:** —
-- **Scope note (frame.md 2026-08-21):** S-10 also absorbs the two data panels deferred from S-07 — the **Sprint Pulse burndown** and **Yesterday's Activity** (per-dev commit/PR/review activity). Both are new read-side aggregators in the same family as S-10's Activity Matrix and sub-burndowns, so they are built here rather than duplicated in the north-star slice. (Reliability KPI stays in S-07 — it is near-free from existing SP columns.)
-- **Risk:** The aging report requires cumulative time-in-each-status per ticket — verify that S-05's schema captures the full status-change history per ticket (not just the current status) before implementing S-10's queries, otherwise a backfill migration is needed. The burndown series likewise must be derived from `jiraStatusHistory` transitions × SP (the `sprint` row holds only `committedSp`/`completedSp` snapshots, not a daily series).
-- **Status:** proposed
+- **Scope note (frame.md 2026-08-21):** S-10 also absorbs the two data panels deferred from S-07 — the **Sprint Pulse burndown** and **Yesterday's Activity** (per-dev commit/PR/review activity). Both are new read-side aggregators in the same family as S-10's Activity Matrix and sub-burndowns, so they are built here rather than duplicated in the north-star slice.
+- **Delivered scope (2026-08-22):**
+  - Five read surfaces on **three shared owner-scoped reducers** (`src/lib/dashboard/`) rather than five bespoke queries: M1 SP-over-time (sub-burndowns, Sprint Pulse, the FR-016 status distribution), M2 activity rollup (Activity Matrix, Yesterday's Activity), M3 time-in-status (aging report).
+  - New route `/dashboard/sprint-detail` + nav link; Today retrofitted behind a four-tab shell with the Anomaly Inbox still the default tab.
+  - **Reliability KPI shipped here, not in S-07** (see that row's correction).
+  - Three data-side prerequisites the surfaces would otherwise have rendered empty: per-commit `additions`/`deletions` (new `getCommitDetail`, capped per repo and forward-only), `jira_project.time_zone` (migration `0005`, written every Jira cycle), and `sprint.committed_sp`/`completed_sp` (nothing in the repo wrote these outside the demo seed — the sync now derives both from the ticket table).
+  - Side effect: `scope-creep` and `sprint-at-risk` had been reading `committedSp ?? 0` since S-06; both now compute against real values.
+- **Risk (both halves resolved during planning):** the aging report needs cumulative time-in-each-status per ticket — **no backfill was needed**, `run-sync.ts` already wrote every transition idempotently. The burndown is derived from `jiraStatusHistory` transitions × SP as expected; the second half of the risk was understated — the `sprint` row did not hold usable `committedSp`/`completedSp` snapshots at all, which is why S-10 added the write.
+- **Status:** done
 
 ---
 

@@ -1,9 +1,17 @@
-// Demo seed for the S-07 Anomaly Inbox (Dashboard "Today").
+// Demo seed for Dashboard "Today" (S-07) and "Sprint Detail" (S-10).
 //
 // Seeds a realistic ACTIVE sprint + roster + per-integration sync_state + all 8
 // anomaly types (incl. both SPRINT_AT_RISK variants) against an EXISTING owner —
 // so the dashboard renders rich data with NO real Jira/GitHub credentials. The
 // dashboard never decrypts tokens, so a placeholder jira_credential is enough.
+//
+// S-10 adds the upstream rows the read-side reducers need: jira_ticket with
+// story points and assignees, jira_status_history transitions spread across the
+// sprint (including a re-open and an unmapped status), monitored_repo +
+// github_commit (some WITH churn, some without — the per-repo stat cap is
+// one-way, so NULL churn is a real production state the UI must render as "—"),
+// github_pull_request, and github_review. jira_project.time_zone is set so day
+// bucketing exercises a non-UTC zone.
 //
 // Prerequisite: a login-able account must already exist (sign up via the UI, or
 // POST /api/auth/sign-up/email). This script does NOT create the auth account.
@@ -50,7 +58,24 @@ const JIRA_BASE = "https://acme.atlassian.net";
 const GH = (n) => `https://github.com/acme/web/pull/${n}`;
 
 // --- Idempotent cleanup (this owner's seeded data) --------------------------
-for (const t of ["anomaly", "sync_state", "team_member", "sprint", "jira_project", "jira_credential"]) {
+// Order matters: children before parents. jira_status_history and github_review
+// cascade from their parents, but deleting them explicitly keeps this readable
+// and independent of the FK cascade config.
+for (const t of [
+  "anomaly",
+  "jira_status_history",
+  "jira_ticket",
+  "github_review",
+  "github_pull_request",
+  "github_commit",
+  "monitored_repo",
+  "github_credential",
+  "sync_state",
+  "team_member",
+  "sprint",
+  "jira_project",
+  "jira_credential",
+]) {
   await client.query(`delete from ${t} where owner_id = $1`, [ownerId]);
 }
 
@@ -63,9 +88,9 @@ await client.query(
 );
 const projId = randomUUID();
 await client.query(
-  `insert into jira_project (id, owner_id, credential_id, jira_project_id, project_key)
-   values ($1,$2,$3,$4,$5)`,
-  [projId, ownerId, credId, "10001", "WEB"],
+  `insert into jira_project (id, owner_id, credential_id, jira_project_id, project_key, time_zone)
+   values ($1,$2,$3,$4,$5,$6)`,
+  [projId, ownerId, credId, "10001", "WEB", "Europe/Warsaw"],
 );
 
 // --- Active sprint ----------------------------------------------------------
@@ -171,8 +196,178 @@ for (const r of rows) {
   );
 }
 
+// ===========================================================================
+// S-10 upstream data — Sprint Detail's three reducers read from these tables.
+// ===========================================================================
+
+const sprintStart = new Date(now - 8 * 86400_000);
+const d = (n) => new Date(sprintStart.getTime() + n * 86400_000); // day n of the sprint
+
+// --- Sprint tickets ---------------------------------------------------------
+// Mixed on purpose: every track represented, one unassigned ticket (so SP lands
+// in the UNKNOWN sub-burndown), one ticket with a NULL category (an FR-005
+// mapping gap, which surfaces the UNKNOWN column in the aging report), and one
+// with no story points at all.
+const tickets = [
+  { key: "WEB-80", sp: 5,    cat: "DONE",        gh: "chenwu",    summary: "Rate-limit the sync loop" },
+  { key: "WEB-83", sp: 3,    cat: "DONE",        gh: "alice-kim", summary: "Dashboard empty states" },
+  { key: "WEB-85", sp: 8,    cat: "DONE",        gh: "bob-r",     summary: "Anomaly detection pipeline" },
+  { key: "WEB-88", sp: 5,    cat: "CODE_REVIEW", gh: "chenwu",    summary: "Incremental Jira history pull" },
+  { key: "WEB-90", sp: 3,    cat: "TESTING",     gh: "dana-o",    summary: "E2E coverage for setup wizard" },
+  { key: "WEB-91", sp: 2,    cat: "IN_PROGRESS", gh: "eriklund",  summary: "Mobile burndown parity" },
+  { key: "WEB-93", sp: 8,    cat: "IN_PROGRESS", gh: "alice-kim", summary: "Sprint Detail aging report" },
+  { key: "WEB-95", sp: 5,    cat: "TODO",        gh: null,        summary: "Recap email template" },
+  { key: "WEB-96", sp: 3,    cat: "TODO",        gh: "bob-r",     summary: "Threshold settings page" },
+  // Unmapped status: currentCategory NULL → UNKNOWN bucket everywhere.
+  { key: "WEB-97", sp: 2,    cat: null,          gh: "dana-o",    summary: "Blocked on vendor API" },
+  { key: "WEB-98", sp: null, cat: "TODO",        gh: "eriklund",  summary: "Spike: offline mode" },
+];
+
+const ticketId = {};
+for (const t of tickets) {
+  const tid = randomUUID();
+  ticketId[t.key] = tid;
+  // Everything moved at least once; the aging report sorts on this.
+  const lastMove = t.cat === "DONE" ? d(5) : t.key === "WEB-88" ? d(5) : d(6.5);
+  await client.query(
+    `insert into jira_ticket (id, owner_id, jira_project_id, sprint_id, jira_key, summary,
+                              story_points, current_status_id, current_category,
+                              assignee_jira_account_id, last_status_change_at,
+                              added_after_sprint_start, source_url)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [tid, ownerId, projId, sprintId, t.key, t.summary, t.sp,
+     t.cat === null ? "999" : "10", t.cat,
+     t.gh ? `acc-${t.gh}` : null, lastMove,
+     // WEB-93 and WEB-96 are the mid-sprint additions the SCOPE_CREEP anomaly cites.
+     t.key === "WEB-93" || t.key === "WEB-96", `${JIRA_BASE}/browse/${t.key}`],
+  );
+}
+
+// --- Status history ---------------------------------------------------------
+// Spread across the sprint so the burndown has a shape. WEB-85 is re-opened and
+// re-closed (the non-double-burn case); WEB-97 transitions into an unmapped
+// status (NULL to_category), so its SP never burns and it lands in UNKNOWN.
+const transitions = [
+  ["WEB-80", "TODO",        "IN_PROGRESS", d(0.5)],
+  ["WEB-80", "IN_PROGRESS", "CODE_REVIEW", d(2)],
+  ["WEB-80", "CODE_REVIEW", "DONE",        d(3)],
+  ["WEB-83", "TODO",        "IN_PROGRESS", d(1)],
+  ["WEB-83", "IN_PROGRESS", "DONE",        d(4)],
+  ["WEB-85", "TODO",        "IN_PROGRESS", d(0.5)],
+  ["WEB-85", "IN_PROGRESS", "DONE",        d(5)],
+  // Re-opened, then closed again — must burn ONCE, on the first completion.
+  ["WEB-85", "DONE",        "IN_PROGRESS", d(6)],
+  ["WEB-85", "IN_PROGRESS", "DONE",        d(7)],
+  ["WEB-88", "TODO",        "IN_PROGRESS", d(1.5)],
+  ["WEB-88", "IN_PROGRESS", "CODE_REVIEW", d(5)],
+  ["WEB-90", "TODO",        "IN_PROGRESS", d(2)],
+  ["WEB-90", "IN_PROGRESS", "TESTING",     d(6.5)],
+  ["WEB-91", "TODO",        "IN_PROGRESS", d(6.5)],
+  ["WEB-93", "TODO",        "IN_PROGRESS", d(6.5)],
+  // Unmapped destination status: to_category NULL.
+  ["WEB-97", "IN_PROGRESS", null,          d(4)],
+];
+
+let changelogSeq = 0;
+for (const [key, from, to, at] of transitions) {
+  await client.query(
+    `insert into jira_status_history (id, owner_id, ticket_id, from_status_id, to_status_id,
+                                      from_category, to_category, changed_at, jira_changelog_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [randomUUID(), ownerId, ticketId[key], "10", to === null ? "999" : "11",
+     from, to, at, `seed-cl-${++changelogSeq}`],
+  );
+}
+
+// --- GitHub: repo, commits, PRs, reviews ------------------------------------
+const ghCredId = randomUUID();
+await client.query(
+  `insert into github_credential (id, owner_id, encrypted_token, token_last4, github_login)
+   values ($1,$2,$3,$4,$5)`,
+  [ghCredId, ownerId, "seed-placeholder-not-a-real-token", "0000", "demo-lead"],
+);
+const repoId = randomUUID();
+await client.query(
+  `insert into monitored_repo (id, owner_id, credential_id, github_repo_id, full_name, is_active)
+   values ($1,$2,$3,$4,$5,true)`,
+  [repoId, ownerId, ghCredId, 900001, "acme/web"],
+);
+
+// Commit churn is deliberately mixed. `null` reproduces an over-cap commit: the
+// per-repo stat cap is one-way, so those rows keep NULL churn forever and the
+// matrix must render "—" rather than 0.
+const commits = [
+  ["alice-kim", d(0.8),  120,  14],
+  ["alice-kim", d(1.2),  86,   9],
+  ["alice-kim", d(4.3),  null, null],
+  ["bob-r",     d(0.6),  240,  30],
+  ["bob-r",     d(2.4),  55,   12],
+  ["bob-r",     d(5.1),  310,  88],
+  ["bob-r",     d(6.6),  null, null],
+  ["chenwu",    d(1.9),  74,   21],
+  ["chenwu",    d(3.2),  190,  40],
+  ["chenwu",    d(6.7),  45,   5],
+  ["dana-o",    d(2.1),  38,   4],
+  ["dana-o",    d(6.4),  92,   16],
+  ["eriklund",  d(1.1),  61,   8],
+  // A drive-by contributor who is NOT on the roster → the UNKNOWN matrix row.
+  ["outside-contributor", d(3.6), 27, 3],
+];
+let shaSeq = 0;
+for (const [login, at, adds, dels] of commits) {
+  await client.query(
+    `insert into github_commit (id, owner_id, repo_id, sha, author_github_username,
+                                authored_at, additions, deletions, branch, message)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [randomUUID(), ownerId, repoId, `seedsha${String(++shaSeq).padStart(4, "0")}`,
+     login, at, adds, dels, null, `seed commit ${shaSeq}`],
+  );
+}
+
+const pulls = [
+  { num: 138, author: "chenwu",    state: "MERGED", opened: d(2.2), merged: d(3.1), ticket: "WEB-80", adds: 210, dels: 24 },
+  { num: 142, author: "bob-r",     state: "OPEN",   opened: d(6.7), merged: null,   ticket: "WEB-88", adds: 180, dels: 12 },
+  { num: 147, author: "alice-kim", state: "MERGED", opened: d(4.1), merged: d(4.9), ticket: "WEB-83", adds: 96,  dels: 30 },
+  { num: 150, author: "alice-kim", state: "OPEN",   opened: d(7.1), merged: null,   ticket: "WEB-93", adds: 920, dels: 40 },
+  { num: 152, author: "dana-o",    state: "OPEN",   opened: d(6.5), merged: null,   ticket: "WEB-90", adds: 64,  dels: 8 },
+];
+const prId = {};
+for (const p of pulls) {
+  const pid = randomUUID();
+  prId[p.num] = pid;
+  await client.query(
+    `insert into github_pull_request (id, owner_id, repo_id, github_pr_id, number, title,
+                                      author_github_username, state, additions, deletions,
+                                      changed_files, opened_at, merged_at, closed_at,
+                                      ready_for_review_at, linked_ticket_key, source_url)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$12,$15,$16)`,
+    [pid, ownerId, repoId, 700000 + p.num, p.num, `${p.ticket}: seeded pull request`,
+     p.author, p.state, p.adds, p.dels, 6, p.opened, p.merged, p.merged,
+     p.ticket, GH(p.num)],
+  );
+}
+
+const reviews = [
+  [138, "bob-r",     "APPROVED",          d(2.9)],
+  [147, "chenwu",    "APPROVED",          d(4.7)],
+  [147, "dana-o",    "COMMENTED",         d(4.5)],
+  [152, "bob-r",     "CHANGES_REQUESTED", d(6.8)],
+];
+for (const [num, reviewer, state, at] of reviews) {
+  await client.query(
+    `insert into github_review (id, owner_id, pull_request_id, reviewer_github_username, state, submitted_at)
+     values ($1,$2,$3,$4,$5,$6)`,
+    [randomUUID(), ownerId, prId[num], reviewer, state, at],
+  );
+}
+
 const { rows: [{ count }] } = await client.query(
   "select count(*)::int as count from anomaly where owner_id = $1", [ownerId],
 );
-console.log(`Seeded ${count} anomalies + Sprint 24 + ${members.length} members + sync_state for owner ${ownerId}.`);
+console.log(
+  `Seeded for owner ${ownerId}:\n` +
+    `  ${count} anomalies, Sprint 24, ${members.length} members, sync_state\n` +
+    `  ${tickets.length} tickets, ${transitions.length} status transitions\n` +
+    `  ${commits.length} commits (2 with NULL churn), ${pulls.length} PRs, ${reviews.length} reviews`,
+);
 await client.end();

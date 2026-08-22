@@ -22,12 +22,18 @@ export const MATRIX_METRICS: { key: MatrixMetric; label: string }[] = [
  * one-way (Phase 1): an over-cap commit is persisted with NULL churn forever.
  * Returning 0 there would claim we measured an empty commit — the whole reason
  * this returns `number | null` rather than `number`.
+ *
+ * A day with NO commits is a different case and returns 0, not null: there was
+ * nothing to measure and we know the answer is zero. Reporting "not measured"
+ * across every quiet day would drown the handful of genuinely unmeasured cells
+ * the cap produces, which is the only signal the null is there to carry.
  */
 export function metricValue(cell: ActivityCell, metric: MatrixMetric): number | null {
   switch (metric) {
     case "commits":
       return cell.commits;
     case "lines":
+      if (cell.commits === 0) return 0;
       if (cell.additions === null && cell.deletions === null) return null;
       return (cell.additions ?? 0) + (cell.deletions ?? 0);
     case "prs":

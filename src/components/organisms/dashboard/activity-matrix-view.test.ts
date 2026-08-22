@@ -56,19 +56,25 @@ describe("metricValue", () => {
   });
 
   it("sums additions and deletions for lines", () => {
-    expect(metricValue(cell({ additions: 100, deletions: 20 }), "lines")).toBe(120);
+    expect(metricValue(cell({ commits: 1, additions: 100, deletions: 20 }), "lines")).toBe(120);
   });
 
-  it("returns null for lines when churn was never measured", () => {
+  it("returns null for lines when the cell's commits all had unmeasured churn", () => {
     expect(metricValue(cell({ commits: 2 }), "lines")).toBeNull();
   });
 
-  it("treats a half-measured cell as measured", () => {
-    expect(metricValue(cell({ additions: 7, deletions: null }), "lines")).toBe(7);
+  it("returns 0, not null, for a day with no commits at all", () => {
+    // Nothing to measure, and we know the answer — reporting "not measured"
+    // across every quiet day would bury the genuinely unmeasured cells.
+    expect(metricValue(cell({ commits: 0 }), "lines")).toBe(0);
   });
 
-  it("returns 0, not null, for a genuinely empty measured cell", () => {
-    expect(metricValue(cell({ additions: 0, deletions: 0 }), "lines")).toBe(0);
+  it("treats a half-measured cell as measured", () => {
+    expect(metricValue(cell({ commits: 1, additions: 7, deletions: null }), "lines")).toBe(7);
+  });
+
+  it("returns 0, not null, for a commit that genuinely changed nothing", () => {
+    expect(metricValue(cell({ commits: 1, additions: 0, deletions: 0 }), "lines")).toBe(0);
   });
 });
 
