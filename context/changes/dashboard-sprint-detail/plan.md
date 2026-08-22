@@ -981,11 +981,11 @@ One additive, nullable column (`jira_project.time_zone`). No data migration, no 
 
 #### Automated
 
-- [x] 9.1 Unit tests pass
-- [x] 9.2 Type checking passes
-- [x] 9.3 Linting passes
-- [x] 9.4 Production build and Workers build pass
-- [x] 9.5 E2E passes (Settings connect has no stepper; wizard still does)
+- [x] 9.1 Unit tests pass — f3c4977
+- [x] 9.2 Type checking passes — f3c4977
+- [x] 9.3 Linting passes — f3c4977
+- [x] 9.4 Production build and Workers build pass — f3c4977
+- [x] 9.5 E2E passes (Settings connect has no stepper; wizard still does) — f3c4977
 
 #### Manual
 
