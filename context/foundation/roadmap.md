@@ -46,6 +46,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
 | S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
+| S-15 | team-management-surface   | manage the team roster after setup — a Settings tab, not the wizard; re-import is additive today and there is no way back to the editor | S-04, S-10 | FR-006 | proposed |
 
 ## Streams
 
@@ -339,6 +340,44 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Head start (S-10, 2026-08-22):** the `/settings` route, its tabbed shell, and the nav entry already exist — S-10 built them for its Connections tab. **S-14 is now a second tab, not a new route.** Scope shrinks to the thresholds/severity form plus its persistence.
 - **Risk:** Threshold overrides must be per-account (not global defaults) — confirm the settings schema in F-02 scopes threshold values to the user's account; a missing account-scope constraint would cause one user's threshold changes to affect all users.
 - **Status:** proposed
+
+---
+
+### S-15: Team management surface (post-setup)
+
+- **Outcome:** the owner can review, edit, merge and remove team members after
+  first run, from a **Settings tab** — without re-entering the setup wizard.
+  Re-import reconciles against the existing roster instead of only appending.
+- **Change ID:** team-management-surface
+- **PRD refs:** FR-006
+- **Prerequisites:** S-04 (the roster editor + import/save services exist), S-10
+  (the `/settings` tabbed shell exists — this becomes a second tab beside
+  Connections, exactly as S-14 will)
+- **Parallel with:** S-08, S-09, S-11, S-13, S-14
+- **Blockers:** —
+- **Why this is a gap, not a nice-to-have (found 2026-08-22 during S-10 manual
+  testing):** FR-006 does not describe a one-time import. It says the user "can
+  edit each member's profile … **and can change the technology track over time**
+  as developers grow into different tracks". S-04 closed FR-006 with the wizard
+  step alone, so the *lifecycle* half of the requirement has no surface. This is
+  the same shape as the Connections gap S-10 had to close: the wizard builds the
+  thing, then nothing links back to it.
+- **Three concrete defects observed:**
+  1. **`importRoster` is additive, not reconciling.** It inserts discovered
+     members (`roster-store.ts`, inside its own transaction) and merges nothing
+     away. Re-running the step on an account that already had 5 rows produced 7.
+     Only `saveRoster` replaces (delete-then-insert), and only when the user
+     saves the edited grid — so a re-import silently grows the roster until
+     someone notices.
+  2. **No route back to the editor.** `/setup/team` is the only surface;
+     `main-nav.tsx` does not reach it and neither does Settings.
+  3. **The wizard measure made the editor unusable** — fixed ahead of this slice
+     in S-10 (`SetupWizardShell` gained an opt-in `wide`), but it is the reason
+     the Remove and Merge controls were reported missing when they existed.
+- **Risk:** the merge control is the only way to fuse a GitHub-only row with its
+  Jira-only counterpart (S-04 resolved dedup as manual mapping — email is
+  unreliable on both sides). Any redesign must keep it, and must keep working
+  for the common real case of one human appearing as two imported rows.
 
 ---
 
