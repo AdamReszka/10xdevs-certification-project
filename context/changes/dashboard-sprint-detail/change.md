@@ -1,9 +1,9 @@
 ---
 change_id: dashboard-sprint-detail
 title: Dashboard "Sprint Detail" — aging report, activity matrix, sub-burndowns (+ deferred S-07 panels)
-status: preparing
+status: planned
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 archived_at: null
 ---
 
