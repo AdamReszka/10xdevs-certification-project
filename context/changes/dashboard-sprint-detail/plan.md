@@ -984,7 +984,31 @@ Re-seed the first account with
 `EMAIL=adam.reszka85@gmail.com npm run db:seed:demo` (idempotent — it clears and
 re-inserts). **Never seed the second one**; it holds real credentials.
 
-### Open question to resolve first
+### RESOLVED 2026-08-22 — the real-integration path works end to end
+
+The zero-sync investigation below is **closed**; it is kept because it names
+three separate defects, all fixed, and a cold reader should know they were real
+rather than environmental. Final state on `demo@sprintflow.test`:
+
+```
+FM-1  IN_PROGRESS  assignee=712020:ffd07ced-…   FM-2/3/6  TODO  unassigned
+sprint "SCRUM Sprint 1"  committed=0  completed=0  tz=Europe/Warsaw
+cursor sprint id == current sprint id
+```
+
+Status mapping resolved (no NULL categories), the merged roster row carries both
+identity keys, and the sprint name now renders in the Sprint Detail heading.
+
+`committed=0 / completed=0` is **correct arithmetic, not a defect** — none of the
+four tickets carries story points. To make row 1.8 mean anything, estimate at
+least one ticket in Jira and re-sync; the row asks for a match against a manual
+count, and 0 == 0 proves little.
+
+Row **7.6 is satisfied** by observation: four consecutive cycles each wrote
+exactly one `sync_attempt` row per integration (19:53 GITHUB=OK/JIRA=ERROR,
+then 20:11, 20:56, 21:11 both OK).
+
+### Open question — closed, kept for the record
 
 `demo@sprintflow.test` reports **GitHub OK and Jira OK, yet synced 0 tickets and
 0 commits.**
@@ -1048,11 +1072,26 @@ Recorded here so they survive a context reset. None block the PR.
    and `last_error` describing the *old* one. The owner reconnects, is told it
    worked, lands on a card that still says "Failing". Fix: clear both for that
    integration on a successful store. Observed live on 2026-08-22.
-2. **`lessons.md` candidate.** `TokenCryptoError` was handled at 1 of 4 call
-   sites, and the unhandled ones turned a recoverable credential problem into a
-   500 that also took down the other integration. Rule worth registering: a typed
-   error thrown by a shared helper must be handled at **every** call site, or the
-   helper should not throw it. Run `/10x-lesson` to add it.
+2. **Two `lessons.md` candidates.** Run `/10x-lesson` for each.
+
+   a. `TokenCryptoError` was handled at 1 of 4 call sites, and the unhandled ones
+   turned a recoverable credential problem into a 500 that also took down the
+   other integration. Rule: a typed error thrown by a shared helper must be
+   handled at **every** call site, or the helper should not throw it.
+
+   b. The stronger one, drawn from the two bugs that cost the most to find
+   (`listBoards`' `type === "scrum"` filter, and the sprint-blind `updated >=`
+   cursor). Both narrowed a query with a predicate that turned out to be wrong,
+   both then **returned an empty set**, and both callers read that as a
+   legitimate "nothing here": no board configured, nothing changed. The cycle
+   reported OK and the dashboard rendered empty. Rule: **when a narrowing
+   predicate is wrong, an empty result is indistinguishable from a true absence**
+   — so either the predicate must be provably total, or the empty case must be
+   distinguished from the filtered-everything-out case and surfaced. This
+   codebase is full of such narrowing (status mapping, JQL windows, delta
+   cursors, per-repo caps), which is why it is worth registering as a rule rather
+   than two bug fixes. Note also what made these expensive: **no automated test
+   could catch them** — all three of tonight's defects needed a real Jira.
 3. **Workers subrequest budget.** The per-commit stat cap is per *repo*, so a
    cycle costs ~30 × N extra subrequests (~460 at 5 repos, up from ~310). Verify
    against the limit on the deployment plan before the first deploy; the fix, if
@@ -1165,7 +1204,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 7.6 A forced sync writes exactly one attempt row per integration
+- [x] 7.6 A forced sync writes exactly one attempt row per integration — verified in-session (4 consecutive cycles, 2 rows each)
 - [ ] 7.7 No token and no raw error text in any new action's network payload
 
 ### Phase 8: `/settings` shell + Connections tab
