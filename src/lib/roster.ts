@@ -42,3 +42,50 @@ export async function listRoster(
     .from(teamMember)
     .where(eq(teamMember.ownerId, ownerId));
 }
+
+/**
+ * The EDITOR's projection — a second reader over the same table, deliberately.
+ *
+ * `listRoster` above is the S-07 dashboard reader, consumed by `dashboard/page.tsx`
+ * and `dashboard/sprint-detail/page.tsx` and asserted by
+ * `dashboard-readers.integration.test.ts`. Its projection is NARROWER than the
+ * editor's: it has `isActive` but neither `spCapacity` nor `source`, both of which
+ * `ClientMember` requires. Widening it would push two unused columns and a shape
+ * change through both dashboards and their test for no gain, so the editor gets
+ * its own reader instead.
+ *
+ * Both editor mounts — the setup wizard's `/setup/team` and Settings → Team —
+ * read through THIS function, so the two grids cannot drift apart.
+ */
+export type EditorRosterMember = {
+  id: string;
+  name: string;
+  githubUsername: string | null;
+  jiraAccountId: string | null;
+  role: string | null;
+  spCapacity: number | null;
+  technologyTrack: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
+  source: "GITHUB" | "JIRA" | "MANUAL" | "BOTH";
+  isActive: boolean;
+};
+
+export async function listRosterForEditor(
+  db: Db,
+  ownerId: string,
+): Promise<EditorRosterMember[]> {
+  return db
+    .select({
+      id: teamMember.id,
+      name: teamMember.name,
+      githubUsername: teamMember.githubUsername,
+      jiraAccountId: teamMember.jiraAccountId,
+      role: teamMember.role,
+      spCapacity: teamMember.spCapacity,
+      technologyTrack: teamMember.technologyTrack,
+      source: teamMember.source,
+      isActive: teamMember.isActive,
+    })
+    .from(teamMember)
+    .where(eq(teamMember.ownerId, ownerId))
+    .orderBy(teamMember.name);
+}

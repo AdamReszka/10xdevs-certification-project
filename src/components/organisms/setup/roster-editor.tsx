@@ -458,6 +458,11 @@ export default function RosterEditor({
       toast.success(
         `Saved ${members.length} team ${members.length === 1 ? "member" : "members"}.`,
       );
+      // The saved roster feeds sibling surfaces (the dashboard's member filter,
+      // the Sprint Detail sub-burndowns). Harmless in the wizard, load-bearing on
+      // the Settings tab. Repo convention after a successful Server Action —
+      // there is no `revalidatePath` anywhere in `src/`.
+      router.refresh();
     } catch {
       setFormError("Something went wrong saving the roster. Please try again.");
     }

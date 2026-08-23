@@ -4,10 +4,10 @@ import { and, eq } from "drizzle-orm";
 import CadenceForm from "@/components/organisms/setup/cadence-form";
 import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
-import { sprint, teamMember } from "@/db/schema";
+import { sprint } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import type { ClientMember } from "@/app/(app)/setup/team/actions";
+import { listRosterForEditor } from "@/lib/roster";
 import type { Weekday } from "@/lib/validations/roster";
 
 /**
@@ -24,32 +24,8 @@ export default async function TeamSetupPage() {
   const db = getDb(env);
   const ownerId = session.user.id;
 
-  const memberRows = await db
-    .select({
-      id: teamMember.id,
-      name: teamMember.name,
-      githubUsername: teamMember.githubUsername,
-      jiraAccountId: teamMember.jiraAccountId,
-      role: teamMember.role,
-      spCapacity: teamMember.spCapacity,
-      technologyTrack: teamMember.technologyTrack,
-      source: teamMember.source,
-      isActive: teamMember.isActive,
-    })
-    .from(teamMember)
-    .where(eq(teamMember.ownerId, ownerId));
-
-  const initialMembers: ClientMember[] = memberRows.map((m) => ({
-    id: m.id,
-    name: m.name,
-    githubUsername: m.githubUsername,
-    jiraAccountId: m.jiraAccountId,
-    role: m.role,
-    spCapacity: m.spCapacity,
-    technologyTrack: m.technologyTrack,
-    source: m.source,
-    isActive: m.isActive,
-  }));
+  // Shared with Settings → Team so the two editor mounts cannot drift.
+  const initialMembers = await listRosterForEditor(db, ownerId);
 
   // The owner's active sprint cadence, when one exists (between-sprints teams
   // have none — the cadence form falls back to editable defaults).
