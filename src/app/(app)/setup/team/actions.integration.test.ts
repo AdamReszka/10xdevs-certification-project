@@ -212,10 +212,22 @@ describe("team actions — happy path", () => {
     expect(imported.githubDegraded).toBe(false);
     expect(imported.members).toHaveLength(4);
 
-    // Save an edited roster (map the two identity keys into one BOTH member).
+    // Save the imported roster BY ID — the realistic edit-then-save flow. The save
+    // is a differential upsert (S-15): it updates the rows it is given and deletes
+    // nothing, so all four imported members survive. Mapping the two halves of one
+    // human is expressed by MOVING the Jira key onto the GitHub row, which leaves
+    // the emptied row behind as MANUAL; collapsing it is the Phase 2 merge action,
+    // not something the bulk save may do implicitly.
+    const octocatRow = imported.members.find((m) => m.githubUsername === "octocat")!;
+    const miaRow = imported.members.find((m) => m.jiraAccountId === "acc-1")!;
+    const untouched = imported.members.filter(
+      (m) => m.id !== octocatRow.id && m.id !== miaRow.id,
+    );
+
     const saved = await saveRosterAction({
       members: [
         {
+          id: octocatRow.id,
           name: "Mia Krystof",
           githubUsername: "octocat",
           jiraAccountId: "acc-1",
@@ -223,14 +235,30 @@ describe("team actions — happy path", () => {
           spCapacity: 8,
           technologyTrack: "BACKEND",
         },
-        { name: "devtwo", githubUsername: "devtwo" },
+        { id: miaRow.id, name: "Mia Krystof (unmapped)", jiraAccountId: "" },
+        ...untouched.map((m) => ({
+          id: m.id,
+          name: m.name,
+          githubUsername: m.githubUsername,
+          jiraAccountId: m.jiraAccountId,
+        })),
       ],
     });
     expect(saved.ok).toBe(true);
 
     const rows = await db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId));
-    expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.githubUsername === "octocat")?.source).toBe("BOTH");
+    expect(rows).toHaveLength(4);
+
+    const mapped = rows.find((r) => r.githubUsername === "octocat");
+    expect(mapped?.source).toBe("BOTH");
+    expect(mapped?.role).toBe("Tech Lead");
+    expect(mapped?.spCapacity).toBe(8);
+    expect(mapped?.technologyTrack).toBe("BACKEND");
+
+    // The row whose Jira key moved away keeps its identity — it is not deleted.
+    const emptied = rows.find((r) => r.id === miaRow.id);
+    expect(emptied?.source).toBe("MANUAL");
+    expect(emptied?.jiraAccountId).toBeNull();
 
     const cadence = await importCadenceAction();
     if (!cadence.ok) throw new Error(`importCadence failed: ${cadence.error}`);

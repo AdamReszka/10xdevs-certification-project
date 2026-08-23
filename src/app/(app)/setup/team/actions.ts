@@ -10,6 +10,7 @@ import { JiraAuthError, type JiraBoard, JiraUnavailableError } from "@/lib/jira"
 import { MissingCredentialError } from "@/lib/integrations/credentials";
 import {
   type TeamMemberRow,
+  UnknownMemberError,
   importCadence as importCadenceService,
   importRoster as importRosterService,
   saveCadence as saveCadenceService,
@@ -43,6 +44,9 @@ export type ClientMember = {
   spCapacity: number | null;
   technologyTrack: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
   source: "GITHUB" | "JIRA" | "MANUAL" | "BOTH";
+  /** Round-trips through the editor so a save cannot resurrect a deactivated
+   *  member as a side effect of an unrelated field edit (S-15). */
+  isActive: boolean;
 };
 
 /** Shared token-free failure shape; the client reads `message` regardless. */
@@ -99,6 +103,7 @@ function toClientMember(m: TeamMemberRow): ClientMember {
     spCapacity: m.spCapacity,
     technologyTrack: m.technologyTrack,
     source: m.source,
+    isActive: m.isActive,
   };
 }
 
@@ -255,6 +260,15 @@ function toFailure(err: unknown, tag: string): ActionFailure {
       ok: false,
       error: "integration_unavailable",
       message: "An integration is not connected. Complete the earlier steps and try again.",
+    };
+  }
+  // A submitted row id outside the caller's roster — a stale grid, or a crafted
+  // payload. Never re-inserted; refused (PRD cross-account isolation).
+  if (err instanceof UnknownMemberError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "That roster is out of date. Reload the page and try again.",
     };
   }
   console.error(`${tag} unexpected error:`, err);

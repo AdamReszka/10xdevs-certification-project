@@ -803,18 +803,18 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [ ] 1.1 Characterisation tests fail before the change and pass after
-- [ ] 1.2 Unchanged save issues no write; absence, attribution and `is_active` survive
-- [ ] 1.3 Foreign member `id` in a payload is rejected as `invalid_input`
-- [ ] 1.4 Duplicate identity keys rejected by the schema
-- [ ] 1.5 Whole suite green (`npm test && npm run test:integration`), incl. the repaired `actions.integration.test.ts`
-- [ ] 1.6 Type checking passes
-- [ ] 1.7 Linting passes
+- [x] 1.1 Characterisation tests fail before the change and pass after
+- [x] 1.2 Unchanged save issues no write; absence, attribution and `is_active` survive
+- [x] 1.3 Foreign member `id` in a payload is rejected as `invalid_input`
+- [x] 1.4 Duplicate identity keys rejected by the schema
+- [x] 1.5 Whole suite green (`npm test && npm run test:integration`), incl. the repaired `actions.integration.test.ts`
+- [x] 1.6 Type checking passes
+- [x] 1.7 Linting passes
 
 #### Manual
 
-- [ ] 1.8 One-field edit moves exactly one row's `updated_at`
-- [ ] 1.9 Out-of-band deactivation survives a UI save
+- [x] 1.8 One-field edit moves exactly one row's `updated_at`
+- [x] 1.9 Out-of-band deactivation survives a UI save
 
 ### Phase 2: Member lifecycle — deactivate, reactivate, delete, merge
 

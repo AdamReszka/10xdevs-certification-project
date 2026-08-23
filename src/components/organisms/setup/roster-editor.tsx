@@ -71,6 +71,9 @@ function toFormMember(m: ClientMember) {
     role: m.role ?? "",
     spCapacity: m.spCapacity,
     technologyTrack: m.technologyTrack,
+    // Carried so a save round-trips it instead of falling back to the stored
+    // value — the Status column that reads/writes it lands in Phase 4.
+    isActive: m.isActive,
   };
 }
 

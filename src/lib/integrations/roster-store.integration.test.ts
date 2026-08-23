@@ -6,6 +6,8 @@ import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
+  absence,
+  anomaly,
   githubCredential,
   jiraCredential,
   jiraProject,
@@ -16,9 +18,11 @@ import {
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
 import {
+  UnknownMemberError,
   importCadence,
   importRoster,
   saveCadence,
+  saveRoster,
 } from "@/lib/integrations/roster-store";
 
 /**
@@ -34,6 +38,9 @@ import {
  *    no-active-sprint path persists board_id only and writes NO sprint row (F1).
  *  - cadence override survives re-import (FR-007): only metadata refreshes.
  *  - GitHub 403 degrades (no throw) and Jira-seeded members still persist.
+ *  - (S-15) saveRoster is a differential upsert: it never deletes, so absences,
+ *    anomaly attribution and `is_active` survive a save, and a payload carrying
+ *    a foreign member id is refused rather than silently re-inserted.
  */
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
@@ -375,5 +382,236 @@ describe("importCadence — board + sprint persistence (FR-007)", () => {
     // Metadata still refreshed from the sprint.
     expect(row.name).toBe("Sprint 7");
     expect(row.state).toBe("ACTIVE");
+  });
+});
+
+// ============================================================================
+// S-15 Phase 1 — saveRoster is a differential upsert, never a delete-then-insert
+// ============================================================================
+
+/**
+ * CHARACTERISATION (written red): the S-04 `saveRoster` deleted the owner's whole
+ * `team_member` set and re-inserted it. Two foreign-key actions fire on that
+ * DELETE and are NOT undone by the re-INSERT, even though the rows come back with
+ * the same ids — `absence.team_member_id` is ON DELETE CASCADE and
+ * `anomaly.related_team_member_id` is ON DELETE SET NULL — and `is_active` was
+ * reset to `true` because the insert omitted the column.
+ *
+ * ISOLATION: the old owner-scoped DELETE accidentally guaranteed a save could
+ * only touch the caller's rows. `UPDATE … WHERE id = $1` does not, so the service
+ * must reject any submitted `id` outside the owner's current set rather than
+ * treating it as new (PRD cross-account-isolation guardrail).
+ */
+describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
+  /** Seed one member plus the `sprint` chain an anomaly row needs (sprint_id NOT NULL). */
+  async function seedMemberWithHistory(ownerId: string) {
+    const memberId = randomUUID();
+    await db.insert(teamMember).values({
+      id: memberId,
+      ownerId,
+      name: "Erik Nord",
+      githubUsername: "eriknord",
+      role: "Developer",
+      source: "GITHUB",
+      isActive: false,
+    });
+
+    const [proj] = await db
+      .select({ id: jiraProject.id })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+
+    const sprintId = randomUUID();
+    await db.insert(sprint).values({
+      id: sprintId,
+      ownerId,
+      jiraProjectId: proj.id,
+      jiraSprintId: `s15-${sprintId}`,
+      name: "Sprint 7",
+      state: "ACTIVE",
+    });
+
+    const absenceId = randomUUID();
+    await db.insert(absence).values({
+      id: absenceId,
+      ownerId,
+      teamMemberId: memberId,
+      sprintId,
+      type: "VACATION",
+      startDate: new Date("2026-08-24T00:00:00.000Z"),
+      endDate: new Date("2026-08-28T00:00:00.000Z"),
+    });
+
+    const anomalyId = randomUUID();
+    await db.insert(anomaly).values({
+      id: anomalyId,
+      ownerId,
+      sprintId,
+      dedupKey: `DEVELOPER_INACTIVE:member:${memberId}`,
+      type: "DEVELOPER_INACTIVE",
+      severity: "MEDIUM",
+      relatedTeamMemberId: memberId,
+    });
+
+    return { memberId, sprintId, absenceId, anomalyId };
+  }
+
+  /** The editor's payload for a persisted row — id included, fields unchanged. */
+  function unchangedPayload(memberId: string) {
+    return {
+      id: memberId,
+      name: "Erik Nord",
+      githubUsername: "eriknord",
+      role: "Developer",
+    };
+  }
+
+  it("a no-op save preserves absences, anomaly attribution and is_active", async () => {
+    const ownerId = await newOwner();
+    const { memberId, absenceId, anomalyId } = await seedMemberWithHistory(ownerId);
+
+    await saveRoster({ db, ownerId, members: [unchangedPayload(memberId)] });
+
+    const absences = await db
+      .select({ id: absence.id })
+      .from(absence)
+      .where(eq(absence.teamMemberId, memberId));
+    expect(absences.map((a) => a.id)).toEqual([absenceId]);
+
+    const [anom] = await db
+      .select({ relatedTeamMemberId: anomaly.relatedTeamMemberId })
+      .from(anomaly)
+      .where(eq(anomaly.id, anomalyId));
+    expect(anom.relatedTeamMemberId).toBe(memberId);
+
+    const [row] = await db
+      .select({ isActive: teamMember.isActive })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(row.isActive).toBe(false);
+  });
+
+  it("an unchanged save issues no write at all", async () => {
+    const ownerId = await newOwner();
+    const { memberId } = await seedMemberWithHistory(ownerId);
+
+    const [before] = await db
+      .select({ updatedAt: teamMember.updatedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+
+    const result = await saveRoster({
+      db,
+      ownerId,
+      members: [unchangedPayload(memberId)],
+    });
+    expect(result).toEqual({ updated: 0, inserted: 0 });
+
+    const [after] = await db
+      .select({ updatedAt: teamMember.updatedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+  });
+
+  it("a one-field edit moves exactly one row; the untouched sibling does not", async () => {
+    const ownerId = await newOwner();
+    const { memberId } = await seedMemberWithHistory(ownerId);
+
+    const siblingId = randomUUID();
+    await db.insert(teamMember).values({
+      id: siblingId,
+      ownerId,
+      name: "Mia Krystof",
+      jiraAccountId: "acc-1",
+      source: "JIRA",
+    });
+
+    const [siblingBefore] = await db
+      .select({ updatedAt: teamMember.updatedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, siblingId));
+
+    const result = await saveRoster({
+      db,
+      ownerId,
+      members: [
+        { ...unchangedPayload(memberId), role: "Tech Lead" },
+        { id: siblingId, name: "Mia Krystof", jiraAccountId: "acc-1" },
+      ],
+    });
+    expect(result).toEqual({ updated: 1, inserted: 0 });
+
+    const [edited] = await db
+      .select({ role: teamMember.role, isActive: teamMember.isActive })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(edited.role).toBe("Tech Lead");
+    // The edit must not resurrect a deactivated member.
+    expect(edited.isActive).toBe(false);
+
+    const [siblingAfter] = await db
+      .select({ updatedAt: teamMember.updatedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, siblingId));
+    expect(siblingAfter.updatedAt.getTime()).toBe(siblingBefore.updatedAt.getTime());
+  });
+
+  it("rows the payload omits are left alone — the bulk save never deletes", async () => {
+    const ownerId = await newOwner();
+    const { memberId } = await seedMemberWithHistory(ownerId);
+
+    const result = await saveRoster({
+      db,
+      ownerId,
+      members: [{ name: "New Joiner", githubUsername: "newjoiner" }],
+    });
+    expect(result).toEqual({ updated: 0, inserted: 1 });
+
+    const rows = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.id)).toContain(memberId);
+  });
+
+  it("persists isActive when the payload carries it", async () => {
+    const ownerId = await newOwner();
+    const { memberId } = await seedMemberWithHistory(ownerId);
+
+    await saveRoster({
+      db,
+      ownerId,
+      members: [{ ...unchangedPayload(memberId), isActive: true }],
+    });
+
+    const [row] = await db
+      .select({ isActive: teamMember.isActive })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(row.isActive).toBe(true);
+  });
+
+  it("rejects a payload carrying another owner's member id (cross-account isolation)", async () => {
+    const ownerA = await newOwner();
+    const ownerB = await newOwner();
+    const { memberId: foreignId } = await seedMemberWithHistory(ownerB);
+
+    await expect(
+      saveRoster({
+        db,
+        ownerId: ownerA,
+        members: [{ id: foreignId, name: "Hijacked", githubUsername: "attacker" }],
+      }),
+    ).rejects.toBeInstanceOf(UnknownMemberError);
+
+    // The victim's row is untouched — not edited, not re-owned, not deleted.
+    const [victim] = await db
+      .select({ name: teamMember.name, ownerId: teamMember.ownerId })
+      .from(teamMember)
+      .where(eq(teamMember.id, foreignId));
+    expect(victim.name).toBe("Erik Nord");
+    expect(victim.ownerId).toBe(ownerB);
   });
 });

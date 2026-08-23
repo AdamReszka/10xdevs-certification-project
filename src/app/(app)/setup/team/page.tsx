@@ -34,6 +34,7 @@ export default async function TeamSetupPage() {
       spCapacity: teamMember.spCapacity,
       technologyTrack: teamMember.technologyTrack,
       source: teamMember.source,
+      isActive: teamMember.isActive,
     })
     .from(teamMember)
     .where(eq(teamMember.ownerId, ownerId));
@@ -47,6 +48,7 @@ export default async function TeamSetupPage() {
     spCapacity: m.spCapacity,
     technologyTrack: m.technologyTrack,
     source: m.source,
+    isActive: m.isActive,
   }));
 
   // The owner's active sprint cadence, when one exists (between-sprints teams

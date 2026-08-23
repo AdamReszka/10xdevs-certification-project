@@ -241,7 +241,26 @@ export type RosterMemberInput = {
   role?: string | null;
   spCapacity?: number | null;
   technologyTrack?: TechnologyTrack | null;
+  /** Omitted ⇒ keep whatever the stored row has (never resurrect a deactivated
+   *  member as a side effect of an unrelated field edit). */
+  isActive?: boolean;
 };
+
+/**
+ * A submitted `id` that is not in the caller's current roster.
+ *
+ * SECURITY (PRD cross-account isolation): the old delete-then-insert save was
+ * owner-scoped by its DELETE, so it could only ever touch the caller's rows. An
+ * `UPDATE … WHERE id = $1` carries no such guarantee, so an unknown id MUST be
+ * refused — treating it as "new" would let a crafted payload edit, or silently
+ * clone, another account's member. Mapped to `invalid_input` by the action layer.
+ */
+export class UnknownMemberError extends Error {
+  constructor(message = "A submitted roster row does not belong to this account.") {
+    super(message);
+    this.name = "UnknownMemberError";
+  }
+}
 
 /**
  * Derive `source` from which identity keys are present: both ⇒ `BOTH` (a mapped
@@ -257,10 +276,24 @@ function deriveSource(m: RosterMemberInput): TeamMemberRow["source"] {
 }
 
 /**
- * Persist the user-edited roster as the full owner-scoped set (delete-then-insert,
- * mirroring the S-02/S-03 monitored-set precedent). The submitted set IS the
- * truth here — manual mapping (two origins merged into one `BOTH` row) and
- * manual additions arrive already resolved from the editor.
+ * Persist the user-edited roster as a DIFFERENTIAL UPSERT: rows carrying an id
+ * known to this owner are updated in place, rows without an id are inserted, and
+ * nothing is ever deleted.
+ *
+ * WHY NOT DELETE-THEN-INSERT (S-15, the defect this replaces): `absence.team_member_id`
+ * is ON DELETE CASCADE and `anomaly.related_team_member_id` is ON DELETE SET NULL,
+ * neither DEFERRABLE. Both fire on the DELETE and are NOT undone by the re-INSERT
+ * — the DB cannot tell that a re-inserted row with the same id is "the same row"
+ * — so every save silently destroyed the owner's recorded absences and detached
+ * their anomaly attribution, and reset `is_active` to the column default. The
+ * S-02/S-03 monitored-set stores can use that idiom safely because their tables
+ * have no hand-entered children; `team_member` does.
+ *
+ * Rows the payload omits are LEFT ALONE: the bulk save is no longer authoritative
+ * over membership. Removal is an explicit, confirmed, single-member operation.
+ *
+ * Unchanged rows are skipped entirely, so a one-field edit moves exactly one
+ * row's `updated_at`.
  */
 export async function saveRoster({
   db,
@@ -270,28 +303,100 @@ export async function saveRoster({
   db: Db;
   ownerId: string;
   members: RosterMemberInput[];
-}): Promise<{ count: number }> {
-  const count = await db.transaction(async (tx) => {
-    await tx.delete(teamMember).where(eq(teamMember.ownerId, ownerId));
-    if (members.length > 0) {
-      await tx.insert(teamMember).values(
-        members.map((m) => ({
-          id: m.id ?? randomUUID(),
-          ownerId,
-          name: m.name,
-          githubUsername: m.githubUsername ?? null,
-          jiraAccountId: m.jiraAccountId ?? null,
-          role: m.role ?? null,
-          spCapacity: m.spCapacity ?? null,
-          technologyTrack: m.technologyTrack ?? null,
-          source: deriveSource(m),
-        })),
-      );
-    }
-    return members.length;
-  });
+}): Promise<{ updated: number; inserted: number }> {
+  return db.transaction(async (tx) => {
+    const existing = await tx
+      .select()
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    const byId = new Map(existing.map((m) => [m.id, m]));
 
-  return { count };
+    const updates: { id: string; values: MemberFields }[] = [];
+    const inserts: (typeof teamMember.$inferInsert)[] = [];
+
+    for (const m of members) {
+      if (m.id == null) {
+        inserts.push({
+          id: randomUUID(),
+          ownerId,
+          ...toMemberFields(m, true),
+        });
+        continue;
+      }
+
+      const current = byId.get(m.id);
+      // Not "insert it anyway" — see UnknownMemberError.
+      if (!current) throw new UnknownMemberError();
+
+      const values = toMemberFields(m, current.isActive);
+      if (!isUnchanged(current, values)) updates.push({ id: m.id, values });
+    }
+
+    for (const u of updates) {
+      await tx
+        .update(teamMember)
+        .set(u.values)
+        // The owner predicate is redundant given the id came from this owner's
+        // set, and deliberately kept: defence in depth on the isolation guarantee.
+        .where(and(eq(teamMember.id, u.id), eq(teamMember.ownerId, ownerId)));
+    }
+
+    if (inserts.length > 0) {
+      await tx.insert(teamMember).values(inserts);
+    }
+
+    return { updated: updates.length, inserted: inserts.length };
+  });
+}
+
+/** The persisted column set a save owns — everything except id/ownerId/timestamps. */
+type MemberFields = {
+  name: string;
+  githubUsername: string | null;
+  jiraAccountId: string | null;
+  role: string | null;
+  spCapacity: number | null;
+  technologyTrack: TechnologyTrack | null;
+  source: TeamMemberRow["source"];
+  isActive: boolean;
+};
+
+/** A cleared text input arrives as `""` from the editor, which is "absent", not a
+ *  value — `deriveSource` already treats it that way, so the persisted column
+ *  must agree or the row's `source` contradicts its own keys. */
+function blankToNull(v: string | null | undefined): string | null {
+  const trimmed = v?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/** Normalize a submitted row to its persisted shape. `fallbackActive` is the
+ *  stored value on an update (or `true` on an insert): an omitted `isActive`
+ *  means "leave it as it is", never "activate". */
+function toMemberFields(m: RosterMemberInput, fallbackActive: boolean): MemberFields {
+  return {
+    name: m.name,
+    githubUsername: blankToNull(m.githubUsername),
+    jiraAccountId: blankToNull(m.jiraAccountId),
+    role: blankToNull(m.role),
+    spCapacity: m.spCapacity ?? null,
+    technologyTrack: m.technologyTrack ?? null,
+    source: deriveSource(m),
+    isActive: m.isActive ?? fallbackActive,
+  };
+}
+
+/** True when the update would be a no-op — skip it so `updated_at` stays put. */
+function isUnchanged(current: TeamMemberRow, next: MemberFields): boolean {
+  return (
+    current.name === next.name &&
+    current.githubUsername === next.githubUsername &&
+    current.jiraAccountId === next.jiraAccountId &&
+    current.role === next.role &&
+    current.spCapacity === next.spCapacity &&
+    current.technologyTrack === next.technologyTrack &&
+    current.source === next.source &&
+    current.isActive === next.isActive
+  );
 }
 
 // ============================================================================
