@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 
@@ -31,7 +32,12 @@ type Stage =
   | { kind: "closed" }
   | { kind: "warning" }
   | { kind: "project"; email: string; projects: ClientProject[] }
-  | { kind: "mapping"; projectId: string; projectKey: string; statuses: ClientStatus[] };
+  | { kind: "mapping"; projectId: string; projectKey: string; statuses: ClientStatus[] }
+  // Only reached when the project actually changed and its sprints were
+  // discarded. The account now has NO sprint, and nothing re-imports one on its
+  // own (roadmap S-16), so closing straight back to the card would leave the
+  // owner with blank dashboards and no explanation.
+  | { kind: "discarded"; summary: string };
 
 export default function JiraProjectEditor({ currentProjectKey }: { currentProjectKey: string | null }) {
   const router = useRouter();
@@ -93,6 +99,31 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
     );
   }
 
+  if (stage.kind === "discarded") {
+    return (
+      <div className="flex flex-col gap-3 rounded-lg border p-4">
+        <Alert>
+          <AlertTriangle className="size-4" aria-hidden />
+          <AlertTitle>{stage.summary}</AlertTitle>
+          <AlertDescription>
+            The previous project&apos;s sprints, tickets and status history were
+            discarded, as warned. Nothing has imported a sprint for the new
+            project yet, so both dashboards will stay empty until you re-run the
+            cadence import.
+          </AlertDescription>
+        </Alert>
+        <div className="flex gap-2">
+          <Button asChild>
+            <Link href="/setup/team">Import sprint cadence</Link>
+          </Button>
+          <Button variant="ghost" onClick={() => setStage({ kind: "closed" })}>
+            Later
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (stage.kind === "project") {
     return (
       <div className="rounded-lg border p-4">
@@ -132,8 +163,12 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
             })),
           );
           if (!result.ok) return { ok: false, message: result.message };
-          setStage({ kind: "closed" });
           router.refresh();
+          setStage(
+            result.sprintsDiscarded
+              ? { kind: "discarded", summary: result.summary }
+              : { kind: "closed" },
+          );
           return { ok: true };
         }}
         onBack={() => setStage({ kind: "closed" })}

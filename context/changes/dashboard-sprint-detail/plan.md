@@ -1313,8 +1313,55 @@ Recorded here so they survive a context reset. None block the PR.
 - [x] 11.11 F9 — `jiraProject` time-zone update asserts `ownerId` instead of inheriting it
 - [x] 11.12 F10 — Phase 5 §5 contradiction and Phase 7 §4 `startedAt` amended in-plan; this section added
 
-#### Still open from triage
+#### Closed after triage
 
-- [ ] 11.13 F2 open half — nothing consumes `sprintsDiscarded`; route to cadence re-import (blocked on whether `importCadence` is safe outside the wizard)
-- [ ] 11.14 Tests for F1 (retained repo keeps history), F2 (both branches), F4 (failing SHA)
-- [ ] 11.15 F6 — the Phase 4/5 manual rows (the actual FR-016/FR-017 deliverable) remain unverified
+- [x] 11.13 F2 open half — **minimal version shipped.** `updateJiraProject` returns `sprintsDiscarded`, the action forwards it, and `jira-project-editor.tsx` gains a `discarded` stage that tells the owner the old sprints are gone and links to `/setup/team`. Deliberately does NOT auto-run `importCadence` — that needs the unverified "is it safe outside the wizard" answer and belongs with S-16.
+- [x] 11.14 Tests — 6 added, all green. `connections.integration.test.ts`: retained repo keeps its row id and its commits when the selection grows; a deselected repo still cascades away; project change discards sprints; same-project re-save keeps them; another owner's sprints are never touched. `run-sync.integration.test.ts`: a 404 on one commit-detail leaves NULL churn while the cycle still completes and the PR leg still persists.
+
+#### Still open — owner side
+
+- [ ] 11.15 F6 — the Phase 4/5 manual rows (the actual FR-016/FR-017 deliverable) remain unverified. Worked from `MANUAL-CHECKLIST.md` in this folder, which maps 1:1 onto the Progress numbers above.
+
+---
+
+## Resume here after a context reset
+
+> Written 2026-08-23 so the next session can pick this up cold. `## Progress` is
+> canonical for state; this section is what to *do* next and why.
+
+**Where the branch stands.** All 10 phases implemented; impl-review run and all
+10 findings triaged (9 fixed, F6 partially — see
+`reviews/impl-review.md`). At HEAD: typecheck clean, 322 unit, 94 integration,
+11/11 e2e, lint 0 errors. Draft PR #46, not marked ready.
+
+**The one thing blocking ready** is 11.15 — the owner's manual pass over
+`MANUAL-CHECKLIST.md`. Nothing for an agent to do until that comes back.
+
+**When the manual pass returns:**
+
+1. Fix whatever it turned up. Rows 4.7 (NULL churn renders `—`, blank ≠ `—`),
+   5.8 (zone-local "yesterday", not UTC) and 5.10 (Today latency on the `max:1`
+   pool) are the likely failures. If 5.10 is slow, the fix is pre-aggregating M2
+   into fewer round-trips — **never** a second pool (lessons.md #3).
+2. Tick the Progress rows, then mark PR #46 ready. The owner merges.
+
+**Carried out of this slice, do NOT lose:**
+
+- **`github-store.ts:157-166` still has the destructive delete-then-insert** that
+  F1 fixed in `connection-service.ts`. It runs on the wizard's *reconnect* path:
+  because `onConflictDoUpdate` keeps the credential id stable but the
+  `monitoredRepo` delete cascades, reconnecting GitHub discards every commit, PR
+  and review. Same fix applies (upsert on `monitored_repo_owner_repo_uq`, delete
+  only the deselected). Out of scope here because it is S-02 code and untouched
+  by this branch — but it is the same defect class and it is live.
+- **Roadmap S-16 `sprint-reconciliation`** is filed and carries the FR-007 gap
+  plus the note that reconciliation must avoid creating a second ACTIVE sprint
+  rather than relying on `getActiveSprintRow`'s new ordering.
+- **Follow-up #1** (a successful reconnect leaves a stale `sync_state`) is still
+  unplanned.
+- **Two `lessons.md` candidates** are described in Follow-ups §2 and have not
+  been written up: the typed-error-handled-at-one-of-four-call-sites rule, and
+  the stronger one — *a wrong narrowing predicate makes an empty result
+  indistinguishable from a true absence*. The second earned itself twice on this
+  branch (`listBoards`' `type === "scrum"` filter, the sprint-blind delta cursor)
+  and no automated test could have caught either.

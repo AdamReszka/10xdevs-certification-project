@@ -83,7 +83,12 @@ export async function testJiraConnection(): Promise<ConnectionTestResult> {
 }
 
 export type UpdateSelectionResult =
-  | { ok: true; summary: string }
+  // `sprintsDiscarded` is set only by the Jira-project path, and only when the
+  // project actually changed. Nothing refreshes the `sprint` row after setup
+  // (roadmap S-16), so a discard leaves the account with no sprint at all until
+  // the cadence import is re-run — the caller has to say so rather than let the
+  // dashboards silently go blank.
+  | { ok: true; summary: string; sprintsDiscarded?: boolean }
   | { ok: false; message: string };
 
 /** Repo shape the existing `RepoSelector` expects (ids as strings for the DOM). */
@@ -257,7 +262,7 @@ export async function updateJiraProject(
   }
 
   try {
-    const { projectKey, mappedStatusCount } = await updateJiraProjectService({
+    const { projectKey, mappedStatusCount, sprintsDiscarded } = await updateJiraProjectService({
       db,
       ownerId: session.user.id,
       jiraProjectId,
@@ -269,6 +274,7 @@ export async function updateJiraProject(
     return {
       ok: true,
       summary: `Now monitoring ${projectKey} with ${mappedStatusCount} mapped statuses.`,
+      sprintsDiscarded,
     };
   } catch {
     return {

@@ -6,10 +6,12 @@ import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
+  githubCommit,
   githubCredential,
   jiraCredential,
   jiraProject,
   monitoredRepo,
+  sprint,
   statusMapping,
   syncAttempt,
   syncState,
@@ -19,6 +21,7 @@ import { encryptToken } from "@/lib/crypto";
 import { getConnectionsOverview } from "@/lib/settings/connections";
 import {
   testGithubConnection,
+  updateJiraProject,
   updateMonitoredRepos,
 } from "@/lib/settings/connection-service";
 
@@ -342,6 +345,85 @@ describe("updateMonitoredRepos", () => {
     expect(rows).toEqual([{ fullName: "acme/api" }]);
   });
 
+  // impl-review F1. The original implementation deleted every monitored_repo row
+  // and re-inserted with fresh UUIDs; `github_commit.repo_id` cascades off that
+  // id, so ADDING a repo silently wiped the history of the ones being kept — and
+  // unrecoverably, since the sync cursor is left untouched.
+  it("keeps a retained repo's synced history when the selection grows", async () => {
+    const { ownerId } = await seedOwner();
+    const [before] = await db
+      .select({ id: monitoredRepo.id })
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+
+    await db.insert(githubCommit).values({
+      id: randomUUID(),
+      ownerId,
+      repoId: before.id,
+      sha: "cafe1234",
+      message: "must survive a selection edit",
+    });
+
+    const fetchImpl = (async () => jsonRes(repoList)) as unknown as typeof fetch;
+    // Keep acme/app (555), ADD acme/api (777).
+    const result = await updateMonitoredRepos({
+      db,
+      ownerId,
+      selectedRepoIds: ["555", "777"],
+      opts: { baseUrl: GH_BASE, fetchImpl },
+    });
+    expect(result.repoCount).toBe(2);
+
+    // Stable row id is the mechanism — without it the cascade fires.
+    const [after] = await db
+      .select({ id: monitoredRepo.id })
+      .from(monitoredRepo)
+      .where(and(eq(monitoredRepo.ownerId, ownerId), eq(monitoredRepo.githubRepoId, 555)));
+    expect(after.id).toBe(before.id);
+
+    const commits = await db
+      .select({ sha: githubCommit.sha })
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    expect(commits).toEqual([{ sha: "cafe1234" }]);
+  });
+
+  it("still drops a deselected repo, and its history with it", async () => {
+    const { ownerId } = await seedOwner();
+    const [seeded] = await db
+      .select({ id: monitoredRepo.id })
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+    await db.insert(githubCommit).values({
+      id: randomUUID(),
+      ownerId,
+      repoId: seeded.id,
+      sha: "dead5678",
+      message: "belongs to a repo being dropped",
+    });
+
+    const fetchImpl = (async () => jsonRes(repoList)) as unknown as typeof fetch;
+    // Deselect acme/app (555) entirely.
+    await updateMonitoredRepos({
+      db,
+      ownerId,
+      selectedRepoIds: ["777"],
+      opts: { baseUrl: GH_BASE, fetchImpl },
+    });
+
+    const rows = await db
+      .select({ fullName: monitoredRepo.fullName })
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+    expect(rows).toEqual([{ fullName: "acme/api" }]);
+
+    const commits = await db
+      .select({ sha: githubCommit.sha })
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    expect(commits).toEqual([]);
+  });
+
   it("keeps the credential intact — no token is re-entered", async () => {
     const { ownerId } = await seedOwner();
     const [before] = await db
@@ -403,5 +485,121 @@ describe("updateMonitoredRepos", () => {
       .from(monitoredRepo)
       .where(and(eq(monitoredRepo.ownerId, b.ownerId)));
     expect(bRows).toEqual([{ fullName: "acme/app" }]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("updateJiraProject", () => {
+  const JIRA_BASE = "https://acme.atlassian.net";
+
+  const jiraFetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("/project/search")) {
+      return jsonRes({
+        isLast: true,
+        values: [
+          { id: "10000", key: "SF", name: "SprintFlow" },
+          { id: "20000", key: "OTHER", name: "Other Project" },
+        ],
+      });
+    }
+    if (url.includes("/statuses")) {
+      return jsonRes([
+        {
+          statuses: [
+            { id: "1", name: "To Do", statusCategory: { key: "new" } },
+            { id: "3", name: "In Progress", statusCategory: { key: "indeterminate" } },
+          ],
+        },
+      ]);
+    }
+    return jsonRes({}, 404);
+  }) as unknown as typeof fetch;
+
+  const mappings = [
+    { jiraStatusId: "1", jiraStatusName: "To Do", category: "TODO" as const },
+    { jiraStatusId: "3", jiraStatusName: "In Progress", category: "IN_PROGRESS" as const },
+  ];
+
+  async function seedSprint(ownerId: string, projectId: string): Promise<void> {
+    await db.insert(sprint).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: projectId,
+      jiraSprintId: "1001",
+      name: "Sprint 24",
+      state: "ACTIVE",
+    });
+  }
+
+  // impl-review F2. The row is UPDATEd in place, which cascades nothing — so
+  // without an explicit delete the OLD project's sprint survived, re-labelled,
+  // and `getActiveSprintRow` (owner-scoped, not project-scoped) kept serving it
+  // while the sync queried the NEW key against the OLD sprint id and reported OK.
+  it("discards the previous project's sprints when the project actually changes", async () => {
+    const { ownerId, projectId } = await seedOwner();
+    await seedSprint(ownerId, projectId);
+
+    const result = await updateJiraProject({
+      db,
+      ownerId,
+      jiraProjectId: "20000",
+      mappings,
+      baseUrl: JIRA_BASE,
+      opts: { fetchImpl: jiraFetch },
+    });
+
+    expect(result.sprintsDiscarded).toBe(true);
+    const rows = await db
+      .select({ id: sprint.id })
+      .from(sprint)
+      .where(eq(sprint.ownerId, ownerId));
+    expect(rows).toEqual([]);
+  });
+
+  // The other half of the contract: re-saving the SAME project (e.g. to fix a
+  // status mapping) must not be destructive.
+  it("keeps the sprints when the same project is re-saved", async () => {
+    const { ownerId, projectId } = await seedOwner();
+    await seedSprint(ownerId, projectId);
+
+    const result = await updateJiraProject({
+      db,
+      ownerId,
+      jiraProjectId: "10000",
+      mappings,
+      baseUrl: JIRA_BASE,
+      opts: { fetchImpl: jiraFetch },
+    });
+
+    expect(result.sprintsDiscarded).toBe(false);
+    const rows = await db
+      .select({ id: sprint.id })
+      .from(sprint)
+      .where(eq(sprint.ownerId, ownerId));
+    expect(rows).toHaveLength(1);
+  });
+
+  it("never discards another owner's sprints", async () => {
+    const a = await seedOwner();
+    const b = await seedOwner();
+    await seedSprint(a.ownerId, a.projectId);
+    await seedSprint(b.ownerId, b.projectId);
+
+    await updateJiraProject({
+      db,
+      ownerId: a.ownerId,
+      jiraProjectId: "20000",
+      mappings,
+      baseUrl: JIRA_BASE,
+      opts: { fetchImpl: jiraFetch },
+    });
+
+    const bRows = await db
+      .select({ id: sprint.id })
+      .from(sprint)
+      .where(eq(sprint.ownerId, b.ownerId));
+    expect(bRows).toHaveLength(1);
   });
 });

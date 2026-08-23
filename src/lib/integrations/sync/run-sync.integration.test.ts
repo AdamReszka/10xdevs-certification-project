@@ -103,7 +103,12 @@ const COMMIT_STATS: Record<string, { additions: number; deletions: number }> = {
   "sha-2": { additions: 100, deletions: 3 },
 };
 
-function githubFetch(opts?: { failStatus?: number; commits?: unknown[] }): {
+function githubFetch(opts?: {
+  failStatus?: number;
+  commits?: unknown[];
+  /** Make the per-commit DETAIL endpoint fail for one sha only (impl-review F4). */
+  failDetailFor?: string;
+}): {
   fetchImpl: typeof fetch;
   calls: string[];
 } {
@@ -114,6 +119,7 @@ function githubFetch(opts?: { failStatus?: number; commits?: unknown[] }): {
     if (opts?.failStatus) return jsonRes({ message: "Bad credentials" }, opts.failStatus);
     if (/\/commits\/[^/?]+$/.test(url)) {
       const sha = url.split("/").pop()!;
+      if (opts?.failDetailFor === sha) return jsonRes({ message: "Not Found" }, 404);
       const stats = COMMIT_STATS[sha];
       return jsonRes(stats ? { sha, stats } : { sha });
     }
@@ -428,6 +434,35 @@ describe("syncOwner — per-commit churn (S-10)", () => {
     expect(older.additions).toBeNull();
     expect(older.deletions).toBeNull();
     expect(gh.calls.some((u) => /\/commits\/sha-1$/.test(u))).toBe(false);
+  });
+
+  // impl-review F4. Enrichment runs inside the per-repo loop, BEFORE the PR leg
+  // and before any write, inside the cycle-wide try. Unguarded, a single 404 on
+  // one sha discarded the cycle's commits, PRs and reviews for every repo — and
+  // the next cycle re-listed the same window and hit the same sha, stalling
+  // permanently. Churn is an enrichment; losing it must never lose the cycle.
+  it("survives a failing commit-detail fetch — NULL churn, cycle still completes", async () => {
+    const { ownerId } = await newOwner();
+    const gh = githubFetch({ failDetailFor: "sha-1" });
+
+    const result = await syncOwner(baseArgs(ownerId, gh.fetchImpl, jiraFetch().fetchImpl));
+
+    expect(result.github.status).toBe("OK");
+
+    const commits = await db
+      .select()
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    const failed = commits.find((c) => c.sha === "sha-1")!;
+    expect(failed.additions).toBeNull();
+    expect(failed.deletions).toBeNull();
+
+    // The PR leg runs after enrichment — an escaping throw would have lost it.
+    const prs = await db
+      .select()
+      .from(githubPullRequest)
+      .where(eq(githubPullRequest.ownerId, ownerId));
+    expect(prs.length).toBeGreaterThan(0);
   });
 });
 
