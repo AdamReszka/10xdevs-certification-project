@@ -860,16 +860,16 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [x] 3.1 The 5 → 7 repro is recorded with the confirmed vector named
-- [x] 3.2 Rewritten and new import tests pass
-- [x] 3.3 `insert(teamMember)` appears only in the save path
-- [x] 3.4 Type checking and linting pass
+- [x] 3.1 The 5 → 7 repro is recorded with the confirmed vector named — 1da8b24
+- [x] 3.2 Rewritten and new import tests pass — 1da8b24
+- [x] 3.3 `insert(teamMember)` appears only in the save path — 1da8b24
+- [x] 3.4 Type checking and linting pass — 1da8b24
 
 #### Manual
 
-- [x] 3.5 Re-import adds no DB rows until Save
-- [x] 3.6 Re-import does not resurrect a deactivated member
-- [x] 3.7 Under GitHub degradation no member is flagged as departed
+- [x] 3.5 Re-import adds no DB rows until Save — 1da8b24
+- [x] 3.6 Re-import does not resurrect a deactivated member — 1da8b24
+- [x] 3.7 Under GitHub degradation no member is flagged as departed — 1da8b24
 
 ### Phase 4: Confirmation dialogs + the active/inactive column
 
