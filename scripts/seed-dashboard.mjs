@@ -19,9 +19,16 @@
 // POST /api/auth/sign-up/email). This script does NOT create the auth account.
 //
 // Usage:
-//   EMAIL=demo@sprintflow.test npm run db:seed:demo      # resolve owner by email
-//   OWNER_ID=<user.id>         npm run db:seed:demo      # or pass the id directly
+//   EMAIL=you@example.com npm run db:seed:demo           # resolve owner by email
+//   OWNER_ID=<user.id>    npm run db:seed:demo           # or pass the id directly
 //   DATABASE_URL defaults to the local Supabase (127.0.0.1:54322).
+//
+// DESTRUCTIVE — this CLEARS the target owner's rows across 14 tables, including
+// `github_credential` and `jira_credential`. Point it at a throwaway demo
+// account ONLY: seeding an account that holds REAL GitHub/Jira credentials
+// destroys them, and nothing here can recover them. Do not paste a real account
+// address into the example above. The guard below additionally refuses any
+// non-loopback DATABASE_URL unless SEED_ALLOW_REMOTE=1 is set.
 //
 // Idempotent: clears this owner's seeded rows (credential/project/sprint/roster/
 // sync_state/anomaly) before re-inserting, so re-running resets the demo.
@@ -68,6 +75,29 @@ function encryptSeedToken(plaintext, ownerId, provider) {
 const connectionString =
   process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
+// Refuse a non-loopback target unless explicitly overridden. This script is
+// destructive (see the header): it deletes the resolved owner's credentials
+// among other rows, so pointing it at a shared or hosted database via a stale
+// exported DATABASE_URL is a data-loss event, not an inconvenience.
+{
+  let host;
+  try {
+    host = new URL(connectionString).hostname;
+  } catch {
+    console.error("DATABASE_URL is not a parseable URL — refusing to run.");
+    process.exit(1);
+  }
+  const isLoopback = host === "127.0.0.1" || host === "localhost" || host === "::1";
+  if (!isLoopback && process.env.SEED_ALLOW_REMOTE !== "1") {
+    console.error(
+      `Refusing to seed a non-loopback database (host: ${host}).\n` +
+        "This CLEARS the target owner's rows, including github_credential and\n" +
+        "jira_credential. Set SEED_ALLOW_REMOTE=1 only if you are certain.",
+    );
+    process.exit(1);
+  }
+}
+
 const client = new pg.Client({ connectionString });
 await client.connect();
 
@@ -102,6 +132,9 @@ const GH = (n) => `https://github.com/acme/web/pull/${n}`;
 // and independent of the FK cascade config.
 for (const t of [
   "anomaly",
+  // Operational log (S-10 Phase 7). Cleared too, so a re-seed leaves no stale
+  // attempt rows behind the freshly-reset sync_state.
+  "sync_attempt",
   "jira_status_history",
   "jira_ticket",
   "github_review",

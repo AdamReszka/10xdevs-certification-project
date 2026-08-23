@@ -1,4 +1,4 @@
-import { and, between, eq } from "drizzle-orm";
+import { and, between, eq, or } from "drizzle-orm";
 
 import {
   githubCommit,
@@ -20,9 +20,10 @@ import { buildActivityGrid, type ActivityGrid } from "@/lib/dashboard/activity-g
  * OWNER SCOPING is explicit per table (no RLS behind this).
  *
  * INDEX NOTE: `githubPullRequest` has no index on `openedAt`/`mergedAt` — it
- * indexes `(ownerId, state)` and `linkedTicketKey` — so the PR leg scans the
- * owner's PRs. Acceptable at the 3–10-person target scale, and the range bound
- * keeps it small; `(ownerId, openedAt)` is the fix if it ever isn't.
+ * indexes `(ownerId, state)` and `linkedTicketKey` — so the PR leg still scans
+ * the owner's PRs and filters in memory. The range bound below is what keeps the
+ * returned set small; acceptable at the 3–10-person target scale, and
+ * `(ownerId, openedAt)` is the fix if it ever isn't.
  */
 
 type Db = ReturnType<typeof getDb>;
@@ -62,9 +63,12 @@ export async function getActivityRollup(
       and(eq(githubCommit.ownerId, ownerId), between(githubCommit.authoredAt, from, to)),
     );
 
-  // PRs are range-bounded on neither column alone: one opened before the window
-  // and merged inside it still belongs on the merge day. Fetch the owner's PRs
-  // and let the fold drop whatever falls outside the axis.
+  // PRs cannot be bounded on either column ALONE — one opened before the window
+  // and merged inside it still belongs on the merge day — so the bound is the
+  // disjunction of the two. This keeps the cross-boundary case the matrix needs
+  // while stopping the leg from scanning every PR the owner has ever synced
+  // (impl-review F8); unbounded, it grew with account age and ran on Today for a
+  // single-day range. The fold still drops whatever falls outside the axis.
   const pullRequests = await db
     .select({
       authorGithubUsername: githubPullRequest.authorGithubUsername,
@@ -72,7 +76,15 @@ export async function getActivityRollup(
       mergedAt: githubPullRequest.mergedAt,
     })
     .from(githubPullRequest)
-    .where(eq(githubPullRequest.ownerId, ownerId));
+    .where(
+      and(
+        eq(githubPullRequest.ownerId, ownerId),
+        or(
+          between(githubPullRequest.openedAt, from, to),
+          between(githubPullRequest.mergedAt, from, to),
+        ),
+      ),
+    );
 
   const reviews = await db
     .select({

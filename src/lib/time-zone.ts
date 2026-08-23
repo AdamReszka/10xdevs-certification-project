@@ -21,13 +21,27 @@
 /**
  * Return `timeZone` when `Intl` recognizes it, else `"UTC"`. Never throws.
  */
+// Resolved-zone cache (impl-review F8). Constructing an `Intl.DateTimeFormat`
+// purely to validate a string is the expensive part of this function, and it is
+// called once per bucketed event — plus ~112 times per `dayRangeInTimeZone`
+// binary search — so a full-sprint activity matrix was doing thousands of them
+// on the Workers CPU budget. Keys are bounded by the IANA set and the database
+// does not change at runtime, so a verdict is safe to keep for the isolate's
+// lifetime.
+const resolvedZones = new Map<string, string>();
+
 export function safeZone(timeZone?: string | null): string {
   if (!timeZone || timeZone.length === 0) return "UTC";
+  const cached = resolvedZones.get(timeZone);
+  if (cached !== undefined) return cached;
+  let resolved: string;
   try {
     // Constructing the formatter is what validates the zone.
     new Intl.DateTimeFormat("en-US", { timeZone });
-    return timeZone;
+    resolved = timeZone;
   } catch {
-    return "UTC";
+    resolved = "UTC";
   }
+  resolvedZones.set(timeZone, resolved);
+  return resolved;
 }

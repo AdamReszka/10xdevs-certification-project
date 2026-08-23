@@ -439,9 +439,21 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
           .sort((a, b) => (b.authoredAt?.getTime() ?? 0) - (a.authoredAt?.getTime() ?? 0))
           .slice(0, maxCommitStats);
         for (const c of toEnrich) {
-          const detail = await getCommitDetail(token, repo.fullName, c.sha, opts);
-          c.additions = detail.additions;
-          c.deletions = detail.deletions;
+          // Per-item guard (impl-review F4): churn is an ENRICHMENT, never a
+          // reason to lose the cycle. Unguarded, one 403/429/404 on a single SHA
+          // — force-push + GC, a secondary rate limit, or an exhausted Workers
+          // subrequest budget — escapes into the cycle-wide catch and discards
+          // this cycle's commits, PRs AND reviews for every repo. Worse, the next
+          // cycle re-lists the same window and hits the same SHA, so it stalls
+          // permanently. NULL churn is already a legitimate documented value
+          // (see the cap comment above), so degrading here costs nothing.
+          try {
+            const detail = await getCommitDetail(token, repo.fullName, c.sha, opts);
+            c.additions = detail.additions;
+            c.deletions = detail.deletions;
+          } catch {
+            // Leave additions/deletions NULL — the matrix renders that as "—".
+          }
         }
       }
 
@@ -645,7 +657,10 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
       await tx
         .update(jiraProject)
         .set({ timeZone: identity.timeZone ?? null })
-        .where(eq(jiraProject.id, project.id));
+        // `ownerId` asserted, not inherited from the upstream read (impl-review
+        // F9). There is no RLS behind this — every table carries its own scope,
+        // the way the `sprint` update below does.
+        .where(and(eq(jiraProject.ownerId, ownerId), eq(jiraProject.id, project.id)));
 
       for (const issue of issues) {
         const lastStatusChangeAt = issue.statusHistory.reduce<Date | null>((acc, h) => {

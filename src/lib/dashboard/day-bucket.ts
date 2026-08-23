@@ -24,13 +24,29 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * `en-CA` is the locale trick: it formats as `YYYY-MM-DD` natively, so no part
  * re-assembly is needed and the result sorts lexicographically.
  */
+// One formatter per resolved zone, reused (impl-review F8). This is the hot path
+// of the activity matrix — once per commit, twice per PR, once per review, and
+// ~112 times per `dayRangeInTimeZone` binary search — and formatter construction
+// dominates `.format()`. Keyed by the ALREADY-resolved zone, so every invalid
+// input collapses onto the single "UTC" entry.
+const dayKeyFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function dayKeyFormatter(resolvedZone: string): Intl.DateTimeFormat {
+  let formatter = dayKeyFormatters.get(resolvedZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: resolvedZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    dayKeyFormatters.set(resolvedZone, formatter);
+  }
+  return formatter;
+}
+
 export function dayKeyInTimeZone(date: Date, timeZone?: string | null): DayKey {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: safeZone(timeZone),
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
+  return dayKeyFormatter(safeZone(timeZone)).format(date);
 }
 
 /**

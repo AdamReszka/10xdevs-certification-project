@@ -17,12 +17,43 @@ import { syncOwner, type IntegrationOutcome } from "@/lib/integrations/sync/run-
  * Thin by design, mirroring the setup actions: `requireSession` →
  * `getCloudflareContext().env` → `getDbWithPool(env)` → `syncOwner`. Owns pool
  * teardown (lesson #3) via `ctx.waitUntil(pool.end())`, or an awaited close when
- * no `ctx` is present (e.g. `next dev`). Returns non-secret per-integration status.
+ * no `ctx` is present (e.g. `next dev`). Returns non-secret per-integration
+ * status — see `SyncNowOutcome` for what is deliberately withheld.
  */
+/**
+ * The client-facing projection of `IntegrationOutcome` — same discriminants,
+ * WITHOUT the `error` string (impl-review F3).
+ *
+ * `classifyError` (`run-sync.ts:339-358`) has a fallback branch that puts an
+ * arbitrary `err.message` here: a Postgres error, a driver error, any untyped
+ * throw. That is an unbounded string nobody has audited for secrets, and it is
+ * precisely why `sync_state.last_error` is never forwarded to the client
+ * (S-07 impl-review F2; the same reasoning is written out in
+ * `failure-reason.ts:9-15`). A Server Action's return value is serialized into
+ * the response payload whether or not the component renders it, so the string
+ * has to be dropped HERE, not merely left unrendered.
+ *
+ * The union shape is preserved so callers keep exhaustive `switch` narrowing.
+ */
+export type SyncNowOutcome =
+  | { status: "OK" }
+  | { status: "SKIPPED"; reason: "leased" | "not_due" | "not_connected" | "no_sprint" }
+  | { status: "ERROR" | "RATE_LIMITED" };
+
 export type SyncNowResult = {
-  github: IntegrationOutcome;
-  jira: IntegrationOutcome;
+  github: SyncNowOutcome;
+  jira: SyncNowOutcome;
 };
+
+function toClientOutcome(outcome: IntegrationOutcome): SyncNowOutcome {
+  if (outcome.status === "SKIPPED") {
+    return { status: "SKIPPED", reason: outcome.reason };
+  }
+  if (outcome.status === "OK") return { status: "OK" };
+  // `error` deliberately not carried across — see SyncNowOutcome above. The
+  // surface classifies `status` instead (`failure-reason.ts`).
+  return { status: outcome.status };
+}
 
 export async function syncNow(): Promise<SyncNowResult> {
   const session = await requireSession();
@@ -50,7 +81,7 @@ export async function syncNow(): Promise<SyncNowResult> {
         err instanceof Error ? err.message : err,
       );
     }
-    return { github: result.github, jira: result.jira };
+    return { github: toClientOutcome(result.github), jira: toClientOutcome(result.jira) };
   } finally {
     // The queries have already resolved (syncOwner is awaited), so closing now is
     // safe. Prefer the request after-hook; fall back to an awaited close in dev.

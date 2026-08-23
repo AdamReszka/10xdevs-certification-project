@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import {
   githubCredential,
   jiraProject,
   monitoredRepo,
+  sprint,
   statusMapping,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
@@ -257,17 +258,44 @@ export async function updateMonitoredRepos({
     throw new Error("None of the selected repositories were found on GitHub.");
   }
 
+  // Upsert on (ownerId, githubRepoId), then delete only what was DESELECTED.
+  //
+  // Deliberately NOT delete-then-insert (the shape `github-store.ts:157-166`
+  // uses): that mints fresh `monitoredRepo.id`s, and `github_commit.repo_id` /
+  // `github_pull_request.repo_id` cascade off that id (`schema.ts:485-487,
+  // 514-516`), with reviews cascading off the PR. Re-inserting a repo the owner
+  // KEPT would therefore discard its entire synced history — unrecoverably,
+  // since the next cycle's `since` window starts at
+  // `sync_state.lastSuccessfulSyncAt`, which this path never touches. Stable ids
+  // are what make editing the selection non-destructive (impl-review F1).
+  const keptRepoIds = selected.map((r) => r.githubRepoId);
   await db.transaction(async (tx) => {
-    await tx.delete(monitoredRepo).where(eq(monitoredRepo.ownerId, ownerId));
-    await tx.insert(monitoredRepo).values(
-      selected.map((r) => ({
-        id: randomUUID(),
-        ownerId,
-        credentialId: cred.id,
-        githubRepoId: r.githubRepoId,
-        fullName: r.fullName,
-      })),
-    );
+    await tx
+      .insert(monitoredRepo)
+      .values(
+        selected.map((r) => ({
+          id: randomUUID(),
+          ownerId,
+          credentialId: cred.id,
+          githubRepoId: r.githubRepoId,
+          fullName: r.fullName,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [monitoredRepo.ownerId, monitoredRepo.githubRepoId],
+        // `id` intentionally omitted — keeping the existing row's id stable is
+        // the entire point of this branch.
+        set: { credentialId: cred.id, fullName: sql`excluded.full_name` },
+      });
+
+    await tx
+      .delete(monitoredRepo)
+      .where(
+        and(
+          eq(monitoredRepo.ownerId, ownerId),
+          notInArray(monitoredRepo.githubRepoId, keptRepoIds),
+        ),
+      );
   });
 
   return { repoCount: selected.length };
@@ -283,6 +311,16 @@ export async function updateMonitoredRepos({
  * deleted and re-inserted precisely to avoid that cascade when the project is
  * unchanged; the status mappings are replaced either way because they are
  * per-project by definition.
+ *
+ * When the project DOES change, the previous project's sprints are deleted
+ * explicitly (impl-review F2). Updating in place cascades nothing, so without
+ * this the old sprint survives and `getActiveSprintRow` — owner-scoped, NOT
+ * project-scoped — keeps serving it forever: every later cycle then queries the
+ * NEW project key against the OLD `jira_sprint_id`, returns nothing, and reports
+ * OK. That is the exact stale-sprint state the S-10 runbook root-caused by hand
+ * (plan.md:1020-1031), and it is what the UI's destructive warning promises to
+ * prevent. `boardId` / `timeZone` are cleared with it: both describe the old
+ * project. `sprintsDiscarded` tells the caller a cadence re-import is now due.
  */
 export async function updateJiraProject({
   db,
@@ -300,7 +338,7 @@ export async function updateJiraProject({
   baseUrl?: string;
   opts?: JiraClientOpts;
   env?: StoreEnv;
-}): Promise<{ projectKey: string; mappedStatusCount: number }> {
+}): Promise<{ projectKey: string; mappedStatusCount: number; sprintsDiscarded: boolean }> {
   const creds = await loadJiraCredentials({ db, ownerId, env });
   const effectiveBase = baseUrl ?? creds.baseUrl;
   const jiraCreds = { email: creds.email, token: creds.token };
@@ -321,11 +359,13 @@ export async function updateJiraProject({
   }
 
   const [existing] = await db
-    .select({ id: jiraProject.id })
+    .select({ id: jiraProject.id, jiraProjectId: jiraProject.jiraProjectId })
     .from(jiraProject)
     .where(eq(jiraProject.ownerId, ownerId))
     .limit(1);
   if (!existing) throw new MissingCredentialError("No Jira project is configured.");
+
+  const projectChanged = existing.jiraProjectId !== target.jiraProjectId;
 
   await db.transaction(async (tx) => {
     await tx
@@ -334,8 +374,19 @@ export async function updateJiraProject({
         jiraProjectId: target.jiraProjectId,
         projectKey: target.key,
         projectName: target.name,
+        // Both describe the project being left behind.
+        ...(projectChanged ? { boardId: null, timeZone: null } : {}),
       })
       .where(and(eq(jiraProject.ownerId, ownerId), eq(jiraProject.id, existing.id)));
+
+    if (projectChanged) {
+      // `jira_ticket` and `jira_status_history` cascade off `sprint`, so this one
+      // delete discards the whole previous project's synced history — which is
+      // what the caller's destructive confirmation already promises.
+      await tx
+        .delete(sprint)
+        .where(and(eq(sprint.ownerId, ownerId), eq(sprint.jiraProjectId, existing.id)));
+    }
 
     await tx
       .delete(statusMapping)
@@ -357,5 +408,5 @@ export async function updateJiraProject({
     );
   });
 
-  return { projectKey: target.key, mappedStatusCount: usable.length };
+  return { projectKey: target.key, mappedStatusCount: usable.length, sprintsDiscarded: projectChanged };
 }
