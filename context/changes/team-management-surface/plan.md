@@ -820,18 +820,18 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [x] 2.1 Deactivate/reactivate preserve absences and attribution
-- [x] 2.2 Delete refused with history; refused for the last member; succeeds when clean
-- [x] 2.3 Merge unions both identity keys and refuses when the dropped row has history
-- [x] 2.4 Every lifecycle action refuses a cross-owner member
-- [x] 2.5 Type checking and linting pass
+- [x] 2.1 Deactivate/reactivate preserve absences and attribution — 724e2bc
+- [x] 2.2 Delete refused with history; refused for the last member; succeeds when clean — 724e2bc
+- [x] 2.3 Merge unions both identity keys and refuses when the dropped row has history — 724e2bc
+- [x] 2.4 Every lifecycle action refuses a cross-owner member — 724e2bc
+- [x] 2.5 Type checking and linting pass — 724e2bc
 
 #### Manual
 
-- [x] 2.6 Service-reported state matches psql
-- [x] 2.7 Deactivated member leaves the dashboard filter but still labels existing anomalies
-- [x] 2.8 Trash on a persisted row removes them for real — gone after a refresh
-- [x] 2.9 Merging two persisted rows leaves exactly one row in psql
+- [x] 2.6 Service-reported state matches psql — 724e2bc
+- [x] 2.7 Deactivated member leaves the dashboard filter but still labels existing anomalies — 724e2bc
+- [x] 2.8 Trash on a persisted row removes them for real — gone after a refresh — 724e2bc
+- [x] 2.9 Merging two persisted rows leaves exactly one row in psql — 724e2bc
 
 ### Phase 3: Import becomes a diff, not a write
 
