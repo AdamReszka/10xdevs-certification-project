@@ -907,7 +907,7 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [x] 6.1 Touched markdown lints; no broken relative links
+- [x] 6.1 Touched markdown lints; no broken relative links — d8ecd0f
 
 #### Manual
 
