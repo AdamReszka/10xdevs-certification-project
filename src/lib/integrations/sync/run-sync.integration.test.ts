@@ -17,6 +17,7 @@ import {
   monitoredRepo,
   sprint,
   statusMapping,
+  syncAttempt,
   syncState,
   user,
 } from "@/db/schema";
@@ -96,7 +97,18 @@ const PULLS = [
   },
 ];
 
-function githubFetch(opts?: { failStatus?: number }): {
+/** Per-commit `stats`, keyed by sha — the detail endpoint the list omits. */
+const COMMIT_STATS: Record<string, { additions: number; deletions: number }> = {
+  "sha-1": { additions: 42, deletions: 7 },
+  "sha-2": { additions: 100, deletions: 3 },
+};
+
+function githubFetch(opts?: {
+  failStatus?: number;
+  commits?: unknown[];
+  /** Make the per-commit DETAIL endpoint fail for one sha only (impl-review F4). */
+  failDetailFor?: string;
+}): {
   fetchImpl: typeof fetch;
   calls: string[];
 } {
@@ -105,6 +117,12 @@ function githubFetch(opts?: { failStatus?: number }): {
     const url = typeof input === "string" ? input : (input as Request).url;
     calls.push(url);
     if (opts?.failStatus) return jsonRes({ message: "Bad credentials" }, opts.failStatus);
+    if (/\/commits\/[^/?]+$/.test(url)) {
+      const sha = url.split("/").pop()!;
+      if (opts?.failDetailFor === sha) return jsonRes({ message: "Not Found" }, 404);
+      const stats = COMMIT_STATS[sha];
+      return jsonRes(stats ? { sha, stats } : { sha });
+    }
     if (/\/pulls\/\d+\/reviews/.test(url)) {
       const n = Number(url.match(/\/pulls\/(\d+)\/reviews/)![1]);
       return jsonRes(
@@ -117,7 +135,7 @@ function githubFetch(opts?: { failStatus?: number }): {
       return jsonRes({ additions: 120, deletions: 12, changed_files: 5 });
     }
     if (url.includes("/pulls?")) return jsonRes(PULLS);
-    if (url.includes("/commits?")) return jsonRes(COMMITS);
+    if (url.includes("/commits?")) return jsonRes(opts?.commits ?? COMMITS);
     throw new Error(`unexpected GitHub mock URL: ${url}`);
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -148,7 +166,13 @@ const JIRA_ISSUE = {
   },
 };
 
-function jiraFetch(opts?: { failStatus?: number }): {
+const JIRA_TIME_ZONE = "Europe/Warsaw";
+
+function jiraFetch(opts?: {
+  failStatus?: number;
+  issues?: unknown[];
+  timeZone?: string | null;
+}): {
   fetchImpl: typeof fetch;
   calls: string[];
 } {
@@ -157,6 +181,14 @@ function jiraFetch(opts?: { failStatus?: number }): {
     const url = typeof input === "string" ? input : (input as Request).url;
     calls.push(url);
     if (opts?.failStatus) return jsonRes({ message: "Unauthorized" }, opts.failStatus);
+    if (url.includes("/rest/api/3/myself")) {
+      const zone = opts?.timeZone === undefined ? JIRA_TIME_ZONE : opts.timeZone;
+      return jsonRes({
+        accountId: "acc-lead",
+        emailAddress: "lead@example.com",
+        ...(zone === null ? {} : { timeZone: zone }),
+      });
+    }
     if (url.includes("/rest/api/3/field")) {
       return jsonRes([
         {
@@ -168,7 +200,7 @@ function jiraFetch(opts?: { failStatus?: number }): {
       ]);
     }
     if (url.includes("/rest/api/3/search/jql")) {
-      return jsonRes({ issues: [JIRA_ISSUE], nextPageToken: null });
+      return jsonRes({ issues: opts?.issues ?? [JIRA_ISSUE], nextPageToken: null });
     }
     throw new Error(`unexpected Jira mock URL: ${url}`);
   }) as typeof fetch;
@@ -177,7 +209,12 @@ function jiraFetch(opts?: { failStatus?: number }): {
 
 // --- Seed / cleanup ---------------------------------------------------------
 
-async function seedOwner(): Promise<{ ownerId: string; repoId: string }> {
+async function seedOwner(): Promise<{
+  ownerId: string;
+  repoId: string;
+  sprintId: string;
+  jiraProjectId: string;
+}> {
   const ownerId = randomUUID();
   await db.insert(user).values({ id: ownerId, name: "Sync Test", email: `st-${ownerId}@example.test` });
 
@@ -219,18 +256,21 @@ async function seedOwner(): Promise<{ ownerId: string; repoId: string }> {
     { id: randomUUID(), ownerId, jiraProjectId: proj.id, jiraStatusId: "3", jiraStatusName: "In Progress", category: "IN_PROGRESS" },
   ]);
 
-  await db.insert(sprint).values({
-    id: randomUUID(),
-    ownerId,
-    jiraProjectId: proj.id,
-    jiraSprintId: "42",
-    name: "Sprint 7",
-    state: "ACTIVE",
-    startDate: new Date("2026-08-17T08:00:00.000Z"),
-    endDate: new Date("2026-08-31T08:00:00.000Z"),
-  });
+  const [sprintRow] = await db
+    .insert(sprint)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: proj.id,
+      jiraSprintId: "42",
+      name: "Sprint 7",
+      state: "ACTIVE",
+      startDate: new Date("2026-08-17T08:00:00.000Z"),
+      endDate: new Date("2026-08-31T08:00:00.000Z"),
+    })
+    .returning({ id: sprint.id });
 
-  return { ownerId, repoId: repo.id };
+  return { ownerId, repoId: repo.id, sprintId: sprintRow.id, jiraProjectId: proj.id };
 }
 
 const owners: string[] = [];
@@ -272,8 +312,9 @@ describe("syncOwner — GitHub ingestion + PR↔ticket link", () => {
     const commits = await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId));
     expect(commits).toHaveLength(1);
     expect(commits[0].sha).toBe("sha-1");
-    // F4: per-commit size is not fetched — left NULL in MVP.
-    expect(commits[0].additions).toBeNull();
+    // S-10: per-commit churn now comes from the detail endpoint, under a per-repo cap.
+    expect(commits[0].additions).toBe(42);
+    expect(commits[0].deletions).toBe(7);
 
     const prs = await db.select().from(githubPullRequest).where(eq(githubPullRequest.ownerId, ownerId));
     const pr7 = prs.find((p) => p.number === 7)!;
@@ -345,6 +386,182 @@ describe("syncOwner — Jira ingestion + status history + cursor", () => {
   });
 });
 
+describe("syncOwner — per-commit churn (S-10)", () => {
+  it("skips the detail fetch for an already-persisted sha", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    // Second cycle re-lists the same commit; it is already persisted, so the
+    // per-commit GET must not fire again.
+    const gh2 = githubFetch();
+    await syncOwner({
+      ...baseArgs(ownerId, gh2.fetchImpl, jiraFetch().fetchImpl),
+      bypassDueCheck: true,
+    });
+
+    expect(gh2.calls.some((u) => /\/commits\/sha-1$/.test(u))).toBe(false);
+  });
+
+  it("inserts an over-cap commit with NULL churn, newest-first", async () => {
+    const { ownerId } = await newOwner();
+    // Two new commits, cap of 1 → only the newest (sha-2) is enriched.
+    const gh = githubFetch({
+      commits: [
+        {
+          sha: "sha-1",
+          author: { login: "octocat" },
+          commit: { author: { date: "2026-08-18T09:00:00.000Z" }, message: "older" },
+        },
+        {
+          sha: "sha-2",
+          author: { login: "octocat" },
+          commit: { author: { date: "2026-08-19T09:00:00.000Z" }, message: "newer" },
+        },
+      ],
+    });
+
+    await syncOwner({
+      ...baseArgs(ownerId, gh.fetchImpl, jiraFetch().fetchImpl),
+      maxCommitStats: 1,
+    });
+
+    const commits = await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId));
+    const newer = commits.find((c) => c.sha === "sha-2")!;
+    const older = commits.find((c) => c.sha === "sha-1")!;
+    expect(newer.additions).toBe(100);
+    // Over-cap commit is still persisted — with NULL churn, permanently.
+    expect(older.additions).toBeNull();
+    expect(older.deletions).toBeNull();
+    expect(gh.calls.some((u) => /\/commits\/sha-1$/.test(u))).toBe(false);
+  });
+
+  // impl-review F4. Enrichment runs inside the per-repo loop, BEFORE the PR leg
+  // and before any write, inside the cycle-wide try. Unguarded, a single 404 on
+  // one sha discarded the cycle's commits, PRs and reviews for every repo — and
+  // the next cycle re-listed the same window and hit the same sha, stalling
+  // permanently. Churn is an enrichment; losing it must never lose the cycle.
+  it("survives a failing commit-detail fetch — NULL churn, cycle still completes", async () => {
+    const { ownerId } = await newOwner();
+    const gh = githubFetch({ failDetailFor: "sha-1" });
+
+    const result = await syncOwner(baseArgs(ownerId, gh.fetchImpl, jiraFetch().fetchImpl));
+
+    expect(result.github.status).toBe("OK");
+
+    const commits = await db
+      .select()
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    const failed = commits.find((c) => c.sha === "sha-1")!;
+    expect(failed.additions).toBeNull();
+    expect(failed.deletions).toBeNull();
+
+    // The PR leg runs after enrichment — an escaping throw would have lost it.
+    const prs = await db
+      .select()
+      .from(githubPullRequest)
+      .where(eq(githubPullRequest.ownerId, ownerId));
+    expect(prs.length).toBeGreaterThan(0);
+  });
+});
+
+describe("syncOwner — Jira time zone (S-10)", () => {
+  it("persists the owner's IANA zone from /myself", async () => {
+    const { ownerId, jiraProjectId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.timeZone).toBe(JIRA_TIME_ZONE);
+  });
+
+  it("writes NULL when Jira omits timeZone", async () => {
+    const { ownerId, jiraProjectId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ timeZone: null }).fetchImpl),
+    );
+
+    const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.timeZone).toBeNull();
+  });
+});
+
+describe("syncOwner — sprint commitment scalars (S-10)", () => {
+  it("aggregates committed/completed SP from the ticket table, not the delta payload", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+
+    // Pre-existing sprint tickets that this cycle's delta pull will NOT return.
+    await db.insert(jiraTicket).values([
+      {
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-90",
+        storyPoints: 3,
+        currentCategory: "TODO",
+        addedAfterSprintStart: false,
+      },
+      {
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-91",
+        storyPoints: 5,
+        currentCategory: "DONE",
+        addedAfterSprintStart: false,
+      },
+      {
+        // Scope crept in after start → excluded from committed, counted as done.
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-92",
+        storyPoints: 2,
+        currentCategory: "DONE",
+        addedAfterSprintStart: true,
+      },
+      {
+        // NULL addedAfterSprintStart means "couldn't tell" → counts as committed.
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId,
+        sprintId,
+        jiraKey: "SF-93",
+        storyPoints: 1,
+        currentCategory: "IN_PROGRESS",
+        addedAfterSprintStart: null,
+      },
+    ]);
+
+    // Empty delta: `issues` is [], so a payload-sourced aggregate would write 0.
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+    );
+    expect(result.jira.status).toBe("OK");
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(row.committedSp).toBe(9); // 3 + 5 + 1 (SF-92 crept in)
+    expect(row.completedSp).toBe(7); // 5 + 2
+  });
+
+  it("writes 0 rather than NULL when the sprint has no estimated tickets", async () => {
+    const { ownerId, sprintId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+    );
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(row.committedSp).toBe(0);
+    expect(row.completedSp).toBe(0);
+  });
+});
+
 describe("syncOwner — per-integration independence", () => {
   it("records a GitHub auth failure as ERROR while Jira stays OK", async () => {
     const { ownerId } = await newOwner();
@@ -386,6 +603,245 @@ describe("syncOwner — per-cycle PR cap", () => {
     expect(prs[0].number).toBe(7);
     // The capped PR's detail endpoint was never called.
     expect(gh.calls.some((u) => /\/pulls\/8$/.test(u))).toBe(false);
+  });
+});
+
+describe("syncOwner — the delta cursor is scoped to its sprint", () => {
+  /** JQL of the issue search on the given mock, decoded. */
+  function searchJql(calls: string[]): string {
+    const url = calls.find((u) => u.includes("/search/jql"))!;
+    return decodeURIComponent(url.replace(/\+/g, " "));
+  }
+
+  it("drops the delta clause when the cursor belongs to a different sprint", async () => {
+    const { ownerId, sprintId } = await newOwner();
+    // A cursor left behind by a PREVIOUS sprint — exactly what a sprint switch
+    // (or a corrected sprint row) leaves in place.
+    await db.insert(syncState).values({
+      id: randomUUID(),
+      ownerId,
+      integration: "JIRA",
+      jiraHistoryCursor: "2026-08-20T10:00:00.000Z",
+      jiraCursorSprintId: randomUUID(),
+      lastSuccessfulSyncAt: new Date("2026-08-20T10:00:00.000Z"),
+    });
+
+    const jira = jiraFetch();
+    await syncOwner({ ...baseArgs(ownerId, githubFetch().fetchImpl, jira.fetchImpl) });
+
+    // Without this, every pre-existing ticket in the new sprint stays invisible
+    // while the cycle still reports OK.
+    expect(searchJql(jira.calls)).not.toContain("updated >=");
+    // …and the cursor is re-pointed at the sprint it now describes.
+    const [state] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(state.jiraCursorSprintId).toBe(sprintId);
+  });
+
+  it("keeps the delta clause when the cursor belongs to the sprint being synced", async () => {
+    const { ownerId } = await newOwner();
+
+    // First cycle records the cursor against this sprint…
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    // …so the second one may legitimately ask only for what changed (FR-012).
+    const jira2 = jiraFetch();
+    await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jira2.fetchImpl),
+      bypassDueCheck: true,
+    });
+
+    expect(searchJql(jira2.calls)).toContain("updated >=");
+  });
+});
+
+describe("syncOwner — attempt history (S-10 Phase 7)", () => {
+  it("records one attempt per integration per cycle", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const attempts = await db
+      .select()
+      .from(syncAttempt)
+      .where(eq(syncAttempt.ownerId, ownerId));
+
+    expect(attempts).toHaveLength(2);
+    expect(attempts.map((a) => a.integration).sort()).toEqual(["GITHUB", "JIRA"]);
+    expect(attempts.every((a) => a.status === "OK")).toBe(true);
+  });
+
+  it("records the failing status without storing any error text", async () => {
+    const { ownerId } = await newOwner();
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch({ failStatus: 401 }).fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const [gh] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "GITHUB")));
+
+    expect(gh.status).toBe("ERROR");
+    // The table has no error column at all — the row carries a bounded status.
+    expect(Object.keys(gh)).not.toContain("lastError");
+    expect(JSON.stringify(gh)).not.toContain("Unauthorized");
+  });
+
+  it("labels a no-op Jira cycle so 'OK but nothing happened' is legible", async () => {
+    const { ownerId } = await newOwner();
+    // Remove the sprint so Jira reports no_sprint.
+    await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+    expect(result.jira).toEqual({ status: "SKIPPED", reason: "no_sprint" });
+
+    const [jira] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(jira.status).toBe("OK");
+    expect(jira.outcome).toBe("no_sprint");
+  });
+
+  it("prunes to the retention cap so the log cannot grow unbounded", async () => {
+    const { ownerId } = await newOwner();
+
+    // Pre-fill well past the cap, then run one real cycle to trigger the prune.
+    await db.insert(syncAttempt).values(
+      Array.from({ length: 60 }, (_, i) => ({
+        id: randomUUID(),
+        ownerId,
+        integration: "GITHUB" as const,
+        status: "OK" as const,
+        outcome: null,
+        finishedAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      })),
+    );
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const rows = await db
+      .select({ finishedAt: syncAttempt.finishedAt })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "GITHUB")));
+
+    expect(rows).toHaveLength(50);
+    // The survivors are the newest — including the cycle just run.
+    expect(Math.max(...rows.map((r) => r.finishedAt.getTime()))).toBe(NOW.getTime());
+  });
+
+  it("keeps each integration's retention independent", async () => {
+    const { ownerId } = await newOwner();
+    await db.insert(syncAttempt).values(
+      Array.from({ length: 55 }, (_, i) => ({
+        id: randomUUID(),
+        ownerId,
+        integration: "GITHUB" as const,
+        status: "OK" as const,
+        outcome: null,
+        finishedAt: new Date(Date.UTC(2026, 0, 1, 0, i)),
+      })),
+    );
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const jira = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    // Pruning GitHub must not have touched Jira's single row.
+    expect(jira).toHaveLength(1);
+  });
+});
+
+describe("syncOwner — undecryptable credential (S-10 Phase 10)", () => {
+  /** Corrupt the stored envelope the way a key rotation or a cross-environment
+   * DB restore would — the value is well-formed text, just not our ciphertext. */
+  async function corruptJiraToken(ownerId: string): Promise<void> {
+    await db
+      .update(jiraCredential)
+      .set({ encryptedToken: "not-an-envelope" })
+      .where(eq(jiraCredential.ownerId, ownerId));
+  }
+
+  it("reports ERROR for that integration instead of throwing", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    expect(result.jira.status).toBe("ERROR");
+  });
+
+  it("leaves the OTHER integration's sync intact — the point of separate rows", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    // Before Phase 10 the Jira throw escaped syncOwner, so this whole call
+    // rejected and GitHub's completed work was reported as a 500.
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    expect(result.github.status).toBe("OK");
+    const commits = await db
+      .select()
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    expect(commits).toHaveLength(1);
+  });
+
+  it("stamps sync_state so the owner actually sees the failure", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [jState] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(jState.status).toBe("ERROR");
+    // The lease is released, so the next cycle is not blocked by a stuck claim.
+    expect(jState.claimedUntil).toBeNull();
+  });
+
+  it("records the attempt with a reason that is not an error message", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [attempt] = await db
+      .select()
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(attempt.status).toBe("ERROR");
+    expect(attempt.outcome).toBe("credential_unreadable");
+  });
+
+  it("still stamps a status when no sync_state row exists yet (first-ever sync)", async () => {
+    const { ownerId } = await newOwner();
+    await corruptJiraToken(ownerId);
+    // The credential load runs BEFORE acquireLease, which is what creates the
+    // row — without ensureSyncStateRow the stamp would be a silent no-op here.
+    await db.delete(syncState).where(eq(syncState.ownerId, ownerId));
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const [jState] = await db
+      .select()
+      .from(syncState)
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+    expect(jState?.status).toBe("ERROR");
   });
 });
 

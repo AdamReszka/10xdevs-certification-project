@@ -66,7 +66,20 @@ type Stage =
       recoveryNote: string | null;
     };
 
-export default function JiraConnectForm() {
+export default function JiraConnectForm({
+  redirectTo,
+}: {
+  /**
+   * Where to go after a successful connect. Omitted (the wizard) → `refresh()`,
+   * so the page re-renders into its connected-status card and the wizard's
+   * "Continue" CTA. Set (Settings) → navigate there instead, because that
+   * caller asked to connect ONE integration, not to enter a 3-step flow.
+   *
+   * A string, not a callback: this is a client component rendered from a server
+   * component, and a function prop cannot cross that boundary.
+   */
+  redirectTo?: string;
+} = {}) {
   const router = useRouter();
   const [stage, setStage] = useState<Stage>({ step: "credentials" });
   const [formError, setFormError] = useState<string | null>(null);
@@ -173,7 +186,8 @@ export default function JiraConnectForm() {
             `Connected to ${result.projectKey} — ${result.mappedCount} ` +
               `${result.mappedCount === 1 ? "status" : "statuses"} mapped.`,
           );
-          router.refresh();
+          if (redirectTo) router.push(redirectTo);
+          else router.refresh();
           return { ok: true as const };
         }}
       />

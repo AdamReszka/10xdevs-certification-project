@@ -265,6 +265,9 @@ export const jiraProject = pgTable("jira_project", {
   projectKey: text("project_key").notNull(),
   projectName: text("project_name"),
   boardId: text("board_id"),
+  // Owner's IANA zone from Jira /myself. Nullable is load-bearing: rows created
+  // before this column, and owners whose Jira omits timeZone, fall back to UTC.
+  timeZone: text("time_zone"),
 });
 
 export const statusMapping = pgTable(
@@ -346,6 +349,45 @@ export const sprint = pgTable(
   (table) => [unique("sprint_owner_sprint_uq").on(table.ownerId, table.jiraSprintId)],
 );
 
+/**
+ * Append-only log of terminal sync outcomes (S-10 Phase 7).
+ *
+ * `sync_state` holds exactly ONE row per (owner, integration), overwritten every
+ * cycle — so "why did it fail an hour ago" is unanswerable from it. This table
+ * answers that.
+ *
+ * NO ERROR-TEXT COLUMN, deliberately: same reasoning as `failure-reason.ts`. A
+ * row carries a classifiable status, never a message that was never audited for
+ * secrets.
+ *
+ * RETENTION IS LOAD-BEARING. The PRD bounds *product* data to current + 2 sprints
+ * and says nothing about an operational log, so this table sets its own bound —
+ * the newest `SYNC_ATTEMPT_RETENTION` rows per (owner, integration), pruned as
+ * each row is appended. Unbounded, a 15-minute cron writes ~3.5k rows per owner
+ * per month, forever.
+ */
+export const syncAttempt = pgTable(
+  "sync_attempt",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    integration: integration("integration").notNull(),
+    status: syncStatus("status").notNull(),
+    /** The `IntegrationOutcome` skip reason, when the cycle was skipped. */
+    outcome: text("outcome"),
+    finishedAt: timestamp("finished_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("sync_attempt_owner_integration_idx").on(
+      table.ownerId,
+      table.integration,
+      table.finishedAt,
+    ),
+  ],
+);
+
 export const syncState = pgTable(
   "sync_state",
   {
@@ -360,6 +402,18 @@ export const syncState = pgTable(
     lastError: text("last_error"),
     // Incremental Jira status-history delta cursor (FR-012).
     jiraHistoryCursor: text("jira_history_cursor"),
+    /**
+     * Which sprint `jiraHistoryCursor` was recorded against.
+     *
+     * The cursor is per-integration but the issue query is per-sprint
+     * (`sprint = N AND updated >= cursor`). Without this, switching the
+     * monitored sprint leaves a cursor from the OLD one in place, and every
+     * ticket in the new sprint that has not been edited since is invisible
+     * forever — the sync reports OK and returns nothing. Observed on a real
+     * project 2026-08-22. When this disagrees with the sprint being synced, the
+     * delta clause is dropped and the cycle pulls the sprint in full.
+     */
+    jiraCursorSprintId: text("jira_cursor_sprint_id"),
     // Overlap guard (S-05): a sync run leases this (owner, integration) row until
     // this instant; a later cron fire skips the row while the lease is still fresh.
     // Nullable — an unclaimed row is immediately eligible. Stale leases self-recover
@@ -848,6 +902,8 @@ export type InsertTeamMember = typeof teamMember.$inferInsert;
 export type SelectSprint = typeof sprint.$inferSelect;
 export type InsertSprint = typeof sprint.$inferInsert;
 export type SelectSyncState = typeof syncState.$inferSelect;
+
+export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;
 export type InsertSyncState = typeof syncState.$inferInsert;
 export type SelectAbsence = typeof absence.$inferSelect;
 export type InsertAbsence = typeof absence.$inferInsert;

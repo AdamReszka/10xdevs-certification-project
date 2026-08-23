@@ -24,6 +24,12 @@ export async function getActiveSprintRow(
     .select()
     .from(sprint)
     .where(and(eq(sprint.ownerId, ownerId), eq(sprint.state, "ACTIVE")))
+    // Ordered for the same reason the fallback below is (impl-review F7):
+    // `.limit(1)` without an ORDER BY lets Postgres return EITHER row when an
+    // owner has more than one ACTIVE sprint — which is reachable, since
+    // `importCadence` conflicts on `jiraSprintId` and therefore INSERTS a second
+    // ACTIVE row rather than updating the first. Newest start wins.
+    .orderBy(desc(sprint.startDate))
     .limit(1);
   if (active) return active;
 

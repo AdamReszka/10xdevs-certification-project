@@ -1,0 +1,1 @@
+ALTER TABLE "jira_project" ADD COLUMN "time_zone" text;

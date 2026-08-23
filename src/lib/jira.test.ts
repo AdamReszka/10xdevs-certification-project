@@ -362,7 +362,7 @@ describe("suggestCategory", () => {
 });
 
 describe("listBoards", () => {
-  it("keeps only scrum boards and maps id/name/type", async () => {
+  it("keeps sprint-capable boards, drops kanban, and maps id/name/type", async () => {
     const fetchImpl = onceFetch(
       jsonResponse({
         isLast: true,
@@ -380,6 +380,31 @@ describe("listBoards", () => {
       { id: 1, name: "SF Scrum", type: "scrum" },
       { id: 3, name: "Other Scrum", type: "scrum" },
     ]);
+  });
+
+  it("keeps a team-managed board, which reports type `simple`", async () => {
+    // A team-managed (next-gen) project — the DEFAULT when creating a project in
+    // Jira Cloud — reports `simple` for its board even when it runs sprints.
+    // Filtering on `scrum` alone returned [], so importCadence persisted no
+    // sprint and the whole dashboard stayed empty. Observed on a real project.
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        isLast: true,
+        values: [{ id: 1, name: "SCRUM board", type: "simple" }],
+      }),
+    );
+
+    const boards = await listBoards(BASE, CREDS, "FM", { fetchImpl });
+
+    expect(boards).toEqual([{ id: 1, name: "SCRUM board", type: "simple" }]);
+  });
+
+  it("still drops kanban when it is the only board", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({ isLast: true, values: [{ id: 9, name: "Board", type: "kanban" }] }),
+    );
+
+    expect(await listBoards(BASE, CREDS, "SF", { fetchImpl })).toEqual([]);
   });
 
   it("queries the Agile base path with projectKeyOrId", async () => {

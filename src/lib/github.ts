@@ -344,16 +344,28 @@ function parseGithubDate(value: unknown): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** A commit as consumed by the sync store. `branch`/`additions`/`deletions` are
- * intentionally absent — the commits *list* endpoint omits per-commit `stats` and
- * carries no per-commit branch label, and fetching them would need a per-commit
- * GET that multiplies subrequests beyond even per-PR detail (plan F4). Those
- * columns stay NULL in MVP; no anomaly rule uses per-commit size. */
+/** A commit as consumed by the sync store. `branch` is intentionally absent —
+ * the commits *list* endpoint carries no per-commit branch label.
+ *
+ * `additions`/`deletions` are **forward-only** (S-10): the list endpoint omits
+ * per-commit `stats`, so they come from a per-commit GET ({@link getCommitDetail})
+ * that the sync applies only to the newest N *new* commits per repo. Commits
+ * beyond that cap are still persisted, with NULL churn, and the GitHub cursor
+ * never revisits them — so NULL means "not measured", never "zero lines". Every
+ * consumer must render it as such. */
 export type GithubCommitData = {
   sha: string;
   authorGithubUsername: string | null;
   authoredAt: Date | null;
   message: string | null;
+  additions: number | null;
+  deletions: number | null;
+};
+
+/** Per-commit line stats from the single-commit endpoint. */
+export type GithubCommitDetail = {
+  additions: number | null;
+  deletions: number | null;
 };
 
 /** A pull request from the *list* endpoint. `additions`/`deletions`/`changedFiles`
@@ -467,6 +479,10 @@ export async function listCommits(
         authorGithubUsername: loginOf(row.author),
         authoredAt: parseGithubDate(row.commit?.author?.date),
         message: typeof row.commit?.message === "string" ? row.commit.message : null,
+        // The list endpoint carries no `stats`; the sync enriches the newest N
+        // new commits per repo via getCommitDetail and leaves the rest NULL.
+        additions: null,
+        deletions: null,
       });
     }
 
@@ -621,6 +637,44 @@ export async function getPullRequestDetail(
     additions: typeof body.additions === "number" ? body.additions : null,
     deletions: typeof body.deletions === "number" ? body.deletions : null,
     changedFiles: typeof body.changed_files === "number" ? body.changed_files : null,
+  };
+}
+
+/**
+ * Fetch one commit's line stats (`stats.additions`/`stats.deletions`) — omitted
+ * by the commits list endpoint, so this is a per-commit GET. Single-resource, so
+ * no pagination cap / origin guard applies (lesson #4 is about `Link` following).
+ * The caller applies the per-repo cap that bounds how many of these run.
+ */
+export async function getCommitDetail(
+  token: string,
+  repoFullName: string,
+  sha: string,
+  opts?: GithubClientOpts,
+): Promise<GithubCommitDetail> {
+  const baseUrl = opts?.baseUrl ?? DEFAULT_BASE_URL;
+  const res = await githubGet(`${baseUrl}/repos/${repoFullName}/commits/${sha}`, token, opts);
+  if (res.status === 401) {
+    throw new GithubAuthError();
+  }
+  if (!res.ok) {
+    throw new GithubUnavailableError(
+      `GitHub responded with ${res.status} while fetching commit detail. Please try again.`,
+    );
+  }
+
+  let body: { stats?: { additions?: unknown; deletions?: unknown } };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    throw new GithubUnavailableError(
+      "GitHub returned an unreadable commit detail. Please try again.",
+    );
+  }
+
+  return {
+    additions: typeof body.stats?.additions === "number" ? body.stats.additions : null,
+    deletions: typeof body.stats?.deletions === "number" ? body.stats.deletions : null,
   };
 }
 

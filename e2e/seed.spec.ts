@@ -40,7 +40,14 @@ test.describe("dashboard (authenticated — uses saved storageState)", () => {
     await expect(
       page.getByRole("heading", { name: /Dashboard/ }),
     ).toBeVisible();
-    await expect(page.getByText(/Signed in as/)).toBeVisible();
+    // Authenticated chrome from `(app)/layout.tsx`: the shell only renders a
+    // sign-out control once `requireSession()` has resolved a real session.
+    //
+    // STALE-ASSERTION REPAIR (S-10): this line used to look for "Signed in as",
+    // copy that S-07 removed in cfba761 when it replaced the shell's user slot.
+    // The assertion has been red on main ever since — nothing regressed here,
+    // the test was simply never updated. The behavior under test is unchanged.
+    await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   });
 });
 

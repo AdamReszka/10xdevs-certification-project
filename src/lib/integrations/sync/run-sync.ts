@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 
 import {
   githubCommit,
@@ -10,7 +10,9 @@ import {
   jiraStatusHistory,
   jiraTicket,
   monitoredRepo,
+  sprint,
   statusMapping,
+  syncAttempt,
   syncState,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
@@ -22,6 +24,7 @@ import {
   type GithubPullRequestData,
   type GithubPullRequestDetail,
   type GithubReviewData,
+  getCommitDetail,
   getPullRequestDetail,
   listCommits,
   listPullRequests,
@@ -33,7 +36,9 @@ import {
   type JiraClientOpts,
   resolveStoryPointFieldId,
   searchSprintIssues,
+  validateCredentials,
 } from "@/lib/jira";
+import { TokenCryptoError } from "@/lib/crypto";
 import {
   MissingCredentialError,
   loadGithubToken,
@@ -89,6 +94,22 @@ const GITHUB_FIRST_SYNC_LOOKBACK_DAYS = 30;
  * back to the oldest processed PR) is out of scope for MVP. */
 const DEFAULT_MAX_PRS_PER_SYNC = 30;
 
+/** Per-**repo** cap on per-commit stat fetches (S-10). The name says PER_REPO
+ * deliberately: the enrichment sits inside the `for (const repo of repos)` loop,
+ * so the real per-cycle ceiling is 30 × N, the same looseness
+ * `DEFAULT_MAX_PRS_PER_SYNC` already has. Arithmetic to keep in view: each repo
+ * already costs ~2 list calls + 30 PRs × (detail + reviews) ≈ 62 subrequests, and
+ * this adds up to 30 more, so 5 repos moves a cycle from ~310 to ~460. Confirm
+ * that clears the Workers subrequest limit on the deployment plan in use; if it
+ * doesn't, the fix is a shared budget decremented across repos, not a smaller
+ * per-repo cap.
+ *
+ * ONE-WAY (same cursor semantics as the PR cap above): a commit skipped here is
+ * persisted with NULL churn and is never revisited, because commits are immutable
+ * (`onConflictDoNothing`) and the cursor advances to `now`. NULL therefore means
+ * "not measured", never "zero lines" — every consumer must render it as such. */
+const DEFAULT_MAX_COMMIT_STATS_PER_REPO = 30;
+
 export type IntegrationOutcome =
   | { status: "OK" }
   | { status: "SKIPPED"; reason: "leased" | "not_due" | "not_connected" | "no_sprint" }
@@ -115,7 +136,54 @@ export type SyncOwnerArgs = {
   jiraBaseUrl?: string;
   /** Test override for the per-cycle PR cap. */
   maxPrs?: number;
+  /** Test override for the per-repo commit-stat cap. */
+  maxCommitStats?: number;
 };
+
+/**
+ * Ensure the `(owner, integration)` row exists so a status can be stamped onto
+ * it. `acquireLease` performs the same upsert, but a credential failure happens
+ * BEFORE the lease is taken — without this the stamp would be a silent no-op on
+ * a first-ever sync and the owner would see no status change at all.
+ */
+async function ensureSyncStateRow(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+): Promise<void> {
+  await db
+    .insert(syncState)
+    .values({ id: randomUUID(), ownerId, integration })
+    .onConflictDoNothing({ target: [syncState.ownerId, syncState.integration] });
+}
+
+/**
+ * The credential is present but cannot be decrypted (S-10 Phase 10).
+ *
+ * Terminal and owner-actionable: no retry fixes a failed AEAD open. Reachable in
+ * production via a `TOKEN_ENCRYPTION_KEY` rotation, a DB snapshot restored
+ * across environments, or a tampered row — the envelope is designed to detect
+ * exactly those, and detection must not take the sync down with it.
+ *
+ * Contained PER INTEGRATION: the other one still runs and still reports, which
+ * is the whole reason the two own separate `sync_state` rows.
+ */
+async function failUnreadableCredential(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+  now: Date,
+): Promise<IntegrationOutcome> {
+  const error = "Stored credential could not be decrypted. Reconnect the integration.";
+  await ensureSyncStateRow(db, ownerId, integration);
+  await finalizeSyncState(db, ownerId, integration, {
+    status: "ERROR",
+    now,
+    error,
+    outcome: "credential_unreadable",
+  });
+  return { status: "ERROR", error };
+}
 
 /** Acquire the per-`(owner, integration)` lease under a row lock, honoring the
  * freshness due-check. Returns the row's cursor state when claimed, or a skip
@@ -128,7 +196,12 @@ async function acquireLease(
   now: Date,
   bypassDueCheck: boolean,
 ): Promise<
-  | { claimed: true; lastSuccessfulSyncAt: Date | null; jiraHistoryCursor: string | null }
+  | {
+      claimed: true;
+      lastSuccessfulSyncAt: Date | null;
+      jiraHistoryCursor: string | null;
+      jiraCursorSprintId: string | null;
+    }
   | { claimed: false; reason: "leased" | "not_due" }
 > {
   return db.transaction(async (tx) => {
@@ -145,6 +218,7 @@ async function acquireLease(
         lastSuccessfulSyncAt: syncState.lastSuccessfulSyncAt,
         freshnessWindowMinutes: syncState.freshnessWindowMinutes,
         jiraHistoryCursor: syncState.jiraHistoryCursor,
+        jiraCursorSprintId: syncState.jiraCursorSprintId,
       })
       .from(syncState)
       .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, integration)))
@@ -173,6 +247,7 @@ async function acquireLease(
       claimed: true as const,
       lastSuccessfulSyncAt: row.lastSuccessfulSyncAt,
       jiraHistoryCursor: row.jiraHistoryCursor,
+      jiraCursorSprintId: row.jiraCursorSprintId,
     };
   });
 }
@@ -188,6 +263,9 @@ async function finalizeSyncState(
     now: Date;
     error?: string | null;
     jiraHistoryCursor?: string;
+    jiraCursorSprintId?: string;
+    /** Skip reason recorded in the attempt log; not stored on `sync_state`. */
+    outcome?: string | null;
   },
 ): Promise<void> {
   await db
@@ -200,8 +278,59 @@ async function finalizeSyncState(
       ...(patch.jiraHistoryCursor !== undefined
         ? { jiraHistoryCursor: patch.jiraHistoryCursor }
         : {}),
+      ...(patch.jiraCursorSprintId !== undefined
+        ? { jiraCursorSprintId: patch.jiraCursorSprintId }
+        : {}),
     })
     .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, integration)));
+
+  await recordAttempt(db, ownerId, integration, patch.status, patch.outcome ?? null, patch.now);
+}
+
+/** Newest attempts kept per (owner, integration). See the table's schema note. */
+const SYNC_ATTEMPT_RETENTION = 50;
+
+/**
+ * Append one attempt row and prune the tail (S-10 Phase 7).
+ *
+ * NEVER THROWS. This runs inside the repo's highest-risk path, after the
+ * `sync_state` update has already committed the outcome that matters. A lost log
+ * line is strictly better than a lost sync — so a failure here is swallowed
+ * rather than propagated into the caller's catch, where it would misreport a
+ * successful cycle as an error and stamp the wrong status.
+ *
+ * No error text is stored: the row carries a status enum and an optional skip
+ * reason, both bounded values (see `failure-reason.ts` for the full reasoning).
+ */
+async function recordAttempt(
+  db: Db,
+  ownerId: string,
+  integration: "GITHUB" | "JIRA",
+  status: "OK" | "ERROR" | "RATE_LIMITED",
+  outcome: string | null,
+  now: Date,
+): Promise<void> {
+  try {
+    await db
+      .insert(syncAttempt)
+      .values({ id: randomUUID(), ownerId, integration, status, outcome, finishedAt: now });
+
+    // Prune in the same call so the table can never grow unbounded, even if a
+    // scheduled cleanup is never built.
+    await db.execute(sql`
+      delete from ${syncAttempt}
+      where ${syncAttempt.id} in (
+        select ${syncAttempt.id} from ${syncAttempt}
+        where ${syncAttempt.ownerId} = ${ownerId}
+          and ${syncAttempt.integration} = ${integration}
+        order by ${syncAttempt.finishedAt} desc
+        offset ${SYNC_ATTEMPT_RETENTION}
+      )
+    `);
+  } catch {
+    // Intentionally swallowed — see the contract above. Not logged either: the
+    // sync path must never emit anything that could carry credential material.
+  }
 }
 
 /** Map a thrown client error to a terminal integration status. An auth failure
@@ -210,6 +339,15 @@ async function finalizeSyncState(
 function classifyError(err: unknown): { status: "ERROR" | "RATE_LIMITED"; error: string } {
   if (err instanceof GithubAuthError || err instanceof JiraAuthError) {
     return { status: "ERROR", error: err.message };
+  }
+  // Reachable if a decrypt happens anywhere else inside the try block: a failed
+  // AEAD open never recovers on retry, so it is ERROR ("reconnect"), never
+  // RATE_LIMITED ("try later").
+  if (err instanceof TokenCryptoError) {
+    return {
+      status: "ERROR",
+      error: "Stored credential could not be decrypted. Reconnect the integration.",
+    };
   }
   if (err instanceof GithubUnavailableError || err instanceof JiraUnavailableError) {
     return { status: "RATE_LIMITED", error: err.message };
@@ -227,13 +365,20 @@ function classifyError(err: unknown): { status: "ERROR" | "RATE_LIMITED"; error:
 async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutcome> {
   const { db, ownerId, env } = args;
   const maxPrs = args.maxPrs ?? DEFAULT_MAX_PRS_PER_SYNC;
+  const maxCommitStats = args.maxCommitStats ?? DEFAULT_MAX_COMMIT_STATS_PER_REPO;
 
   let token: string;
   try {
     token = await loadGithubToken({ db, ownerId, env });
   } catch (err) {
     if (err instanceof MissingCredentialError) {
+      // Nothing configured — nothing was attempted.
       return { status: "SKIPPED", reason: "not_connected" };
+    }
+    if (err instanceof TokenCryptoError) {
+      // Something IS configured and it is broken. The opposite of the above:
+      // the owner must act, so this is a reported ERROR, not a silent skip.
+      return failUnreadableCredential(db, ownerId, "GITHUB", now);
     }
     throw err;
   }
@@ -269,6 +414,49 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
     for (const repo of repos) {
       // --- All network reads for this repo complete BEFORE the txn (F1) -----
       const commits = await listCommits(token, repo.fullName, since, opts);
+
+      // Per-commit churn (S-10): the list endpoint omits `stats`, so enrich the
+      // newest *new* commits with a per-commit GET, capped per repo. Already-
+      // persisted SHAs are dropped first so a re-listed window costs nothing.
+      // Anything past the cap keeps NULL churn permanently — see the constant.
+      if (commits.length > 0 && maxCommitStats > 0) {
+        const persisted = await db
+          .select({ sha: githubCommit.sha })
+          .from(githubCommit)
+          .where(
+            and(
+              eq(githubCommit.ownerId, ownerId),
+              eq(githubCommit.repoId, repo.id),
+              inArray(
+                githubCommit.sha,
+                commits.map((c) => c.sha),
+              ),
+            ),
+          );
+        const known = new Set(persisted.map((r) => r.sha));
+        const toEnrich = commits
+          .filter((c) => !known.has(c.sha))
+          .sort((a, b) => (b.authoredAt?.getTime() ?? 0) - (a.authoredAt?.getTime() ?? 0))
+          .slice(0, maxCommitStats);
+        for (const c of toEnrich) {
+          // Per-item guard (impl-review F4): churn is an ENRICHMENT, never a
+          // reason to lose the cycle. Unguarded, one 403/429/404 on a single SHA
+          // — force-push + GC, a secondary rate limit, or an exhausted Workers
+          // subrequest budget — escapes into the cycle-wide catch and discards
+          // this cycle's commits, PRs AND reviews for every repo. Worse, the next
+          // cycle re-lists the same window and hits the same SHA, so it stalls
+          // permanently. NULL churn is already a legitimate documented value
+          // (see the cap comment above), so degrading here costs nothing.
+          try {
+            const detail = await getCommitDetail(token, repo.fullName, c.sha, opts);
+            c.additions = detail.additions;
+            c.deletions = detail.deletions;
+          } catch {
+            // Leave additions/deletions NULL — the matrix renders that as "—".
+          }
+        }
+      }
+
       const pulls = await listPullRequests(token, repo.fullName, since, opts);
       const capped = pulls.slice(0, maxPrs);
       const enriched: Array<{
@@ -296,6 +484,8 @@ async function syncGithub(args: SyncOwnerArgs, now: Date): Promise<IntegrationOu
                 authorGithubUsername: c.authorGithubUsername,
                 authoredAt: c.authoredAt,
                 message: c.message,
+                additions: c.additions,
+                deletions: c.deletions,
               })),
             )
             // A commit is immutable once written — nothing to update on conflict.
@@ -393,6 +583,9 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
     if (err instanceof MissingCredentialError) {
       return { status: "SKIPPED", reason: "not_connected" };
     }
+    if (err instanceof TokenCryptoError) {
+      return failUnreadableCredential(db, ownerId, "JIRA", now);
+    }
     throw err;
   }
 
@@ -412,18 +605,34 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
   if (!chosenSprint) {
     // Jira is connected but there's no sprint to sync — stamp fresh OK so the
-    // dashboard shows the integration as healthy, not stale.
-    await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now });
+    // dashboard shows the integration as healthy, not stale. The attempt log
+    // records WHY it was a no-op, so "OK but nothing happened" is legible in
+    // the history rather than looking like a normal successful pull.
+    await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now, outcome: "no_sprint" });
     return { status: "SKIPPED", reason: "no_sprint" };
   }
 
   const baseUrl = args.jiraBaseUrl ?? env?.JIRA_API_BASE_URL ?? creds.baseUrl;
   const jiraCreds = { email: creds.email, token: creds.token };
-  const updatedSince = lease.jiraHistoryCursor ? new Date(lease.jiraHistoryCursor) : null;
+  // Delta only applies to the sprint the cursor was recorded against. On a
+  // sprint switch the stored cursor describes the PREVIOUS sprint, and reusing
+  // it hides every ticket in the new one that has not been edited since —
+  // silently, with the cycle still reporting OK. Mismatch (or a first-ever
+  // cursor) means pull the sprint in full.
+  const cursorMatchesSprint = lease.jiraCursorSprintId === chosenSprint.id;
+  const updatedSince =
+    cursorMatchesSprint && lease.jiraHistoryCursor
+      ? new Date(lease.jiraHistoryCursor)
+      : null;
 
   try {
     // --- All Jira reads complete BEFORE the txn (F1) ----------------------
     const storyPointFieldId = await resolveStoryPointFieldId(baseUrl, jiraCreds, args.jiraOpts);
+    // +1 subrequest per cycle: the owner's IANA zone, re-read every cycle so it
+    // self-heals when they change their Jira profile. Its JiraAuthError /
+    // JiraUnavailableError throws land in the surrounding catch like any other
+    // Jira read — no second handler.
+    const identity = await validateCredentials(baseUrl, jiraCreds, args.jiraOpts);
     const issues = await searchSprintIssues(
       baseUrl,
       jiraCreds,
@@ -445,6 +654,14 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
     // --- Pure DB writes inside one short transaction ----------------------
     await db.transaction(async (tx) => {
+      await tx
+        .update(jiraProject)
+        .set({ timeZone: identity.timeZone ?? null })
+        // `ownerId` asserted, not inherited from the upstream read (impl-review
+        // F9). There is no RLS behind this — every table carries its own scope,
+        // the way the `sprint` update below does.
+        .where(and(eq(jiraProject.ownerId, ownerId), eq(jiraProject.id, project.id)));
+
       for (const issue of issues) {
         const lastStatusChangeAt = issue.statusHistory.reduce<Date | null>((acc, h) => {
           if (h.changedAt && (!acc || h.changedAt > acc)) return h.changedAt;
@@ -512,12 +729,39 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
             });
         }
       }
+
+      // Sprint commitment scalars (S-10). Aggregated from the **table**, never
+      // from `issues`: searchSprintIssues is an incremental delta pull, so
+      // `issues` holds only what changed this cycle. SUM over an empty set is
+      // NULL — coalesce to 0 so "no estimated tickets" reads as 0, not unknown.
+      //
+      // `committedSp` is recomputed every cycle, so it tracks mid-sprint estimate
+      // edits rather than freezing at sprint start. Accepted tradeoff: freezing
+      // would need a first-sync-wins guard plus a story for a first sync that
+      // lands mid-sprint. A NULL `addedAfterSprintStart` counts as committed —
+      // it means "couldn't tell" (rows predating cadence import).
+      const [totals] = await tx
+        .select({
+          committedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.addedAfterSprintStart} is not true), 0)`,
+          completedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.currentCategory} = 'DONE'), 0)`,
+        })
+        .from(jiraTicket)
+        .where(and(eq(jiraTicket.ownerId, ownerId), eq(jiraTicket.sprintId, chosenSprint.id)));
+
+      await tx
+        .update(sprint)
+        .set({
+          committedSp: Number(totals?.committedSp ?? 0),
+          completedSp: Number(totals?.completedSp ?? 0),
+        })
+        .where(and(eq(sprint.ownerId, ownerId), eq(sprint.id, chosenSprint.id)));
     });
 
     await finalizeSyncState(db, ownerId, "JIRA", {
       status: "OK",
       now,
       jiraHistoryCursor: now.toISOString(),
+      jiraCursorSprintId: chosenSprint.id,
     });
     return { status: "OK" };
   } catch (err) {
