@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { reposBeingDropped } from "@/components/organisms/setup/repo-selection";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -29,6 +30,7 @@ export default function RepoSelector({
   repos,
   likelyFineGrained,
   hasRepoScope,
+  monitoredRepoIds = [],
   onSave,
   onBack,
 }: {
@@ -36,16 +38,31 @@ export default function RepoSelector({
   repos: ClientRepo[];
   likelyFineGrained: boolean;
   hasRepoScope: boolean;
+  /**
+   * What the owner already monitors. Empty during first-time setup; supplied by
+   * the Settings editor, where a save REPLACES the selection — opening unchecked
+   * there made "add a repo" delete the ones already being kept.
+   */
+  monitoredRepoIds?: string[];
   onSave: (
     selectedRepoIds: string[],
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
   onBack: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Lazy init: this component mounts once its data has loaded, so the current
+  // selection is known on first render and never needs syncing afterwards.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(monitoredRepoIds),
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const showScopeWarning = likelyFineGrained || !hasRepoScope;
+  const dropped = reposBeingDropped({
+    repos,
+    monitoredIds: monitoredRepoIds,
+    selectedIds: selected,
+  });
 
   function toggle(id: string) {
     setSelected((prev) => {
@@ -104,6 +121,22 @@ export default function RepoSelector({
             <OctagonXIcon />
             <AlertTitle>Couldn&apos;t save</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        {dropped.length > 0 ? (
+          <Alert variant="destructive">
+            <TriangleAlertIcon />
+            <AlertTitle>
+              Saving now discards synced history for{" "}
+              {dropped.length === 1 ? "1 repository" : `${dropped.length} repositories`}
+            </AlertTitle>
+            <AlertDescription>
+              {dropped.join(", ")} {dropped.length === 1 ? "is" : "are"} monitored
+              today but unchecked here. Saving deletes their commits, pull requests
+              and reviews. Re-selecting later does not bring that history back — a
+              later sync only fetches activity newer than the last successful one.
+            </AlertDescription>
           </Alert>
         ) : null}
 

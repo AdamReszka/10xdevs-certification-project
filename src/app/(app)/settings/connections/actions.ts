@@ -101,6 +101,8 @@ export type LoadReposResult =
       likelyFineGrained: boolean;
       hasRepoScope: boolean;
       repos: ClientRepo[];
+      /** Currently-monitored repo ids, so the picker opens pre-checked. */
+      selectedRepoIds: string[];
     }
   | { ok: false; message: string };
 
@@ -123,6 +125,7 @@ export async function loadAvailableRepos(): Promise<LoadReposResult> {
       likelyFineGrained: result.likelyFineGrained,
       hasRepoScope: result.hasRepoScope,
       repos: result.repos.map((r) => ({ id: String(r.githubRepoId), fullName: r.fullName })),
+      selectedRepoIds: result.monitoredRepoIds.map(String),
     };
   } catch {
     return { ok: false, message: "Could not reach GitHub. Check the connection and try again." };

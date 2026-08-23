@@ -29,6 +29,7 @@ export default function RepoSelectionEditor() {
     likelyFineGrained: boolean;
     hasRepoScope: boolean;
     repos: ClientRepo[];
+    selectedRepoIds: string[];
   } | null>(null);
 
   async function handleOpen() {
@@ -43,6 +44,7 @@ export default function RepoSelectionEditor() {
           likelyFineGrained: result.likelyFineGrained,
           hasRepoScope: result.hasRepoScope,
           repos: result.repos,
+          selectedRepoIds: result.selectedRepoIds,
         });
       } else {
         setError(result.message);
@@ -74,6 +76,10 @@ export default function RepoSelectionEditor() {
           repos={data.repos}
           likelyFineGrained={data.likelyFineGrained}
           hasRepoScope={data.hasRepoScope}
+          // A save REPLACES the selection, so the picker must open showing what
+          // is monitored today — otherwise adding one repo drops all the others
+          // and cascades their synced history away.
+          monitoredRepoIds={data.selectedRepoIds}
           onSave={async (selectedRepoIds) => {
             const result = await updateMonitoredRepos(selectedRepoIds);
             if (!result.ok) return { ok: false, message: result.message };

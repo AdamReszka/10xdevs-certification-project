@@ -166,11 +166,34 @@ export async function listAvailableRepos({
   likelyFineGrained: boolean;
   hasRepoScope: boolean;
   repos: { githubRepoId: number; fullName: string }[];
+  /**
+   * What this owner monitors RIGHT NOW, so the picker can open pre-checked.
+   *
+   * Without it the edit picker opens empty and reads as "add a repo" while
+   * `updateMonitoredRepos` treats the submission as the whole selection: saving
+   * with only the new repo ticked deselects every existing one, and the delete
+   * branch cascades its commits, PRs and reviews away. That loss is not
+   * recoverable by re-selecting the repo — the next sync's `since` window starts
+   * at `sync_state.lastSuccessfulSyncAt`, which this path never touches.
+   */
+  monitoredRepoIds: number[];
 }> {
   const token = await loadGithubToken({ db, ownerId, env });
   const { login, scopes, likelyFineGrained } = await validatePat(token, opts);
   const repos = await listRepos(token, opts);
-  return { login, likelyFineGrained, hasRepoScope: scopes.includes("repo"), repos };
+
+  const monitored = await db
+    .select({ githubRepoId: monitoredRepo.githubRepoId })
+    .from(monitoredRepo)
+    .where(eq(monitoredRepo.ownerId, ownerId));
+
+  return {
+    login,
+    likelyFineGrained,
+    hasRepoScope: scopes.includes("repo"),
+    repos,
+    monitoredRepoIds: monitored.map((r) => r.githubRepoId),
+  };
 }
 
 /** List the projects the STORED Jira credential can see, for the edit picker. */

@@ -20,6 +20,7 @@ import {
 import { encryptToken } from "@/lib/crypto";
 import { getConnectionsOverview } from "@/lib/settings/connections";
 import {
+  listAvailableRepos,
   testGithubConnection,
   updateJiraProject,
   updateMonitoredRepos,
@@ -485,6 +486,82 @@ describe("updateMonitoredRepos", () => {
       .from(monitoredRepo)
       .where(and(eq(monitoredRepo.ownerId, b.ownerId)));
     expect(bRows).toEqual([{ fullName: "acme/app" }]);
+  });
+});
+
+describe("listAvailableRepos", () => {
+  const repoList = [
+    { id: 555, full_name: "acme/app", private: false },
+    { id: 777, full_name: "acme/api", private: false },
+  ];
+
+  // The picker opens pre-checked from this field. Without it the edit flow
+  // opened empty, so saving "add one repo" deselected — and cascade-deleted —
+  // every repo the owner was keeping.
+  it("reports which repos the owner monitors today, scoped to that owner", async () => {
+    const a = await seedOwner();
+    const b = await seedOwner();
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/user/repos")) return jsonRes(repoList);
+      return jsonRes({ login: "lead" }, 200);
+    }) as unknown as typeof fetch;
+
+    const result = await listAvailableRepos({
+      db,
+      ownerId: a.ownerId,
+      opts: { baseUrl: GH_BASE, fetchImpl },
+    });
+
+    // seedOwner monitors acme/app (555) only.
+    expect(result.monitoredRepoIds).toEqual([555]);
+    expect(result.repos.map((r) => r.githubRepoId).sort()).toEqual([555, 777]);
+
+    // Owner b's identical selection must not leak into a's answer.
+    await db
+      .insert(monitoredRepo)
+      .values({
+        id: randomUUID(),
+        ownerId: b.ownerId,
+        credentialId: (
+          await db
+            .select({ id: githubCredential.id })
+            .from(githubCredential)
+            .where(eq(githubCredential.ownerId, b.ownerId))
+        )[0].id,
+        githubRepoId: 777,
+        fullName: "acme/api",
+      });
+
+    const again = await listAvailableRepos({
+      db,
+      ownerId: a.ownerId,
+      opts: { baseUrl: GH_BASE, fetchImpl },
+    });
+    expect(again.monitoredRepoIds).toEqual([555]);
+  });
+
+  it("reports an empty selection when nothing is monitored yet", async () => {
+    const { ownerId } = await seedOwner({ github: false });
+    await db.insert(githubCredential).values({
+      id: randomUUID(),
+      ownerId,
+      encryptedToken: encryptToken("gh_ConnPat1234ABCD", { ownerId, provider: "GITHUB" }),
+      tokenLast4: "ABCD",
+      githubLogin: "lead",
+    });
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/user/repos")) return jsonRes(repoList);
+      return jsonRes({ login: "lead" }, 200);
+    }) as unknown as typeof fetch;
+
+    const result = await listAvailableRepos({
+      db,
+      ownerId,
+      opts: { baseUrl: GH_BASE, fetchImpl },
+    });
+    expect(result.monitoredRepoIds).toEqual([]);
   });
 });
 
