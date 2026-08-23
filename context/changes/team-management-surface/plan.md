@@ -803,35 +803,35 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [x] 1.1 Characterisation tests fail before the change and pass after
-- [x] 1.2 Unchanged save issues no write; absence, attribution and `is_active` survive
-- [x] 1.3 Foreign member `id` in a payload is rejected as `invalid_input`
-- [x] 1.4 Duplicate identity keys rejected by the schema
-- [x] 1.5 Whole suite green (`npm test && npm run test:integration`), incl. the repaired `actions.integration.test.ts`
-- [x] 1.6 Type checking passes
-- [x] 1.7 Linting passes
+- [x] 1.1 Characterisation tests fail before the change and pass after — 4561a55
+- [x] 1.2 Unchanged save issues no write; absence, attribution and `is_active` survive — 4561a55
+- [x] 1.3 Foreign member `id` in a payload is rejected as `invalid_input` — 4561a55
+- [x] 1.4 Duplicate identity keys rejected by the schema — 4561a55
+- [x] 1.5 Whole suite green (`npm test && npm run test:integration`), incl. the repaired `actions.integration.test.ts` — 4561a55
+- [x] 1.6 Type checking passes — 4561a55
+- [x] 1.7 Linting passes — 4561a55
 
 #### Manual
 
-- [x] 1.8 One-field edit moves exactly one row's `updated_at`
-- [x] 1.9 Out-of-band deactivation survives a UI save
+- [x] 1.8 One-field edit moves exactly one row's `updated_at` — 4561a55
+- [x] 1.9 Out-of-band deactivation survives a UI save — 4561a55
 
 ### Phase 2: Member lifecycle — deactivate, reactivate, delete, merge
 
 #### Automated
 
-- [ ] 2.1 Deactivate/reactivate preserve absences and attribution
-- [ ] 2.2 Delete refused with history; refused for the last member; succeeds when clean
-- [ ] 2.3 Merge unions both identity keys and refuses when the dropped row has history
-- [ ] 2.4 Every lifecycle action refuses a cross-owner member
-- [ ] 2.5 Type checking and linting pass
+- [x] 2.1 Deactivate/reactivate preserve absences and attribution
+- [x] 2.2 Delete refused with history; refused for the last member; succeeds when clean
+- [x] 2.3 Merge unions both identity keys and refuses when the dropped row has history
+- [x] 2.4 Every lifecycle action refuses a cross-owner member
+- [x] 2.5 Type checking and linting pass
 
 #### Manual
 
-- [ ] 2.6 Service-reported state matches psql
-- [ ] 2.7 Deactivated member leaves the dashboard filter but still labels existing anomalies
-- [ ] 2.8 Trash on a persisted row removes them for real — gone after a refresh
-- [ ] 2.9 Merging two persisted rows leaves exactly one row in psql
+- [x] 2.6 Service-reported state matches psql
+- [x] 2.7 Deactivated member leaves the dashboard filter but still labels existing anomalies
+- [x] 2.8 Trash on a persisted row removes them for real — gone after a refresh
+- [x] 2.9 Merging two persisted rows leaves exactly one row in psql
 
 ### Phase 3: Import becomes a diff, not a write
 

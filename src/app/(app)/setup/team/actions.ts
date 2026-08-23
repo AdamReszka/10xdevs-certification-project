@@ -9,14 +9,26 @@ import { GithubAuthError, type GithubClientOpts, GithubUnavailableError } from "
 import { JiraAuthError, type JiraBoard, JiraUnavailableError } from "@/lib/jira";
 import { MissingCredentialError } from "@/lib/integrations/credentials";
 import {
+  LastMemberError,
+  type MemberHistory,
+  MemberHasHistoryError,
   type TeamMemberRow,
   UnknownMemberError,
+  deleteMember as deleteMemberService,
+  getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
   importRoster as importRosterService,
+  mergeMembers as mergeMembersService,
   saveCadence as saveCadenceService,
   saveRoster as saveRosterService,
+  setMemberActive as setMemberActiveService,
 } from "@/lib/integrations/roster-store";
-import { cadenceSchema, rosterSaveSchema } from "@/lib/validations/roster";
+import {
+  cadenceSchema,
+  memberIdSchema,
+  mergeMembersSchema,
+  rosterSaveSchema,
+} from "@/lib/validations/roster";
 import type { DerivedCadence } from "@/lib/integrations/cadence";
 
 /**
@@ -75,6 +87,14 @@ export type ImportCadenceResult =
   | ActionFailure;
 
 export type SaveCadenceResult = { ok: true } | ActionFailure;
+
+export type SetMemberActiveResult = { ok: true; isActive: boolean } | ActionFailure;
+
+export type DeleteMemberResult = { ok: true } | ActionFailure;
+
+export type MergeMembersResult = { ok: true; id: string } | ActionFailure;
+
+export type MemberHistoryResult = ({ ok: true } & MemberHistory) | ActionFailure;
 
 /**
  * Test-only GitHub base override (`GITHUB_API_BASE_URL`) — lets the Playwright
@@ -226,6 +246,115 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
   }
 }
 
+// ============================================================================
+// Member lifecycle (S-15) — the roster's per-member operations
+//
+// They live beside the roster save so every `team_member` mutation stays in one
+// module; the Settings surface imports from here, following the precedent at
+// `settings/connections/page.tsx`.
+// ============================================================================
+
+/** What a permanent delete would destroy — drives the confirmation's copy. */
+export async function getMemberHistoryAction(
+  memberId: unknown,
+): Promise<MemberHistoryResult> {
+  const session = await requireSession();
+
+  const parsed = memberIdSchema.safeParse(memberId);
+  if (!parsed.success) return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const history = await getMemberHistoryService({
+      db,
+      ownerId: session.user.id,
+      memberId: parsed.data,
+    });
+    return { ok: true, ...history };
+  } catch (err) {
+    return toFailure(err, "[setup/team] getMemberHistory");
+  }
+}
+
+/** Deactivate or reactivate a member. Destroys nothing; freely reversible. */
+export async function setMemberActiveAction(
+  memberId: unknown,
+  isActive: unknown,
+): Promise<SetMemberActiveResult> {
+  const session = await requireSession();
+
+  const parsedId = memberIdSchema.safeParse(memberId);
+  if (!parsedId.success) return invalidInput("Pick a member and try again.");
+  if (typeof isActive !== "boolean") return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await setMemberActiveService({
+      db,
+      ownerId: session.user.id,
+      memberId: parsedId.data,
+      isActive,
+    });
+    return { ok: true, isActive };
+  } catch (err) {
+    return toFailure(err, "[setup/team] setMemberActive");
+  }
+}
+
+/** Permanently delete a member. Refused when they carry history or are the last. */
+export async function deleteMemberAction(memberId: unknown): Promise<DeleteMemberResult> {
+  const session = await requireSession();
+
+  const parsed = memberIdSchema.safeParse(memberId);
+  if (!parsed.success) return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await deleteMemberService({ db, ownerId: session.user.id, memberId: parsed.data });
+    return { ok: true };
+  } catch (err) {
+    return toFailure(err, "[setup/team] deleteMember");
+  }
+}
+
+/** Fuse two imported rows into one member. `keepId` is the row the grid keeps. */
+export async function mergeMembersAction(input: unknown): Promise<MergeMembersResult> {
+  const session = await requireSession();
+
+  const parsed = mergeMembersSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidInput(
+      parsed.error.issues[0]?.message ?? "Check the members and try again.",
+    );
+  }
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const result = await mergeMembersService({
+      db,
+      ownerId: session.user.id,
+      keepId: parsed.data.keepId,
+      dropId: parsed.data.dropId,
+      merged: parsed.data.merged,
+    });
+    return { ok: true, id: result.id };
+  } catch (err) {
+    return toFailure(err, "[setup/team] mergeMembers");
+  }
+}
+
+function invalidInput(message: string): ActionFailure {
+  return { ok: false, error: "invalid_input", message };
+}
+
 /**
  * Map a service/client error to a typed, token-free failure. `*AuthError` (401)
  * is the only "invalid token" verdict; `*UnavailableError` and
@@ -271,10 +400,31 @@ function toFailure(err: unknown, tag: string): ActionFailure {
       message: "That roster is out of date. Reload the page and try again.",
     };
   }
+  // The counts are what makes the refusal actionable: they name what the owner
+  // would have destroyed, and point at the non-destructive alternative.
+  if (err instanceof MemberHasHistoryError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: `This member has ${plural(err.absences, "recorded absence", "recorded absences")} and ${plural(err.anomalies, "attributed anomaly", "attributed anomalies")}. Deactivate them instead — a permanent delete would destroy that history.`,
+    };
+  }
+  if (err instanceof LastMemberError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "This is your only team member. Add someone else before removing them.",
+    };
+  }
   console.error(`${tag} unexpected error:`, err);
   return {
     ok: false,
     error: "integration_unavailable",
     message: "Something went wrong. Please try again.",
   };
+}
+
+/** "1 recorded absence" / "2 recorded absences" — the refusal copy reads badly otherwise. */
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
 }

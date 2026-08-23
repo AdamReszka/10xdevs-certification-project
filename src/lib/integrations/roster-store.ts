@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 
 import {
+  absence,
+  anomaly,
   jiraProject,
   monitoredRepo,
   sprint,
@@ -59,6 +61,14 @@ type StoreEnv = {
 };
 
 type Db = ReturnType<typeof getDb>;
+
+/** The transaction handle `db.transaction` hands its callback. */
+type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
+
+/** Anything that can run a read — the pool or an open transaction. Lets the
+ *  history check be reused as an advisory pre-check AND as the in-transaction
+ *  gate without duplicating the queries. */
+type Reader = Db | Tx;
 
 /** A persisted roster row (full select shape). */
 export type TeamMemberRow = typeof teamMember.$inferSelect;
@@ -397,6 +407,209 @@ function isUnchanged(current: TeamMemberRow, next: MemberFields): boolean {
     current.source === next.source &&
     current.isActive === next.isActive
   );
+}
+
+// ============================================================================
+// Member lifecycle (deactivate / reactivate / delete / merge)
+//
+// The bulk save is no longer authoritative over membership (see saveRoster), so
+// removal is an explicit, confirmed, single-member operation. Each one owns its
+// own destructiveness: deactivation destroys nothing, deletion is gated on the
+// member having no history, and merge genuinely drops a row so it is gated too.
+// ============================================================================
+
+/** Refuses a permanent delete that would take recorded history with it. */
+export class MemberHasHistoryError extends Error {
+  constructor(
+    readonly absences: number,
+    readonly anomalies: number,
+    message = "This member has recorded history. Deactivate them instead of deleting.",
+  ) {
+    super(message);
+    this.name = "MemberHasHistoryError";
+  }
+}
+
+/** Refuses deleting the owner's only member — `isOnboardingComplete` counts rows. */
+export class LastMemberError extends Error {
+  constructor(message = "This is the only member on the team; the roster cannot be emptied.") {
+    super(message);
+    this.name = "LastMemberError";
+  }
+}
+
+/** What a permanent delete would destroy, so the confirmation can name it. */
+export type MemberHistory = {
+  absences: number;
+  anomalies: number;
+  isLastMember: boolean;
+};
+
+/**
+ * Count what deleting this member would take with it.
+ *
+ * Both counts are owner-scoped as well as member-scoped so a foreign member id
+ * reads as "not found" rather than leaking another account's history shape.
+ * `absence` is covered by `absence_member_window_idx`; `anomaly` has no index on
+ * `related_team_member_id`, so it is an owner-scoped scan — acceptable at the
+ * PRD's 3–10-person scale, and it runs only when a confirmation opens.
+ */
+export async function getMemberHistory({
+  db,
+  ownerId,
+  memberId,
+}: {
+  db: Reader;
+  ownerId: string;
+  memberId: string;
+}): Promise<MemberHistory> {
+  const [owned] = await db
+    .select({ id: teamMember.id })
+    .from(teamMember)
+    .where(and(eq(teamMember.id, memberId), eq(teamMember.ownerId, ownerId)));
+  if (!owned) throw new UnknownMemberError();
+
+  const [absences] = await db
+    .select({ count: count() })
+    .from(absence)
+    .where(and(eq(absence.teamMemberId, memberId), eq(absence.ownerId, ownerId)));
+
+  const [anomalies] = await db
+    .select({ count: count() })
+    .from(anomaly)
+    .where(
+      and(eq(anomaly.relatedTeamMemberId, memberId), eq(anomaly.ownerId, ownerId)),
+    );
+
+  const [total] = await db
+    .select({ count: count() })
+    .from(teamMember)
+    .where(eq(teamMember.ownerId, ownerId));
+
+  return {
+    absences: absences.count,
+    anomalies: anomalies.count,
+    isLastMember: total.count === 1,
+  };
+}
+
+/**
+ * The non-destructive answer to "this person left" or "is on long leave": the
+ * member stops counting toward capacity, stops being eligible for
+ * `DEVELOPER_INACTIVE` and drops out of the dashboard filter, while every
+ * absence, commit, PR and anomaly attribution stays intact.
+ *
+ * No history check — deactivation destroys nothing and is freely reversible.
+ */
+export async function setMemberActive({
+  db,
+  ownerId,
+  memberId,
+  isActive,
+}: {
+  db: Db;
+  ownerId: string;
+  memberId: string;
+  isActive: boolean;
+}): Promise<{ updated: number }> {
+  const rows = await db
+    .update(teamMember)
+    .set({ isActive })
+    .where(and(eq(teamMember.id, memberId), eq(teamMember.ownerId, ownerId)))
+    .returning({ id: teamMember.id });
+
+  if (rows.length === 0) throw new UnknownMemberError();
+  return { updated: rows.length };
+}
+
+/**
+ * A genuine DELETE, for the one case that warrants it: somebody the import pulled
+ * in who was never on the team and has no history worth keeping.
+ *
+ * The history check is re-run INSIDE the write transaction — the dialog's earlier
+ * check is advisory (an absence can land between opening it and confirming), this
+ * one is the gate.
+ */
+export async function deleteMember({
+  db,
+  ownerId,
+  memberId,
+}: {
+  db: Db;
+  ownerId: string;
+  memberId: string;
+}): Promise<{ deleted: true }> {
+  return db.transaction(async (tx) => {
+    const history = await getMemberHistory({ db: tx, ownerId, memberId });
+    if (history.absences > 0 || history.anomalies > 0) {
+      throw new MemberHasHistoryError(history.absences, history.anomalies);
+    }
+    // Deleting the last member would flip isOnboardingComplete back to false.
+    if (history.isLastMember) throw new LastMemberError();
+
+    await tx
+      .delete(teamMember)
+      .where(and(eq(teamMember.id, memberId), eq(teamMember.ownerId, ownerId)));
+
+    return { deleted: true as const };
+  });
+}
+
+/**
+ * Fuse a GitHub-only row with its Jira-only counterpart — the only way to map one
+ * human who was imported as two rows.
+ *
+ * `keepId` MUST be the id the editor keeps in its grid: the surviving row is
+ * updated with the merged field set and the dropped row is deleted, so if the two
+ * disagree the merge duplicates the person instead of fusing them.
+ *
+ * Refused when the DROPPED row carries history — merging away someone's recorded
+ * absences is exactly the loss this slice exists to prevent; the owner deactivates
+ * that row instead.
+ */
+export async function mergeMembers({
+  db,
+  ownerId,
+  keepId,
+  dropId,
+  merged,
+}: {
+  db: Db;
+  ownerId: string;
+  keepId: string;
+  dropId: string;
+  merged: RosterMemberInput;
+}): Promise<{ id: string }> {
+  if (keepId === dropId) throw new UnknownMemberError("A member cannot be merged into itself.");
+
+  return db.transaction(async (tx) => {
+    const owned = await tx
+      .select()
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+
+    const keep = owned.find((m) => m.id === keepId);
+    const drop = owned.find((m) => m.id === dropId);
+    if (!keep || !drop) throw new UnknownMemberError();
+
+    const history = await getMemberHistory({ db: tx, ownerId, memberId: dropId });
+    if (history.absences > 0 || history.anomalies > 0) {
+      throw new MemberHasHistoryError(history.absences, history.anomalies);
+    }
+
+    // The drop happens first so the surviving row can take the dropped row's
+    // identity key without tripping over it.
+    await tx
+      .delete(teamMember)
+      .where(and(eq(teamMember.id, dropId), eq(teamMember.ownerId, ownerId)));
+
+    await tx
+      .update(teamMember)
+      .set(toMemberFields(merged, keep.isActive))
+      .where(and(eq(teamMember.id, keepId), eq(teamMember.ownerId, ownerId)));
+
+    return { id: keepId };
+  });
 }
 
 // ============================================================================

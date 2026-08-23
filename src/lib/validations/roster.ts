@@ -93,6 +93,27 @@ export const rosterSaveSchema = z.object({
   });
 });
 
+/** A member id as it arrives from the client — opaque, only ever non-empty. */
+export const memberIdSchema = z.string().min(1).max(64);
+
+/**
+ * A merge of two imported rows into one member (S-15).
+ *
+ * `keepId` MUST be the row the editor keeps in its grid and `dropId` the one it
+ * removes: the service updates the former and deletes the latter, so if the two
+ * disagree with the grid the merge duplicates the person instead of fusing them.
+ */
+export const mergeMembersSchema = z
+  .object({
+    keepId: memberIdSchema,
+    dropId: memberIdSchema,
+    merged: rosterMemberSchema,
+  })
+  .refine((v) => v.keepId !== v.dropId, {
+    message: "Pick two different members to merge.",
+    path: ["dropId"],
+  });
+
 /**
  * User-confirmed / overridden sprint cadence. `boardId` is the optional chosen
  * scrum board (only relevant when multiple boards exist).
@@ -112,3 +133,4 @@ export type Weekday = z.infer<typeof weekdaySchema>;
 export type RosterMemberValues = z.infer<typeof rosterMemberSchema>;
 export type RosterSaveValues = z.infer<typeof rosterSaveSchema>;
 export type CadenceValues = z.infer<typeof cadenceSchema>;
+export type MergeMembersValues = z.infer<typeof mergeMembersSchema>;

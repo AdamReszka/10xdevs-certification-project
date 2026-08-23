@@ -18,11 +18,17 @@ import {
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
 import {
+  LastMemberError,
+  MemberHasHistoryError,
   UnknownMemberError,
+  deleteMember,
+  getMemberHistory,
   importCadence,
   importRoster,
+  mergeMembers,
   saveCadence,
   saveRoster,
+  setMemberActive,
 } from "@/lib/integrations/roster-store";
 
 /**
@@ -613,5 +619,397 @@ describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
       .where(eq(teamMember.id, foreignId));
     expect(victim.name).toBe("Erik Nord");
     expect(victim.ownerId).toBe(ownerB);
+  });
+});
+
+// ============================================================================
+// S-15 Phase 2 — member lifecycle
+// ============================================================================
+
+/**
+ * Each operation owns its own destructiveness: deactivation destroys nothing,
+ * a permanent delete is gated on the member having no history and on not being
+ * the last member, and merge genuinely drops a row so it is gated too.
+ *
+ * Every case also has a cross-owner sibling: none of these may reach a member
+ * belonging to another account (PRD cross-account isolation).
+ */
+describe("member lifecycle (S-15 Phase 2)", () => {
+  /** A member with no children — the group-A case a permanent delete is for. */
+  async function seedCleanMember(ownerId: string, name = "Clean Member") {
+    const id = randomUUID();
+    await db.insert(teamMember).values({
+      id,
+      ownerId,
+      name,
+      githubUsername: name.toLowerCase().replace(/\W+/g, ""),
+      source: "GITHUB",
+    });
+    return id;
+  }
+
+  /** The owner's sprint, created once per owner so anomalies have something to key on. */
+  async function seedSprint(ownerId: string) {
+    const [proj] = await db
+      .select({ id: jiraProject.id })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+    const sprintId = randomUUID();
+    await db.insert(sprint).values({
+      id: sprintId,
+      ownerId,
+      jiraProjectId: proj.id,
+      jiraSprintId: `s15p2-${sprintId}`,
+      name: "Sprint 7",
+      state: "ACTIVE",
+    });
+    return sprintId;
+  }
+
+  async function addAbsence(ownerId: string, memberId: string, sprintId: string) {
+    const id = randomUUID();
+    await db.insert(absence).values({
+      id,
+      ownerId,
+      teamMemberId: memberId,
+      sprintId,
+      type: "VACATION",
+      startDate: new Date("2026-08-24T00:00:00.000Z"),
+      endDate: new Date("2026-08-28T00:00:00.000Z"),
+    });
+    return id;
+  }
+
+  async function addAnomaly(ownerId: string, memberId: string, sprintId: string) {
+    const id = randomUUID();
+    await db.insert(anomaly).values({
+      id,
+      ownerId,
+      sprintId,
+      dedupKey: `DEVELOPER_INACTIVE:member:${id}`,
+      type: "DEVELOPER_INACTIVE",
+      severity: "MEDIUM",
+      relatedTeamMemberId: memberId,
+    });
+    return id;
+  }
+
+  // --- getMemberHistory -----------------------------------------------------
+
+  describe("getMemberHistory", () => {
+    it("counts absences and anomalies and flags the last member", async () => {
+      const ownerId = await newOwner();
+      const sprintId = await seedSprint(ownerId);
+      const memberId = await seedCleanMember(ownerId, "Erik Nord");
+      await addAbsence(ownerId, memberId, sprintId);
+      await addAbsence(ownerId, memberId, sprintId);
+      await addAnomaly(ownerId, memberId, sprintId);
+
+      expect(await getMemberHistory({ db, ownerId, memberId })).toEqual({
+        absences: 2,
+        anomalies: 1,
+        isLastMember: true,
+      });
+
+      await seedCleanMember(ownerId, "Ada Lovelace");
+      const withSibling = await getMemberHistory({ db, ownerId, memberId });
+      expect(withSibling.isLastMember).toBe(false);
+    });
+
+    it("refuses a member belonging to another owner", async () => {
+      const ownerA = await newOwner();
+      const ownerB = await newOwner();
+      const foreignId = await seedCleanMember(ownerB);
+
+      await expect(
+        getMemberHistory({ db, ownerId: ownerA, memberId: foreignId }),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+    });
+  });
+
+  // --- setMemberActive ------------------------------------------------------
+
+  describe("setMemberActive", () => {
+    it("deactivate preserves absences and anomaly attribution; reactivate restores", async () => {
+      const ownerId = await newOwner();
+      const sprintId = await seedSprint(ownerId);
+      const memberId = await seedCleanMember(ownerId, "Erik Nord");
+      const absenceId = await addAbsence(ownerId, memberId, sprintId);
+      const anomalyId = await addAnomaly(ownerId, memberId, sprintId);
+
+      expect(await setMemberActive({ db, ownerId, memberId, isActive: false })).toEqual({
+        updated: 1,
+      });
+
+      const [deactivated] = await db
+        .select({ isActive: teamMember.isActive })
+        .from(teamMember)
+        .where(eq(teamMember.id, memberId));
+      expect(deactivated.isActive).toBe(false);
+
+      // The whole point: nothing else moved.
+      const absences = await db
+        .select({ id: absence.id })
+        .from(absence)
+        .where(eq(absence.teamMemberId, memberId));
+      expect(absences.map((a) => a.id)).toEqual([absenceId]);
+
+      const [anom] = await db
+        .select({ relatedTeamMemberId: anomaly.relatedTeamMemberId })
+        .from(anomaly)
+        .where(eq(anomaly.id, anomalyId));
+      expect(anom.relatedTeamMemberId).toBe(memberId);
+
+      await setMemberActive({ db, ownerId, memberId, isActive: true });
+      const [reactivated] = await db
+        .select({ isActive: teamMember.isActive })
+        .from(teamMember)
+        .where(eq(teamMember.id, memberId));
+      expect(reactivated.isActive).toBe(true);
+    });
+
+    it("refuses a member belonging to another owner", async () => {
+      const ownerA = await newOwner();
+      const ownerB = await newOwner();
+      const foreignId = await seedCleanMember(ownerB);
+
+      await expect(
+        setMemberActive({ db, ownerId: ownerA, memberId: foreignId, isActive: false }),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+
+      const [victim] = await db
+        .select({ isActive: teamMember.isActive })
+        .from(teamMember)
+        .where(eq(teamMember.id, foreignId));
+      expect(victim.isActive).toBe(true);
+    });
+  });
+
+  // --- deleteMember ---------------------------------------------------------
+
+  describe("deleteMember", () => {
+    it("succeeds for a clean member when they are not the last one", async () => {
+      const ownerId = await newOwner();
+      const memberId = await seedCleanMember(ownerId, "Erik Nord");
+      await seedCleanMember(ownerId, "Ada Lovelace");
+
+      expect(await deleteMember({ db, ownerId, memberId })).toEqual({ deleted: true });
+
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).not.toBe(memberId);
+    });
+
+    it("refuses a member with a recorded absence, and destroys nothing", async () => {
+      const ownerId = await newOwner();
+      const sprintId = await seedSprint(ownerId);
+      const memberId = await seedCleanMember(ownerId, "Erik Nord");
+      await seedCleanMember(ownerId, "Ada Lovelace");
+      await addAbsence(ownerId, memberId, sprintId);
+
+      await expect(deleteMember({ db, ownerId, memberId })).rejects.toBeInstanceOf(
+        MemberHasHistoryError,
+      );
+
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.id, memberId));
+      expect(rows).toHaveLength(1);
+    });
+
+    it("refuses a member with an attributed anomaly", async () => {
+      const ownerId = await newOwner();
+      const sprintId = await seedSprint(ownerId);
+      const memberId = await seedCleanMember(ownerId, "Erik Nord");
+      await seedCleanMember(ownerId, "Ada Lovelace");
+      await addAnomaly(ownerId, memberId, sprintId);
+
+      await expect(deleteMember({ db, ownerId, memberId })).rejects.toBeInstanceOf(
+        MemberHasHistoryError,
+      );
+    });
+
+    it("refuses the last remaining member — that would un-onboard the account", async () => {
+      const ownerId = await newOwner();
+      const memberId = await seedCleanMember(ownerId, "Only Member");
+
+      await expect(deleteMember({ db, ownerId, memberId })).rejects.toBeInstanceOf(
+        LastMemberError,
+      );
+
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId));
+      expect(rows).toHaveLength(1);
+    });
+
+    it("refuses a member belonging to another owner", async () => {
+      const ownerA = await newOwner();
+      const ownerB = await newOwner();
+      const foreignId = await seedCleanMember(ownerB);
+      await seedCleanMember(ownerB, "Sibling");
+
+      await expect(
+        deleteMember({ db, ownerId: ownerA, memberId: foreignId }),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.id, foreignId));
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  // --- mergeMembers ---------------------------------------------------------
+
+  describe("mergeMembers", () => {
+    /** The canonical case: one human imported twice, GitHub-only + Jira-only. */
+    async function seedMergePair(ownerId: string) {
+      const keepId = randomUUID();
+      await db.insert(teamMember).values({
+        id: keepId,
+        ownerId,
+        name: "octocat",
+        githubUsername: "octocat",
+        source: "GITHUB",
+      });
+      const dropId = randomUUID();
+      await db.insert(teamMember).values({
+        id: dropId,
+        ownerId,
+        name: "Mia Krystof",
+        jiraAccountId: "acc-1",
+        source: "JIRA",
+      });
+      return { keepId, dropId };
+    }
+
+    it("unions both identity keys onto the kept row and deletes the dropped one", async () => {
+      const ownerId = await newOwner();
+      const { keepId, dropId } = await seedMergePair(ownerId);
+
+      const result = await mergeMembers({
+        db,
+        ownerId,
+        keepId,
+        dropId,
+        merged: {
+          id: keepId,
+          name: "Mia Krystof",
+          githubUsername: "octocat",
+          jiraAccountId: "acc-1",
+          role: "Tech Lead",
+        },
+      });
+      expect(result).toEqual({ id: keepId });
+
+      const rows = await db
+        .select()
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(keepId);
+      expect(rows[0].githubUsername).toBe("octocat");
+      expect(rows[0].jiraAccountId).toBe("acc-1");
+      expect(rows[0].name).toBe("Mia Krystof");
+      expect(rows[0].role).toBe("Tech Lead");
+      // Both keys present ⇒ the mapped member.
+      expect(rows[0].source).toBe("BOTH");
+    });
+
+    it("keeps the row named by keepId, whichever side of the pair it is", async () => {
+      const ownerId = await newOwner();
+      // Reverse the roles: survive the JIRA row, drop the GITHUB one.
+      const { keepId: githubId, dropId: jiraId } = await seedMergePair(ownerId);
+
+      await mergeMembers({
+        db,
+        ownerId,
+        keepId: jiraId,
+        dropId: githubId,
+        merged: {
+          id: jiraId,
+          name: "Mia Krystof",
+          githubUsername: "octocat",
+          jiraAccountId: "acc-1",
+        },
+      });
+
+      const rows = await db
+        .select({ id: teamMember.id, source: teamMember.source })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].id).toBe(jiraId);
+      expect(rows[0].source).toBe("BOTH");
+    });
+
+    it("refuses when the DROPPED row carries history — deactivate it instead", async () => {
+      const ownerId = await newOwner();
+      const sprintId = await seedSprint(ownerId);
+      const { keepId, dropId } = await seedMergePair(ownerId);
+      await addAbsence(ownerId, dropId, sprintId);
+
+      await expect(
+        mergeMembers({
+          db,
+          ownerId,
+          keepId,
+          dropId,
+          merged: { id: keepId, name: "Mia Krystof", githubUsername: "octocat", jiraAccountId: "acc-1" },
+        }),
+      ).rejects.toBeInstanceOf(MemberHasHistoryError);
+
+      // Nothing merged, nothing dropped.
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId));
+      expect(rows).toHaveLength(2);
+    });
+
+    it("refuses when either id belongs to another owner", async () => {
+      const ownerA = await newOwner();
+      const ownerB = await newOwner();
+      const { keepId } = await seedMergePair(ownerA);
+      const foreignId = await seedCleanMember(ownerB);
+
+      await expect(
+        mergeMembers({
+          db,
+          ownerId: ownerA,
+          keepId,
+          dropId: foreignId,
+          merged: { id: keepId, name: "Hijacked", githubUsername: "octocat" },
+        }),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+
+      const rows = await db
+        .select({ id: teamMember.id })
+        .from(teamMember)
+        .where(eq(teamMember.id, foreignId));
+      expect(rows).toHaveLength(1);
+    });
+
+    it("refuses merging a member into itself", async () => {
+      const ownerId = await newOwner();
+      const { keepId } = await seedMergePair(ownerId);
+
+      await expect(
+        mergeMembers({
+          db,
+          ownerId,
+          keepId,
+          dropId: keepId,
+          merged: { id: keepId, name: "octocat", githubUsername: "octocat" },
+        }),
+      ).rejects.toBeInstanceOf(UnknownMemberError);
+    });
   });
 });

@@ -2,14 +2,19 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OctagonXIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 
 import {
-  importRosterAction,
-  saveRosterAction,
   type ClientMember,
+  deleteMemberAction,
+  getMemberHistoryAction,
+  importRosterAction,
+  mergeMembersAction,
+  saveRosterAction,
+  setMemberActiveAction,
 } from "@/app/(app)/setup/team/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -50,6 +55,15 @@ import { rosterSaveSchema, type RosterSaveValues } from "@/lib/validations/roste
  * saved roster with a Re-import button. A GitHub scope/auth failure surfaces the
  * PAT-scope degradation banner — the step continues with Jira-seeded + manual
  * members (graceful degradation), never a hard stop.
+ *
+ * REMOVAL IS SERVER-SIDE for persisted rows (S-15). The bulk save is a
+ * differential upsert that never deletes, so dropping a row from this grid no
+ * longer removes anybody — the trash and Merge call the lifecycle actions and
+ * only then update the grid. An UNSAVED row (no `id`) has nothing server-side to
+ * lose and stays a pure client-side `remove`.
+ *
+ * The `window.confirm` prompts here are INTERIM: Phase 4 swaps them for
+ * `ConfirmDialog` carrying the same copy, with no change to these call sites.
  */
 
 const TRACKS = [
@@ -96,6 +110,9 @@ export default function RosterEditor({
   const [degradedReason, setDegradedReason] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  /** The row whose lifecycle action is in flight — disables its controls. */
+  const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  const router = useRouter();
 
   const form = useForm<RosterSaveValues>({
     resolver: zodResolver(rosterSaveSchema),
@@ -151,31 +168,141 @@ export default function RosterEditor({
     });
   }
 
+  /** One line naming what a permanent delete would destroy — the copy Phase 4's
+   *  dialog will carry, and the reason a member with history can only be
+   *  deactivated. */
+  function stakesCopy(name: string, history: { absences: number; anomalies: number }) {
+    const abs = `${history.absences} recorded ${history.absences === 1 ? "absence" : "absences"}`;
+    const anom = `${history.anomalies} attributed ${history.anomalies === 1 ? "anomaly" : "anomalies"}`;
+    return `${name} has ${abs} and ${anom}. They stay with a deactivated member and are destroyed by a permanent delete.`;
+  }
+
+  /**
+   * The trash. A persisted row goes through the lifecycle actions — permanent
+   * delete when the member is clean and not the last one, deactivation
+   * otherwise. An unsaved row is just dropped from the grid.
+   */
+  async function removeRow(index: number) {
+    setFormError(null);
+    const row = form.getValues(`members.${index}`);
+
+    if (!row.id) {
+      remove(index);
+      setSelected(new Set());
+      return;
+    }
+
+    const memberId = row.id;
+    const name = row.name || "This member";
+    setPendingRowId(memberId);
+    try {
+      const history = await getMemberHistoryAction(memberId);
+      if (!history.ok) {
+        setFormError(history.message);
+        return;
+      }
+
+      const isClean = history.absences === 0 && history.anomalies === 0;
+      const canDelete = isClean && !history.isLastMember;
+
+      if (canDelete) {
+        if (!window.confirm(`Permanently delete ${name}? This cannot be undone.`)) return;
+        const result = await deleteMemberAction(memberId);
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+        toast.success(`Removed ${name} from the team.`);
+      } else {
+        const why = history.isLastMember && isClean
+          ? `${name} is your only team member, so they cannot be deleted.`
+          : stakesCopy(name, history);
+        if (!window.confirm(`${why}\n\nDeactivate ${name} instead?`)) return;
+        const result = await setMemberActiveAction(memberId, false);
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+        toast.success(`Deactivated ${name}.`);
+      }
+
+      // Only now does the grid change — a failed action leaves the row in place.
+      remove(index);
+      setSelected(new Set());
+      router.refresh();
+    } catch {
+      setFormError("Something went wrong removing that member. Please try again.");
+    } finally {
+      setPendingRowId(null);
+    }
+  }
+
   /** Merge exactly two selected rows into one (GitHub-only + Jira-only → one). */
-  function mergeSelected() {
+  async function mergeSelected() {
+    setFormError(null);
     const ids = [...selected];
     if (ids.length !== 2) return;
     const values = form.getValues("members");
     const idxA = fields.findIndex((f) => f.id === ids[0]);
     const idxB = fields.findIndex((f) => f.id === ids[1]);
     if (idxA < 0 || idxB < 0) return;
-    const a = values[idxA];
-    const b = values[idxB];
-    // Primary is the row with a name that isn't just a bare login (prefer the
-    // Jira displayName); fall back to A. Identity keys union across both.
-    const merged = {
-      id: a.id,
-      name: a.name || b.name,
-      githubUsername: a.githubUsername || b.githubUsername || "",
-      jiraAccountId: a.jiraAccountId || b.jiraAccountId || "",
-      role: a.role || b.role || "",
-      spCapacity: a.spCapacity ?? b.spCapacity ?? null,
-      technologyTrack: a.technologyTrack ?? b.technologyTrack ?? null,
+
+    // The grid keeps the LOWER index so the remaining index stays stable, which
+    // makes the kept row — not "A" — the one whose id must survive. Picking the
+    // id by A/B while picking the row by index is what made a merge of two
+    // persisted rows write one id and orphan the other, duplicating the person.
+    const [keepIdx, dropIdx] = idxA < idxB ? [idxA, idxB] : [idxB, idxA];
+    const keepRow = values[keepIdx];
+    const dropRow = values[dropIdx];
+
+    // Identity keys union across both; the kept row wins every scalar. Name
+    // selection (preferring a Jira displayName over a bare login) is Phase 4.
+    const mergedFields = {
+      name: keepRow.name || dropRow.name,
+      githubUsername: keepRow.githubUsername || dropRow.githubUsername || "",
+      jiraAccountId: keepRow.jiraAccountId || dropRow.jiraAccountId || "",
+      role: keepRow.role || dropRow.role || "",
+      spCapacity: keepRow.spCapacity ?? dropRow.spCapacity ?? null,
+      technologyTrack: keepRow.technologyTrack ?? dropRow.technologyTrack ?? null,
+      isActive: keepRow.isActive ?? dropRow.isActive,
     };
-    // Update the lower index, remove the higher (so the remaining index is stable).
-    const [keep, drop] = idxA < idxB ? [idxA, idxB] : [idxB, idxA];
-    update(keep, merged);
-    remove(drop);
+
+    // Both persisted ⇒ one of the two DB rows genuinely disappears, so this is a
+    // confirmed server operation. Otherwise the surviving row carries whichever
+    // id exists (if any) and the next Save upserts it — nothing to delete.
+    if (keepRow.id && dropRow.id) {
+      const dropName = dropRow.name || "the other row";
+      if (
+        !window.confirm(
+          `Merge these two rows into one member? "${dropName}" disappears and its identity key moves onto "${mergedFields.name}".`,
+        )
+      ) {
+        return;
+      }
+
+      setPendingRowId(keepRow.id);
+      try {
+        const result = await mergeMembersAction({
+          keepId: keepRow.id,
+          dropId: dropRow.id,
+          merged: { ...mergedFields, id: keepRow.id },
+        });
+        if (!result.ok) {
+          setFormError(result.message);
+          return;
+        }
+        toast.success(`Merged into ${mergedFields.name}.`);
+      } catch {
+        setFormError("Something went wrong merging those members. Please try again.");
+        return;
+      } finally {
+        setPendingRowId(null);
+      }
+      router.refresh();
+    }
+
+    update(keepIdx, { ...mergedFields, id: keepRow.id ?? dropRow.id });
+    remove(dropIdx);
     setSelected(new Set());
   }
 
@@ -356,10 +483,11 @@ export default function RosterEditor({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
-                          remove(index);
-                          setSelected(new Set());
-                        }}
+                        onClick={() => void removeRow(index)}
+                        disabled={
+                          pendingRowId != null &&
+                          pendingRowId === watched?.[index]?.id
+                        }
                         aria-label={`Remove ${watched?.[index]?.name ?? "member"}`}
                       >
                         <Trash2Icon />
@@ -395,7 +523,7 @@ export default function RosterEditor({
             type="button"
             variant="outline"
             size="sm"
-            onClick={mergeSelected}
+            onClick={() => void mergeSelected()}
             disabled={selected.size !== 2}
           >
             Merge selected
