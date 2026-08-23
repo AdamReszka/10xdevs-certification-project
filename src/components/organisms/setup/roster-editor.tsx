@@ -17,6 +17,7 @@ import {
   saveRosterAction,
   setMemberActiveAction,
 } from "@/app/(app)/setup/team/actions";
+import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +47,8 @@ import {
 } from "@/components/ui/table";
 import { rosterSaveSchema, type RosterSaveValues } from "@/lib/validations/roster";
 
+import { decideMerge } from "./roster-merge";
+
 /**
  * Roster editor (S-04, FR-006). A `useFieldArray` table of the auto-imported team
  * (GitHub collaborators + Jira project members) that the lead can edit, extend,
@@ -63,8 +66,10 @@ import { rosterSaveSchema, type RosterSaveValues } from "@/lib/validations/roste
  * only then update the grid. An UNSAVED row (no `id`) has nothing server-side to
  * lose and stays a pure client-side `remove`.
  *
- * The `window.confirm` prompts here are INTERIM: Phase 4 swaps them for
- * `ConfirmDialog` carrying the same copy, with no change to these call sites.
+ * Every destructive action confirms through `ConfirmDialog`, which NAMES what it
+ * is about to destroy: the trash offers Deactivate by default and Delete
+ * permanently only when the member has no absences, no attributed anomalies and
+ * is not the last one; Merge names the row that disappears.
  */
 
 const TRACKS = [
@@ -137,6 +142,27 @@ export default function RosterEditor({
     new Map(),
   );
   const [importSummary, setImportSummary] = useState<string | null>(null);
+  /** The row the trash was pressed on, with the history the dialog must name. */
+  const [removeTarget, setRemoveTarget] = useState<{
+    index: number;
+    memberId: string;
+    name: string;
+    absences: number;
+    anomalies: number;
+    isLastMember: boolean;
+  } | null>(null);
+  /** The pending merge, held so the dialog can name the row that disappears. */
+  const [mergeTarget, setMergeTarget] = useState<{
+    keepIdx: number;
+    dropIdx: number;
+    keepId: string;
+    dropId: string;
+    dropName: string;
+    merged: ReturnType<typeof decideMerge>["merged"];
+  } | null>(null);
+  // Shown by default: the roster is small, and hiding them would make
+  // reactivation undiscoverable.
+  const [showInactive, setShowInactive] = useState(true);
   const router = useRouter();
 
   const form = useForm<RosterSaveValues>({
@@ -253,9 +279,8 @@ export default function RosterEditor({
     }
   }
 
-  /** One line naming what a permanent delete would destroy — the copy Phase 4's
-   *  dialog will carry, and the reason a member with history can only be
-   *  deactivated. */
+  /** One line naming what a permanent delete would destroy — and the reason a
+   *  member with history can only be deactivated. */
   function stakesCopy(name: string, history: { absences: number; anomalies: number }) {
     const abs = `${history.absences} recorded ${history.absences === 1 ? "absence" : "absences"}`;
     const anom = `${history.anomalies} attributed ${history.anomalies === 1 ? "anomaly" : "anomalies"}`;
@@ -263,9 +288,9 @@ export default function RosterEditor({
   }
 
   /**
-   * The trash. A persisted row goes through the lifecycle actions — permanent
-   * delete when the member is clean and not the last one, deactivation
-   * otherwise. An unsaved row is just dropped from the grid.
+   * The trash. An UNSAVED row is just dropped from the grid — there is nothing
+   * server-side to lose. A persisted row opens the confirmation, which first
+   * reads what a permanent delete would destroy so it can say it.
    */
   async function removeRow(index: number) {
     setFormError(null);
@@ -278,7 +303,6 @@ export default function RosterEditor({
     }
 
     const memberId = row.id;
-    const name = row.name || "This member";
     setPendingRowId(memberId);
     try {
       const history = await getMemberHistoryAction(memberId);
@@ -286,44 +310,83 @@ export default function RosterEditor({
         setFormError(history.message);
         return;
       }
-
-      const isClean = history.absences === 0 && history.anomalies === 0;
-      const canDelete = isClean && !history.isLastMember;
-
-      if (canDelete) {
-        if (!window.confirm(`Permanently delete ${name}? This cannot be undone.`)) return;
-        const result = await deleteMemberAction(memberId);
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
-        }
-        toast.success(`Removed ${name} from the team.`);
-      } else {
-        const why = history.isLastMember && isClean
-          ? `${name} is your only team member, so they cannot be deleted.`
-          : stakesCopy(name, history);
-        if (!window.confirm(`${why}\n\nDeactivate ${name} instead?`)) return;
-        const result = await setMemberActiveAction(memberId, false);
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
-        }
-        toast.success(`Deactivated ${name}.`);
-      }
-
-      // Only now does the grid change — a failed action leaves the row in place.
-      remove(index);
-      setSelected(new Set());
-      router.refresh();
+      setRemoveTarget({
+        index,
+        memberId,
+        name: row.name || "This member",
+        absences: history.absences,
+        anomalies: history.anomalies,
+        isLastMember: history.isLastMember,
+      });
     } catch {
-      setFormError("Something went wrong removing that member. Please try again.");
+      setFormError("Something went wrong reading that member's history. Please try again.");
     } finally {
       setPendingRowId(null);
     }
   }
 
-  /** Merge exactly two selected rows into one (GitHub-only + Jira-only → one). */
-  async function mergeSelected() {
+  /** Confirmed permanent delete. The service re-checks inside its transaction. */
+  async function confirmDelete() {
+    if (!removeTarget) return;
+    const { memberId, index, name } = removeTarget;
+    const result = await deleteMemberAction(memberId);
+    if (!result.ok) {
+      setFormError(result.message);
+      return;
+    }
+    remove(index);
+    setSelected(new Set());
+    toast.success(`Removed ${name} from the team.`);
+    router.refresh();
+  }
+
+  /** Confirmed deactivation — the non-destructive way out of the same dialog. */
+  async function confirmDeactivate() {
+    if (!removeTarget) return;
+    const { memberId, index, name } = removeTarget;
+    const result = await setMemberActiveAction(memberId, false);
+    if (!result.ok) {
+      setFormError(result.message);
+      return;
+    }
+    form.setValue(`members.${index}.isActive`, false);
+    setSelected(new Set());
+    toast.success(`Deactivated ${name}.`);
+    router.refresh();
+  }
+
+  /** Bring a deactivated member back. Nothing at stake, so no confirmation. */
+  async function reactivateRow(index: number) {
+    setFormError(null);
+    const memberId = form.getValues(`members.${index}.id`);
+    if (!memberId) return;
+
+    setPendingRowId(memberId);
+    try {
+      const result = await setMemberActiveAction(memberId, true);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
+      form.setValue(`members.${index}.isActive`, true);
+      toast.success(`Reactivated ${form.getValues(`members.${index}.name`)}.`);
+      router.refresh();
+    } catch {
+      setFormError("Something went wrong reactivating that member. Please try again.");
+    } finally {
+      setPendingRowId(null);
+    }
+  }
+
+  /**
+   * Merge exactly two selected rows into one (GitHub-only + Jira-only → one).
+   *
+   * The grid keeps the LOWER index so the remaining index stays stable, which
+   * makes the kept row — not the first-selected one — the row whose id must
+   * survive. `decideMerge` owns that whole decision; see its header for the two
+   * defects it closes.
+   */
+  function mergeSelected() {
     setFormError(null);
     const ids = [...selected];
     if (ids.length !== 2) return;
@@ -332,63 +395,49 @@ export default function RosterEditor({
     const idxB = fields.findIndex((f) => f.id === ids[1]);
     if (idxA < 0 || idxB < 0) return;
 
-    // The grid keeps the LOWER index so the remaining index stays stable, which
-    // makes the kept row — not "A" — the one whose id must survive. Picking the
-    // id by A/B while picking the row by index is what made a merge of two
-    // persisted rows write one id and orphan the other, duplicating the person.
     const [keepIdx, dropIdx] = idxA < idxB ? [idxA, idxB] : [idxB, idxA];
-    const keepRow = values[keepIdx];
-    const dropRow = values[dropIdx];
+    const decision = decideMerge(values[keepIdx], values[dropIdx]);
 
-    // Identity keys union across both; the kept row wins every scalar. Name
-    // selection (preferring a Jira displayName over a bare login) is Phase 4.
-    const mergedFields = {
-      name: keepRow.name || dropRow.name,
-      githubUsername: keepRow.githubUsername || dropRow.githubUsername || "",
-      jiraAccountId: keepRow.jiraAccountId || dropRow.jiraAccountId || "",
-      role: keepRow.role || dropRow.role || "",
-      spCapacity: keepRow.spCapacity ?? dropRow.spCapacity ?? null,
-      technologyTrack: keepRow.technologyTrack ?? dropRow.technologyTrack ?? null,
-      isActive: keepRow.isActive ?? dropRow.isActive,
-    };
-
-    // Both persisted ⇒ one of the two DB rows genuinely disappears, so this is a
-    // confirmed server operation. Otherwise the surviving row carries whichever
-    // id exists (if any) and the next Save upserts it — nothing to delete.
-    if (keepRow.id && dropRow.id) {
-      const dropName = dropRow.name || "the other row";
-      if (
-        !window.confirm(
-          `Merge these two rows into one member? "${dropName}" disappears and its identity key moves onto "${mergedFields.name}".`,
-        )
-      ) {
-        return;
-      }
-
-      setPendingRowId(keepRow.id);
-      try {
-        const result = await mergeMembersAction({
-          keepId: keepRow.id,
-          dropId: dropRow.id,
-          merged: { ...mergedFields, id: keepRow.id },
-        });
-        if (!result.ok) {
-          setFormError(result.message);
-          return;
-        }
-        toast.success(`Merged into ${mergedFields.name}.`);
-      } catch {
-        setFormError("Something went wrong merging those members. Please try again.");
-        return;
-      } finally {
-        setPendingRowId(null);
-      }
-      router.refresh();
+    // Only when BOTH rows are persisted does a DB row genuinely disappear, so
+    // only then is this a confirmed server operation.
+    if (decision.needsServerMerge && decision.keepId && decision.dropId) {
+      setMergeTarget({
+        keepIdx,
+        dropIdx,
+        keepId: decision.keepId,
+        dropId: decision.dropId,
+        dropName: values[dropIdx].name || "the other row",
+        merged: decision.merged,
+      });
+      return;
     }
 
-    update(keepIdx, { ...mergedFields, id: keepRow.id ?? dropRow.id });
+    applyMergeToGrid(keepIdx, dropIdx, decision.merged);
+  }
+
+  function applyMergeToGrid(
+    keepIdx: number,
+    dropIdx: number,
+    merged: ReturnType<typeof decideMerge>["merged"],
+  ) {
+    update(keepIdx, merged);
     remove(dropIdx);
     setSelected(new Set());
+  }
+
+  /** Confirmed merge of two persisted rows — one of them is deleted for real. */
+  async function confirmMerge() {
+    if (!mergeTarget) return;
+    const { keepId, dropId, merged, keepIdx, dropIdx } = mergeTarget;
+
+    const result = await mergeMembersAction({ keepId, dropId, merged });
+    if (!result.ok) {
+      setFormError(result.message);
+      return;
+    }
+    applyMergeToGrid(keepIdx, dropIdx, merged);
+    toast.success(`Merged into ${merged.name}.`);
+    router.refresh();
   }
 
   const onSave = form.handleSubmit(async (values) => {
@@ -483,12 +532,19 @@ export default function RosterEditor({
                   <TableHead className="w-20">Capacity</TableHead>
                   <TableHead className="w-32">Track</TableHead>
                   <TableHead className="w-24">Origin</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
                   <TableHead className="w-10" aria-label="Remove" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fields.map((field, index) => (
-                  <TableRow key={field.id}>
+                {fields.map((field, index) => {
+                  const isActive = watched?.[index]?.isActive !== false;
+                  if (!isActive && !showInactive) return null;
+                  return (
+                  <TableRow
+                    key={field.id}
+                    className={isActive ? undefined : "opacity-60"}
+                  >
                     <TableCell>
                       <Checkbox
                         checked={selected.has(field.id)}
@@ -596,6 +652,27 @@ export default function RosterEditor({
                       </div>
                     </TableCell>
                     <TableCell>
+                      {watched?.[index]?.isActive === false ? (
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="text-xs text-muted-foreground">Inactive</span>
+                          {watched?.[index]?.id ? (
+                            <Button
+                              type="button"
+                              variant="link"
+                              size="sm"
+                              className="h-auto p-0 text-xs"
+                              onClick={() => void reactivateRow(index)}
+                              disabled={pendingRowId === watched?.[index]?.id}
+                            >
+                              Reactivate
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Active</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Button
                         type="button"
                         variant="ghost"
@@ -611,7 +688,8 @@ export default function RosterEditor({
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -630,6 +708,7 @@ export default function RosterEditor({
                 role: "",
                 spCapacity: null,
                 technologyTrack: null,
+                isActive: true,
               })
             }
           >
@@ -640,14 +719,70 @@ export default function RosterEditor({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => void mergeSelected()}
+            onClick={mergeSelected}
             disabled={selected.size !== 2}
           >
             Merge selected
             {selected.size > 0 ? ` (${selected.size})` : null}
           </Button>
+
+          <label className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox
+              checked={showInactive}
+              onCheckedChange={(next) => setShowInactive(next === true)}
+              aria-label="Show inactive members"
+            />
+            Show inactive members
+          </label>
         </div>
       </CardContent>
+
+      {/* One dialog per destructive operation, rendered outside the table so a
+          row unmounting (the merge/delete it just confirmed) cannot take its own
+          dialog down mid-transition. */}
+      <ConfirmDialog
+        open={removeTarget != null}
+        onOpenChange={(next) => !next && setRemoveTarget(null)}
+        title={`Remove ${removeTarget?.name ?? "member"}?`}
+        description={
+          removeTarget
+            ? removeTarget.absences === 0 && removeTarget.anomalies === 0
+              ? removeTarget.isLastMember
+                ? `${removeTarget.name} is your only team member, so they cannot be deleted permanently — the roster cannot be emptied. Deactivating them keeps the record and can be undone at any time.`
+                : `${removeTarget.name} has no recorded absences and no anomalies attributed to them, so there is nothing to lose either way. Deactivating keeps the record; deleting removes it for good.`
+              : stakesCopy(removeTarget.name, removeTarget)
+            : ""
+        }
+        confirmLabel="Deactivate"
+        variant="default"
+        onConfirm={confirmDeactivate}
+        secondary={
+          removeTarget &&
+          removeTarget.absences === 0 &&
+          removeTarget.anomalies === 0 &&
+          !removeTarget.isLastMember
+            ? {
+                label: "Delete permanently",
+                variant: "destructive",
+                onConfirm: confirmDelete,
+              }
+            : undefined
+        }
+      />
+
+      <ConfirmDialog
+        open={mergeTarget != null}
+        onOpenChange={(next) => !next && setMergeTarget(null)}
+        title="Merge these two rows into one member?"
+        description={
+          mergeTarget
+            ? `"${mergeTarget.dropName}" disappears and its identity key moves onto "${mergeTarget.merged.name}". This cannot be undone — to split them again you would add a row and move the key back.`
+            : ""
+        }
+        confirmLabel="Merge"
+        variant="default"
+        onConfirm={confirmMerge}
+      />
 
       <CardFooter className="justify-end">
         <Button type="button" onClick={onSave} disabled={form.formState.isSubmitting}>

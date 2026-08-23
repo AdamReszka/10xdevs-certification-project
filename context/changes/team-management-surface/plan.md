@@ -875,9 +875,9 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [ ] 4.1 `roster-merge.test.ts` covers surviving id, name selection and key union in both orders
-- [ ] 4.2 No `window.confirm` remains in the roster editor
-- [ ] 4.3 Type checking and linting pass
+- [x] 4.1 `roster-merge.test.ts` covers surviving id, name selection and key union in both orders
+- [x] 4.2 No `window.confirm` remains in the roster editor
+- [x] 4.3 Type checking and linting pass
 
 #### Manual
 
