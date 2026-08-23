@@ -1136,7 +1136,7 @@ Recorded here so they survive a context reset. None block the PR.
 #### Manual
 
 - [x] 1.6 Real sync populates `jira_project.time_zone` — verified in-session (real Jira sync on demo@sprintflow.test wrote tz=Europe/Warsaw)
-- [ ] 1.7 No token or raw error text in Worker logs
+- [x] 1.7 No token or raw error text in Worker logs
 - [ ] 1.8 Real sync populates `sprint.committed_sp`/`completed_sp` matching a manual Jira count
 
 ### Phase 2: The three reducers (M1 / M2 / M3)
@@ -1150,8 +1150,8 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 2.5 Burndown day-0 remaining SP equals Σ sprint-ticket SP (and `committedSp` absent scope creep)
-- [ ] 2.6 Sub-burndown series sum to the total series
+- [x] 2.5 Burndown day-0 remaining SP equals Σ sprint-ticket SP (and `committedSp` absent scope creep)
+- [x] 2.6 Sub-burndown series sum to the total series
 
 ### Phase 3: shadcn primitives + chart foundation
 
@@ -1164,7 +1164,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 3.5 Chart renders legibly in light and dark theme
+- [x] 3.5 Chart renders legibly in light and dark theme
 - [x] 3.6 No Node-API warning attributable to recharts in `build:cf` — verified in-session (clean build:cf output)
 
 ### Phase 4: Sprint Detail route (surfaces A, B, C)
@@ -1178,13 +1178,13 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 4.5 All three surfaces render on seeded data
-- [ ] 4.6 Aging report default sort and per-column sorting work
-- [ ] 4.7 Matrix switcher works; null churn shows `—`
-- [ ] 4.8 Sub-burndown legible in both themes; `UNKNOWN` distinguishable
-- [ ] 4.9 Usable at 10-inch tablet width; no page-body horizontal scroll
-- [ ] 4.10 Freshness + error banner present, no raw error text
-- [ ] 4.11 No-sprint owner gets the empty state, not an error page
+- [x] 4.5 All three surfaces render on seeded data
+- [x] 4.6 Aging report default sort and per-column sorting work
+- [x] 4.7 Matrix switcher works; null churn shows `—`
+- [x] 4.8 Sub-burndown legible in both themes; `UNKNOWN` distinguishable
+- [x] 4.9 Usable at 10-inch tablet width; no page-body horizontal scroll
+- [x] 4.10 Freshness + error banner present, no raw error text
+- [x] 4.11 No-sprint owner gets the empty state, not an error page
 
 ### Phase 5: Today retrofit (surfaces D, E, F)
 
@@ -1198,11 +1198,11 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 5.6 Today opens on the Inbox; sorting/filtering unregressed
-- [ ] 5.7 All four tabs render; freshness bar persists across tabs
-- [ ] 5.8 Yesterday's Activity matches the fixture for the correct zone-local day
-- [ ] 5.9 Reliability KPI empty state on null `committedSp`
-- [ ] 5.10 Today page render latency acceptable on the `max:1` pool
+- [x] 5.6 Today opens on the Inbox; sorting/filtering unregressed
+- [x] 5.7 All four tabs render; freshness bar persists across tabs
+- [x] 5.8 Yesterday's Activity matches the fixture for the correct zone-local day
+- [x] 5.9 Reliability KPI empty state on null `committedSp`
+- [x] 5.10 Today page render latency acceptable on the `max:1` pool
 
 ### Phase 6: E2E coverage + slice closeout
 
@@ -1227,7 +1227,7 @@ Recorded here so they survive a context reset. None block the PR.
 #### Manual
 
 - [x] 7.6 A forced sync writes exactly one attempt row per integration — verified in-session (4 consecutive cycles, 2 rows each)
-- [ ] 7.7 No token and no raw error text in any new action's network payload
+- [x] 7.7 No token and no raw error text in any new action's network payload
 
 ### Phase 8: `/settings` shell + Connections tab
 
@@ -1247,7 +1247,7 @@ Recorded here so they survive a context reset. None block the PR.
 - [x] 8.9 Monitored repos change without re-entering the token — verified manually 2026-08-22
 - [x] 8.10 Jira project change warns about discarded sprint data first — verified manually 2026-08-22
 - [x] 8.11 Not-connected state links into the wizard — verified manually 2026-08-22
-- [ ] 8.12 Usable at 10-inch tablet width; legible in dark mode
+- [x] 8.12 Usable at 10-inch tablet width; legible in dark mode
 
 ### Phase 9: Split the wizard from single-integration connect
 
@@ -1286,7 +1286,7 @@ Recorded here so they survive a context reset. None block the PR.
 #### Manual
 
 - [ ] 6.6 Seed reset then re-run produces a coherent story across both dashboards
-- [ ] 6.7 `/10x-impl-review` run with findings triaged
+- [x] 6.7 `/10x-impl-review` run with findings triaged — report in `reviews/impl-review.md`; the triage IS Phase 11 (11.1–11.14, each with its commit). Only 11.15 (the manual pass) remains open there
 - [x] 6.8 Roadmap updated, including the corrected S-07 row — verified in-session (roadmap corrected in 4366af9)
 
 ### Phase 11: Post-Phase-10 fixes + impl-review triage
