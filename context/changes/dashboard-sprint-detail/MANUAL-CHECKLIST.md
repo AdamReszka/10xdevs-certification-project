@@ -2,9 +2,18 @@
 
 > Everything left that a human has to look at before PR #46 goes ready.
 > Automated checks are all green at HEAD and are **not** repeated here.
->
-> Item numbers map to `plan.md` `## Progress`, which stays canonical — tick them
-> there too, or tick here and copy across at the end.
+
+**How this file relates to `plan.md` `## Progress`** (which stays canonical):
+
+- Finishing **this entire file** is what closes the single Progress item
+  **11.15**. There is deliberately no row numbered 11.15 below — 11.15 is the
+  umbrella, not a check.
+- Every numbered row below carries the number of the **phase it belongs to**
+  (4.5–4.11 Sprint Detail, 5.6–5.10 Today, 2.5/2.6/3.5 reducers and charts,
+  1.7 and 7.7 security, 8.12 Settings, 6.6 closeout). Tick each one in its own
+  phase in `## Progress` as it passes.
+- **Section F has no Progress counterpart.** Those rows are new in this review —
+  live checks on the destructive fixes F1/F2/F5 — and exist only here.
 
 ## Before you start
 

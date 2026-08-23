@@ -1320,7 +1320,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Still open — owner side
 
-- [ ] 11.15 F6 — the Phase 4/5 manual rows (the actual FR-016/FR-017 deliverable) remain unverified. Worked from `MANUAL-CHECKLIST.md` in this folder, which maps 1:1 onto the Progress numbers above.
+- [ ] 11.15 F6 — the manual verification pass. **This is an umbrella item, not a single check**: it is done when every row in `MANUAL-CHECKLIST.md` (this folder) is ticked. That file has no row numbered 11.15 — its rows carry the numbers of the phases they belong to (4.5–4.11, 5.6–5.10, 2.5, 2.6, 3.5, 1.7, 7.7, 8.12, 6.6), plus a section **F** of live checks on this review's destructive fixes that has no Progress counterpart. Tick each row in its own phase above as it passes; tick 11.15 only when the whole file is clear.
 
 ---
 
