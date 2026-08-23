@@ -47,6 +47,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
 | S-15 | team-management-surface   | manage the team roster after setup — a Settings tab, not the wizard; re-import is additive today and there is no way back to the editor | S-04, S-10 | FR-006 | proposed |
+| S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | proposed |
 
 ## Streams
 
@@ -402,6 +403,36 @@ Foundations below assume these are present and do NOT re-scaffold them.
   Jira-only counterpart (S-04 resolved dedup as manual mapping — email is
   unreliable on both sides). Any redesign must keep it, and must keep working
   for the common real case of one human appearing as two imported rows.
+
+---
+
+### S-16: Sprint reconciliation on every sync
+
+- **Outcome:** when the team starts a new sprint in Jira, SprintFlow follows it
+  automatically. Today it does not: the sprint captured at setup is synced
+  forever until someone manually re-runs a wizard step.
+- **Change ID:** sprint-reconciliation
+- **PRD refs:** FR-007
+- **Prerequisites:** S-05
+- **Status:** proposed
+
+- **Why this exists (S-10 impl-review F7, 2026-08-23):** FR-007 says the system
+  "pulls sprint cadence from the monitored Jira project's active-sprint
+  configuration **on each sync**". As built, that happens *once*. The only writer
+  of the `sprint` row is `roster-store.ts:435` (`importCadence`, the
+  `/setup/team` step); `run-sync.ts` contains no `insert(sprint)` at all — it
+  *reads* via `getActiveSprintRow` and never reconciles against Jira. This is the
+  S-04/S-05 seam, not S-10, but it is the difference between the product working
+  in week 1 and working in week 3.
+- **Observed cost:** this is exactly what made the real account report a healthy
+  green sync while showing an empty dashboard — the stored sprint was the demo
+  seed's `jira_sprint_id=1001`, which does not exist in that Jira, so
+  `searchSprintIssues` correctly returned nothing and the cycle reported OK.
+  Root-cause write-up: `context/changes/dashboard-sprint-detail/plan.md:1020-1052`.
+- **Related, already fixed:** the sibling defect — `getActiveSprintRow`'s ACTIVE
+  branch selecting nondeterministically between two ACTIVE rows — was closed in
+  S-10 (`src/lib/sprint.ts`, ordered by `startDate desc`). Reconciliation should
+  still avoid *creating* a second ACTIVE row rather than relying on that ordering.
 
 ---
 

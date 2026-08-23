@@ -409,6 +409,19 @@ Put the Anomaly Inbox behind a tab shell and add the three panels FR-016 specifi
 
 **Contract**: Extend the existing `Promise.all` (`:32-36`) with `getBurndownSeries` and a single-day `getActivityRollup` on the **same** `db` handle — do not add a second `Promise.all` or a second pool (lessons.md #3). The `<AnomalyInbox>` element and every prop it receives stay **byte-identical**; it simply becomes the `inbox` element prop of `<DashboardTodayTabs>`. `SyncStatusBar` stays outside the tabs so freshness and errors are visible on every tab.
 
+**Amendment (impl-review F10, 2026-08-23) — these two clauses contradict each
+other.** S-07 rendered `<SyncStatusBar>` *inside* `AnomalyInbox`
+(`anomaly-inbox.tsx`, via a `syncState` prop), so "the bar sits outside the tabs"
+and "the inbox keeps every prop byte-identical" cannot both hold: honoring the
+first requires removing the prop, and honoring the second renders the bar inside
+one of four tabs — or twice, if the page also renders it. The implementation took
+the only non-double-rendering reading: the `syncState` prop and the internal
+`<SyncStatusBar>` were removed, and the bar moved up to `dashboard/page.tsx`,
+outside the tab shell, in the same on-screen position with the same copy. The
+inbox's sort/filter/empty-state body is untouched and `inbox-controls.test.ts` is
+unchanged. **The byte-identical clause is void; the outside-the-tabs clause
+stands.**
+
 ### Success Criteria
 
 #### Automated Verification
@@ -563,10 +576,19 @@ it (Phase 8).
 overwritten every cycle — so "why did it fail an hour ago" is unanswerable today.
 
 **Contract**: New `sync_attempt` table: `id`, `ownerId` (cascade), `integration`,
-`startedAt`, `finishedAt`, `status` (reuse the `syncStatus` enum), `outcome`
+`finishedAt`, `status` (reuse the `syncStatus` enum), `outcome`
 (text — the `IntegrationOutcome` skip reason where applicable), indexed
-`(ownerId, integration, finishedAt desc)`. **No error text column** — same
+`(ownerId, integration, finishedAt)`. **No error text column** — same
 reasoning as §1; the row carries a classifiable status, not a message.
+
+**Amendment (impl-review F10, 2026-08-23):** `startedAt` was dropped from this
+Contract to match what shipped (`schema.ts:376-388`, `0006_high_echo.sql`).
+Nothing reads attempt *duration* — the surface shows a timestamp, an outcome and
+a classified reason — so the column would be written and never queried. Add it
+only when something needs to measure cycle length. The index also shipped
+ascending rather than `desc`; Postgres scans a btree backwards, so for a
+single-column ordering the two are equivalent and the Contract is corrected
+rather than the migration.
 
 **Retention is load-bearing.** The PRD's retention non-goal bounds product data
 to current + 2 sprints and says nothing about an operational log, so this table
@@ -1266,3 +1288,33 @@ Recorded here so they survive a context reset. None block the PR.
 - [ ] 6.6 Seed reset then re-run produces a coherent story across both dashboards
 - [ ] 6.7 `/10x-impl-review` run with findings triaged
 - [x] 6.8 Roadmap updated, including the corrected S-07 row — verified in-session (roadmap corrected in 4366af9)
+
+### Phase 11: Post-Phase-10 fixes + impl-review triage
+
+> Added 2026-08-23 (impl-review F10). Three code-bearing commits landed after
+> Phase 10 with no Progress row, and this review's triage then applied eight more
+> fixes. `## Progress` is canonical, so both are recorded here.
+
+#### Landed before the review
+
+- [x] 11.1 Team-managed Jira boards accepted (`type === "simple"`) — d4da8d9
+- [x] 11.2 Jira delta cursor scoped to its sprint + sprint name shown — 9af2ed5 (migration `0007`)
+- [x] 11.3 Wizard team step widened to the app-shell measure — 474d384
+
+#### Applied during impl-review triage (2026-08-22/23)
+
+- [x] 11.4 F1 — `updateMonitoredRepos` upserts on `(ownerId, githubRepoId)`; retained repos keep their row id, so commits/PRs no longer cascade away
+- [x] 11.5 F2 — `updateJiraProject` discards the previous project's sprints when the project actually changes, clears `boardId`/`timeZone`, returns `sprintsDiscarded`
+- [x] 11.6 F3 — `syncNow` returns `SyncNowOutcome`; the raw `error` string never crosses to the client
+- [x] 11.7 F4 — per-item guard around `getCommitDetail`; one bad SHA no longer loses the cycle
+- [x] 11.8 F5 — seed script: neutral usage example, loopback guard (`SEED_ALLOW_REMOTE`), `sync_attempt` cleared
+- [x] 11.9 F7 — `getActiveSprintRow` ACTIVE branch ordered by `startDate desc`; FR-007 gap filed as roadmap S-16
+- [x] 11.10 F8 — PR leg range-bounded via `or(between(openedAt), between(mergedAt))`; docblock corrected; `Intl` formatters memoized
+- [x] 11.11 F9 — `jiraProject` time-zone update asserts `ownerId` instead of inheriting it
+- [x] 11.12 F10 — Phase 5 §5 contradiction and Phase 7 §4 `startedAt` amended in-plan; this section added
+
+#### Still open from triage
+
+- [ ] 11.13 F2 open half — nothing consumes `sprintsDiscarded`; route to cadence re-import (blocked on whether `importCadence` is safe outside the wizard)
+- [ ] 11.14 Tests for F1 (retained repo keeps history), F2 (both branches), F4 (failing SHA)
+- [ ] 11.15 F6 — the Phase 4/5 manual rows (the actual FR-016/FR-017 deliverable) remain unverified
