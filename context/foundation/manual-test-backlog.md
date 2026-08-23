@@ -77,13 +77,24 @@ Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.2, 5.3, 5.4, 5.5**.
 Otwarte: **1.5, 2.7, 2.8, 3.4, 4.3, 4.4, 4.5, 4.6, 5.5, 5.6** + nota
 koordynacyjna z `onboarding-routing`.
 
-> ⚠️ **Nie testuj 4.3 i 4.6 teraz.** 4.3 („roster auto-importuje z obu źródeł,
-> merge scala wiersze, edycje przeżywają re-import") opisuje zachowanie, o
-> którym **S-15 mówi, że jest zepsute**: `importRoster` dodaje zamiast uzgadniać,
-> więc ponowny import na koncie z 5 osobami dał 7 wierszy. 4.6 (szerokość na
-> tablecie) został naprawiony dopiero w S-10. Weryfikacja tych dwóch przed S-15
-> to praca do wyrzucenia — poczekaj, aż `team-management-surface` przebuduje tę
-> powierzchnię.
+> ✅ **4.3 i 4.6 — odblokowane przez S-15 (PR #49), ale przepisane.**
+>
+> **4.3** w starym brzmieniu („roster auto-importuje z obu źródeł, merge scala
+> wiersze, edycje przeżywają re-import") jest **nieaktualne**: import już nie
+> zapisuje. Reprodukcja w S-15 potwierdziła wektor — seed demo wpisuje klucze
+> `alice-kim` / `acc-alice-kim`, których żaden prawdziwy import nie dopasuje,
+> więc 5 wierszy rosło do 5 + liczba tożsamości z upstreamu (zmierzone: 9).
+> **Nowe brzmienie 4.3:** re-import *proponuje* — nowi ludzie pojawiają się jako
+> niezapisane wiersze z plakietką „New — unsaved", osoby znikłe u źródła dostają
+> znacznik „Not in GitHub/Jira any more" i jednoklikowy Deactivate, a **w bazie
+> nie przybywa ani jeden wiersz, dopóki nie naciśniesz Save**. Edycje i wiersze
+> `MANUAL` nadal przeżywają re-import. Testuj to na powierzchni S-15
+> (`context/changes/team-management-surface/MANUAL-CHECKLIST.md`, sekcja C), nie
+> na starym opisie.
+>
+> **4.6** (szerokość na tablecie) naprawił S-10, a S-15 domyka jego weryfikację —
+> ale **jeszcze nie odhaczone**: to wiersz 5.7 w checkliście S-15 i wymaga oczu w
+> przeglądarce. Odhaczaj tam, nie tutaj.
 
 ### F-03 `ui-component-foundation` — 9 pozycji
 

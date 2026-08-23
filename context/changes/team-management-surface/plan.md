@@ -892,8 +892,8 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [x] 5.1 Type checking and linting pass
-- [x] 5.2 Existing unit and integration suites still green
+- [x] 5.1 Type checking and linting pass — 5863b2e
+- [x] 5.2 Existing unit and integration suites still green — 5863b2e
 
 #### Manual
 
@@ -907,7 +907,7 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [ ] 6.1 Touched markdown lints; no broken relative links
+- [x] 6.1 Touched markdown lints; no broken relative links
 
 #### Manual
 
