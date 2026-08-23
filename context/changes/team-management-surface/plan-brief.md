@@ -91,9 +91,9 @@ must be rejected rather than treated as new.
 | Phase | What it delivers | Key risk |
 |---|---|---|
 | 1. Upsert-only save | The data loss stops; `is_active` persists | Cross-account isolation must be re-established explicitly |
-| 2. Member lifecycle | Deactivate / reactivate / guarded delete / merge | History check must be inside the write transaction, not just advisory |
+| 2. Member lifecycle | Deactivate / reactivate / guarded delete / merge, **and the editor rewired to them** | History check must be inside the write transaction; the editor's client-side removals stop working the moment the save stops deleting |
 | 3. Import as a diff | Re-import reconciles instead of appending | Degradation must not flag a whole source as departed |
-| 4. Dialogs + status column | Destructive actions name what they destroy | New primitive; focus and keyboard behaviour need real checking |
+| 4. Dialogs + status column | Interim confirms become real dialogs; active/inactive visible | New primitive; focus and keyboard behaviour need real checking |
 | 5. Settings → Team tab | The roadmap's actual ask, reachable from the nav | Two pages must not drift on the member projection |
 | 6. Documentation | `lessons.md`, roadmap, manual checklist | — |
 

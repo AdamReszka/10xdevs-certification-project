@@ -184,7 +184,8 @@ inside the transaction, partition the payload into "has an id known to this owne
 omits are left alone — the bulk save is no longer authoritative over membership.
 
 **Contract**: `saveRoster({ db, ownerId, members }) → { updated: number; inserted: number }`
-(was `{ count }` — update the two call sites). `RosterMemberInput` gains
+(was `{ count }`; the single call site, `actions.ts:151`, discards the return
+entirely, so the shape change needs no action-layer plumbing). `RosterMemberInput` gains
 `isActive?: boolean`, persisted on both branches; `deriveSource` is unchanged.
 Every `update` carries `and(eq(teamMember.id, m.id), eq(teamMember.ownerId, ownerId))`.
 Any submitted `id` absent from the owner's current set throws a new
@@ -216,6 +217,27 @@ instead of defaulting to `true` on every save.
 **Contract**: `ClientMember` gains `isActive: boolean`; `toClientMember` maps it;
 `toFormMember` passes it through. No UI for it yet — that is Phase 4.
 
+#### 5. Fix the action-level test the upsert breaks
+
+**File**: `src/app/(app)/setup/team/actions.integration.test.ts`
+
+**Intent**: The happy-path case (`:210-231`) imports the roster — which at this
+phase still persists 4 members, since import is not defanged until Phase 3 — then
+saves a 2-member payload carrying **no ids**, and asserts
+`expect(rows).toHaveLength(2)`. That assertion only holds because the old save
+deleted the owner's whole set first. Under the upsert it becomes 4 + 2 = 6 and the
+suite goes red on a test this plan otherwise never mentions.
+
+**Contract**: Rewrite the case to assert the post-upsert reality: either save the
+imported rows **with their ids** (the realistic edit-then-save flow, asserting 4
+rows with the two edited) or drop the preceding import from that case. The
+`source === "BOTH"` assertion for the mapped member must survive either way, as
+must the two token-leak assertions (`:250-251`) — those are the PRD guardrail and
+are the reason this test exists.
+
+**Note**: Phase 3 revisits this same file when `importRosterAction` stops writing;
+expect a second, smaller edit there.
+
 ### Success Criteria
 
 #### Automated Verification
@@ -224,6 +246,7 @@ instead of defaulting to `true` on every save.
 - Unchanged-save issues no write; absence, anomaly attribution and `is_active` all survive
 - A payload carrying a foreign member `id` is rejected as `invalid_input`
 - Duplicate identity keys across rows are rejected by the schema: `npm test`
+- **The whole suite is green, not just the new tests**: `npm test && npm run test:integration` — `actions.integration.test.ts` is the known casualty of this change
 - Type checking passes: `npm run typecheck`
 - Linting passes: `npm run lint`
 
@@ -295,7 +318,10 @@ confirmed operation, not a grid edit.
 
 **Contract**: `mergeMembers({ db, ownerId, keepId, dropId, merged }) → { id: string }`.
 One transaction: verify both ids belong to the owner, update `keepId` with the
-merged field set (`source` re-derived), delete `dropId`. Refuses when the dropped
+merged field set (`source` re-derived), delete `dropId`. `keepId` MUST be the id
+the editor keeps in the grid — see Phase 4 §5, where today's `mergeSelected` picks
+the surviving id by A/B while picking the surviving *row* by index; the two must
+agree or the merge duplicates instead of fusing. Refuses when the dropped
 row has absences or anomalies — the owner must deactivate it instead, since
 merging away someone's recorded absences is exactly the loss this slice exists to
 prevent.
@@ -316,6 +342,31 @@ for `UnknownMemberError` / `MemberHasHistoryError` / `LastMemberError` →
 `invalid_input` with a human-readable message. Input ids validated as
 `z.string().min(1)` before use.
 
+#### 6. Rewire the editor's removal paths — same phase as the services
+
+**File**: `src/components/organisms/setup/roster-editor.tsx`
+
+**Intent**: Phase 1 took deletion out of the bulk save, and the editor's only two
+removal paths are client-side: `remove(index)` on the trash (`:357`) and
+`remove(drop)` inside `mergeSelected` (`:175`). Both worked only because save was
+delete-then-insert. Leaving them unrewired until Phase 4 means three
+pause-for-confirmation phases where the trash shows "Saved N team members" and the
+member is still there on refresh, and where merging two persisted rows *duplicates*
+the person instead of fusing them. The rewire therefore belongs here, immediately
+behind the actions it calls — not two phases later.
+
+**Contract**: For a **persisted** row (has an `id`), the trash calls
+`deleteMemberAction` / `setMemberActiveAction` and merge calls
+`mergeMembersAction` — passing `keepId` / `dropId` consistent with the row the grid
+keeps, which today's `mergeSelected` gets wrong when the second-selected row has
+the lower index (Phase 4 §5) — each followed by `router.refresh()`; an **unsaved** row (no
+`id`) keeps the pure client-side `remove(index)` / client-side merge — there is
+nothing server-side to lose. Confirmation in this phase is an interim
+`window.confirm` carrying the same copy the dialog will carry (the counts from
+`getMemberHistoryAction`); Phase 4 §3 swaps it for `ConfirmDialog` with no change
+to the call sites. A failed action surfaces through the existing `formError` path
+and the row is NOT removed from the grid.
+
 ### Success Criteria
 
 #### Automated Verification
@@ -328,6 +379,8 @@ for `UnknownMemberError` / `MemberHasHistoryError` / `LastMemberError` →
 
 - Deactivating a member in psql-visible state matches what the service reports
 - A deactivated member disappears from the dashboard's member filter but still labels their existing anomalies
+- Trash on a persisted row removes them for real — the row is gone after a refresh, not just from the grid
+- Merging two persisted rows leaves exactly one row in psql, not two
 
 **Implementation Note**: Pause for manual confirmation before Phase 3.
 
@@ -399,6 +452,17 @@ and `upstreamMissing` rows with a muted "not in GitHub/Jira any more" marker plu
 a one-click Deactivate. First-run auto-import (`roster-editor.tsx:132-140`) is
 unchanged — it fires on an empty roster, and the owner's Save is what persists it.
 
+**Where the flags live.** *Not* in the field array. `toFormMember` (`:65-75`)
+projects down to `rosterMemberSchema`, which has no `proposed` / `upstreamMissing`
+— it is the same reason `source` is already dropped and `originLabel` (`:76-85`)
+re-derives the origin from the watched keys instead. Passing the flags through
+`replace()` would silently discard them. Hold them in component state set
+alongside the `replace()` call, mirroring how `degradedReason` is already held
+outside the form (`:90`): a `Map` keyed by member `id` for persisted rows, and by
+identity key (`githubUsername`/`jiraAccountId`, lowercased) for proposed rows that
+have no id yet — **never by array index**, which `append` / `remove` reshuffles.
+A row with no id and no key (a blank Add-member row) simply carries no flag.
+
 ### Success Criteria
 
 #### Automated Verification
@@ -432,8 +496,10 @@ destroy before it does it.
 **Intent**: The repo has no dialog component. `@shadcn/alert-dialog` is the
 right one — modal, focus-trapped, with an explicit Cancel/Action pair.
 
-**Contract**: `npx shadcn add alert-dialog` (never re-run `init` —
-`components.json` is already wired). Lands at `src/components/ui/alert-dialog.tsx`;
+**Contract**: Confirm the component and its current API via the `@shadcn` MCP
+server first — CLAUDE.md requires that lookup before any UI surface — then
+`npx shadcn add alert-dialog` (never re-run `init` — `components.json` is already
+wired). Lands at `src/components/ui/alert-dialog.tsx`;
 `radix-ui` is already a dependency.
 
 #### 2. Confirm dialog molecule
@@ -447,14 +513,16 @@ actions — and the Disconnect button whenever someone fixes it — read the sam
 client component, `onConfirm` async with a pending state. Sits in `molecules/`
 beside `main-nav.tsx` per the atomic-design convention in CLAUDE.md.
 
-#### 3. Row actions in the editor
+#### 3. Swap the interim confirms for the dialog
 
 **File**: `src/components/organisms/setup/roster-editor.tsx`
 
-**Intent**: Replace the bare trash icon with the lifecycle the owner actually
-wants, and make what is at stake visible before the click lands.
+**Intent**: Phase 2 §6 already routes the trash and merge through the lifecycle
+actions behind a `window.confirm`. This replaces that prompt with the real
+surface, so what is at stake is *shown* rather than crammed into a browser
+alert. The call sites do not change — only the confirmation UI.
 
-**Contract**: For a **persisted** row the trash opens a dialog offering
+**Contract**: For a **persisted** row the trash opens a `ConfirmDialog` offering
 *Deactivate* (default) and, only when `getMemberHistoryAction` reports zero
 absences, zero anomalies and not-last-member, *Delete permanently* — with the
 counts stated either way ("Erik has 2 recorded absences and 3 anomalies
@@ -462,7 +530,8 @@ attributed to him; they stay with a deactivated member and are destroyed by a
 permanent delete"). For an **unsaved** row (no id) the trash still calls
 `remove(index)` with no dialog — there is nothing to lose. **Merge** gets its own
 confirmation naming the row being dropped; when either selected row is unsaved,
-merge stays purely client-side (nothing to delete server-side).
+merge stays purely client-side (nothing to delete server-side). No
+`window.confirm` remains in the file after this step.
 
 #### 4. Active column
 
@@ -476,17 +545,30 @@ visually muted and a Reactivate action. A "Show inactive members" toggle
 reactivation undiscoverable). The grid is already horizontally scrollable
 (`roster-editor.tsx:253`); adding a column needs no layout change.
 
-#### 5. The lying comment
+#### 5. The lying comment — and the id it picks up with it
 
-**File**: `src/components/organisms/setup/roster-editor.tsx:161-162`
+**File**: `src/components/organisms/setup/roster-editor.tsx:161-174`
 
-**Intent**: The comment claims name selection prefers the Jira `displayName`; the
-code is `a.name || b.name`, and both imported rows always carry a name, so `a`
-always wins and merging a GitHub row first yields the bare login. Implement the
-comment rather than deleting it — the behaviour it describes is the better one.
+**Intent**: Two defects in one function. The comment claims name selection prefers
+the Jira `displayName`; the code is `a.name || b.name`, and both imported rows
+always carry a name, so `a` always wins and merging a GitHub row first yields the
+bare login. Implement the comment rather than deleting it — the behaviour it
+describes is the better one.
 
-**Contract**: A `looksLikeLogin(name, githubUsername)` helper (name equals the
-GitHub login, case-insensitively) picks the other row's name when one row's name
+The second is worse and previously invisible: `merged.id = a.id` (`:164`) where
+`a = values[idxA]`, but keep/drop are chosen by **index** (`:173`), not by A/B. When
+`idxB < idxA`, `update(idxB, merged)` writes `a`'s id into the surviving row while
+`b`'s row is the one removed from the grid. Under the old delete-then-insert save
+this was harmless — the whole set was replaced. From Phase 1 on, the save updates
+`a.id`'s row and leaves `b.id`'s row untouched in the DB: the merge **duplicates**
+the person instead of fusing them.
+
+**Contract**: Extract the whole merge decision — surviving **id**, name, keys,
+profile fields — into one pure helper. The surviving id is the *kept* row's id
+(the one the grid keeps and the one passed as `keepId` to `mergeMembersAction`),
+never unconditionally `a`'s; the dropped row's id is what goes to `dropId`. Name
+selection uses a `looksLikeLogin(name, githubUsername)` helper (name equals the
+GitHub login, case-insensitively) picking the other row's name when one row's name
 is just its login; ties fall back to `a`. Unit-tested in a new
 `roster-merge.test.ts` alongside the existing `repo-selection.test.ts` precedent
 of extracting pure logic out of an organism.
@@ -495,7 +577,8 @@ of extracting pure logic out of an organism.
 
 #### Automated Verification
 
-- `roster-merge.test.ts` covers: GitHub row first still yields the Jira display name; both-login case falls back to `a`; identity keys union in both orders: `npm test`
+- `roster-merge.test.ts` covers: **the surviving id is the kept row's id in both selection orders** (select-B-then-A must not resurrect A's id); GitHub row first still yields the Jira display name; both-login case falls back to `a`; identity keys union in both orders: `npm test`
+- `grep -n "window.confirm" src/components/organisms/setup/roster-editor.tsx` returns nothing — Phase 2's interim prompts are gone
 - Type checking and linting pass
 
 #### Manual Verification
@@ -545,8 +628,19 @@ Settings says "this is your team".
 owner-scoped read → render `<RosterEditor initialMembers={…} />`. Do **not**
 re-declare `force-dynamic` or `requireSession` (inherited from
 `(app)/layout.tsx:9,22`). The member projection matches
-`setup/team/page.tsx:27-39` plus `isActive`; extract it to a shared reader in
-`src/lib/roster.ts` so the two pages cannot drift.
+`setup/team/page.tsx:27-39` plus `isActive`.
+
+**The shared reader is a NEW export, not an extraction.** `src/lib/roster.ts`
+already holds `listRoster` (`:28`) — the S-07 dashboard reader consumed by
+`dashboard/page.tsx:58` and `dashboard/sprint-detail/page.tsx:69` and asserted by
+`dashboard-readers.integration.test.ts:194-232`. Its projection is *narrower* than
+the editor's: it has `isActive` but neither `spCapacity` nor `source`, both of
+which `ClientMember` requires. Do **not** widen it — that would push two unused
+columns and a shape change through both dashboards and their test for no gain.
+Add `listRosterForEditor(db, ownerId)` beside it, returning the `ClientMember`
+projection, and point *both* `setup/team/page.tsx` and `settings/team/page.tsx` at
+it so the two editor mounts cannot drift. Carry a short comment saying why the
+file has two readers, matching the existing one's why-comment style.
 
 #### 3. Refresh after save
 
@@ -713,13 +807,14 @@ No schema migration. Two behavioural migrations to be aware of:
 - [ ] 1.2 Unchanged save issues no write; absence, attribution and `is_active` survive
 - [ ] 1.3 Foreign member `id` in a payload is rejected as `invalid_input`
 - [ ] 1.4 Duplicate identity keys rejected by the schema
-- [ ] 1.5 Type checking passes
-- [ ] 1.6 Linting passes
+- [ ] 1.5 Whole suite green (`npm test && npm run test:integration`), incl. the repaired `actions.integration.test.ts`
+- [ ] 1.6 Type checking passes
+- [ ] 1.7 Linting passes
 
 #### Manual
 
-- [ ] 1.7 One-field edit moves exactly one row's `updated_at`
-- [ ] 1.8 Out-of-band deactivation survives a UI save
+- [ ] 1.8 One-field edit moves exactly one row's `updated_at`
+- [ ] 1.9 Out-of-band deactivation survives a UI save
 
 ### Phase 2: Member lifecycle — deactivate, reactivate, delete, merge
 
@@ -735,6 +830,8 @@ No schema migration. Two behavioural migrations to be aware of:
 
 - [ ] 2.6 Service-reported state matches psql
 - [ ] 2.7 Deactivated member leaves the dashboard filter but still labels existing anomalies
+- [ ] 2.8 Trash on a persisted row removes them for real — gone after a refresh
+- [ ] 2.9 Merging two persisted rows leaves exactly one row in psql
 
 ### Phase 3: Import becomes a diff, not a write
 
@@ -755,17 +852,18 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [ ] 4.1 `roster-merge.test.ts` covers name selection and key union in both orders
-- [ ] 4.2 Type checking and linting pass
+- [ ] 4.1 `roster-merge.test.ts` covers surviving id, name selection and key union in both orders
+- [ ] 4.2 No `window.confirm` remains in the roster editor
+- [ ] 4.3 Type checking and linting pass
 
 #### Manual
 
-- [ ] 4.3 Trash on a member with history offers Deactivate only, with counts stated
-- [ ] 4.4 Trash on a clean member offers both; permanent delete works
-- [ ] 4.5 Permanent delete refused for the last remaining member
-- [ ] 4.6 Merge confirms and names the dropped row
-- [ ] 4.7 Deactivated rows are muted and reactivatable
-- [ ] 4.8 Dialog traps focus, Escape cancels, Cancel takes default focus
+- [ ] 4.4 Trash on a member with history offers Deactivate only, with counts stated
+- [ ] 4.5 Trash on a clean member offers both; permanent delete works
+- [ ] 4.6 Permanent delete refused for the last remaining member
+- [ ] 4.7 Merge confirms and names the dropped row
+- [ ] 4.8 Deactivated rows are muted and reactivatable
+- [ ] 4.9 Dialog traps focus, Escape cancels, Cancel takes default focus
 
 ### Phase 5: The Settings → Team tab
 

@@ -1,7 +1,7 @@
 ---
 change_id: team-management-surface
 title: Team management surface
-status: planned
+status: plan_reviewed
 created: 2026-08-23
 updated: 2026-08-23
 archived_at: null
