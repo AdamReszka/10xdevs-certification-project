@@ -212,22 +212,21 @@ describe("team actions — happy path", () => {
     expect(imported.githubDegraded).toBe(false);
     expect(imported.members).toHaveLength(4);
 
-    // Save the imported roster BY ID — the realistic edit-then-save flow. The save
-    // is a differential upsert (S-15): it updates the rows it is given and deletes
-    // nothing, so all four imported members survive. Mapping the two halves of one
-    // human is expressed by MOVING the Jira key onto the GitHub row, which leaves
-    // the emptied row behind as MANUAL; collapsing it is the Phase 2 merge action,
-    // not something the bulk save may do implicitly.
-    const octocatRow = imported.members.find((m) => m.githubUsername === "octocat")!;
-    const miaRow = imported.members.find((m) => m.jiraAccountId === "acc-1")!;
-    const untouched = imported.members.filter(
-      (m) => m.id !== octocatRow.id && m.id !== miaRow.id,
-    );
+    // Import PROPOSES now (S-15): four id-less rows, and not one DB write.
+    expect(imported.added).toBe(4);
+    expect(imported.missing).toBe(0);
+    expect(imported.members.every((m) => m.proposed === true && m.id === undefined)).toBe(true);
+    const afterImport = await db
+      .select()
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(afterImport).toHaveLength(0);
 
+    // The owner's Save is what persists it — this is the first-run flow, with the
+    // two halves of one human already mapped in the grid, so three members land.
     const saved = await saveRosterAction({
       members: [
         {
-          id: octocatRow.id,
           name: "Mia Krystof",
           githubUsername: "octocat",
           jiraAccountId: "acc-1",
@@ -235,19 +234,14 @@ describe("team actions — happy path", () => {
           spCapacity: 8,
           technologyTrack: "BACKEND",
         },
-        { id: miaRow.id, name: "Mia Krystof (unmapped)", jiraAccountId: "" },
-        ...untouched.map((m) => ({
-          id: m.id,
-          name: m.name,
-          githubUsername: m.githubUsername,
-          jiraAccountId: m.jiraAccountId,
-        })),
+        { name: "devtwo", githubUsername: "devtwo" },
+        { name: "Sam Lee", jiraAccountId: "acc-2" },
       ],
     });
     expect(saved.ok).toBe(true);
 
     const rows = await db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId));
-    expect(rows).toHaveLength(4);
+    expect(rows).toHaveLength(3);
 
     const mapped = rows.find((r) => r.githubUsername === "octocat");
     expect(mapped?.source).toBe("BOTH");
@@ -255,10 +249,16 @@ describe("team actions — happy path", () => {
     expect(mapped?.spCapacity).toBe(8);
     expect(mapped?.technologyTrack).toBe("BACKEND");
 
-    // The row whose Jira key moved away keeps its identity — it is not deleted.
-    const emptied = rows.find((r) => r.id === miaRow.id);
-    expect(emptied?.source).toBe("MANUAL");
-    expect(emptied?.jiraAccountId).toBeNull();
+    // A re-import against the saved roster proposes nothing and still writes nothing.
+    const reimported = await importRosterAction();
+    if (!reimported.ok) throw new Error(`re-import failed: ${reimported.error}`);
+    expect(reimported.added).toBe(0);
+    expect(reimported.missing).toBe(0);
+    const afterReimport = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(afterReimport).toHaveLength(3);
 
     const cadence = await importCadenceAction();
     if (!cadence.ok) throw new Error(`importCadence failed: ${cadence.error}`);

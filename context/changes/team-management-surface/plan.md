@@ -393,6 +393,29 @@ and the row is NOT removed from the grid.
 Make re-import reconcile. The mechanism is to stop it writing at all: it proposes,
 the owner reviews, Save persists.
 
+**§0 repro — CONFIRMED as vector (4), the demo seed's synthetic keys.** Run on a
+scratch account (`repro-57-*@sprintflow.test`, never `demo@sprintflow.test`) with
+the demo roster seeded exactly as `scripts/seed-dashboard.mjs:189-204` writes it,
+then two imports against fixture GitHub/Jira responses:
+
+| step | rows | delta |
+|---|---|---|
+| after `db:seed:demo` | 5 | — |
+| after 1st import | 9 | +4 |
+| after 2nd import | 9 | +0 |
+
+The seed stores `alice-kim … eriklund` / `acc-alice-kim … acc-eriklund`; upstream
+returns `octocat, devtwo` / `acc-1, acc-2`. **The key overlap is empty**, so
+`importRoster`'s merge-by-key skip can never fire on a demo row and every upstream
+identity is inserted as new. All five demo rows survive untouched — import neither
+updates nor reconciles them.
+
+The growth is `5 + |upstream identities|` and happens **once** per identity, which
+is why the count is stable on the second run rather than climbing: the reported
+5 → 7 is this same vector against an upstream set of two. The other three key-miss
+vectors in research §2 are not needed to explain it, and the diff below covers
+them regardless.
+
 ### Changes Required
 
 #### 0. Reproduce the 5 → 7 first
@@ -837,16 +860,16 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Automated
 
-- [ ] 3.1 The 5 → 7 repro is recorded with the confirmed vector named
-- [ ] 3.2 Rewritten and new import tests pass
-- [ ] 3.3 `insert(teamMember)` appears only in the save path
-- [ ] 3.4 Type checking and linting pass
+- [x] 3.1 The 5 → 7 repro is recorded with the confirmed vector named
+- [x] 3.2 Rewritten and new import tests pass
+- [x] 3.3 `insert(teamMember)` appears only in the save path
+- [x] 3.4 Type checking and linting pass
 
 #### Manual
 
-- [ ] 3.5 Re-import adds no DB rows until Save
-- [ ] 3.6 Re-import does not resurrect a deactivated member
-- [ ] 3.7 Under GitHub degradation no member is flagged as departed
+- [x] 3.5 Re-import adds no DB rows until Save
+- [x] 3.6 Re-import does not resurrect a deactivated member
+- [x] 3.7 Under GitHub degradation no member is flagged as departed
 
 ### Phase 4: Confirmation dialogs + the active/inactive column
 

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import {
   type ClientMember,
+  type ClientPreviewMember,
   deleteMemberAction,
   getMemberHistoryAction,
   importRosterAction,
@@ -75,8 +76,15 @@ const TRACKS = [
 
 const NONE = "NONE";
 
-/** Blank string / null coalescing for the RHF text inputs (schema allows null). */
-function toFormMember(m: ClientMember) {
+/**
+ * Blank string / null coalescing for the RHF text inputs (schema allows null).
+ *
+ * NOTE: this projects down to `rosterMemberSchema`, which has no `source`,
+ * `proposed` or `upstreamMissing` — anything not listed here is DISCARDED. The
+ * import flags therefore live in component state, keyed by identity, not in the
+ * field array. See `importFlags`.
+ */
+function toFormMember(m: ClientMember | ClientPreviewMember) {
   return {
     id: m.id,
     name: m.name,
@@ -89,6 +97,17 @@ function toFormMember(m: ClientMember) {
     // value — the Status column that reads/writes it lands in Phase 4.
     isActive: m.isActive,
   };
+}
+
+/**
+ * Stable key for a preview row's import flag. A persisted row is keyed by `id`;
+ * a proposal has none yet, so it is keyed by its lowercased identity key. NEVER
+ * by array index — `append` / `remove` reshuffle those.
+ */
+function flagKey(m: { id?: string; githubUsername?: string | null; jiraAccountId?: string | null }) {
+  if (m.id) return m.id;
+  const key = m.githubUsername || m.jiraAccountId;
+  return key ? key.toLowerCase() : null;
 }
 
 /** The per-row origin label, derived from the currently-entered identity keys. */
@@ -112,6 +131,12 @@ export default function RosterEditor({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   /** The row whose lifecycle action is in flight — disables its controls. */
   const [pendingRowId, setPendingRowId] = useState<string | null>(null);
+  /** Import annotations, held OUTSIDE the form: `toFormMember` cannot carry them
+   *  (see its note) and array indices are not stable under append/remove. */
+  const [importFlags, setImportFlags] = useState<Map<string, "proposed" | "missing">>(
+    new Map(),
+  );
+  const [importSummary, setImportSummary] = useState<string | null>(null);
   const router = useRouter();
 
   const form = useForm<RosterSaveValues>({
@@ -130,6 +155,7 @@ export default function RosterEditor({
   async function runImport() {
     setFormError(null);
     setDegradedReason(null);
+    setImportSummary(null);
     setIsImporting(true);
     try {
       const result = await importRosterAction();
@@ -139,6 +165,30 @@ export default function RosterEditor({
       }
       replace(result.members.map(toFormMember));
       setSelected(new Set());
+
+      // Set alongside replace(), never through it.
+      const flags = new Map<string, "proposed" | "missing">();
+      for (const m of result.members) {
+        const key = flagKey(m);
+        if (!key) continue;
+        if (m.proposed) flags.set(key, "proposed");
+        else if (m.upstreamMissing) flags.set(key, "missing");
+      }
+      setImportFlags(flags);
+
+      // Import no longer writes — say so, or the owner will navigate away
+      // believing the proposal was persisted.
+      const parts: string[] = [];
+      if (result.added > 0) parts.push(`${result.added} new`);
+      if (result.missing > 0) {
+        parts.push(`${result.missing} no longer in GitHub/Jira`);
+      }
+      setImportSummary(
+        parts.length > 0
+          ? `${parts.join(", ")} — nothing is saved until you press Save.`
+          : "Your roster already matches GitHub and Jira — nothing to add.",
+      );
+
       if (result.githubDegraded && result.reason) {
         setDegradedReason(result.reason);
       }
@@ -166,6 +216,41 @@ export default function RosterEditor({
       else next.add(id);
       return next;
     });
+  }
+
+  /** The import annotation for a row, resolved by identity rather than index. */
+  function rowFlag(index: number): "proposed" | "missing" | undefined {
+    if (importFlags.size === 0) return undefined;
+    const key = flagKey({
+      id: watched?.[index]?.id,
+      githubUsername: watched?.[index]?.githubUsername,
+      jiraAccountId: watched?.[index]?.jiraAccountId,
+    });
+    return key ? importFlags.get(key) : undefined;
+  }
+
+  /** The one-click answer to "this person is gone upstream" — no confirmation
+   *  needed, deactivation destroys nothing and is reversible. */
+  async function deactivateRow(index: number) {
+    setFormError(null);
+    const memberId = form.getValues(`members.${index}.id`);
+    if (!memberId) return;
+
+    setPendingRowId(memberId);
+    try {
+      const result = await setMemberActiveAction(memberId, false);
+      if (!result.ok) {
+        setFormError(result.message);
+        return;
+      }
+      form.setValue(`members.${index}.isActive`, false);
+      toast.success(`Deactivated ${form.getValues(`members.${index}.name`)}.`);
+      router.refresh();
+    } catch {
+      setFormError("Something went wrong deactivating that member. Please try again.");
+    } finally {
+      setPendingRowId(null);
+    }
   }
 
   /** One line naming what a permanent delete would destroy — the copy Phase 4's
@@ -372,6 +457,12 @@ export default function RosterEditor({
           </Alert>
         ) : null}
 
+        {importSummary ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            {importSummary}
+          </p>
+        ) : null}
+
         {fields.length === 0 && !isImporting ? (
           <div className="flex flex-col items-center gap-3 rounded-md border border-dashed py-10 text-center">
             <UsersIcon className="size-6 text-muted-foreground" />
@@ -471,12 +562,38 @@ export default function RosterEditor({
                       />
                     </TableCell>
                     <TableCell>
-                      <span className="text-xs text-muted-foreground">
-                        {originLabel(
-                          watched?.[index]?.githubUsername,
-                          watched?.[index]?.jiraAccountId,
-                        )}
-                      </span>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          {originLabel(
+                            watched?.[index]?.githubUsername,
+                            watched?.[index]?.jiraAccountId,
+                          )}
+                        </span>
+                        {rowFlag(index) === "proposed" ? (
+                          <span className="text-xs font-medium text-foreground">
+                            New — unsaved
+                          </span>
+                        ) : null}
+                        {rowFlag(index) === "missing" ? (
+                          <div className="flex flex-col items-start gap-0.5">
+                            <span className="text-xs text-muted-foreground">
+                              Not in GitHub/Jira any more
+                            </span>
+                            {watched?.[index]?.id ? (
+                              <Button
+                                type="button"
+                                variant="link"
+                                size="sm"
+                                className="h-auto p-0 text-xs"
+                                onClick={() => void deactivateRow(index)}
+                                disabled={pendingRowId === watched?.[index]?.id}
+                              >
+                                Deactivate
+                              </Button>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Button

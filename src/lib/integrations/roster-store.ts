@@ -83,12 +83,27 @@ const DEFAULT_CADENCE: DerivedCadence = {
 };
 
 // ============================================================================
-// Roster import (auto-seed from both sources, merge-by-key)
+// Roster import preview (read both sources, diff against the stored roster)
 // ============================================================================
 
+/** A row in the proposed roster: either a stored member or a new proposal. */
+export type PreviewMember = RosterMemberInput & {
+  /** Present ⇒ a stored row. Absent ⇒ a proposal the save will insert. */
+  id?: string;
+  source: TeamMemberRow["source"];
+  /** Upstream has this identity and the roster does not — a new joiner. */
+  proposed?: true;
+  /** Stored row whose key is absent from a source that WAS read successfully. */
+  upstreamMissing?: true;
+};
+
 export type ImportRosterResult = {
-  /** The full owner-scoped roster after the import. */
-  members: TeamMemberRow[];
+  /** What the roster WOULD become. Nothing here is persisted. */
+  members: PreviewMember[];
+  /** How many rows are new proposals. */
+  added: number;
+  /** How many stored rows no longer appear upstream. */
+  missing: number;
   /** True when the GitHub side could not be read (scope/auth/absent) — the step
    *  continues with Jira-seeded + manual members. Never silently dropped. */
   githubDegraded: boolean;
@@ -97,21 +112,34 @@ export type ImportRosterResult = {
 };
 
 /**
- * Auto-import the roster: read GitHub collaborators (per monitored repo) + Jira
- * assignable users, then merge-by-key upsert into `team_member`.
+ * Read GitHub collaborators (per monitored repo) + Jira assignable users and
+ * return what the roster WOULD become. **Persists nothing.**
  *
- * MERGE-BY-KEY (FR-006): import only INSERTS members whose stable key
- * (`githubUsername` for GitHub-sourced, `jiraAccountId` for Jira-sourced) is not
- * already present. It NEVER updates an existing row, so user-owned fields
- * (`name`, `role`, `spCapacity`, `technologyTrack`) and `MANUAL` rows survive
- * every re-import untouched. Manual GitHub↔Jira mapping / source promotion is the
- * job of `saveRoster`, not import.
+ * WHY IT NO LONGER WRITES (S-15): the old import inserted every upstream identity
+ * whose key was not already stored, and never updated or removed anything, so
+ * re-import GREW the roster instead of reconciling with it. Confirmed vector: the
+ * demo seed writes synthetic keys (`alice-kim` / `acc-alice-kim`) that no real
+ * import can ever match, so every upstream identity reads as new — 5 rows became
+ * 9 on one import (Phase 3 §0). Making it a pure read + diff removes the whole
+ * class: additive import cannot happen if import does not insert. `saveRoster` is
+ * now the only writer of `team_member` in the application.
+ *
+ * MERGE-BY-KEY (FR-006) survives as MATCHING rather than skipping: an upstream
+ * identity already present as a stored key yields that stored row untouched, so
+ * user-owned fields (`name`, `role`, `spCapacity`, `technologyTrack`) and `MANUAL`
+ * rows still survive every re-import. GitHub logins match case-insensitively.
+ *
+ * FLAGGING IS PER-SOURCE AND NEVER GUESSES. A stored row is flagged
+ * `upstreamMissing` only when the source that owns its key was read SUCCESSFULLY.
+ * Under `githubDegraded` the GitHub side is *unknown*, not *empty* — otherwise a
+ * token missing `read:org` would flag the whole GitHub-sourced roster as departed.
+ * `MANUAL` rows have no upstream and are never flagged.
  *
  * DEGRADATION: any failure reading the GitHub side (missing `read:org` scope →
  * 403, revoked token → 401, or no stored credential) is caught and surfaced as
  * `githubDegraded` — it must not abort the step (PRD graceful-degradation).
  */
-export async function importRoster({
+export async function previewRosterImport({
   db,
   ownerId,
   env,
@@ -189,53 +217,92 @@ export async function importRoster({
     jiraOpts,
   );
 
-  // --- DB-only work inside the transaction --------------------------------
-  const members = await db.transaction(async (tx) => {
-    const existing = await tx
-      .select()
-      .from(teamMember)
-      .where(eq(teamMember.ownerId, ownerId));
+  // --- Diff: one read, no transaction, no write ---------------------------
+  const existing = await db
+    .select()
+    .from(teamMember)
+    .where(eq(teamMember.ownerId, ownerId));
 
-    const existingGithub = new Set(
-      existing.map((m) => m.githubUsername).filter((v): v is string => !!v),
-    );
-    const existingJira = new Set(
-      existing.map((m) => m.jiraAccountId).filter((v): v is string => !!v),
-    );
+  // GitHub logins are case-insensitive, so the stored side is folded too —
+  // otherwise "OctoCat" upstream duplicates a stored "octocat".
+  const storedGithub = new Set(
+    existing
+      .map((m) => m.githubUsername?.toLowerCase())
+      .filter((v): v is string => !!v),
+  );
+  const storedJira = new Set(
+    existing.map((m) => m.jiraAccountId).filter((v): v is string => !!v),
+  );
 
-    const toInsert: (typeof teamMember.$inferInsert)[] = [];
-    for (const g of githubMembers) {
-      if (existingGithub.has(g.login)) continue;
-      toInsert.push({
-        id: randomUUID(),
-        ownerId,
-        name: g.login,
-        githubUsername: g.login,
-        source: "GITHUB",
-      });
+  const upstreamGithub = new Set(githubMembers.map((g) => g.login.toLowerCase()));
+  const upstreamJira = new Set(jiraMembers.map((j) => j.accountId));
+
+  const members: PreviewMember[] = existing.map((m) => {
+    const row: PreviewMember = {
+      id: m.id,
+      name: m.name,
+      githubUsername: m.githubUsername,
+      jiraAccountId: m.jiraAccountId,
+      role: m.role,
+      spCapacity: m.spCapacity,
+      technologyTrack: m.technologyTrack,
+      isActive: m.isActive,
+      source: m.source,
+    };
+
+    // Only a source that was READ can testify that somebody is gone.
+    const githubGone =
+      !githubDegraded && !!m.githubUsername && !upstreamGithub.has(m.githubUsername.toLowerCase());
+    const jiraGone = !!m.jiraAccountId && !upstreamJira.has(m.jiraAccountId);
+
+    switch (m.source) {
+      case "GITHUB":
+        if (githubGone) row.upstreamMissing = true;
+        break;
+      case "JIRA":
+        if (jiraGone) row.upstreamMissing = true;
+        break;
+      case "BOTH":
+        // A mapped member is gone only when BOTH of their identities are, and
+        // only when both sides could be checked.
+        if (!githubDegraded && githubGone && jiraGone) row.upstreamMissing = true;
+        break;
+      case "MANUAL":
+        // No upstream to be missing from.
+        break;
     }
-    for (const j of jiraMembers) {
-      if (existingJira.has(j.accountId)) continue;
-      toInsert.push({
-        id: randomUUID(),
-        ownerId,
-        name: j.displayName,
-        jiraAccountId: j.accountId,
-        source: "JIRA",
-      });
-    }
 
-    if (toInsert.length > 0) {
-      await tx.insert(teamMember).values(toInsert);
-    }
-
-    return tx
-      .select()
-      .from(teamMember)
-      .where(eq(teamMember.ownerId, ownerId));
+    return row;
   });
 
-  return { members, githubDegraded, reason };
+  for (const g of githubMembers) {
+    if (storedGithub.has(g.login.toLowerCase())) continue;
+    members.push({
+      name: g.login,
+      githubUsername: g.login,
+      source: "GITHUB",
+      isActive: true,
+      proposed: true,
+    });
+  }
+  for (const j of jiraMembers) {
+    if (storedJira.has(j.accountId)) continue;
+    members.push({
+      name: j.displayName,
+      jiraAccountId: j.accountId,
+      source: "JIRA",
+      isActive: true,
+      proposed: true,
+    });
+  }
+
+  return {
+    members,
+    added: members.filter((m) => m.proposed).length,
+    missing: members.filter((m) => m.upstreamMissing).length,
+    githubDegraded,
+    reason,
+  };
 }
 
 // ============================================================================

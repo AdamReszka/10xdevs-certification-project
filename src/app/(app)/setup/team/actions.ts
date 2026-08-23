@@ -12,12 +12,12 @@ import {
   LastMemberError,
   type MemberHistory,
   MemberHasHistoryError,
-  type TeamMemberRow,
+  type PreviewMember,
   UnknownMemberError,
   deleteMember as deleteMemberService,
   getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
-  importRoster as importRosterService,
+  previewRosterImport as previewRosterImportService,
   mergeMembers as mergeMembersService,
   saveCadence as saveCadenceService,
   saveRoster as saveRosterService,
@@ -68,8 +68,23 @@ export type ActionFailure = {
   message: string;
 };
 
+/** A preview row: a stored member, or a proposal the save would insert. */
+export type ClientPreviewMember = Omit<ClientMember, "id"> & {
+  /** Absent ⇒ a proposal with no DB row yet. */
+  id?: string;
+  proposed?: true;
+  upstreamMissing?: true;
+};
+
 export type ImportRosterResult =
-  | { ok: true; members: ClientMember[]; githubDegraded: boolean; reason?: string }
+  | {
+      ok: true;
+      members: ClientPreviewMember[];
+      added: number;
+      missing: number;
+      githubDegraded: boolean;
+      reason?: string;
+    }
   | ActionFailure;
 
 export type SaveRosterResult = { ok: true } | ActionFailure;
@@ -113,23 +128,26 @@ function jiraBaseOverride(): string | undefined {
   return process.env.JIRA_API_BASE_URL || undefined;
 }
 
-function toClientMember(m: TeamMemberRow): ClientMember {
+function toClientPreviewMember(m: PreviewMember): ClientPreviewMember {
   return {
     id: m.id,
     name: m.name,
-    githubUsername: m.githubUsername,
-    jiraAccountId: m.jiraAccountId,
-    role: m.role,
-    spCapacity: m.spCapacity,
-    technologyTrack: m.technologyTrack,
+    githubUsername: m.githubUsername ?? null,
+    jiraAccountId: m.jiraAccountId ?? null,
+    role: m.role ?? null,
+    spCapacity: m.spCapacity ?? null,
+    technologyTrack: m.technologyTrack ?? null,
     source: m.source,
-    isActive: m.isActive,
+    isActive: m.isActive ?? true,
+    proposed: m.proposed,
+    upstreamMissing: m.upstreamMissing,
   };
 }
 
 /**
- * Auto-import the roster from GitHub collaborators + Jira project members. A
- * GitHub scope/auth failure is surfaced as `githubDegraded` (still `ok: true`),
+ * PROPOSE the roster from GitHub collaborators + Jira project members. Persists
+ * nothing (S-15): the editor shows the diff and the owner's Save is what writes.
+ * A GitHub scope/auth failure is surfaced as `githubDegraded` (still `ok: true`),
  * never a hard failure — the step continues with Jira-seeded + manual members.
  */
 export async function importRosterAction(): Promise<ImportRosterResult> {
@@ -138,7 +156,7 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
   const db = getDb(env);
 
   try {
-    const result = await importRosterService({
+    const result = await previewRosterImportService({
       db,
       ownerId: session.user.id,
       env,
@@ -147,12 +165,14 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
     });
     return {
       ok: true,
-      members: result.members.map(toClientMember),
+      members: result.members.map(toClientPreviewMember),
+      added: result.added,
+      missing: result.missing,
       githubDegraded: result.githubDegraded,
       reason: result.reason,
     };
   } catch (err) {
-    return toFailure(err, "[setup/team] importRoster");
+    return toFailure(err, "[setup/team] previewRosterImport");
   }
 }
 

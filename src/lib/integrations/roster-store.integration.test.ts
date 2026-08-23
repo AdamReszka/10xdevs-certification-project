@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { drizzle } from "drizzle-orm/node-postgres";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -24,7 +24,7 @@ import {
   deleteMember,
   getMemberHistory,
   importCadence,
-  importRoster,
+  previewRosterImport,
   mergeMembers,
   saveCadence,
   saveRoster,
@@ -203,67 +203,69 @@ afterEach(async () => {
 
 // --- Tests ------------------------------------------------------------------
 
-describe("importRoster — merge-by-key (FR-006)", () => {
-  it("fresh import seeds members from both sources (bots filtered)", async () => {
+describe("previewRosterImport — diff, not a write (FR-006, S-15)", () => {
+  const opts = {
+    githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch() },
+    jiraBaseUrl: JIRA_BASE,
+    jiraOpts: { fetchImpl: jiraFetch() },
+  };
+
+  async function rowCount(ownerId: string) {
+    const rows = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    return rows.length;
+  }
+
+  it("fresh import proposes members from both sources (bots filtered) and writes nothing", async () => {
     const ownerId = await newOwner();
 
-    const result = await importRoster({
-      db,
-      ownerId,
-      githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch() },
-      jiraBaseUrl: JIRA_BASE,
-      jiraOpts: { fetchImpl: jiraFetch() },
-    });
+    const result = await previewRosterImport({ db, ownerId, ...opts });
 
     expect(result.githubDegraded).toBe(false);
     // 2 human collaborators (bot dropped) + 2 atlassian members (app dropped).
     expect(result.members).toHaveLength(4);
+    expect(result.added).toBe(4);
+    expect(result.missing).toBe(0);
+    // Every row is a proposal with NO id — the save is what inserts them.
+    expect(result.members.every((m) => m.proposed === true && m.id === undefined)).toBe(true);
+
     const byGithub = result.members.filter((m) => m.source === "GITHUB");
     const byJira = result.members.filter((m) => m.source === "JIRA");
     expect(byGithub.map((m) => m.githubUsername).sort()).toEqual(["devtwo", "octocat"]);
     expect(byJira.map((m) => m.jiraAccountId).sort()).toEqual(["acc-1", "acc-2"]);
     expect(byJira.find((m) => m.jiraAccountId === "acc-1")?.name).toBe("Mia Krystof");
+
+    // THE POINT: the preview persisted nothing.
+    expect(await rowCount(ownerId)).toBe(0);
   });
 
-  it("re-import preserves edited fields and never touches MANUAL rows", async () => {
+  it("re-import preserves edited fields, never touches MANUAL rows, and adds no rows", async () => {
     const ownerId = await newOwner();
 
-    await importRoster({
-      db,
-      ownerId,
-      githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch() },
-      jiraBaseUrl: JIRA_BASE,
-      jiraOpts: { fetchImpl: jiraFetch() },
-    });
-
-    // Simulate a user edit on an auto-imported GitHub row.
-    await db
-      .update(teamMember)
-      .set({ role: "Tech Lead", spCapacity: 8, technologyTrack: "BACKEND" })
-      .where(and(eq(teamMember.ownerId, ownerId), eq(teamMember.githubUsername, "octocat")));
-
-    // Add a MANUAL member that import must never touch.
+    // The roster as it exists after the owner saved the first import.
+    const octocatId = randomUUID();
+    await db.insert(teamMember).values([
+      { id: octocatId, ownerId, name: "octocat", githubUsername: "octocat", role: "Tech Lead", spCapacity: 8, technologyTrack: "BACKEND", source: "GITHUB" },
+      { id: randomUUID(), ownerId, name: "devtwo", githubUsername: "devtwo", source: "GITHUB" },
+      { id: randomUUID(), ownerId, name: "Mia Krystof", jiraAccountId: "acc-1", source: "JIRA" },
+      { id: randomUUID(), ownerId, name: "Sam Lee", jiraAccountId: "acc-2", source: "JIRA" },
+    ]);
     const manualId = randomUUID();
     await db.insert(teamMember).values({
-      id: manualId,
-      ownerId,
-      name: "Contractor",
-      role: "Consultant",
-      source: "MANUAL",
+      id: manualId, ownerId, name: "Contractor", role: "Consultant", source: "MANUAL",
     });
 
-    const result = await importRoster({
-      db,
-      ownerId,
-      githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch() },
-      jiraBaseUrl: JIRA_BASE,
-      jiraOpts: { fetchImpl: jiraFetch() },
-    });
+    const result = await previewRosterImport({ db, ownerId, ...opts });
 
-    // No duplicates created: 4 auto + 1 manual.
+    // Nothing new to propose: every upstream identity is already stored.
     expect(result.members).toHaveLength(5);
+    expect(result.added).toBe(0);
+    expect(result.missing).toBe(0);
 
     const edited = result.members.find((m) => m.githubUsername === "octocat");
+    expect(edited?.id).toBe(octocatId);
     expect(edited?.role).toBe("Tech Lead");
     expect(edited?.spCapacity).toBe(8);
     expect(edited?.technologyTrack).toBe("BACKEND");
@@ -271,13 +273,16 @@ describe("importRoster — merge-by-key (FR-006)", () => {
     const manual = result.members.find((m) => m.id === manualId);
     expect(manual?.source).toBe("MANUAL");
     expect(manual?.name).toBe("Contractor");
-    expect(manual?.role).toBe("Consultant");
+    // A MANUAL row has no upstream, so it can never be flagged as departed.
+    expect(manual?.upstreamMissing).toBeUndefined();
+
+    expect(await rowCount(ownerId)).toBe(5);
   });
 
-  it("GitHub 403 degrades without throwing; Jira members still persist", async () => {
+  it("GitHub 403 degrades without throwing; Jira members are still proposed", async () => {
     const ownerId = await newOwner();
 
-    const result = await importRoster({
+    const result = await previewRosterImport({
       db,
       ownerId,
       githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch({ status: 403 }) },
@@ -287,9 +292,108 @@ describe("importRoster — merge-by-key (FR-006)", () => {
 
     expect(result.githubDegraded).toBe(true);
     expect(result.reason).toContain("read:org");
-    // Only the 2 Jira members were seeded; no GitHub rows.
     expect(result.members).toHaveLength(2);
     expect(result.members.every((m) => m.source === "JIRA")).toBe(true);
+  });
+
+  it("a stored row whose upstream key vanished is flagged upstreamMissing", async () => {
+    const ownerId = await newOwner();
+    const goneId = randomUUID();
+    await db.insert(teamMember).values([
+      { id: randomUUID(), ownerId, name: "octocat", githubUsername: "octocat", source: "GITHUB" },
+      // Left the org — no longer a collaborator upstream.
+      { id: goneId, ownerId, name: "Departed Dev", githubUsername: "departed", source: "GITHUB" },
+    ]);
+
+    const result = await previewRosterImport({ db, ownerId, ...opts });
+
+    const gone = result.members.find((m) => m.id === goneId);
+    expect(gone?.upstreamMissing).toBe(true);
+    const stayed = result.members.find((m) => m.githubUsername === "octocat");
+    expect(stayed?.upstreamMissing).toBeUndefined();
+    expect(result.missing).toBe(1);
+    // Flagging is not deleting.
+    expect(await rowCount(ownerId)).toBe(2);
+  });
+
+  it("flags NOTHING GitHub-sourced when the GitHub read degraded", async () => {
+    const ownerId = await newOwner();
+    await db.insert(teamMember).values([
+      { id: randomUUID(), ownerId, name: "octocat", githubUsername: "octocat", source: "GITHUB" },
+      { id: randomUUID(), ownerId, name: "Departed Dev", githubUsername: "departed", source: "GITHUB" },
+    ]);
+
+    const result = await previewRosterImport({
+      db,
+      ownerId,
+      githubOpts: { baseUrl: GH_BASE, fetchImpl: githubFetch({ status: 403 }) },
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    expect(result.githubDegraded).toBe(true);
+    // A missing read:org scope must not read as "the whole team left".
+    expect(result.members.filter((m) => m.upstreamMissing)).toHaveLength(0);
+    expect(result.missing).toBe(0);
+  });
+
+  it("a mapped BOTH row survives when only one of its two identities is gone", async () => {
+    const ownerId = await newOwner();
+    const mappedId = randomUUID();
+    await db.insert(teamMember).values({
+      id: mappedId,
+      ownerId,
+      name: "Mia Krystof",
+      githubUsername: "octocat",
+      // This Jira account is no longer assignable upstream.
+      jiraAccountId: "acc-retired",
+      source: "BOTH",
+    });
+
+    const result = await previewRosterImport({ db, ownerId, ...opts });
+
+    const mapped = result.members.find((m) => m.id === mappedId);
+    expect(mapped?.upstreamMissing).toBeUndefined();
+    expect(result.missing).toBe(0);
+  });
+
+  it("a deactivated member is matched, not re-proposed", async () => {
+    const ownerId = await newOwner();
+    const deactivatedId = randomUUID();
+    await db.insert(teamMember).values({
+      id: deactivatedId,
+      ownerId,
+      name: "octocat",
+      githubUsername: "octocat",
+      source: "GITHUB",
+      isActive: false,
+    });
+
+    const result = await previewRosterImport({ db, ownerId, ...opts });
+
+    const stored = result.members.filter((m) => m.githubUsername === "octocat");
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe(deactivatedId);
+    expect(stored[0].proposed).toBeUndefined();
+    // The preview carries the stored flag, so saving it cannot resurrect them.
+    expect(stored[0].isActive).toBe(false);
+  });
+
+  it("a case-differing GitHub login does not duplicate", async () => {
+    const ownerId = await newOwner();
+    const storedId = randomUUID();
+    await db.insert(teamMember).values({
+      id: storedId, ownerId, name: "OctoCat", githubUsername: "OctoCat", source: "GITHUB",
+    });
+
+    const result = await previewRosterImport({ db, ownerId, ...opts });
+
+    const octos = result.members.filter(
+      (m) => m.githubUsername?.toLowerCase() === "octocat",
+    );
+    expect(octos).toHaveLength(1);
+    expect(octos[0].id).toBe(storedId);
+    expect(octos[0].upstreamMissing).toBeUndefined();
   });
 });
 
