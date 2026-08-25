@@ -799,8 +799,8 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 2.1 `npm run typecheck`, `npm run lint`, `npm test` pass including `absence-calendar-view.ts` unit tests
-- [x] 2.2 Production build succeeds and lists `/settings/absences`
+- [x] 2.1 `npm run typecheck`, `npm run lint`, `npm test` pass including `absence-calendar-view.ts` unit tests — 6bdb448
+- [x] 2.2 Production build succeeds and lists `/settings/absences` — 6bdb448
 
 #### Manual
 
@@ -812,11 +812,11 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [ ] 3.1 `npm test` passes with new `countWorkingDays` boundary tests (non-UTC zone, `nonWorkingDays`, Mon–Fri fallback)
-- [ ] 3.1b Both boundary semantics pinned on one Mon–Fri input: exclusive-start 4, inclusive 5
-- [ ] 3.2 The 10 `TICKET_STATUS_AGING` tests and the 5 `countWorkingDays` assertions in `helpers.test.ts` pass, changed expectations commented
-- [ ] 3.3 `npm run test:integration`, `npm run typecheck`, `npm run lint` pass
-- [ ] 3.4 `npm run test:mutation` stays above the 70 break threshold
+- [x] 3.1 `npm test` passes with new `countWorkingDays` boundary tests (non-UTC zone, `nonWorkingDays`, Mon–Fri fallback)
+- [x] 3.1b Both boundary semantics pinned on one Mon–Fri input: exclusive-start 4, inclusive 5
+- [x] 3.2 The 10 `TICKET_STATUS_AGING` tests and the 5 `countWorkingDays` assertions in `helpers.test.ts` pass, changed expectations commented
+- [x] 3.3 `npm run test:integration`, `npm run typecheck`, `npm run lint` pass
+- [x] 3.4 `npm run test:mutation` stays above the 70 break threshold
 
 ### Phase 4: Wire absences into the anomaly engine
 

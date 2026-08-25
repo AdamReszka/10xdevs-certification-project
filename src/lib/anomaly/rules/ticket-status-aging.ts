@@ -61,7 +61,12 @@ export const detectTicketStatusAging: Detector = (snapshot, effective, now) => {
       const budget = inProgressBudget(ticket.storyPoints, t.inProgressHoursBySp);
       if (budget == null) continue;
       if (budget === "8_WORKING_DAYS") {
-        const elapsed = countWorkingDays(since, now, snapshot.sprint.workingDays);
+        const elapsed = countWorkingDays(
+          since,
+          now,
+          snapshot.sprint.workingDays,
+          snapshot.timeZone,
+        );
         triggered = elapsed >= 8;
         magnitude = clamp01(elapsed / 16);
       } else {

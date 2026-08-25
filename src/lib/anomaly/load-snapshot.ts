@@ -7,6 +7,7 @@ import {
   jiraTicket,
   teamMember,
 } from "@/db/schema";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
 import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types";
@@ -39,7 +40,7 @@ export async function loadSprintSnapshot(
     chosen.startDate ??
     new Date(now.getTime() - COMMIT_FALLBACK_LOOKBACK_DAYS * 86_400_000);
 
-  const [tickets, prs, reviews, commits, teamMembers] = await Promise.all([
+  const [tickets, prs, reviews, commits, teamMembers, timeZone] = await Promise.all([
     db
       .select()
       .from(jiraTicket)
@@ -56,6 +57,8 @@ export async function loadSprintSnapshot(
         ),
       ),
     db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId)),
+    // The zone every day-boundary decision in the rules is resolved against.
+    getJiraTimeZone(db, ownerId),
   ]);
 
   const reviewsByPr = new Map<string, typeof reviews>();
@@ -76,5 +79,6 @@ export async function loadSprintSnapshot(
     commits,
     teamMembers,
     absences: [],
+    timeZone,
   };
 }

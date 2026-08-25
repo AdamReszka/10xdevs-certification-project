@@ -154,6 +154,9 @@ export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot
     commits: [],
     teamMembers: [],
     absences: [],
+    // UTC by default so every rule expectation reads as a plain calendar fact,
+    // independent of the machine the suite runs on.
+    timeZone: "UTC",
     ...over,
   };
 }

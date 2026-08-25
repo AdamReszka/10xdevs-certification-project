@@ -1,3 +1,4 @@
+import { type DayKey, enumerateDayKeys } from "@/lib/dashboard/day-bucket";
 import type { WeekdayCode } from "@/lib/integrations/cadence";
 import type { EffectiveThresholds } from "@/lib/anomaly/thresholds";
 import type { DetectedAnomaly, SprintSnapshot } from "@/lib/anomaly/types";
@@ -52,31 +53,91 @@ const WEEKDAY_BY_INDEX: WeekdayCode[] = [
 ];
 
 /**
- * Count working days strictly after `from` up to and including `to`, per the
- * sprint's working-day set. Used to resolve the `8_WORKING_DAYS` In-Progress
- * budget against the real calendar. Capped at 366 day-steps so a corrupt date
- * can't spin. Falls back to Mon–Fri when `workingDays` is empty/absent.
+ * Count working days between two instants, resolved in the TEAM's zone.
+ *
+ * TWO NAMED INTENTS, ONE IMPLEMENTATION (S-08). The boundary is explicit because
+ * the two callers need different ones and the difference is a silent off-by-one:
+ *
+ *  - {@link countWorkingDays} counts days STRICTLY AFTER `from`, through `to`
+ *    inclusive — a half-open range. `TICKET_STATUS_AGING` measures elapsed time
+ *    since a movement, and the day the ticket moved is not an elapsed day.
+ *    Mon→Fri is 4.
+ *  - {@link countWorkingDaysInclusive} counts a CLOSED range, both ends included.
+ *    An absence from Monday to Friday costs 5 working days, and a sprint's own
+ *    working-day total is likewise closed. Mon→Fri is 5.
+ *
+ * WHY THE ZONE IS REQUIRED (and not optional): this used to bucket with
+ * `setHours(0,0,0,0)` + `getDay()`, i.e. in whatever zone the server happened to
+ * run in, while every dashboard day axis buckets in `jira_project.time_zone`
+ * through `day-bucket.ts`. On Workers the server is UTC so the two agreed by
+ * accident; a Warsaw team's absence would not. Two counters that disagree is a
+ * failure mode `context/foundation/lessons.md` already records once — hence one
+ * implementation, and a zone the caller cannot forget to pass. An unrecognized or
+ * absent zone degrades to UTC via `safeZone`, never throws.
+ *
+ * `nonWorkingDays` is a seam, empty in S-08: the public-holiday / company-day-off
+ * calendar is its own roadmap slice, and needs a country signal the app does not
+ * store yet.
+ *
+ * Falls back to Mon–Fri when `workingDays` is empty/absent. Day enumeration is
+ * capped by `enumerateDayKeys` so a corrupt date cannot spin.
  */
 export function countWorkingDays(
   from: Date,
   to: Date,
   workingDays: readonly string[] | null | undefined,
+  timeZone: string | null | undefined,
+  nonWorkingDays?: ReadonlySet<DayKey>,
 ): number {
   if (to <= from) return 0;
+  // Drop the first day: it is the day of `from`, which a half-open range excludes.
+  return countDays(from, to, workingDays, timeZone, nonWorkingDays, 1);
+}
+
+/** The closed-range sibling of {@link countWorkingDays} — both ends counted. */
+export function countWorkingDaysInclusive(
+  from: Date,
+  to: Date,
+  workingDays: readonly string[] | null | undefined,
+  timeZone: string | null | undefined,
+  nonWorkingDays?: ReadonlySet<DayKey>,
+): number {
+  if (to < from) return 0;
+  return countDays(from, to, workingDays, timeZone, nonWorkingDays, 0);
+}
+
+/** Shared iteration. `skipFirst` is what separates the two boundary semantics. */
+function countDays(
+  from: Date,
+  to: Date,
+  workingDays: readonly string[] | null | undefined,
+  timeZone: string | null | undefined,
+  nonWorkingDays: ReadonlySet<DayKey> | undefined,
+  skipFirst: 0 | 1,
+): number {
   const set = new Set<string>(
     workingDays && workingDays.length > 0
       ? workingDays
       : ["MON", "TUE", "WED", "THU", "FRI"],
   );
+
   let count = 0;
-  const cursor = new Date(from);
-  cursor.setHours(0, 0, 0, 0);
-  cursor.setDate(cursor.getDate() + 1);
-  for (let i = 0; i < 366 && cursor <= to; i += 1) {
-    if (set.has(WEEKDAY_BY_INDEX[cursor.getDay()])) count += 1;
-    cursor.setDate(cursor.getDate() + 1);
+  for (const dayKey of enumerateDayKeys(from, to, timeZone).slice(skipFirst)) {
+    if (nonWorkingDays?.has(dayKey)) continue;
+    if (set.has(weekdayOf(dayKey))) count += 1;
   }
   return count;
+}
+
+/**
+ * The weekday a `YYYY-MM-DD` day key falls on.
+ *
+ * Zone-free on purpose: a calendar date's weekday is the same fact everywhere —
+ * 2026-08-17 is a Monday in Warsaw and in Los Angeles. The zone has already done
+ * its job upstream, deciding WHICH day keys the instants map to.
+ */
+function weekdayOf(dayKey: DayKey): WeekdayCode {
+  return WEEKDAY_BY_INDEX[new Date(`${dayKey}T12:00:00Z`).getUTCDay()];
 }
 
 /** Index team members by a key, skipping members whose key is null. */

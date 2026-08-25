@@ -33,8 +33,7 @@ export type PullRequestWithReviews = SelectGithubPullRequest & {
 /**
  * The correlated inputs for one owner's active sprint. PRs are scoped by the
  * owner's monitored repos (they have no sprint FK), not by the sprint; the sprint
- * is the detection *context* every anomaly is attributed to. `absences` is empty
- * this slice (S-08 wires real suppression on top without reshaping detectors).
+ * is the detection *context* every anomaly is attributed to.
  */
 export type SprintSnapshot = {
   sprint: SelectSprint;
@@ -43,6 +42,15 @@ export type SprintSnapshot = {
   commits: SelectGithubCommit[];
   teamMembers: SelectTeamMember[];
   absences: SelectAbsence[];
+  /**
+   * The team's IANA zone from `jira_project.time_zone`, or null (S-08).
+   *
+   * Rules are pure over the snapshot, so every day-boundary decision they make
+   * has to arrive this way. Without it `countWorkingDays` would bucket in the
+   * server's zone while the dashboards bucket in the team's — the same day axis,
+   * two answers. Null degrades to UTC through `safeZone`.
+   */
+  timeZone: string | null;
 };
 
 /** One detected anomaly, pre-persistence. Carries the five FR-014 attributes plus
