@@ -274,12 +274,102 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 
 ---
 
-## 8. S-08 `absence-calendar` — przeniesione pod termin (2026-08-25)
+## 8. S-08 `absence-calendar` — przeniesione pod termin (2026-08-25/26)
 
-`context/changes/absence-calendar/MANUAL-CHECKLIST.md` została przycięta do
-**pięciu** pozycji (6.4, 4.5, 2.3, 2.4+2.5, 6.5) zgodnie z `CLAUDE.md` →
-*Manual testing conventions*. Poniższe trzy zostały **świadomie przeniesione
-tutaj** — nie są niepotrzebne, są odłożone.
+**Cała checklista S-08 jest tutaj. Slice idzie do merge'a bez ani jednej
+weryfikacji manualnej** — decyzja właściciela z 2026-08-26 („teraz ich nie
+wykonam"), podjęta świadomie pod termin kursu, nie przeoczenie.
+
+Co to znaczy w praktyce: automaty pokrywają logikę (433 unit, 154 integracyjne,
+mutacje 78.96%, review implementacji z 7 naprawionymi znaleziskami), ale **żadna
+z pięciu ścieżek przeglądarkowych nie została przeklikana przez człowieka.**
+Ryzyko jest skoncentrowane w **8.4**, bo to jedyny wiersz dotykający ścieżki,
+która **nieodwracalnie kasuje dane**.
+
+Kolejność niżej to kolejność, w jakiej warto to nadrobić: 8.4 → 8.5 → 8.6 → 8.7
+→ 8.8, potem 8.1–8.3.
+
+### 8.4 — 6.4 🔴 Bramka trwałego usunięcia uzbraja się po raz pierwszy
+
+*Źródło:* `context/changes/absence-calendar/MANUAL-CHECKLIST.md`, faza 6
+*Gdzie:* `/settings/absences`, potem `/settings/team`.
+*Jak:* zapisz absencję dla dowolnej osoby → zakładka **Team** → kosz przy **tej
+samej** osobie.
+*Co musi być prawdą:*
+  - dialog oferuje **wyłącznie Deactivate**, przycisku „Delete permanently" **nie ma**;
+  - dialog pisze „**1 recorded absence**" (liczba, nie ogólnik);
+  - przy osobie **bez** absencji „Delete permanently" nadal **jest**.
+*Dlaczego to najważniejszy wiersz S-08:* to jedyna pozycja pilnująca ścieżki
+**niszczącej dane nieodwracalnie**. S-08 jest pierwszym slice'em, który realnie
+uzbraja bramkę z S-15 — do tej pory `absence` miała zero wierszy, więc
+`getMemberHistory` zawsze zwracała 0 i ta gałąź **nigdy się nie wykonała na
+produkcyjnej ścieżce**. Regresja kasuje ręcznie wprowadzone dane bez ostrzeżenia,
+a żaden test automatyczny nie złapie tego jako widocznego dla użytkownika.
+*Koszt:* ~3 minuty.
+
+### 8.5 — 4.5 Absencja gasi `DEVELOPER_INACTIVE` bez czekania na sync
+
+*Źródło:* `MANUAL-CHECKLIST.md`, faza 4
+*Gdzie:* `/dashboard` (zakładka **Anomaly Inbox**), potem `/settings/absences`.
+*Jak:* znajdź w inboxie wiersz `DEVELOPER_INACTIVE`, zapisz absencję dla tej
+osoby na zakres obejmujący **dzisiaj**, wróć na `/dashboard` i odśwież.
+*Co musi być prawdą:* wiersz zniknął **od razu**, bez czekania na cykl cron
+(15 min) i bez „Sync now".
+*Dlaczego:* to decyzja D1. Testy integracyjne pokrywają pętlę reconcile, ale nie
+ścieżkę Server Action → `router.refresh()` → render. Jeśli to nie działa, lead
+zapisuje urlop i patrzy na anomalię, którą właśnie wyjaśnił.
+
+### 8.6 — 2.3 Zapis absencji przeżywa odświeżenie, z właściwymi dniami
+
+*Źródło:* `MANUAL-CHECKLIST.md`, faza 2
+*Gdzie:* `/settings/absences`.
+*Jak:* *Record an absence* → osoba → **dwa** kliknięcia w kalendarzu → rodzaj →
+*Record absence* → **F5**.
+*Co musi być prawdą:* wiersz jest po odświeżeniu, a kolumna **Dates** pokazuje
+**dokładnie te dni, które kliknąłeś** — nie o jeden wcześniej.
+*Dlaczego:* dzień z kalendarza jest lokalny dla przeglądarki, a kolumny są
+instantami w strefie **zespołu**. Przesunięcie o dzień jest cicho poprawne dla
+TypeScriptu i psuje wszystkie trzy efekty FR-010 naraz.
+*Kontekst:* dokładnie ta klasa błędu wyszła w impl-review w seedzie (F2) — tam
+helper stref był zależny od strefy hosta. Kod aplikacji idzie inną ścieżką i ma
+testy, ale to jedyne miejsce, gdzie realna przeglądarka to potwierdza.
+
+### 8.7 — 2.4 + 2.5 Edycja i usuwanie trafiają we właściwy wiersz
+
+*Źródło:* `MANUAL-CHECKLIST.md`, faza 2
+*Gdzie:* `/settings/absences`, mając **co najmniej dwie** absencje.
+*Jak:* ołówek przy pierwszej → zmień zakres → *Save changes*; potem kosz przy drugiej.
+*Co musi być prawdą:*
+  - po edycji wierszy jest **tyle samo** co przed;
+  - dialog usuwania **cytuje konkretną absencję** („Mia Krystof — vacation,
+    5 May 2026 – 9 May 2026"), a nie ogólne „this item".
+*Dlaczego:* edycja gubiąca `id` degraduje się do wstawienia duplikatu, którego
+magazyn nie odrzuci (to inne okno). Dialog nienazywający tego, co niszczy, to
+klasa błędu, którą zamykał S-15.
+
+### 8.8 — 6.5 Seed demo pokazuje wszystkie trzy efekty
+
+*Źródło:* `MANUAL-CHECKLIST.md`, faza 6
+*Gdzie:* terminal, potem `/dashboard`.
+*Jak:* `OWNER_ID=<id konta z atrapami> npm run db:seed:demo`.
+⚠️ **Sprawdź last4 przed uruchomieniem** — patrz §5; `db:seed:demo` **kasuje
+credentiale** swojego ownera.
+*Co musi być prawdą:*
+  - Availability: **Erik Lund**, **Bob Rivera** i **Chen Wu** mają zaznaczone dni;
+    „Next window" **nie zachodzi** na „This sprint" (ostatnia kolumna pierwszej
+    siatki i pierwsza kolumna drugiej to różne daty — to była realna regresja F1,
+    naprawiona);
+  - liczba pojemności w SP jest **niższa** niż 50 SP (5 × 10 z rosteru);
+  - inbox: `SPRINT_AT_RISK` o **Bobie**, `DEVELOPER_INACTIVE` o **Alice**, nie o Eriku;
+  - nigdzie w inboxie nie pada **sickness / vacation / training**.
+*Dlaczego:* dwie rzeczy naraz — czy trzy efekty FR-010 są widoczne bez prawdziwych
+integracji (wejście dla **S-09**), i czy typ absencji nie wycieka na ekran. Typ to
+informacja o zdrowiu nazwanej osoby, a FR-018 wysyła każdą anomalię mailem.
+
+---
+
+Poniższe trzy (8.1–8.3) zostały przeniesione tutaj **wcześniej**, przy cięciu
+checklisty do pięciu pozycji — nie są niepotrzebne, są odłożone.
 
 ### 8.1 — 5.5 Zakładka Availability pokazuje właściwych ludzi we właściwych dniach
 
