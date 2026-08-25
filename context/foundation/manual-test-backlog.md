@@ -271,3 +271,54 @@ when the GitHub read degraded"); odtworzenie wymaga podmiany prawdziwych
 credentiali na koncie, które używa ich do wszystkiego innego.
 *Pułapka:* po teście **przywróć pełny token**, inaczej kolejne sesje pracują na
 zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
+
+---
+
+## 8. S-08 `absence-calendar` — przeniesione pod termin (2026-08-25)
+
+`context/changes/absence-calendar/MANUAL-CHECKLIST.md` została przycięta do
+**pięciu** pozycji (6.4, 4.5, 2.3, 2.4+2.5, 6.5) zgodnie z `CLAUDE.md` →
+*Manual testing conventions*. Poniższe trzy zostały **świadomie przeniesione
+tutaj** — nie są niepotrzebne, są odłożone.
+
+### 8.1 — 5.5 Zakładka Availability pokazuje właściwych ludzi we właściwych dniach
+
+*Źródło:* `context/changes/absence-calendar/plan.md` faza 5, wiersz 5.5
+*Jak:* `/dashboard` → zakładka **Availability**; porównaj zaznaczone komórki z
+wierszami na `/settings/absences`.
+*Co musi być prawdą:* każda absencja jest zaznaczona na **dokładnie** tych dniach,
+które pokazuje kolumna **Dates**, w obu sekcjach („This sprint" i „Next window").
+*Dlaczego odłożone:* logika budowania siatki jest w całości pokryta przez
+`availability-view.test.ts` — oś dni, oba końce zakresu, przycinanie do okna,
+pominięcie absencji spoza okna, strefa czasowa zespołu. Zostaje samo
+renderowanie, a **wiersz 6.5 z krótkiej listy i tak każe spojrzeć na tę zakładkę**
+na danych z seeda.
+*Kiedy zrobić:* przy okazji 6.5, jeśli będzie chwila.
+
+### 8.2 — 5.6 Zapis absencji obniża liczbę pojemności
+
+*Źródło:* `plan.md` faza 5, wiersz 5.6
+*Jak:* zapamiętaj liczbę SP na zakładce Availability → dodaj absencję na kilka
+dni roboczych → wróć i odśwież.
+*Co musi być prawdą:* liczba spadła, i spadła **proporcjonalnie** — osoba z
+`sp_capacity` 10 nieobecna przez połowę dni roboczych sprintu zabiera ~5 SP,
+nie 10 i nie 0.
+*Dlaczego odłożone:* `capacity.test.ts` pinuje dokładnie tę arytmetykę
+(nieobecność przez pół sprintu, przez cały sprint, przycięta do krawędzi
+sprintu, weekend kosztujący zero). Wiersz 6.5 sprawdza kierunek zmiany
+(pojemność < 50 SP na seedzie), więc niepokryta zostaje tylko proporcja.
+
+### 8.3 — 5.7 Zespół bez ustawionego `sp_capacity` widzi wyjaśnienie, nie „0 SP"
+
+*Źródło:* `plan.md` faza 5, wiersz 5.7
+*Jak:* na koncie testowym wyczyść `sp_capacity` **wszystkim** aktywnym członkom
+(`/settings/team`, pole Capacity na puste, zapisz) → `/dashboard` → Availability.
+*Co musi być prawdą:* widać zdanie „No story-point capacity set for anyone on
+the team yet…", a **nie** liczba „0 SP".
+*Dlaczego odłożone:* `NULL` jest tu jawnie wykluczony i policzony osobno
+(`membersWithoutCapacity`), i ma własny test unitowy („excludes a member with no
+capacity set and counts them separately"). Przygotowanie stanu wymaga
+zdemolowania rosteru konta testowego, co jest droższe niż samo sprawdzenie.
+*Dlaczego mimo to warto:* `NULL` czytany jako zero to dokładnie ta klasa błędu,
+która daje leadowi liczbę wyglądającą na prawdziwą — a on nie ma jak poznać, że
+jest zaniżona.

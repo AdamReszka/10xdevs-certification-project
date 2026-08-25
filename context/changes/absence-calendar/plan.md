@@ -850,9 +850,9 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 6.1 `npm run db:seed:demo` creates the three absence rows against a throwaway owner
-- [x] 6.2 Re-running the seed is idempotent — no duplicate absences
-- [x] 6.3 `npm test`, `npm run test:integration`, `npm run typecheck`, `npm run lint` all pass
+- [x] 6.1 `npm run db:seed:demo` creates the three absence rows against a throwaway owner — 417b969
+- [x] 6.2 Re-running the seed is idempotent — no duplicate absences — 417b969
+- [x] 6.3 `npm test`, `npm run test:integration`, `npm run typecheck`, `npm run lint` all pass — 417b969
 
 #### Manual
 
