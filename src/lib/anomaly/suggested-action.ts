@@ -26,6 +26,11 @@ export const suggestedAction = {
   sprintAtRiskTodoNearEnd: (p: { count: number; hours: number }) =>
     `Pull ${p.count} To Do ticket(s) into progress or drop them — ${p.hours}h left in the sprint.`,
 
+  /** Names the person (the action needs a subject) but NEVER the absence type —
+   *  FR-018 puts this string into outbound email. */
+  sprintAtRiskAbsence: (p: { name: string; lost: number; left: number }) =>
+    `Re-plan around ${p.name}'s absence — ${p.lost} of the ${p.left} working day(s) left in the sprint are gone.`,
+
   prTooBig: (p: { number: number; lines: number; limit: number }) =>
     `Consider splitting PR #${p.number} — ${p.lines} lines changed is over the ${p.limit} guideline.`,
 

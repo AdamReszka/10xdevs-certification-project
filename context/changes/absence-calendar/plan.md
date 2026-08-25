@@ -812,20 +812,20 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 3.1 `npm test` passes with new `countWorkingDays` boundary tests (non-UTC zone, `nonWorkingDays`, Mon–Fri fallback)
-- [x] 3.1b Both boundary semantics pinned on one Mon–Fri input: exclusive-start 4, inclusive 5
-- [x] 3.2 The 10 `TICKET_STATUS_AGING` tests and the 5 `countWorkingDays` assertions in `helpers.test.ts` pass, changed expectations commented
-- [x] 3.3 `npm run test:integration`, `npm run typecheck`, `npm run lint` pass
-- [x] 3.4 `npm run test:mutation` stays above the 70 break threshold
+- [x] 3.1 `npm test` passes with new `countWorkingDays` boundary tests (non-UTC zone, `nonWorkingDays`, Mon–Fri fallback) — a8b9dad
+- [x] 3.1b Both boundary semantics pinned on one Mon–Fri input: exclusive-start 4, inclusive 5 — a8b9dad
+- [x] 3.2 The 10 `TICKET_STATUS_AGING` tests and the 5 `countWorkingDays` assertions in `helpers.test.ts` pass, changed expectations commented — a8b9dad
+- [x] 3.3 `npm run test:integration`, `npm run typecheck`, `npm run lint` pass — a8b9dad
+- [x] 3.4 `npm run test:mutation` stays above the 70 break threshold — a8b9dad
 
 ### Phase 4: Wire absences into the anomaly engine
 
 #### Automated
 
-- [ ] 4.1 `npm test` passes with positive, healthy-silent and three boundary cases per rule, expectations hand-derived from FR-010
-- [ ] 4.2 `npm run test:integration` passes the suppression lifecycle (detect → ACTIVE → absence → RESOLVED)
-- [ ] 4.3 `npm run test:integration` passes the unplanned-absence `SPRINT_AT_RISK` case and its resolution on delete
-- [ ] 4.4 `npm run test:mutation` stays above threshold
+- [x] 4.1 `npm test` passes with positive, healthy-silent and three boundary cases per rule, expectations hand-derived from FR-010
+- [x] 4.2 `npm run test:integration` passes the suppression lifecycle (detect → ACTIVE → absence → RESOLVED)
+- [x] 4.3 `npm run test:integration` passes the unplanned-absence `SPRINT_AT_RISK` case and its resolution on delete
+- [x] 4.4 `npm run test:mutation` stays above threshold
 
 #### Manual
 

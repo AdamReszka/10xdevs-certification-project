@@ -6,6 +6,7 @@ import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
+  absence,
   anomaly,
   githubCredential,
   githubPullRequest,
@@ -19,6 +20,7 @@ import {
   user,
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
+import { createAbsence, deleteAbsence } from "@/lib/absence-store";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 
 /**
@@ -312,5 +314,196 @@ describe("detectAnomalies", () => {
       .where(eq(anomaly.id, stalled1.id));
     expect(reactivated.status).toBe("ACTIVE");
     expect(reactivated.detectedAt?.toISOString()).toBe(NOW3.toISOString());
+  });
+});
+
+/**
+ * S-08 — the two FR-010 anomaly effects, end to end through the real reconcile
+ * loop rather than against the pure rules.
+ *
+ * Detection is a RECONCILE: a `dedupKey` that stops being emitted is flipped to
+ * RESOLVED. So suppression needs no removal code of its own — the proof is that
+ * an existing ACTIVE row leaves the inbox after an absence is recorded, and comes
+ * back when it is deleted.
+ *
+ * The seeded scenario has Alex Dev on an In-Progress ticket with zero commits, so
+ * DEVELOPER_INACTIVE is ACTIVE on the first run. The sprint runs 2026-08-05 →
+ * 2026-08-20 and the clock is 2026-08-10T12:00Z.
+ */
+describe("detectAnomalies — absences (S-08, FR-010)", () => {
+  async function onlyMemberId(ownerId: string) {
+    const [row] = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    return row.id;
+  }
+
+  function absencesOf(ownerId: string, condition: string) {
+    return db
+      .select()
+      .from(anomaly)
+      .where(and(eq(anomaly.ownerId, ownerId), eq(anomaly.status, "ACTIVE")))
+      .then((rows) =>
+        rows.filter(
+          (r) => (r.context as { condition?: string } | null)?.condition === condition,
+        ),
+      );
+  }
+
+  it("resolves an ACTIVE DEVELOPER_INACTIVE once the member's absence is recorded", async () => {
+    const { ownerId } = await newScenario();
+    const memberId = await onlyMemberId(ownerId);
+
+    // --- Run 1: the developer looks inactive ---
+    await detectAnomalies({ db, ownerId, now: NOW1 });
+    const before = await activeAnomalies(ownerId);
+    const inactive = before.find((r) => r.type === "DEVELOPER_INACTIVE");
+    expect(inactive).toBeDefined();
+
+    // --- The owner explains it: a planned holiday across the window ---
+    await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "VACATION",
+        startDate: "2026-08-09",
+        endDate: "2026-08-12",
+        isPlanned: true,
+      },
+    });
+
+    // --- Run 2: the row is reconciled away, not left stale ---
+    await detectAnomalies({ db, ownerId, now: NOW2 });
+    const [after] = await db.select().from(anomaly).where(eq(anomaly.id, inactive!.id));
+    expect(after.status).toBe("RESOLVED");
+    const stillActive = await activeAnomalies(ownerId);
+    expect(stillActive.some((r) => r.type === "DEVELOPER_INACTIVE")).toBe(false);
+  });
+
+  it("brings DEVELOPER_INACTIVE back when the absence is deleted", async () => {
+    const { ownerId } = await newScenario();
+    const memberId = await onlyMemberId(ownerId);
+    const { id: absenceId } = await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "SICKNESS",
+        startDate: "2026-08-09",
+        endDate: "2026-08-12",
+        isPlanned: true,
+      },
+    });
+
+    await detectAnomalies({ db, ownerId, now: NOW1 });
+    expect((await activeAnomalies(ownerId)).some((r) => r.type === "DEVELOPER_INACTIVE")).toBe(
+      false,
+    );
+
+    // The absence was entered by mistake and removed.
+    await deleteAbsence({ db, ownerId, absenceId });
+    await detectAnomalies({ db, ownerId, now: NOW2 });
+
+    expect((await activeAnomalies(ownerId)).some((r) => r.type === "DEVELOPER_INACTIVE")).toBe(
+      true,
+    );
+  });
+
+  it("raises a SPRINT_AT_RISK row for an unplanned mid-sprint absence and resolves it on delete", async () => {
+    const { ownerId } = await newScenario();
+    const memberId = await onlyMemberId(ownerId);
+
+    await detectAnomalies({ db, ownerId, now: NOW1 });
+    expect(await absencesOf(ownerId, "absence")).toHaveLength(0);
+
+    const { id: absenceId } = await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "SICKNESS",
+        startDate: "2026-08-11",
+        endDate: "2026-08-14",
+        isPlanned: false,
+      },
+    });
+
+    await detectAnomalies({ db, ownerId, now: NOW2 });
+    const raised = await absencesOf(ownerId, "absence");
+    expect(raised).toHaveLength(1);
+    expect(raised[0].type).toBe("SPRINT_AT_RISK");
+    expect(raised[0].dedupKey).toBe(`SPRINT_AT_RISK:absence:${absenceId}`);
+    expect(raised[0].relatedTeamMemberId).toBe(memberId);
+    // Wed 12 → Fri 14 of the Tue 11 … Thu 20 remainder. Hand-derived, not lifted:
+    // NOW2 is Mon 10 Aug 13:00Z, so the days left are 10,11,12,13,14,17,18,19,20
+    // = 9 working days, of which the absence takes 11,12,13,14 = 4.
+    expect(raised[0].context).toMatchObject({
+      condition: "absence",
+      workingDaysLost: 4,
+      workingDaysLeft: 9,
+    });
+    expect(raised[0].riskScore).toBeGreaterThan(0);
+
+    // --- The absence is removed → the risk row reconciles away ---
+    await deleteAbsence({ db, ownerId, absenceId });
+    await detectAnomalies({ db, ownerId, now: NOW3 });
+    expect(await absencesOf(ownerId, "absence")).toHaveLength(0);
+    const [resolved] = await db
+      .select()
+      .from(anomaly)
+      .where(eq(anomaly.dedupKey, `SPRINT_AT_RISK:absence:${absenceId}`));
+    expect(resolved.status).toBe("RESOLVED");
+  });
+
+  it("never writes the absence type into the persisted anomaly row", async () => {
+    // FR-018 mails these rows out. A SICKNESS absence must not become health
+    // information about a named person in the recap.
+    const { ownerId } = await newScenario();
+    const memberId = await onlyMemberId(ownerId);
+    await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "SICKNESS",
+        startDate: "2026-08-11",
+        endDate: "2026-08-14",
+        isPlanned: false,
+      },
+    });
+
+    await detectAnomalies({ db, ownerId, now: NOW1 });
+    const [row] = await absencesOf(ownerId, "absence");
+    const readable = JSON.stringify([row.description, row.suggestedAction, row.context]);
+    expect(readable.toLowerCase()).not.toContain("sick");
+  });
+
+  it("keeps absences out of the snapshot when they belong to another owner", async () => {
+    const mine = await newScenario();
+    const theirs = await newScenario();
+    const theirMember = await onlyMemberId(theirs.ownerId);
+    await createAbsence({
+      db,
+      ownerId: theirs.ownerId,
+      input: {
+        teamMemberId: theirMember,
+        type: "VACATION",
+        startDate: "2026-08-09",
+        endDate: "2026-08-12",
+        isPlanned: true,
+      },
+    });
+
+    await detectAnomalies({ db, ownerId: mine.ownerId, now: NOW1 });
+
+    // Their holiday must not silence MY inactive developer.
+    expect(
+      (await activeAnomalies(mine.ownerId)).some((r) => r.type === "DEVELOPER_INACTIVE"),
+    ).toBe(true);
+    expect(await db.select().from(absence).where(eq(absence.ownerId, mine.ownerId))).toEqual(
+      [],
+    );
   });
 });

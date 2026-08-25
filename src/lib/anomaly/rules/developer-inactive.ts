@@ -1,3 +1,4 @@
+import { overlaps } from "@/lib/absence-dates";
 import { suggestedAction } from "@/lib/anomaly/suggested-action";
 import type { DetectedAnomaly } from "@/lib/anomaly/types";
 import {
@@ -8,9 +9,21 @@ import {
 /**
  * DEVELOPER_INACTIVE — a team member with active assigned work (≥1 In-Progress
  * ticket) but zero commits authored within the no-commit window. Correlates Jira
- * assignment with GitHub authorship. Absence-based suppression is wired in S-08
- * (this slice ships with `absences: []`, so no suppression). Team/flow-framed —
- * the member id targets the check-in action, never a performance judgement.
+ * assignment with GitHub authorship. Team/flow-framed — the member id targets the
+ * check-in action, never a performance judgement.
+ *
+ * SUPPRESSED BY A RECORDED ABSENCE (S-08, FR-010): an absent developer with no
+ * commits is explained, not anomalous, and an inbox that keeps flagging someone
+ * the owner has already told it is on holiday teaches the lead to ignore the
+ * inbox. Suppression is unconditional on absence type — sickness explains missing
+ * commits exactly as vacation does.
+ *
+ * WHY THE GUARD IS INSIDE THE RULE and not a roster pre-filter: `teamMembers` is
+ * shared by five other detectors that index it for `relatedTeamMemberId`
+ * attribution, so removing an absent member from that array would silently strip
+ * attribution from unrelated anomalies. It is also not a post-detection filter,
+ * because the window the absence has to overlap is the RULE's own evaluation
+ * window, which only the rule knows.
  */
 export const detectDeveloperInactive: Detector = (snapshot, effective, now) => {
   const { severity, thresholds } = effective.DEVELOPER_INACTIVE;
@@ -28,6 +41,13 @@ export const detectDeveloperInactive: Detector = (snapshot, effective, now) => {
         t.assigneeJiraAccountId === member.jiraAccountId,
     );
     if (!hasActiveWork) continue;
+
+    // After the cheap ticket filter, before the commit scan: an absent developer
+    // never reaches the "why has nobody committed?" question.
+    const isAway = snapshot.absences.some(
+      (a) => a.teamMemberId === member.id && overlaps(a, windowStart, now),
+    );
+    if (isAway) continue;
 
     const committedInWindow = snapshot.commits.some(
       (c) =>
