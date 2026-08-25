@@ -436,9 +436,10 @@ describe("detectAnomalies — absences (S-08, FR-010)", () => {
     expect(raised[0].type).toBe("SPRINT_AT_RISK");
     expect(raised[0].dedupKey).toBe(`SPRINT_AT_RISK:absence:${absenceId}`);
     expect(raised[0].relatedTeamMemberId).toBe(memberId);
-    // Wed 12 → Fri 14 of the Tue 11 … Thu 20 remainder. Hand-derived, not lifted:
-    // NOW2 is Mon 10 Aug 13:00Z, so the days left are 10,11,12,13,14,17,18,19,20
-    // = 9 working days, of which the absence takes 11,12,13,14 = 4.
+    // Hand-derived, not lifted from engine output: NOW2 is Mon 10 Aug 13:00Z and
+    // the sprint runs to Thu 20 Aug, so the working days left are
+    // 10,11,12,13,14,17,18,19,20 = 9, of which the absence (Tue 11 → Fri 14)
+    // takes 11,12,13,14 = 4.
     expect(raised[0].context).toMatchObject({
       condition: "absence",
       workingDaysLost: 4,

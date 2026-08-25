@@ -575,6 +575,14 @@ The third FR-010 effect, plus the surface that makes it visible.
 
 #### 1. Capacity module
 
+> **Amended after impl-review (2026-08-25, F7).** The reducer ships WITHOUT the
+> `now` parameter this contract asks for. The property the house convention
+> protects — no hidden clock reads — holds regardless: the function contains no
+> `Date.now()` / `new Date()` and is deterministic on its inputs. The consequence
+> worth recording is semantic, and **S-18 must not assume otherwise**: this is a
+> WHOLE-SPRINT capacity number, not "capacity remaining". On day 9 of 10 it still
+> reports the full-sprint figure, which is what *Desired End State* asks for.
+
 **File**: `src/lib/dashboard/capacity.ts` (new)
 
 **Intent**: No capacity calculation exists anywhere. This gives `sp_capacity` its first

@@ -133,6 +133,11 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
       // Strict `false`, per the `scope-creep.ts` precedent — never a truthiness
       // check on a column that used to be nullable.
       if (absence.isPlanned !== false) continue;
+      // KNOWN GAP (impl-review F10): `createAbsence` stamps NULL when the owner
+      // has no active sprint, and nothing re-stamps it later — so an unplanned
+      // absence recorded BETWEEN sprints can never raise risk, not even once the
+      // sprint it falls inside starts. Re-stamping belongs with S-16 (sprint
+      // reconciliation), which is what would notice the rollover.
       if (absence.sprintId !== snapshot.sprint.id) continue;
       if (!overlaps(absence, now, endDate)) continue;
 

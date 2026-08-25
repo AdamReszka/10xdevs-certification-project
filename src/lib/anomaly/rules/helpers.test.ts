@@ -93,10 +93,14 @@ describe("countWorkingDays", () => {
 
   it("excludes a day listed in nonWorkingDays", () => {
     // The seam a future public-holidays / company-days-off slice fills. S-08
-    // always passes it empty.
+    // always passes it empty, so this is the only exercise it gets.
     const from = new Date("2026-08-17T09:00:00.000Z"); // Mon
     const to = new Date("2026-08-21T09:00:00.000Z"); // Fri
 
+    expect(countWorkingDays(from, to, null, "UTC")).toBe(4);
+    expect(countWorkingDays(from, to, null, "UTC", new Set(["2026-08-18"]))).toBe(3);
+    // …and on the closed-range sibling, which is what capacity and the absence
+    // magnitude actually call.
     expect(countWorkingDaysInclusive(from, to, null, "UTC")).toBe(5);
     expect(
       countWorkingDaysInclusive(from, to, null, "UTC", new Set(["2026-08-18"])),

@@ -25,19 +25,74 @@ const MEMBERS = [
 ];
 
 describe("nextWindowAfter", () => {
-  it("starts the instant the sprint ends and runs for the same length", () => {
-    const next = nextWindowAfter(SPRINT_START, SPRINT_END);
+  /**
+   * These assert on the DAYS the two grids actually draw, not on the arithmetic
+   * the function performs. The earlier version restated `end + 1ms` back to
+   * itself and therefore could not fail — which is exactly how the overlap below
+   * shipped (impl-review F1/F3).
+   */
+  function daysOf(from: Date, to: Date, timeZone: string | null) {
+    return buildAvailabilityGrid({ members: MEMBERS, absences: [], from, to, timeZone })
+      .days;
+  }
 
-    expect(next.from.getTime()).toBe(SPRINT_END.getTime() + 1);
-    expect(next.to.getTime() - next.from.getTime()).toBe(
-      SPRINT_END.getTime() - SPRINT_START.getTime(),
-    );
+  it("does not share a day with the sprint when the sprint ends mid-day", () => {
+    // The load-bearing case: real Jira sprints end at an arbitrary instant.
+    // `run-sync.integration.test.ts` stores 2026-08-31T08:00:00.000Z.
+    const start = new Date("2026-08-17T08:00:00.000Z");
+    const end = new Date("2026-08-28T08:00:00.000Z");
+    const next = nextWindowAfter(start, end, "UTC");
+
+    const current = daysOf(start, end, "UTC");
+    const upcoming = daysOf(next.from, next.to, "UTC");
+
+    expect(current.at(-1)).toBe("2026-08-28");
+    expect(upcoming[0]).toBe("2026-08-29");
+    expect(current.filter((d) => upcoming.includes(d))).toEqual([]);
   });
 
-  it("does not overlap the sprint it follows", () => {
-    const next = nextWindowAfter(SPRINT_START, SPRINT_END);
+  it("does not share a day when the sprint ends at the last instant of a day", () => {
+    const next = nextWindowAfter(SPRINT_START, SPRINT_END, "UTC");
 
-    expect(next.from.getTime()).toBeGreaterThan(SPRINT_END.getTime());
+    const current = daysOf(SPRINT_START, SPRINT_END, "UTC");
+    const upcoming = daysOf(next.from, next.to, "UTC");
+
+    expect(current.at(-1)).toBe("2026-08-14");
+    expect(upcoming[0]).toBe("2026-08-15");
+    expect(current.filter((d) => upcoming.includes(d))).toEqual([]);
+  });
+
+  it("resolves the boundary in the team's zone, not in UTC", () => {
+    // 2026-08-28T08:00Z is still 2026-08-28 in Warsaw (+2) but 2026-08-28 01:00
+    // in Los Angeles — and an end at 2026-08-29T04:00Z is the 29th in Warsaw and
+    // still the 28th in LA, so the next window starts on a different day in each.
+    const start = new Date("2026-08-17T08:00:00.000Z");
+    const end = new Date("2026-08-29T04:00:00.000Z");
+
+    expect(
+      daysOf(
+        nextWindowAfter(start, end, "Europe/Warsaw").from,
+        nextWindowAfter(start, end, "Europe/Warsaw").to,
+        "Europe/Warsaw",
+      )[0],
+    ).toBe("2026-08-30");
+    expect(
+      daysOf(
+        nextWindowAfter(start, end, "America/Los_Angeles").from,
+        nextWindowAfter(start, end, "America/Los_Angeles").to,
+        "America/Los_Angeles",
+      )[0],
+    ).toBe("2026-08-29");
+  });
+
+  it("keeps the next window the same length as the sprint", () => {
+    const start = new Date("2026-08-17T08:00:00.000Z");
+    const end = new Date("2026-08-28T08:00:00.000Z");
+    const next = nextWindowAfter(start, end, "UTC");
+
+    expect(daysOf(next.from, next.to, "UTC")).toHaveLength(
+      daysOf(start, end, "UTC").length,
+    );
   });
 });
 

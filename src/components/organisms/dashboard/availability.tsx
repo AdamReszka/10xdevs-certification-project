@@ -64,7 +64,7 @@ export default function Availability({
     if (!sprintStart || !sprintEnd) return null;
     const start = new Date(sprintStart);
     const end = new Date(sprintEnd);
-    const next = nextWindowAfter(start, end);
+    const next = nextWindowAfter(start, end, timeZone);
     const parsed = absences.map((a) => ({
       teamMemberId: a.teamMemberId,
       startDate: new Date(a.startDate),

@@ -144,10 +144,40 @@ const dayKeyOf = (date) =>
     day: "2-digit",
   }).format(date);
 
+/**
+ * How far ahead of UTC `SEED_ZONE` is at `date`, in ms.
+ *
+ * Reads the zone's WALL CLOCK via `formatToParts` and re-interprets it as UTC.
+ * The obvious `toLocaleString` + `new Date` shortcut is wrong: it yields
+ * `zoneOffset − hostOffset`, so the seed only produced correct rows on a UTC
+ * machine and silently wrote one-day-too-long absences everywhere else
+ * (impl-review F2 — this repo's own dev machine is Europe/Warsaw).
+ */
+function zoneOffsetMs(date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: SEED_ZONE,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(date);
+  const p = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  // `hour` is "24" at midnight under hour12:false in some ICU versions.
+  const wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute, +p.second);
+  return wall - Math.floor(date.getTime() / 1000) * 1000;
+}
+
 function zonedDayStart(dayKey) {
-  const utcGuess = new Date(`${dayKey}T00:00:00Z`);
-  const asZoned = new Date(utcGuess.toLocaleString("en-US", { timeZone: SEED_ZONE }));
-  return new Date(utcGuess.getTime() - (asZoned.getTime() - utcGuess.getTime()));
+  const utcMidnight = new Date(`${dayKey}T00:00:00Z`).getTime();
+  // Two passes: the offset in force at the guess can differ from the offset in
+  // force at the answer across a DST boundary. Verified against both 2026
+  // transitions (23-hour and 25-hour local days) on four host zones.
+  let t = utcMidnight - zoneOffsetMs(new Date(utcMidnight));
+  t = utcMidnight - zoneOffsetMs(new Date(t));
+  return new Date(t);
 }
 
 /** Whole days `[fromOffset, toOffset]` in days relative to now, both inclusive. */
@@ -249,18 +279,21 @@ for (const m of members) {
 // detection run:
 //   * Erik  — PLANNED, covering the last few days INCLUDING today. This is why
 //     no DEVELOPER_INACTIVE row names him below: a recorded absence explains the
-//     silence. Dana carries that flag instead, so the contrast is legible on one
+//     silence. Alice carries that flag instead, so the contrast is legible on one
 //     screen (someone quiet AND flagged, next to someone quiet AND explained).
-//   * Alice — UNPLANNED, starting today. Drives the SPRINT_AT_RISK "absence"
+//     Alice is the right person for it because she holds WEB-93 (IN_PROGRESS) —
+//     the flag's own copy says "while holding in-progress work", so it must name
+//     somebody who does (impl-review F4).
+//   * Bob   — UNPLANNED, starting today. Drives the SPRINT_AT_RISK "absence"
 //     row seeded below; its `absence_id` context points at THIS row.
-//   * Bob   — PLANNED, later in the sprint. Lowers capacity and nothing else.
+//   * Chen  — PLANNED, later in the sprint. Lowers capacity and nothing else.
 // The static anomaly rows are hand-written display fixtures the engine does not
 // regenerate; a real `detectAnomalies` run reconciles them against these
 // absences, which is the behaviour the integration suite covers.
 const absences = [
   { gh: "eriklund", type: "VACATION", planned: true,  from: -3, to: 0 },
-  { gh: "alice-kim", type: "SICKNESS", planned: false, from: 0,  to: 3 },
-  { gh: "bob-r",    type: "TRAINING", planned: true,  from: 4,  to: 5 },
+  { gh: "bob-r",    type: "SICKNESS", planned: false, from: 0,  to: 3 },
+  { gh: "chenwu",   type: "TRAINING", planned: true,  from: 4,  to: 5 },
 ];
 const absenceId = {};
 for (const a of absences) {
@@ -310,20 +343,22 @@ const rows = [
     act: "Re-scope: 16 SP of To Do is unlikely to land in 36h." },
   // Deliberately NOT Erik: he has a recorded absence covering this window, and
   // FR-010 suppresses the flag for an absent developer. Pairing this row with
-  // Erik's empty inbox is what makes suppression visible in the demo.
-  { type: "DEVELOPER_INACTIVE", sev: "MEDIUM", risk: 48, member: id["dana-o"], src: null, det: h(24),
-    dedup: `DEVELOPER_INACTIVE:member:${id["dana-o"]}`,
-    ctx: { teamMemberId: id["dana-o"], githubUsername: "dana-o", noCommitDays: 3 },
-    desc: "Dana Osei has no commits for 3 days while holding in-progress work.",
-    act: "Check in with Dana — an in-progress ticket has had no commits for 3 days." },
-  // S-08 / FR-010: the unplanned mid-sprint absence recorded for Alice above.
+  // Erik's empty inbox is what makes suppression visible in the demo. Alice is
+  // the one named because she holds WEB-93 (IN_PROGRESS) and carries no absence,
+  // so the row's copy is true of her and a real detection run could produce it.
+  { type: "DEVELOPER_INACTIVE", sev: "MEDIUM", risk: 48, member: id["alice-kim"], src: null, det: h(24),
+    dedup: `DEVELOPER_INACTIVE:member:${id["alice-kim"]}`,
+    ctx: { teamMemberId: id["alice-kim"], githubUsername: "alice-kim", noCommitDays: 3 },
+    desc: "Alice Kim has no commits for 3 days while holding in-progress work.",
+    act: "Check in with Alice — an in-progress ticket has had no commits for 3 days." },
+  // S-08 / FR-010: the unplanned mid-sprint absence recorded for Bob above.
   // No absence TYPE anywhere in the row — FR-018 mails these out.
-  { type: "SPRINT_AT_RISK", sev: "HIGH", risk: 67, member: id["alice-kim"], src: null, det: h(1),
-    dedup: `SPRINT_AT_RISK:absence:${absenceId["alice-kim"]}`,
-    ctx: { condition: "absence", absenceId: absenceId["alice-kim"], teamMemberId: id["alice-kim"],
+  { type: "SPRINT_AT_RISK", sev: "HIGH", risk: 67, member: id["bob-r"], src: null, det: h(1),
+    dedup: `SPRINT_AT_RISK:absence:${absenceId["bob-r"]}`,
+    ctx: { condition: "absence", absenceId: absenceId["bob-r"], teamMemberId: id["bob-r"],
            workingDaysLost: 3, workingDaysLeft: 5 },
-    desc: "Alice Kim is unexpectedly away for 3 of the 5 working day(s) left in the sprint — the commitment did not account for it.",
-    act: "Re-plan around Alice Kim's absence — 3 of the 5 working day(s) left in the sprint are gone." },
+    desc: "Bob Rivera is unexpectedly away for 3 of the 5 working day(s) left in the sprint — the commitment did not account for it.",
+    act: "Re-plan around Bob Rivera's absence — 3 of the 5 working day(s) left in the sprint are gone." },
   { type: "SCOPE_CREEP", sev: "MEDIUM", risk: 55, member: null, src: null, det: h(12),
     dedup: `SCOPE_CREEP:sprint:${sprintId}`,
     ctx: { sprintId, addedSp: 12, committedSp: 40, actualPercent: 30, thresholdPercent: 15 },

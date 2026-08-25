@@ -152,8 +152,9 @@ export default async function DashboardPage() {
               name: m.name,
               isActive: m.isActive,
             }))}
-            // Dates cross the client boundary as ISO strings; the component
-            // rebuilds them. A `Date` in props would not survive serialization.
+            // Dates cross the client boundary as ISO strings, per the convention
+            // at `organisms/anomaly/types.ts`. (React's Flight serializer would
+            // carry a `Date` — the convention is a house rule, not a limitation.)
             absences={(availability?.absences ?? []).map((a) => ({
               teamMemberId: a.teamMemberId,
               startDate: a.startDate.toISOString(),

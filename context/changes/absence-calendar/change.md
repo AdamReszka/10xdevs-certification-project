@@ -1,7 +1,7 @@
 ---
 change_id: absence-calendar
 title: Absence calendar
-status: implementing
+status: impl_reviewed
 created: 2026-08-25
 updated: 2026-08-25
 archived_at: null

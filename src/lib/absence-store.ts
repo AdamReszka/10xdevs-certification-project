@@ -138,8 +138,11 @@ export async function createAbsence({
 }): Promise<{ id: string }> {
   // Reads before the transaction: neither needs to be in it, and holding a
   // Hyperdrive-backed connection open longer than necessary is what exhausts it.
-  const timeZone = await getJiraTimeZone(db, ownerId);
-  const activeSprint = await getActiveSprintRow(db, ownerId);
+  // They are independent, so one round trip rather than two.
+  const [timeZone, activeSprint] = await Promise.all([
+    getJiraTimeZone(db, ownerId),
+    getActiveSprintRow(db, ownerId),
+  ]);
   const window = absenceInstants(input.startDate, input.endDate, timeZone);
 
   return db.transaction(async (tx) => {

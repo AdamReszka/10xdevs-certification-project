@@ -44,12 +44,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { absenceSaveSchema, type AbsenceSaveValues } from "@/lib/validations/absence";
+import {
+  absenceSaveSchema,
+  type AbsenceSaveValues,
+  type AbsenceType,
+} from "@/lib/validations/absence";
 
 import {
   type AbsenceMember,
   type AbsenceRow,
-  type StoredAbsence,
   dayKeyToPickerDate,
   defaultIsPlanned,
   describeAbsence,
@@ -89,13 +92,26 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(
   TYPES.map((t) => [t.value, t.label]),
 );
 
+/**
+ * A stored absence as it crosses the server→client boundary: dates as ISO
+ * strings, per the convention at `organisms/anomaly/types.ts`.
+ */
+export type SerializedStoredAbsence = {
+  id: string;
+  teamMemberId: string;
+  type: AbsenceType;
+  isPlanned: boolean;
+  startDate: string;
+  endDate: string;
+};
+
 export default function AbsenceEditor({
   absences,
   members,
   timeZone,
   sprintStartDay,
 }: {
-  absences: StoredAbsence[];
+  absences: SerializedStoredAbsence[];
   members: (AbsenceMember & { isActive: boolean })[];
   timeZone: string | null;
   sprintStartDay: string | null;
@@ -107,7 +123,16 @@ export default function AbsenceEditor({
   const [formError, setFormError] = useState<string | null>(null);
 
   const rows = useMemo(
-    () => toAbsenceRows({ absences, members, timeZone }),
+    () =>
+      toAbsenceRows({
+        absences: absences.map((a) => ({
+          ...a,
+          startDate: new Date(a.startDate),
+          endDate: new Date(a.endDate),
+        })),
+        members,
+        timeZone,
+      }),
     [absences, members, timeZone],
   );
 

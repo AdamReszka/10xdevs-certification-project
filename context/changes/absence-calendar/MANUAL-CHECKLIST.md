@@ -1,7 +1,7 @@
 # S-08 — manual checklist (owner side)
 
 > Wszystko, co człowiek musi zobaczyć, zanim PR #50 pójdzie ready.
-> Automaty są zielone na HEAD i **nie** są tu powtarzane: 431 testów unitowych,
+> Automaty są zielone na HEAD i **nie** są tu powtarzane: 433 testy unitowe,
 > 154 integracyjne, `typecheck`, `lint`, mutacje 78.96% (próg break 70) oraz
 > build produkcyjny listujący `/settings/absences`.
 
@@ -104,12 +104,15 @@ nie celuj nim w konto z prawdziwymi credentialami. Żaden wiersz poniżej poza
   ⚠️ **Sprawdź last4 przed uruchomieniem** — patrz ostrzeżenie wyżej. Potem
   `/dashboard` → zakładka **Availability**, potem zakładka **Anomaly Inbox**.
   **Co musi być prawdą:**
-  - Availability: **Erik Lund**, **Alice Kim** i **Bob Rivera** mają zaznaczone
-    dni; sekcja „Next window" istnieje i nie zachodzi na „This sprint".
+  - Availability: **Erik Lund**, **Bob Rivera** i **Chen Wu** mają zaznaczone
+    dni; sekcja „Next window" istnieje i **nie zachodzi** na „This sprint" —
+    ostatnia kolumna pierwszej siatki i pierwsza kolumna drugiej to **różne
+    daty** (to była realna regresja, naprawiona po impl-review).
   - Widać liczbę pojemności w SP, i jest **niższa** niż suma `sp_capacity`
     rosteru (5 × 10 = 50 SP).
-  - Inbox: jest wiersz `SPRINT_AT_RISK` o Alice („unexpectedly away for …
-    working day(s)"), a **`DEVELOPER_INACTIVE` nie dotyczy Erika** (dotyczy Dany).
+  - Inbox: jest wiersz `SPRINT_AT_RISK` o **Bobie** („unexpectedly away for …
+    working day(s)"), a **`DEVELOPER_INACTIVE` nie dotyczy Erika** — dotyczy
+    **Alice**, która jako jedyna trzyma ticket `IN_PROGRESS` i nie ma absencji.
   - Nigdzie w inboxie nie pada słowo **sickness / vacation / training**.
   **Dlaczego to ma znaczenie:** dwie rzeczy naraz. Po pierwsze — czy trzy efekty
   FR-010 są w ogóle widoczne bez prawdziwych integracji (to wejście dla S-09).

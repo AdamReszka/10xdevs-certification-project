@@ -54,13 +54,17 @@ export default async function AbsenceSettingsPage() {
       </div>
 
       <AbsenceEditor
+        // Dates cross as ISO strings, per the convention stated at
+        // `organisms/anomaly/types.ts` ("no Date/unknown across the RSC
+        // boundary"). React's Flight serializer would in fact carry a `Date`,
+        // but this surface was the only one in `src/` disagreeing with the rest.
         absences={absences.map((a) => ({
           id: a.id,
           teamMemberId: a.teamMemberId,
           type: a.type,
           isPlanned: a.isPlanned,
-          startDate: a.startDate,
-          endDate: a.endDate,
+          startDate: a.startDate.toISOString(),
+          endDate: a.endDate.toISOString(),
         }))}
         members={members.map((m) => ({
           id: m.id,
