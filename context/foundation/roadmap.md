@@ -51,6 +51,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-17 | working-days-calendar     | public holidays + per-sprint company days off stop counting as working days everywhere         | S-08               | FR-009, FR-010                                  | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
+| S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 
 ## Streams
 
@@ -572,6 +573,46 @@ Foundations below assume these are present and do NOT re-scaffold them.
   invalidate S-15 manual rows 5.3 / 5.4 — the ones that verify the Settings nav
   reaches the roster at all. Those were only ticked on 2026-08-25; re-opening them
   to satisfy a navigation preference is the wrong trade under a deadline.
+
+---
+
+### S-20: Absence sprint scoping
+
+- **Outcome:** a recorded absence means the same thing to all three of its
+  consumers. Today `SPRINT_AT_RISK` filters absences by `sprint_id` while sprint
+  capacity and `DEVELOPER_INACTIVE` filter the same rows by date overlap, so one
+  absence can simultaneously reduce a sprint's capacity, suppress an inactivity
+  anomaly in it, and be invisible to its risk score.
+- **Change ID:** absence-sprint-scoping
+- **PRD refs:** FR-010
+- **Prerequisites:** S-08, S-16
+- **Status:** proposed
+
+- **Why this exists (S-16 research, 2026-08-26):** `absence.sprint_id` is stamped
+  once at record time (`src/lib/absence-store.ts:157`) and `updateAbsence`
+  deliberately never re-stamps it (`:169-173`). Three consumers then disagree:
+  `src/lib/anomaly/rules/sprint-at-risk.ts:141` skips any absence whose
+  `sprint_id` differs from the snapshot's sprint, while
+  `src/lib/dashboard/capacity.ts:170-176` and
+  `src/lib/anomaly/rules/developer-inactive.ts:47-51` never look at `sprint_id`
+  at all and match on date overlap alone. An absence recorded in sprint N whose
+  range extends into N+1 therefore lowers N+1's capacity and suppresses
+  `DEVELOPER_INACTIVE` there, but cannot raise `SPRINT_AT_RISK` there.
+- **This is not simply a bug to fix.** The `sprint-at-risk` behaviour is the
+  *recorded intent* of S-08's D2 definition of planned-ness — an absence carried
+  into a later sprint is "planned there" and should stop raising risk
+  (`context/archive/2026-08-25-absence-calendar/plan.md:154-163`). The defect is
+  that the other two consumers were never brought in line with that rule, and
+  that nothing states which reading is canonical. The slice is the *decision*
+  plus its consistent application, not a one-line filter change.
+- **Related, deliberately excluded from S-16:** impl-review F10's narrower
+  complaint (an absence recorded with no active sprint stores NULL and can never
+  raise risk — `sprint-at-risk.ts:135-140`) is largely dissolved by S-16's
+  between-sprints fix, which makes a sprint row exist from the first cycle after
+  a sprint goes active. What survives F10 is the disagreement above.
+- **Also in range:** `src/app/(app)/settings/absences/page.tsx:24` tells the
+  reader retention already bounds the list to current + 2 previous sprints. No
+  retention purge exists (that is S-12), so the claim is false today.
 
 ---
 

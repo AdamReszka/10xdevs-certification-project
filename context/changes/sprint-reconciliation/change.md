@@ -116,8 +116,10 @@ Revisit in `/10x-plan` if the owner wants different behaviour.
   surfaced a separate, unfiled defect that must not be lost:** three consumers of
   the same absence row disagree about which sprint it belongs to —
   `sprint-at-risk.ts:141` is `sprint_id`-scoped while `capacity.ts:170-176` and
-  `developer-inactive.ts:47-51` are date-scoped. Needs its own roadmap row;
-  not created here, since scope changes start in `roadmap.md` by owner decision.
+  `developer-inactive.ts:47-51` are date-scoped. **Filed 2026-08-26 as roadmap
+  S-20 `absence-sprint-scoping`** (prerequisites S-08, S-16) — note it is a
+  decision slice, not a filter fix: `sprint-at-risk`'s behaviour is S-08's
+  recorded intent, and the other two consumers were never brought in line.
 - **D — retention purge** (S-12). Note that S-16 turns "one sprint row per owner"
   into a growing series, so the gap stops being theoretical. Related one-liner
   left undone: `settings/absences/page.tsx:24` already tells the reader retention
