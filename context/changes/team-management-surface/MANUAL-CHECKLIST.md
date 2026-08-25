@@ -53,7 +53,7 @@ patrz ostrzeżenie wyżej). `npm run dev`, potem `/settings/team`.
 
 ---
 
-- [ ] **5.3 + 5.4 — dotarcie do zakładki Team** *(faza 5)*
+- [x] **5.3 + 5.4 — dotarcie do zakładki Team** *(faza 5)*
 
   **Gdzie:** dowolna strona aplikacji, główna nawigacja.
   **Co zrobić:** kliknij **Settings** w głównej nawigacji. Potem kliknij zakładkę
@@ -103,9 +103,6 @@ patrz ostrzeżenie wyżej). `npm run dev`, potem `/settings/team`.
   tylko w gridzie, w bazie zostaną dwa wiersze z rozjechaną tożsamością — a to
   cicho psuje atrybucję anomalii (patrz `validations/roster.ts:54`).
   **Sprzątanie:** po teście usuń zmergowany wiersz (kosz → Delete permanently).
-
-  > **Zaliczone 2026-08-25.** `Rocky Testowy` zniknął z bazy trwale; dialog się
-  > otworzył, co potwierdza poprawkę `646facf` na żywo.
 
 - [ ] **Sprzątanie po testach** *(nie jest wierszem fazy)*
 
