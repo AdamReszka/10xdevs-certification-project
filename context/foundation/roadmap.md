@@ -463,6 +463,24 @@ Foundations below assume these are present and do NOT re-scaffold them.
   branch selecting nondeterministically between two ACTIVE rows — was closed in
   S-10 (`src/lib/sprint.ts`, ordered by `startDate desc`). Reconciliation should
   still avoid *creating* a second ACTIVE row rather than relying on that ordering.
+- **Worse than "week 1 vs week 3" (research, 2026-08-26):** an owner who onboards
+  *between* sprints gets no `sprint` row at all, and never gets one. S-04 recorded
+  "cadence re-pulls on the next sync (FR-007)" as the accepted degradation for
+  that path (`archive/2026-08-20-setup-team-roster-cadence/plan.md:63`, `:277`,
+  carried into `changes/onboarding-routing/change.md:60-67`) — and that re-pull
+  does not exist. `syncJira` returns `SKIPPED/no_sprint` forever while stamping a
+  fresh **OK**, so the account is permanently dead and permanently green. S-16 is
+  therefore a first-run correctness fix, not only a rollover fix.
+- **Scope, decided by the owner 2026-08-26 after research:** the reconcile itself;
+  at most one ACTIVE row per owner (which also closes the two unfixed twins of the
+  S-10 F7 nondeterminism); never blanking the row on failure or on a legitimate
+  no-active-sprint; the between-sprints onboarding case; a 401 branch on
+  `listBoards`/`getActiveSprint` so failure classification does not regress; the
+  integration-test mock; closing old-sprint anomalies; and the wizard-side sprint
+  delete on a project change that the settings path already has. Deferred with
+  reasons: absence re-stamping, retention purge, post-setup cadence UI,
+  `timestamptz`. Full record: `context/changes/sprint-reconciliation/change.md`
+  § *Scope decision — approved*; blast-radius map: `.../research.md`.
 
 ---
 
