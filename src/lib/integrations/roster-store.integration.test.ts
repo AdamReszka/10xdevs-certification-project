@@ -615,7 +615,7 @@ describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
       ownerId,
       members: [unchangedPayload(memberId)],
     });
-    expect(result).toEqual({ updated: 0, inserted: 0 });
+    expect(result).toEqual({ updated: 0, inserted: 0, ids: [memberId] });
 
     const [after] = await db
       .select({ updatedAt: teamMember.updatedAt })
@@ -650,7 +650,7 @@ describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
         { id: siblingId, name: "Mia Krystof", jiraAccountId: "acc-1" },
       ],
     });
-    expect(result).toEqual({ updated: 1, inserted: 0 });
+    expect(result).toEqual({ updated: 1, inserted: 0, ids: [memberId, siblingId] });
 
     const [edited] = await db
       .select({ role: teamMember.role, isActive: teamMember.isActive })
@@ -676,7 +676,8 @@ describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
       ownerId,
       members: [{ name: "New Joiner", githubUsername: "newjoiner" }],
     });
-    expect(result).toEqual({ updated: 0, inserted: 1 });
+    expect(result.updated).toBe(0);
+    expect(result.inserted).toBe(1);
 
     const rows = await db
       .select({ id: teamMember.id })
@@ -701,6 +702,92 @@ describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
       .from(teamMember)
       .where(eq(teamMember.id, memberId));
     expect(row.isActive).toBe(true);
+  });
+
+  /**
+   * THE ID HAND-BACK (S-15 follow-up, found in manual QA).
+   *
+   * The editor's react-hook-form state is seeded from props ONCE at mount, so the
+   * `router.refresh()` after a save cannot teach it the id a freshly-inserted row
+   * just got. Before `saveRoster` returned `ids`, that row stayed `id: undefined`
+   * in form state and every id-keyed action misfired on it — most visibly the
+   * trash, which took its unsaved-row branch and dropped the row from the grid
+   * while leaving it in the DB, reading to the owner as a successful delete.
+   *
+   * These three lock the contract the editor now depends on: alignment, real
+   * persisted ids, and usability of a returned id as a lifecycle handle.
+   */
+  it("returns every submitted row's persisted id, positionally aligned", async () => {
+    const ownerId = await newOwner();
+    const { memberId } = await seedMemberWithHistory(ownerId);
+
+    const result = await saveRoster({
+      db,
+      ownerId,
+      members: [
+        { name: "First Joiner", githubUsername: "firstjoiner" },
+        unchangedPayload(memberId),
+        { name: "Second Joiner", jiraAccountId: "acc-second" },
+      ],
+    });
+
+    expect(result.ids).toHaveLength(3);
+    // An updated row hands back the id it came in with, in ITS position.
+    expect(result.ids[1]).toBe(memberId);
+    expect(new Set(result.ids).size).toBe(3);
+
+    // Each returned id addresses the row whose payload sat at that index —
+    // alignment, not merely "three ids exist".
+    const names = await Promise.all(
+      result.ids.map(async (id) => {
+        const [row] = await db
+          .select({ name: teamMember.name })
+          .from(teamMember)
+          .where(eq(teamMember.id, id));
+        return row?.name;
+      }),
+    );
+    expect(names).toEqual(["First Joiner", "Erik Nord", "Second Joiner"]);
+  });
+
+  it("an inserted row's returned id is the one actually persisted", async () => {
+    const ownerId = await newOwner();
+
+    const result = await saveRoster({
+      db,
+      ownerId,
+      members: [{ name: "New Joiner", githubUsername: "newjoiner" }],
+    });
+
+    const rows = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(rows).toHaveLength(1);
+    expect(result.ids).toEqual([rows[0].id]);
+  });
+
+  it("the returned id is a usable lifecycle handle — the trash reaches the row", async () => {
+    const ownerId = await newOwner();
+    // Two rows: the delete gate refuses the last remaining member.
+    const { ids } = await saveRoster({
+      db,
+      ownerId,
+      members: [
+        { name: "Keeper", githubUsername: "keeper" },
+        { name: "Doomed", githubUsername: "doomed" },
+      ],
+    });
+
+    // This is what the editor now does with `ids`, and what it could not do
+    // before: address a row it inserted moments ago without a remount.
+    await deleteMember({ db, ownerId, memberId: ids[1] });
+
+    const rows = await db
+      .select({ name: teamMember.name })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(rows.map((r) => r.name)).toEqual(["Keeper"]);
   });
 
   it("rejects a payload carrying another owner's member id (cross-account isolation)", async () => {

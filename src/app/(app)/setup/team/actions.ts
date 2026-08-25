@@ -87,7 +87,9 @@ export type ImportRosterResult =
     }
   | ActionFailure;
 
-export type SaveRosterResult = { ok: true } | ActionFailure;
+/** `ids` is positionally aligned with the submitted `members`: the editor zips it
+ *  back on so a freshly-inserted row stops being id-less in form state. */
+export type SaveRosterResult = { ok: true; ids: string[] } | ActionFailure;
 
 export type ImportCadenceResult =
   | {
@@ -193,8 +195,12 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
   const db = getDb(env);
 
   try {
-    await saveRosterService({ db, ownerId: session.user.id, members: parsed.data.members });
-    return { ok: true };
+    const { ids } = await saveRosterService({
+      db,
+      ownerId: session.user.id,
+      members: parsed.data.members,
+    });
+    return { ok: true, ids };
   } catch (err) {
     return toFailure(err, "[setup/team] saveRoster");
   }

@@ -455,6 +455,19 @@ export default function RosterEditor({
         setFormError(result.message);
         return;
       }
+      // Adopt the ids the save just assigned. `useForm` seeds from props ONCE at
+      // mount, so without this a row inserted by THIS save keeps `id: undefined`
+      // until a full remount, and every id-keyed action misfires on it: the trash
+      // takes its unsaved-row branch (`removeRow`) and drops it from the grid
+      // while it survives in the DB, deactivate/reactivate return early, merge
+      // degrades to grid-only, and the next save re-inserts it as a duplicate.
+      // `ids` is positionally aligned with what we submitted.
+      result.ids.forEach((id, index) => {
+        if (!form.getValues(`members.${index}.id`)) {
+          form.setValue(`members.${index}.id`, id);
+        }
+      });
+
       toast.success(
         `Saved ${members.length} team ${members.length === 1 ? "member" : "members"}.`,
       );

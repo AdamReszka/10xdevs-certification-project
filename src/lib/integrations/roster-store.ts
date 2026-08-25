@@ -371,6 +371,19 @@ function deriveSource(m: RosterMemberInput): TeamMemberRow["source"] {
  *
  * Unchanged rows are skipped entirely, so a one-field edit moves exactly one
  * row's `updated_at`.
+ *
+ * RETURNS THE PERSISTED ID OF EVERY SUBMITTED ROW, positionally aligned with
+ * `members` — an updated row yields the id it came in with, an inserted row
+ * yields the id this call generated. The editor has no other way to learn it:
+ * its react-hook-form state is seeded from props ONCE at mount, so a
+ * `router.refresh()` after the save re-renders the server component without
+ * touching form state, and a freshly-inserted row would keep `id: undefined`
+ * indefinitely. Every id-keyed action then silently misfires on it — the trash
+ * takes its unsaved-row branch and drops the row from the grid while leaving it
+ * in the DB, deactivate/reactivate return early, merge degrades to a grid-only
+ * merge, and the NEXT save re-inserts the row as a duplicate sharing its
+ * `github_username` (there is no unique index; `rosterSaveSchema` only checks
+ * within one submission). Handing the ids back closes all of it at the source.
  */
 export async function saveRoster({
   db,
@@ -380,7 +393,7 @@ export async function saveRoster({
   db: Db;
   ownerId: string;
   members: RosterMemberInput[];
-}): Promise<{ updated: number; inserted: number }> {
+}): Promise<{ updated: number; inserted: number; ids: string[] }> {
   return db.transaction(async (tx) => {
     const existing = await tx
       .select()
@@ -390,14 +403,18 @@ export async function saveRoster({
 
     const updates: { id: string; values: MemberFields }[] = [];
     const inserts: (typeof teamMember.$inferInsert)[] = [];
+    // Positional, so the caller can zip it back onto its own submitted array.
+    const ids: string[] = [];
 
     for (const m of members) {
       if (m.id == null) {
+        const id = randomUUID();
         inserts.push({
-          id: randomUUID(),
+          id,
           ownerId,
           ...toMemberFields(m, true),
         });
+        ids.push(id);
         continue;
       }
 
@@ -405,6 +422,7 @@ export async function saveRoster({
       // Not "insert it anyway" — see UnknownMemberError.
       if (!current) throw new UnknownMemberError();
 
+      ids.push(m.id);
       const values = toMemberFields(m, current.isActive);
       if (!isUnchanged(current, values)) updates.push({ id: m.id, values });
     }
@@ -422,7 +440,7 @@ export async function saveRoster({
       await tx.insert(teamMember).values(inserts);
     }
 
-    return { updated: updates.length, inserted: inserts.length };
+    return { updated: updates.length, inserted: inserts.length, ids };
   });
 }
 

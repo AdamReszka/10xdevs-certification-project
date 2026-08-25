@@ -44,7 +44,7 @@ roster, and the destructive rows create and remove their own members.
 
 Route: `/settings/team`.
 
-- [ ] **4.4** Trash on a member **with** recorded absences or attributed
+- [x] **4.4** Trash on a member **with** recorded absences or attributed
       anomalies: the dialog offers **Deactivate** only — no "Delete permanently"
       button — and the description states both counts and says the history stays
       with a deactivated member.
@@ -55,7 +55,7 @@ Route: `/settings/team`.
       button, and the description says the roster cannot be emptied.
 - [ ] **4.7** Select two rows → **Merge selected**. The dialog names which row
       disappears and which name survives. Confirm; one row remains.
-- [ ] **4.8** A deactivated row is visually muted, shows **Inactive** with a
+- [x] **4.8** A deactivated row is visually muted, shows **Inactive** with a
       **Reactivate** link, and reactivating restores it. Unticking **Show
       inactive members** hides it; the default is shown.
 - [ ] **4.9** Keyboard: the dialog traps focus, **Escape** cancels, and **Cancel**
@@ -78,11 +78,11 @@ Route: `/settings/team`.
 
 ## C. Re-import as a proposal (Progress 3.5–3.7, already verified)
 
-- [ ] **3.5** Press **Re-import** on a populated roster. New people appear as
+- [x] **3.5** Press **Re-import** on a populated roster. New people appear as
       rows badged **New — unsaved**, the summary line says how many and that
       nothing is saved until you press Save, and **no DB row appears** until you
       do. Check with psql before saving.
-- [ ] **3.6** Deactivate someone, then re-import: they must **not** come back as
+- [x] **3.6** Deactivate someone, then re-import: they must **not** come back as
       a new proposal, and must still read **Inactive**.
 - [ ] **3.7** With a GitHub token lacking `read:org`, the degradation banner shows
       and **nobody** is flagged "Not in GitHub/Jira any more" — a scope failure is
@@ -90,7 +90,7 @@ Route: `/settings/team`.
 
 ## D. Lifecycle against psql (Progress 2.6–2.9, already verified)
 
-- [ ] **2.6** What the dialog reports matches psql: `select count(*) from absence
+- [x] **2.6** What the dialog reports matches psql: `select count(*) from absence
       where team_member_id = …` and the same for
       `anomaly.related_team_member_id`.
 - [ ] **2.7** A deactivated member disappears from the dashboard's member filter
