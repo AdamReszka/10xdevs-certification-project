@@ -7,6 +7,11 @@
 // surfaces never decrypt, and the paths that do — "Sync now", "Test connection" —
 // now fail cleanly against a live API instead of choking on a bad envelope.
 //
+// S-08 adds three `absence` rows (one per FR-010 effect: suppression, unplanned
+// mid-sprint risk, capacity) plus the matching SPRINT_AT_RISK "absence" anomaly,
+// and moves DEVELOPER_INACTIVE off the absent developer so the demo does not
+// contradict itself. See the block above the absences for the reasoning.
+//
 // S-10 adds the upstream rows the read-side reducers need: jira_ticket with
 // story points and assignees, jira_status_history transitions spread across the
 // sprint (including a re-open and an unmapped status), monitored_repo +
@@ -123,6 +128,38 @@ if (!ownerId) {
 
 const now = Date.now();
 const h = (n) => new Date(now - n * 3600_000); // n hours ago
+
+// --- Whole-day helpers for absences (S-08) ----------------------------------
+// `absence.start_date` / `end_date` are the first and last INSTANT of a local
+// calendar day in the team's zone (see src/lib/absence-dates.ts). The seeded
+// project is `Europe/Warsaw`, so writing UTC midnight would put every absence
+// one day early on the availability grid. This is the .mjs mirror of
+// `dayRangeInTimeZone`; kept deliberately small.
+const SEED_ZONE = "Europe/Warsaw";
+const dayKeyOf = (date) =>
+  new Intl.DateTimeFormat("en-CA", {
+    timeZone: SEED_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+
+function zonedDayStart(dayKey) {
+  const utcGuess = new Date(`${dayKey}T00:00:00Z`);
+  const asZoned = new Date(utcGuess.toLocaleString("en-US", { timeZone: SEED_ZONE }));
+  return new Date(utcGuess.getTime() - (asZoned.getTime() - utcGuess.getTime()));
+}
+
+/** Whole days `[fromOffset, toOffset]` in days relative to now, both inclusive. */
+function absenceWindow(fromOffsetDays, toOffsetDays) {
+  const startKey = dayKeyOf(new Date(now + fromOffsetDays * 86400_000));
+  const endKey = dayKeyOf(new Date(now + toOffsetDays * 86400_000));
+  const startDate = zonedDayStart(startKey);
+  const endDate = new Date(
+    zonedDayStart(dayKeyOf(new Date(zonedDayStart(endKey).getTime() + 86400_000))).getTime() - 1,
+  );
+  return { startDate, endDate };
+}
 const JIRA_BASE = "https://acme.atlassian.net";
 const GH = (n) => `https://github.com/acme/web/pull/${n}`;
 
@@ -143,6 +180,10 @@ for (const t of [
   "monitored_repo",
   "github_credential",
   "sync_state",
+  // S-08. Before `team_member`: `absence.team_member_id` is ON DELETE CASCADE,
+  // so the parent delete would take these anyway — deleting explicitly keeps the
+  // file's stated children-before-parents convention true.
+  "absence",
   "team_member",
   "sprint",
   "jira_project",
@@ -203,6 +244,36 @@ for (const m of members) {
   );
 }
 
+// --- Absences (S-08, FR-010) ------------------------------------------------
+// Three rows, one per downstream effect, so the demo shows all three without a
+// detection run:
+//   * Erik  — PLANNED, covering the last few days INCLUDING today. This is why
+//     no DEVELOPER_INACTIVE row names him below: a recorded absence explains the
+//     silence. Dana carries that flag instead, so the contrast is legible on one
+//     screen (someone quiet AND flagged, next to someone quiet AND explained).
+//   * Alice — UNPLANNED, starting today. Drives the SPRINT_AT_RISK "absence"
+//     row seeded below; its `absence_id` context points at THIS row.
+//   * Bob   — PLANNED, later in the sprint. Lowers capacity and nothing else.
+// The static anomaly rows are hand-written display fixtures the engine does not
+// regenerate; a real `detectAnomalies` run reconciles them against these
+// absences, which is the behaviour the integration suite covers.
+const absences = [
+  { gh: "eriklund", type: "VACATION", planned: true,  from: -3, to: 0 },
+  { gh: "alice-kim", type: "SICKNESS", planned: false, from: 0,  to: 3 },
+  { gh: "bob-r",    type: "TRAINING", planned: true,  from: 4,  to: 5 },
+];
+const absenceId = {};
+for (const a of absences) {
+  const aid = randomUUID();
+  absenceId[a.gh] = aid;
+  const { startDate, endDate } = absenceWindow(a.from, a.to);
+  await client.query(
+    `insert into absence (id, owner_id, team_member_id, sprint_id, type, start_date, end_date, is_planned)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [aid, ownerId, id[a.gh], sprintId, a.type, startDate, endDate, a.planned],
+  );
+}
+
 // --- Sync state: Jira healthy, GitHub errored (shows freshness + banner) -----
 await client.query(
   `insert into sync_state (id, owner_id, integration, last_successful_sync_at, last_attempt_at, status, last_error)
@@ -237,11 +308,22 @@ const rows = [
     ctx: { condition: "todo_near_end", todoCount: 5, todoSp: 16, hoursLeft: 36 },
     desc: "16 SP still in To Do with 36h left in the sprint.",
     act: "Re-scope: 16 SP of To Do is unlikely to land in 36h." },
-  { type: "DEVELOPER_INACTIVE", sev: "MEDIUM", risk: 48, member: id["eriklund"], src: null, det: h(24),
-    dedup: `DEVELOPER_INACTIVE:member:${id["eriklund"]}`,
-    ctx: { teamMemberId: id["eriklund"], githubUsername: "eriklund", noCommitDays: 3 },
-    desc: "Erik Lund has no commits for 3 days while holding in-progress work.",
-    act: "Check in with Erik — an in-progress ticket has had no commits for 3 days." },
+  // Deliberately NOT Erik: he has a recorded absence covering this window, and
+  // FR-010 suppresses the flag for an absent developer. Pairing this row with
+  // Erik's empty inbox is what makes suppression visible in the demo.
+  { type: "DEVELOPER_INACTIVE", sev: "MEDIUM", risk: 48, member: id["dana-o"], src: null, det: h(24),
+    dedup: `DEVELOPER_INACTIVE:member:${id["dana-o"]}`,
+    ctx: { teamMemberId: id["dana-o"], githubUsername: "dana-o", noCommitDays: 3 },
+    desc: "Dana Osei has no commits for 3 days while holding in-progress work.",
+    act: "Check in with Dana — an in-progress ticket has had no commits for 3 days." },
+  // S-08 / FR-010: the unplanned mid-sprint absence recorded for Alice above.
+  // No absence TYPE anywhere in the row — FR-018 mails these out.
+  { type: "SPRINT_AT_RISK", sev: "HIGH", risk: 67, member: id["alice-kim"], src: null, det: h(1),
+    dedup: `SPRINT_AT_RISK:absence:${absenceId["alice-kim"]}`,
+    ctx: { condition: "absence", absenceId: absenceId["alice-kim"], teamMemberId: id["alice-kim"],
+           workingDaysLost: 3, workingDaysLeft: 5 },
+    desc: "Alice Kim is unexpectedly away for 3 of the 5 working day(s) left in the sprint — the commitment did not account for it.",
+    act: "Re-plan around Alice Kim's absence — 3 of the 5 working day(s) left in the sprint are gone." },
   { type: "SCOPE_CREEP", sev: "MEDIUM", risk: 55, member: null, src: null, det: h(12),
     dedup: `SCOPE_CREEP:sprint:${sprintId}`,
     ctx: { sprintId, addedSp: 12, committedSp: 40, actualPercent: 30, thresholdPercent: 15 },

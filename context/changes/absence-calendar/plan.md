@@ -835,10 +835,10 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 5.1 `npm test` passes capacity unit tests (null capacity excluded, full/partial absence, zero-working-day sprint)
-- [x] 5.2 `npm test` passes `availability-view.ts` unit tests
-- [x] 5.3 `npm run typecheck`, `npm run lint`, `npm run test:integration` pass
-- [x] 5.4 Production build succeeds
+- [x] 5.1 `npm test` passes capacity unit tests (null capacity excluded, full/partial absence, zero-working-day sprint) — a01dbb3
+- [x] 5.2 `npm test` passes `availability-view.ts` unit tests — a01dbb3
+- [x] 5.3 `npm run typecheck`, `npm run lint`, `npm run test:integration` pass — a01dbb3
+- [x] 5.4 Production build succeeds — a01dbb3
 
 #### Manual
 
@@ -850,9 +850,9 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [ ] 6.1 `npm run db:seed:demo` creates the three absence rows against a throwaway owner
-- [ ] 6.2 Re-running the seed is idempotent — no duplicate absences
-- [ ] 6.3 `npm test`, `npm run test:integration`, `npm run typecheck`, `npm run lint` all pass
+- [x] 6.1 `npm run db:seed:demo` creates the three absence rows against a throwaway owner
+- [x] 6.2 Re-running the seed is idempotent — no duplicate absences
+- [x] 6.3 `npm test`, `npm run test:integration`, `npm run typecheck`, `npm run lint` all pass
 
 #### Manual
 

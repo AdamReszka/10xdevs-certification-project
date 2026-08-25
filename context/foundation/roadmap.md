@@ -39,7 +39,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-05 | data-sync-engine          | GitHub + Jira data synced on 15-min cycle; last-sync timestamp per integration stored        | S-04, F-02         | FR-011, FR-012                                  | done     |
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | done     |
 | S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox (render + sort/filter); freshness timestamp + error banner; real-data smoke-test. Burndown, Yesterday's Activity **and the Reliability KPI + tab shell** all shipped in S-10, not here | S-06, F-03 | FR-015, FR-016, US-01 | done     |
-| S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window | S-04, S-06 | FR-010                                    | proposed |
+| S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window; sprint capacity + availability tab | S-04, S-06 | FR-010                        | done     |
 | S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07, S-10   | FR-008, US-02                             | proposed |
 | S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns; **plus** the Today tab shell with Sprint Pulse, Yesterday's Activity and the Reliability KPI, and the three sync writes they need (commit churn, Jira time zone, sprint SP scalars) | S-05, S-07 | FR-016, FR-017 | done     |
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | proposed |
@@ -48,6 +48,9 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
 | S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | proposed |
+| S-17 | working-days-calendar     | public holidays + per-sprint company days off stop counting as working days everywhere         | S-08               | FR-009, FR-010                                  | proposed |
+| S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
+| S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 
 ## Streams
 
@@ -240,8 +243,16 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Parallel with:** S-09, S-10, S-11, S-13, S-14
 - **Blockers:** —
 - **Unknowns:** —
-- **Risk:** Absence records feed three downstream calculations (capacity, SPRINT_AT_RISK weighting, DEVELOPER_INACTIVE suppression); test all three effects independently — a silent failure in any one leaves the anomaly inbox giving misleading signals.
-- **Status:** proposed
+- **Risk:** Absence records feed three downstream calculations (capacity, SPRINT_AT_RISK weighting, DEVELOPER_INACTIVE suppression); test all three effects independently — a silent failure in any one leaves the anomaly inbox giving misleading signals. **Addressed:** each effect has its own unit + integration coverage (suppression lifecycle, an unplanned-absence `SPRINT_AT_RISK` that resolves on delete, and a capacity reducer whose null-capacity case is pinned).
+- **Status:** done
+
+- **Delivered beyond the outcome line (PR #50):** `/settings/absences` as a third
+  Settings tab; a fifth Dashboard "Today" tab showing who is away this sprint and
+  in the next window of the same length; `countWorkingDays` rewritten to bucket in
+  the team's Jira zone with two explicitly named boundary semantics (the old one
+  was server-local and half-open, which was wrong for both new callers); and
+  `team_member.sp_capacity` given its first reader.
+- **Deliberately deferred here, tracked as S-17 / S-18 / S-19 below.**
 
 ---
 
@@ -482,6 +493,69 @@ Foundations below assume these are present and do NOT re-scaffold them.
 1. **Demo data ↔ real integrations interaction** — When a user has loaded demo data AND has real Jira + GitHub credentials connected, what does the dashboard show? Mutual exclusion, side-by-side toggle, or real-data precedence? Owner: user. Block: S-09 (yes — this decision determines demo-mode data routing architecture; S-09 cannot be planned until resolved).
 2. **5-category status mapping rigidity** — Should MVP keep the 5 standard categories (To Do / In Progress / Code Review / Testing / Done) or add a 6th "Blocked" bucket? A 6th bucket would suppress `TICKET_STATUS_AGING` for explicitly blocked tickets. Owner: user. Block: S-03 (no — MVP ships with 5 categories; 6th bucket is phase 2 per PRD; implementation can proceed; revisit after first real-team trial).
 3. **GitHub cache TTL default** — FR-011 commits to 15-minute default; confirm against actual rate-limit budget during S-05 implementation (classic PAT = 5,000 req/h; multi-user deployments may require a higher TTL). Owner: implementation planning (S-05). Block: no.
+
+### S-17: Working-days calendar
+
+- **Outcome:** public holidays and per-sprint company days off stop counting as
+  working days — in the `TICKET_STATUS_AGING` budget, in the `SPRINT_AT_RISK`
+  absence magnitude, and in the capacity divisor alike.
+- **Change ID:** working-days-calendar
+- **PRD refs:** FR-009, FR-010
+- **Prerequisites:** S-08
+- **Status:** proposed
+
+- **Why this exists (S-08, 2026-08-25):** S-08 built the seam and left it empty.
+  `countWorkingDays` / `countWorkingDaysInclusive` take an optional
+  `nonWorkingDays: Set<DayKey>`; every S-08 caller passes nothing, so a Polish
+  team's 15 August currently counts as a full working day in the capacity number
+  and in every aging budget.
+- **Why it was not done in S-08:** it needs data the app does not store. Deriving
+  holidays requires a COUNTRY, and the only geographic signal on the account is
+  `jira_project.time_zone` — which is a zone, not a jurisdiction, and gets a team
+  in Vienna and a team in Warsaw wrong in opposite ways. So the slice is: a
+  country (or holiday-set) field, a source for the dates, per-sprint custom days
+  off, a settings surface, and tests — none of which is a line of code in S-08.
+
+---
+
+### S-18: Next-sprint capacity forecast
+
+- **Outcome:** the availability tab answers "can I promise this?" with a NUMBER
+  for the next window, not only with who is away.
+- **Change ID:** next-sprint-capacity
+- **PRD refs:** FR-010
+- **Prerequisites:** S-08
+- **Status:** proposed
+
+- **Why this exists (S-08, 2026-08-25):** the S-08 tab shows the next window's
+  absences but deliberately computes no capacity for it. Capacity needs a sprint's
+  working-day total, and the next sprint does not exist in the database yet — its
+  dates are inferred from the current sprint's length, which is good enough to
+  draw a grid and not good enough to promise story points against. Doing it
+  properly likely depends on S-16 (sprint reconciliation) so the next sprint is a
+  real row rather than an extrapolation.
+
+---
+
+### S-19: Team navigation section
+
+- **Outcome:** roster, absences and cadence live under a first-class **Team**
+  section instead of being three tabs inside Settings.
+- **Change ID:** team-navigation-section
+- **PRD refs:** FR-006, FR-010
+- **Prerequisites:** S-08, S-15
+- **Status:** proposed
+
+- **Why this exists (S-08, 2026-08-25):** Settings now carries Connections, Team
+  and Absences, and S-14 adds Anomaly rules. Two of those four are "how SprintFlow
+  reaches your data" and two are "who your team is" — one nav that means two
+  different things.
+- **Why it was not done in S-08:** it MOVES `/settings/team`, which would
+  invalidate S-15 manual rows 5.3 / 5.4 — the ones that verify the Settings nav
+  reaches the roster at all. Those were only ticked on 2026-08-25; re-opening them
+  to satisfy a navigation preference is the wrong trade under a deadline.
+
+---
 
 ## Parked
 
