@@ -822,10 +822,10 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 4.1 `npm test` passes with positive, healthy-silent and three boundary cases per rule, expectations hand-derived from FR-010
-- [x] 4.2 `npm run test:integration` passes the suppression lifecycle (detect → ACTIVE → absence → RESOLVED)
-- [x] 4.3 `npm run test:integration` passes the unplanned-absence `SPRINT_AT_RISK` case and its resolution on delete
-- [x] 4.4 `npm run test:mutation` stays above threshold
+- [x] 4.1 `npm test` passes with positive, healthy-silent and three boundary cases per rule, expectations hand-derived from FR-010 — a046bba
+- [x] 4.2 `npm run test:integration` passes the suppression lifecycle (detect → ACTIVE → absence → RESOLVED) — a046bba
+- [x] 4.3 `npm run test:integration` passes the unplanned-absence `SPRINT_AT_RISK` case and its resolution on delete — a046bba
+- [x] 4.4 `npm run test:mutation` stays above threshold — a046bba
 
 #### Manual
 
@@ -835,10 +835,10 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [ ] 5.1 `npm test` passes capacity unit tests (null capacity excluded, full/partial absence, zero-working-day sprint)
-- [ ] 5.2 `npm test` passes `availability-view.ts` unit tests
-- [ ] 5.3 `npm run typecheck`, `npm run lint`, `npm run test:integration` pass
-- [ ] 5.4 Production build succeeds
+- [x] 5.1 `npm test` passes capacity unit tests (null capacity excluded, full/partial absence, zero-working-day sprint)
+- [x] 5.2 `npm test` passes `availability-view.ts` unit tests
+- [x] 5.3 `npm run typecheck`, `npm run lint`, `npm run test:integration` pass
+- [x] 5.4 Production build succeeds
 
 #### Manual
 
