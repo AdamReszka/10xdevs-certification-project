@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import AnomalyInbox from "@/components/organisms/anomaly/anomaly-inbox";
+import Availability from "@/components/organisms/dashboard/availability";
 import DashboardTodayTabs from "@/components/organisms/dashboard/today-tabs";
 import ReliabilityKpi from "@/components/organisms/dashboard/reliability-kpi";
 import SprintPulse from "@/components/organisms/dashboard/sprint-pulse";
@@ -12,6 +13,7 @@ import { listAnomaliesForSprint } from "@/lib/anomaly/reader";
 import { anomalyContextChips, anomalyIdentity } from "@/lib/anomaly/context";
 import { getActivityRollup } from "@/lib/dashboard/activity";
 import { getBurndownSeries } from "@/lib/dashboard/burndown";
+import { getSprintCapacity } from "@/lib/dashboard/capacity";
 import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -51,16 +53,20 @@ export default async function DashboardPage() {
   const yesterdayRange = dayRangeInTimeZone(yesterdayKey, timeZone);
 
   // ONE Promise.all on the SAME `db` handle — no second pool, no second fan-out
-  // (lessons.md #3). The two S-10 reads join the existing three.
-  const [rows, syncStateRaw, roster, burndown, yesterdayGrid] = await Promise.all([
-    sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
-    getSyncState(db, ownerId),
-    listRoster(db, ownerId),
-    sprint
-      ? getBurndownSeries(db, ownerId, sprint.id, now)
-      : Promise.resolve(EMPTY_BURNDOWN),
-    getActivityRollup(db, ownerId, yesterdayRange),
-  ]);
+  // (lessons.md #3). The two S-10 reads and S-08's availability read join the
+  // original three.
+  const [rows, syncStateRaw, roster, burndown, yesterdayGrid, availability] =
+    await Promise.all([
+      sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
+      getSyncState(db, ownerId),
+      listRoster(db, ownerId),
+      sprint
+        ? getBurndownSeries(db, ownerId, sprint.id, now)
+        : Promise.resolve(EMPTY_BURNDOWN),
+      getActivityRollup(db, ownerId, yesterdayRange),
+      // S-08: who is away, plus the capacity number absences reduce.
+      getSprintCapacity(db, ownerId),
+    ]);
 
   // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
   // deactivated member still resolves its name; the filter dropdown (below) uses
@@ -137,6 +143,27 @@ export default async function DashboardPage() {
           <ReliabilityKpi
             committedSp={sprint?.committedSp ?? null}
             completedSp={sprint?.completedSp ?? null}
+          />
+        }
+        availability={
+          <Availability
+            members={roster.map((m) => ({
+              id: m.id,
+              name: m.name,
+              isActive: m.isActive,
+            }))}
+            // Dates cross the client boundary as ISO strings, per the convention
+            // at `organisms/anomaly/types.ts`. (React's Flight serializer would
+            // carry a `Date` — the convention is a house rule, not a limitation.)
+            absences={(availability?.absences ?? []).map((a) => ({
+              teamMemberId: a.teamMemberId,
+              startDate: a.startDate.toISOString(),
+              endDate: a.endDate.toISOString(),
+            }))}
+            sprintStart={availability?.sprintStart.toISOString() ?? null}
+            sprintEnd={availability?.sprintEnd.toISOString() ?? null}
+            timeZone={timeZone}
+            capacity={availability?.capacity ?? null}
           />
         }
       />

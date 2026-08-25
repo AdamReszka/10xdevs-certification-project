@@ -1,8 +1,10 @@
+import { overlaps } from "@/lib/absence-dates";
 import { suggestedAction } from "@/lib/anomaly/suggested-action";
 import type { DetectedAnomaly } from "@/lib/anomaly/types";
 import {
   CATEGORY_LABEL,
   clamp01,
+  countWorkingDaysInclusive,
   hoursBetween,
   indexBy,
   round,
@@ -25,7 +27,15 @@ const PARALLEL_CATEGORIES = ["IN_PROGRESS", "CODE_REVIEW", "TESTING"] as const;
  *     targets the rebalance action.
  *  2. ToDo-before-end: To Do tickets still open within the lead-time window before
  *     sprint end — sprint-level, no member attribution.
- * Absence weighting is added in S-08.
+ *  3. unplanned absence (S-08, FR-010): a mid-sprint absence the commitment did
+ *     not account for, sized by the working days it removes from what is left.
+ *
+ * WHY (3) IS ITS OWN ANOMALY rather than extra weight on (1) or (2): the
+ * per-anomaly score is `WEIGHT[severity] × magnitude × 100/3`, this rule is
+ * already HIGH by default, and `todo_near_end` already reaches magnitude 1 —
+ * there is nothing to raise. An additional row with its own dedupKey is the only
+ * mechanism that reliably increases the risk the lead actually sees, and it
+ * matches the one-anomaly-per-condition contract above.
  */
 export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
   const { severity, thresholds } = effective.SPRINT_AT_RISK;
@@ -103,6 +113,78 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
           magnitude,
         });
       }
+    }
+  }
+
+  // --- 3. Unplanned mid-sprint absences (S-08, FR-010) ----------------------
+  //
+  // Scoped to absences stamped with THIS sprint: one carried over from an earlier
+  // sprint was unplanned *there*, and by D2's definition is planned here — it
+  // must stop raising risk at the rollover rather than forever.
+  if (endDate) {
+    const workingDaysLeft = countWorkingDaysInclusive(
+      now,
+      endDate,
+      snapshot.sprint.workingDays,
+      snapshot.timeZone,
+    );
+
+    for (const absence of snapshot.absences) {
+      // Strict `false`, per the `scope-creep.ts` precedent — never a truthiness
+      // check on a column that used to be nullable.
+      if (absence.isPlanned !== false) continue;
+      // KNOWN GAP (impl-review F10): `createAbsence` stamps NULL when the owner
+      // has no active sprint, and nothing re-stamps it later — so an unplanned
+      // absence recorded BETWEEN sprints can never raise risk, not even once the
+      // sprint it falls inside starts. Re-stamping belongs with S-16 (sprint
+      // reconciliation), which is what would notice the rollover.
+      if (absence.sprintId !== snapshot.sprint.id) continue;
+      if (!overlaps(absence, now, endDate)) continue;
+
+      const member = snapshot.teamMembers.find((m) => m.id === absence.teamMemberId);
+      const name = member?.name ?? "A team member";
+
+      // Only the part of the absence still ahead, clipped to the sprint: days
+      // already spent are not days the remaining plan can lose.
+      const lostFrom =
+        absence.startDate > now ? absence.startDate : now;
+      const lostTo = absence.endDate < endDate ? absence.endDate : endDate;
+      const workingDaysLost = countWorkingDaysInclusive(
+        lostFrom,
+        lostTo,
+        snapshot.sprint.workingDays,
+        snapshot.timeZone,
+      );
+
+      // Zero denominator ⇒ an absence on what is left costs the whole of what is
+      // left. Mirrors the `committed > 0 ? … : 1` guard above; never NaN.
+      const magnitude =
+        workingDaysLeft > 0 ? clamp01(workingDaysLost / workingDaysLeft) : 1;
+
+      out.push({
+        type: "SPRINT_AT_RISK",
+        severity,
+        dedupKey: `SPRINT_AT_RISK:absence:${absence.id}`,
+        // Magnitude 0 still emits: a Sat–Sun sickness costs no working days, but
+        // the lead still needs to know somebody is unexpectedly away. The risk
+        // score simply reads 0. This is the deliberate opposite of suppressing.
+        description: `${name} is unexpectedly away for ${workingDaysLost} of the ${workingDaysLeft} working day(s) left in the sprint — the commitment did not account for it.`,
+        suggestedAction: suggestedAction.sprintAtRiskAbsence({
+          name,
+          lost: workingDaysLost,
+          left: workingDaysLeft,
+        }),
+        context: {
+          condition: "absence",
+          absenceId: absence.id,
+          teamMemberId: absence.teamMemberId,
+          workingDaysLost,
+          workingDaysLeft,
+        },
+        sourceUrl: null,
+        relatedTeamMemberId: absence.teamMemberId,
+        magnitude,
+      });
     }
   }
 

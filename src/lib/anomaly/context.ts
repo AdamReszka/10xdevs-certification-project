@@ -59,9 +59,24 @@ export type SprintAtRiskTodoNearEndContext = {
   todoSp: number;
   hoursLeft: number;
 };
+/**
+ * NO ABSENCE TYPE HERE, deliberately (S-08). The context object is serialized
+ * into the `anomaly` row and rendered as a chip, so putting `VACATION` /
+ * `SICKNESS` / `TRAINING` in it would leak health information about a named
+ * person onto the dashboard and into the FR-018 recap email. Days lost carry the
+ * same signal for the lead.
+ */
+export type SprintAtRiskAbsenceContext = {
+  condition: "absence";
+  absenceId: string;
+  teamMemberId: string;
+  workingDaysLost: number;
+  workingDaysLeft: number;
+};
 export type SprintAtRiskContext =
   | SprintAtRiskParallelContext
-  | SprintAtRiskTodoNearEndContext;
+  | SprintAtRiskTodoNearEndContext
+  | SprintAtRiskAbsenceContext;
 
 export type PrTooBigContext = {
   pullRequestId: string;
@@ -195,6 +210,12 @@ export function anomalyContextChips(anomaly: {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
       if (c.condition === "max_parallel") {
         return [`${c.count}/${c.limit} in ${CATEGORY_LABEL[c.category] ?? c.category}`];
+      }
+      if (c.condition === "absence") {
+        return [
+          `${c.workingDaysLost}d lost to an absence`,
+          `${c.workingDaysLeft}d left`,
+        ];
       }
       return [`${c.todoCount} to-do (${c.todoSp} SP)`, `${c.hoursLeft}h left`];
     }

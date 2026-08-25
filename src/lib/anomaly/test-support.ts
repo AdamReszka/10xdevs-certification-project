@@ -1,5 +1,6 @@
 import { DEFAULT_THRESHOLDS } from "@/db/defaults";
 import type {
+  SelectAbsence,
   SelectGithubCommit,
   SelectGithubReview,
   SelectJiraTicket,
@@ -146,6 +147,26 @@ export function makeCommit(
   } as SelectGithubCommit;
 }
 
+/**
+ * A recorded absence (S-08). Defaults to a PLANNED vacation covering Mon 10 Aug
+ * through Fri 14 Aug — whole days in UTC, `end_date` inclusive, exactly as
+ * `absence-dates.ts` writes them — stamped with the default sprint.
+ */
+export function makeAbsence(over: Partial<SelectAbsence> = {}): SelectAbsence {
+  return {
+    id: "absence-1",
+    ownerId: "owner-1",
+    teamMemberId: "member-1",
+    sprintId: "sprint-1",
+    type: "VACATION",
+    startDate: new Date("2026-08-10T00:00:00.000Z"),
+    endDate: new Date("2026-08-14T23:59:59.999Z"),
+    isPlanned: true,
+    createdAt: NOW,
+    ...over,
+  } as SelectAbsence;
+}
+
 export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot {
   return {
     sprint: makeSprint(),
@@ -154,6 +175,9 @@ export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot
     commits: [],
     teamMembers: [],
     absences: [],
+    // UTC by default so every rule expectation reads as a plain calendar fact,
+    // independent of the machine the suite runs on.
+    timeZone: "UTC",
     ...over,
   };
 }

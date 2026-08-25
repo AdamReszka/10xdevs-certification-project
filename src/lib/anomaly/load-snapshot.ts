@@ -1,12 +1,14 @@
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, lte } from "drizzle-orm";
 
 import {
+  absence,
   githubCommit,
   githubPullRequest,
   githubReview,
   jiraTicket,
   teamMember,
 } from "@/db/schema";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
 import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types";
@@ -18,6 +20,9 @@ import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types
  * — they have no sprint FK, and the PR-only rules apply to all monitored PRs; the
  * chosen sprint is the detection *context* the orchestrator attributes anomalies to.
  * Returns null when the owner has no sprint to detect against.
+ *
+ * Absences (S-08) join the snapshot here: `DEVELOPER_INACTIVE` uses them to
+ * suppress, `SPRINT_AT_RISK` to size an unplanned mid-sprint gap.
  */
 
 type Db = ReturnType<typeof getDb>;
@@ -39,7 +44,16 @@ export async function loadSprintSnapshot(
     chosen.startDate ??
     new Date(now.getTime() - COMMIT_FALLBACK_LOOKBACK_DAYS * 86_400_000);
 
-  const [tickets, prs, reviews, commits, teamMembers] = await Promise.all([
+  // The absence window the rules can possibly ask about: DEVELOPER_INACTIVE looks
+  // back over its own no-commit window (a couple of days before `now`), and
+  // SPRINT_AT_RISK looks forward to sprint end. `commitsSince` is already the
+  // earlier of "sprint start" and a 30-day fallback, so it is a generous lower
+  // bound; `now` guards the case where the chosen sprint has already ended.
+  const absencesUntil =
+    chosen.endDate != null && chosen.endDate > now ? chosen.endDate : now;
+
+  const [tickets, prs, reviews, commits, teamMembers, timeZone, absences] =
+    await Promise.all([
     db
       .select()
       .from(jiraTicket)
@@ -56,6 +70,24 @@ export async function loadSprintSnapshot(
         ),
       ),
     db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId)),
+    // The zone every day-boundary decision in the rules is resolved against.
+    getJiraTimeZone(db, ownerId),
+    // FR-010 (S-08). Bounded by the window above rather than pulled whole: an
+    // owner's absence history outlives the sprint being detected against.
+    // NOTE: `absence` has no `(owner_id, …)` index — the only index is
+    // `(team_member_id, start_date, end_date)` — so this is an owner-scoped scan.
+    // Acceptable at the PRD's 3–10-person scale; revisit if a real query proves
+    // slow, not before.
+    db
+      .select()
+      .from(absence)
+      .where(
+        and(
+          eq(absence.ownerId, ownerId),
+          lte(absence.startDate, absencesUntil),
+          gte(absence.endDate, commitsSince),
+        ),
+      ),
   ]);
 
   const reviewsByPr = new Map<string, typeof reviews>();
@@ -75,6 +107,7 @@ export async function loadSprintSnapshot(
     pullRequests,
     commits,
     teamMembers,
-    absences: [],
+    absences,
+    timeZone,
   };
 }

@@ -530,6 +530,15 @@ export default function RosterEditor({
           </p>
         ) : null}
 
+        {fields.length === 0 && !isImporting ? null : (
+          <p className="text-sm text-muted-foreground">
+            <strong>Capacity</strong> is this person&apos;s realistic story points for a
+            FULL sprint — part-time included, so a half-time developer&apos;s number is
+            already halved. SprintFlow scales it down further for recorded absences;
+            it never multiplies it by anything.
+          </p>
+        )}
+
         {fields.length === 0 && !isImporting ? (
           <div className="flex flex-col items-center gap-3 rounded-md border border-dashed py-10 text-center">
             <UsersIcon className="size-6 text-muted-foreground" />
