@@ -212,7 +212,18 @@ describe("team actions — happy path", () => {
     expect(imported.githubDegraded).toBe(false);
     expect(imported.members).toHaveLength(4);
 
-    // Save an edited roster (map the two identity keys into one BOTH member).
+    // Import PROPOSES now (S-15): four id-less rows, and not one DB write.
+    expect(imported.added).toBe(4);
+    expect(imported.missing).toBe(0);
+    expect(imported.members.every((m) => m.proposed === true && m.id === undefined)).toBe(true);
+    const afterImport = await db
+      .select()
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(afterImport).toHaveLength(0);
+
+    // The owner's Save is what persists it — this is the first-run flow, with the
+    // two halves of one human already mapped in the grid, so three members land.
     const saved = await saveRosterAction({
       members: [
         {
@@ -224,13 +235,30 @@ describe("team actions — happy path", () => {
           technologyTrack: "BACKEND",
         },
         { name: "devtwo", githubUsername: "devtwo" },
+        { name: "Sam Lee", jiraAccountId: "acc-2" },
       ],
     });
     expect(saved.ok).toBe(true);
 
     const rows = await db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId));
-    expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.githubUsername === "octocat")?.source).toBe("BOTH");
+    expect(rows).toHaveLength(3);
+
+    const mapped = rows.find((r) => r.githubUsername === "octocat");
+    expect(mapped?.source).toBe("BOTH");
+    expect(mapped?.role).toBe("Tech Lead");
+    expect(mapped?.spCapacity).toBe(8);
+    expect(mapped?.technologyTrack).toBe("BACKEND");
+
+    // A re-import against the saved roster proposes nothing and still writes nothing.
+    const reimported = await importRosterAction();
+    if (!reimported.ok) throw new Error(`re-import failed: ${reimported.error}`);
+    expect(reimported.added).toBe(0);
+    expect(reimported.missing).toBe(0);
+    const afterReimport = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, ownerId));
+    expect(afterReimport).toHaveLength(3);
 
     const cadence = await importCadenceAction();
     if (!cadence.ok) throw new Error(`importCadence failed: ${cadence.error}`);

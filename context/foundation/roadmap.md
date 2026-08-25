@@ -46,7 +46,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
 | S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
-| S-15 | team-management-surface   | manage the team roster after setup — a Settings tab, not the wizard; re-import is additive today and there is no way back to the editor | S-04, S-10 | FR-006 | proposed |
+| S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | proposed |
 
 ## Streams
@@ -403,6 +403,25 @@ Foundations below assume these are present and do NOT re-scaffold them.
   Jira-only counterpart (S-04 resolved dedup as manual mapping — email is
   unreliable on both sides). Any redesign must keep it, and must keep working
   for the common real case of one human appearing as two imported rows.
+- **Delivered (PR #49):** the research found a **sixth** defect the roadmap had
+  not recorded, and it turned out to be the load-bearing one: `saveRoster` was a
+  delete-then-insert of the owner's whole set, so **every** roster save — not
+  just a stray trash click — destroyed recorded absences via
+  `absence.team_member_id`'s `ON DELETE CASCADE`, detached anomaly attribution
+  via `anomaly.related_team_member_id`'s `ON DELETE SET NULL`, and reset
+  `is_active`. Defect 4 above framed this as "the damage lands on Save" after a
+  removal; in fact no removal was needed. It is documented in
+  `context/changes/team-management-surface/research.md` and in
+  `context/foundation/lessons.md` § "Delete-then-insert is only safe for tables
+  with no hand-entered children". Fixing it first is what made the rest of the
+  slice safe: with the bulk save no longer deleting, a stray trash click became
+  structurally incapable of dropping anyone. Defect 1's additive re-import was
+  confirmed as the demo seed's synthetic keys (`alice-kim` / `acc-alice-kim`)
+  matching nothing a real import returns — recorded with counts in the plan's
+  Phase 3 overview. Defect 5's lying comment is implemented rather than deleted,
+  alongside a second, worse defect in the same function: the merge picked the
+  surviving *id* by A/B while picking the surviving *row* by index, which from
+  the upsert save onward duplicated the person instead of fusing them.
 
 ---
 
@@ -476,6 +495,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Custom anomaly rules or custom dashboards** — Why parked: left open in shape-notes (not locked as in-scope for MVP).
 - **Per-status workflow heatmap in Sprint Detail** — Why parked: PRD §FR-017 Socratic note defers heatmap to phase 2 due to design-quality risk; sorted aging report ships instead.
 - **CI/CD pipeline (.github/workflows)** — Why parked: baseline reports absent; deferred given `speed` main goal; add in a hardening pass after S-07 lands.
+- **Unique index on `team_member` identity keys** — Why parked: `(owner_id, lower(github_username))` and `(owner_id, jira_account_id)` have no DB-level uniqueness; it is enforced only by `rosterSaveSchema.superRefine`, which sees one submission at a time. A duplicate silently corrupts anomaly attribution (`indexBy` keeps whichever row it reads last — see `validations/roster.ts:54`). The known route in was closed by S-15 follow-up `646facf` (`saveRoster` now hands persisted ids back, so a freshly-inserted row stops being re-inserted), and the local DB has zero duplicates, so this is defence in depth, not a live hole. Real cost is not the migration: it fails on any pre-existing duplicate, so it needs a detect-and-merge script (which row survives, what happens to its absences and anomalies) plus `23505` translation into a readable error — half a day to a day. Revisit in a hardening pass, or if a second duplicate route is ever found. Raised 2026-08-25.
 - **Observability (structured logging, Sentry, metrics)** — Why parked: no MVP NFR requires it; deferred given `speed` main goal; add before any public launch.
 
 ## Done

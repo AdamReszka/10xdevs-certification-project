@@ -41,12 +41,78 @@ export const rosterMemberSchema = z.object({
   role: z.string().max(100).nullish(),
   spCapacity: z.number().int().min(0).max(1000).nullish(),
   technologyTrack: technologyTrackSchema.nullish(),
+  // Round-trips through the editor so an unrelated field edit cannot resurrect a
+  // deactivated member (S-15). Omitted ⇒ the stored value is kept.
+  isActive: z.boolean().optional(),
 });
 
-/** The full user-edited roster (owner-scoped set). */
+/**
+ * The full user-edited roster (owner-scoped set).
+ *
+ * CROSS-ROW UNIQUENESS (S-15): two rows claiming the same person are rejected
+ * here rather than by a partial index — the anomaly rules index the roster by
+ * `githubUsername` / `jiraAccountId` (`anomaly/rules/helpers.ts`) and silently
+ * keep whichever row they see last, so a duplicate key corrupts attribution
+ * instead of erroring. GitHub logins are case-insensitive; Jira account ids are
+ * opaque and compared exactly.
+ */
 export const rosterSaveSchema = z.object({
   members: z.array(rosterMemberSchema).max(100),
+}).superRefine((value, ctx) => {
+  const seenGithub = new Map<string, number>();
+  const seenJira = new Map<string, number>();
+
+  value.members.forEach((m, index) => {
+    const github = m.githubUsername?.trim().toLowerCase();
+    if (github) {
+      const first = seenGithub.get(github);
+      if (first === undefined) {
+        seenGithub.set(github, index);
+      } else {
+        ctx.addIssue({
+          code: "custom",
+          path: ["members", index, "githubUsername"],
+          message: `Two rows share the GitHub username "${m.githubUsername!.trim()}" — merge them into one member.`,
+        });
+      }
+    }
+
+    const jira = m.jiraAccountId?.trim();
+    if (jira) {
+      const first = seenJira.get(jira);
+      if (first === undefined) {
+        seenJira.set(jira, index);
+      } else {
+        ctx.addIssue({
+          code: "custom",
+          path: ["members", index, "jiraAccountId"],
+          message: `Two rows share the Jira account "${jira}" — merge them into one member.`,
+        });
+      }
+    }
+  });
 });
+
+/** A member id as it arrives from the client — opaque, only ever non-empty. */
+export const memberIdSchema = z.string().min(1).max(64);
+
+/**
+ * A merge of two imported rows into one member (S-15).
+ *
+ * `keepId` MUST be the row the editor keeps in its grid and `dropId` the one it
+ * removes: the service updates the former and deletes the latter, so if the two
+ * disagree with the grid the merge duplicates the person instead of fusing them.
+ */
+export const mergeMembersSchema = z
+  .object({
+    keepId: memberIdSchema,
+    dropId: memberIdSchema,
+    merged: rosterMemberSchema,
+  })
+  .refine((v) => v.keepId !== v.dropId, {
+    message: "Pick two different members to merge.",
+    path: ["dropId"],
+  });
 
 /**
  * User-confirmed / overridden sprint cadence. `boardId` is the optional chosen
@@ -67,3 +133,4 @@ export type Weekday = z.infer<typeof weekdaySchema>;
 export type RosterMemberValues = z.infer<typeof rosterMemberSchema>;
 export type RosterSaveValues = z.infer<typeof rosterSaveSchema>;
 export type CadenceValues = z.infer<typeof cadenceSchema>;
+export type MergeMembersValues = z.infer<typeof mergeMembersSchema>;

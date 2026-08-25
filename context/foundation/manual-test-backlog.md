@@ -77,13 +77,24 @@ Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.2, 5.3, 5.4, 5.5**.
 Otwarte: **1.5, 2.7, 2.8, 3.4, 4.3, 4.4, 4.5, 4.6, 5.5, 5.6** + nota
 koordynacyjna z `onboarding-routing`.
 
-> ⚠️ **Nie testuj 4.3 i 4.6 teraz.** 4.3 („roster auto-importuje z obu źródeł,
-> merge scala wiersze, edycje przeżywają re-import") opisuje zachowanie, o
-> którym **S-15 mówi, że jest zepsute**: `importRoster` dodaje zamiast uzgadniać,
-> więc ponowny import na koncie z 5 osobami dał 7 wierszy. 4.6 (szerokość na
-> tablecie) został naprawiony dopiero w S-10. Weryfikacja tych dwóch przed S-15
-> to praca do wyrzucenia — poczekaj, aż `team-management-surface` przebuduje tę
-> powierzchnię.
+> ✅ **4.3 i 4.6 — odblokowane przez S-15 (PR #49), ale przepisane.**
+>
+> **4.3** w starym brzmieniu („roster auto-importuje z obu źródeł, merge scala
+> wiersze, edycje przeżywają re-import") jest **nieaktualne**: import już nie
+> zapisuje. Reprodukcja w S-15 potwierdziła wektor — seed demo wpisuje klucze
+> `alice-kim` / `acc-alice-kim`, których żaden prawdziwy import nie dopasuje,
+> więc 5 wierszy rosło do 5 + liczba tożsamości z upstreamu (zmierzone: 9).
+> **Nowe brzmienie 4.3:** re-import *proponuje* — nowi ludzie pojawiają się jako
+> niezapisane wiersze z plakietką „New — unsaved", osoby znikłe u źródła dostają
+> znacznik „Not in GitHub/Jira any more" i jednoklikowy Deactivate, a **w bazie
+> nie przybywa ani jeden wiersz, dopóki nie naciśniesz Save**. Edycje i wiersze
+> `MANUAL` nadal przeżywają re-import. Testuj to na powierzchni S-15
+> (`context/changes/team-management-surface/MANUAL-CHECKLIST.md`, sekcja C), nie
+> na starym opisie.
+>
+> **4.6** (szerokość na tablecie) naprawił S-10, a S-15 domyka jego weryfikację —
+> ale **jeszcze nie odhaczone**: to wiersz 5.7 w checkliście S-15 i wymaga oczu w
+> przeglądarce. Odhaczaj tam, nie tutaj.
 
 ### F-03 `ui-component-foundation` — 9 pozycji
 
@@ -178,3 +189,85 @@ ponownie sprawdzać: czytelności wykresów w obu motywach (4.8, 3.5, 8.12),
 arytmetyki burndownu (2.5, 2.6), braku wycieków w payloadach akcji (7.7) i w
 logach Workera (1.7), guardu seeda (F5) oraz niedestrukcyjności edycji repo i
 projektu Jiry (F1, F2).
+
+---
+
+## 7. S-15 `team-management-surface` — przeniesione pod termin (2026-08-25)
+
+`context/changes/team-management-surface/MANUAL-CHECKLIST.md` została przycięta
+do blokujących pozycji (nawigacja do zakładki Team + dwie ścieżki nieodwracalnie
+kasujące dane + sprzątanie). Wiersze poniżej zostały **odłożone, nie
+odpuszczone** — każdy z powodem, dla którego dało się go zdjąć ze ścieżki
+krytycznej. Konwencja: `CLAUDE.md` → *Manual testing conventions*.
+
+**Zamknięte w sesji 2026-08-25** (nie powtarzaj): 2.6, 3.5, 3.6, 4.4, 4.5, 4.8 —
+każdy zweryfikowany na ekranie plus kontrola w `psql`. Wcześniej dowodowo:
+1.8, 1.9, 2.7–2.9, 3.7 (symulacje na kontach jednorazowych, `724e2bc`, `1da8b24`).
+
+### 7.1 — 4.6 Trwałe usunięcie ostatniego członka
+
+*Źródło:* `context/changes/team-management-surface/plan.md` faza 4, wiersz 4.6
+*Jak:* `/settings/team` na koncie z **jednym** członkiem → kosz → przeczytaj
+dialog → **Cancel**.
+*Co musi być prawdą:* brak przycisku *Delete permanently*; opis mówi, że roster
+nie może zostać opróżniony.
+*Dlaczego odłożone:* gate siedzi w serwisie i **ma test integracyjny**
+(`roster-store.integration.test.ts` → „refuses the last remaining member").
+Warstwa UI tylko go odzwierciedla. Scenariusz wymaga rozebrania rosteru do jednej
+osoby, co niszczy stan potrzebny gdzie indziej.
+
+### 7.2 — 4.9 Obsługa klawiatury w dialogu
+
+*Źródło:* `plan.md` faza 4, wiersz 4.9
+*Jak:* otwórz dowolny dialog potwierdzenia → Tab w kółko → Escape.
+*Co musi być prawdą:* focus nie wychodzi poza dialog; Escape anuluje; **Cancel**
+ma focus domyślny, nie akcja destrukcyjna.
+*Dlaczego odłożone:* trap focusa i Escape to zachowanie `shadcn/ui` Dialog
+(Radix), nie nasz kod. Naszą decyzją jest wyłącznie to, który przycisk dostaje
+focus domyślny — jednolinijkowe, widoczne w kodzie.
+*Ryzyko:* realne, ale dotyczy dostępności, nie poprawności danych.
+
+### 7.3 — 5.5 Technology track dociera do sub-burndownów
+
+*Źródło:* `plan.md` faza 5, wiersz 5.5
+*Jak:* Settings → Team → zmień komuś **technology track** → Save → „Sync now"
+w `/settings/connections` → Dashboard → **Sprint Detail** → sub-burndowny.
+*Co musi być prawdą:* SP tej osoby liczą się w nowym torze.
+*Dlaczego odłożone:* **zapis** kolumny potwierdzony w `psql`. Niesprawdzona
+zostaje tylko konsumpcja po stronie dashboardu, wspólna z S-10 i tam
+weryfikowana. Wymaga pełnego cyklu synca — najdroższy test w puli.
+
+### 7.4 — 5.6 `/setup/team` na świeżym koncie
+
+*Źródło:* `plan.md` faza 5, wiersz 5.6
+*Jak:* załóż nowe konto → przejdź kreator do kroku Team.
+*Co musi być prawdą:* auto-import odpala się sam na pustym rosterze, grid się
+wypełnia, Save zapisuje.
+*Dlaczego odłożone:* auto-import na pustym rosterze ma test integracyjny
+(„fresh import proposes members from both sources"), a **oba** mounty edytora
+czytają przez `listRosterForEditor`, więc nie mogą się rozjechać (komentarz w
+`src/lib/roster.ts`). Koszt: pełny setup nowego konta z credentialami.
+*Jeśli będzie czas na jeden dodatkowy test — wybierz ten.* To jedyny wiersz
+dotykający kreatora, a nie zakładki Settings.
+
+### 7.5 — 5.7 Szerokość tabletu (NFR, podłoga 10 cali)
+
+*Źródło:* `plan.md` faza 5, wiersz 5.7 — **zamyka zaparkowany wiersz 4.6 z S-04**
+*Jak:* DevTools → 1024 px → `/settings/team`.
+*Co musi być prawdą:* grid scrolluje się poziomo, każda kontrolka osiągalna,
+`body` nie scrolluje się w poziomie.
+*Dlaczego odłożone:* czysto wizualne, zero ryzyka dla danych.
+*Ale:* to **NFR z PRD**, więc formalnie należy do zakresu MVP — odhacz przed
+oddaniem projektu, choćby na samym końcu.
+
+### 7.6 — 3.7 Degradacja GitHuba bez `read:org`
+
+*Źródło:* `plan.md` faza 3, wiersz 3.7
+*Jak:* wygeneruj drugi PAT **bez** scope'u `read:org`, podłącz, zrób Re-import.
+*Co musi być prawdą:* pokazuje się baner degradacji; **nikt** nie dostaje flagi
+„Not in GitHub/Jira any more".
+*Dlaczego odłożone:* pokryte testem integracyjnym („flags NOTHING GitHub-sourced
+when the GitHub read degraded"); odtworzenie wymaga podmiany prawdziwych
+credentiali na koncie, które używa ich do wszystkiego innego.
+*Pułapka:* po teście **przywróć pełny token**, inaczej kolejne sesje pracują na
+zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.

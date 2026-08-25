@@ -41,6 +41,50 @@ These are required by the PRD but not wired yet:
 - Cloudflare adapter: `@opennextjs/cloudflare` (Workers target; `@cloudflare/next-on-pages` is deprecated)
 - Database driver: `drizzle-orm/node-postgres` (`pg`) over Cloudflare Hyperdrive — Workers-safe TCP via the `HYPERDRIVE` binding (`src/lib/db.ts`). An HTTP-mode driver (`@neondatabase/serverless` / `drizzle-orm/neon-http`) is NOT used; Hyperdrive removes the no-persistent-TCP constraint.
 
+## Manual testing conventions
+
+**Priority order: shipping the remaining functionality comes first.** Manual
+verification is real work but it is not what the deadline is measured on. Never
+block progress on a slice waiting for the user to finish clicking through the
+previous one.
+
+### At the start of every session
+
+**Ask the user for the state of outstanding manual tests before planning new
+work.** Read the current change's `MANUAL-CHECKLIST.md` and
+`context/foundation/manual-test-backlog.md` §1, name the rows still unticked,
+and ask which of them they got through. They test during token-limit waits, so
+the answer is usually "some of them" — tick what they confirm, then move on to
+building. Do not re-derive the state from git or assume nothing was done.
+
+### Two files, two jobs
+
+- **`context/changes/<change-id>/MANUAL-CHECKLIST.md` — the short list.** Only
+  what genuinely blocks the slice: paths that destroy data irreversibly, and
+  surfaces that are unreachable if broken. Aim for **3–5 rows per slice**, never
+  twenty. This is what the user is asked to do at the end of a phase.
+- **`context/foundation/manual-test-backlog.md` — everything else.** Full
+  detail, deferred rows, cross-slice debt, environment traps. Written in Polish,
+  the format is already established there. Nothing is dropped — it is moved
+  here, with the reason it was deprioritized.
+
+### Writing a row the user can act on without asking questions
+
+Every row in either file carries four things. A row missing any of them costs a
+round trip the deadline cannot afford:
+
+1. **Where** — the exact route (`/settings/team`), and the account to use when
+   it matters.
+2. **What to do** — click by click, in order.
+3. **What must be true** — the observable pass condition, worded so there is no
+   judgment call left. Not "check the dialog is right" but "the dialog offers
+   Deactivate only, with no Delete permanently button".
+4. **Why it matters** — the defect this catches. Without it the user cannot
+   judge what to skip when time runs short.
+
+Sign off with the phase number so `plan.md` `## Progress` can be ticked in step;
+`plan.md` stays canonical.
+
 ## Task tracking conventions
 
 Issue/PR work follows the hybrid convention in `context/foundation/task-tracking.md`. Read that file before creating, editing, or referencing GitHub issues. Highlights:

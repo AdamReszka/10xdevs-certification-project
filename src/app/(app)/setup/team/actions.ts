@@ -9,13 +9,26 @@ import { GithubAuthError, type GithubClientOpts, GithubUnavailableError } from "
 import { JiraAuthError, type JiraBoard, JiraUnavailableError } from "@/lib/jira";
 import { MissingCredentialError } from "@/lib/integrations/credentials";
 import {
-  type TeamMemberRow,
+  LastMemberError,
+  type MemberHistory,
+  MemberHasHistoryError,
+  type PreviewMember,
+  UnknownMemberError,
+  deleteMember as deleteMemberService,
+  getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
-  importRoster as importRosterService,
+  previewRosterImport as previewRosterImportService,
+  mergeMembers as mergeMembersService,
   saveCadence as saveCadenceService,
   saveRoster as saveRosterService,
+  setMemberActive as setMemberActiveService,
 } from "@/lib/integrations/roster-store";
-import { cadenceSchema, rosterSaveSchema } from "@/lib/validations/roster";
+import {
+  cadenceSchema,
+  memberIdSchema,
+  mergeMembersSchema,
+  rosterSaveSchema,
+} from "@/lib/validations/roster";
 import type { DerivedCadence } from "@/lib/integrations/cadence";
 
 /**
@@ -43,6 +56,9 @@ export type ClientMember = {
   spCapacity: number | null;
   technologyTrack: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
   source: "GITHUB" | "JIRA" | "MANUAL" | "BOTH";
+  /** Round-trips through the editor so a save cannot resurrect a deactivated
+   *  member as a side effect of an unrelated field edit (S-15). */
+  isActive: boolean;
 };
 
 /** Shared token-free failure shape; the client reads `message` regardless. */
@@ -52,11 +68,28 @@ export type ActionFailure = {
   message: string;
 };
 
+/** A preview row: a stored member, or a proposal the save would insert. */
+export type ClientPreviewMember = Omit<ClientMember, "id"> & {
+  /** Absent ⇒ a proposal with no DB row yet. */
+  id?: string;
+  proposed?: true;
+  upstreamMissing?: true;
+};
+
 export type ImportRosterResult =
-  | { ok: true; members: ClientMember[]; githubDegraded: boolean; reason?: string }
+  | {
+      ok: true;
+      members: ClientPreviewMember[];
+      added: number;
+      missing: number;
+      githubDegraded: boolean;
+      reason?: string;
+    }
   | ActionFailure;
 
-export type SaveRosterResult = { ok: true } | ActionFailure;
+/** `ids` is positionally aligned with the submitted `members`: the editor zips it
+ *  back on so a freshly-inserted row stops being id-less in form state. */
+export type SaveRosterResult = { ok: true; ids: string[] } | ActionFailure;
 
 export type ImportCadenceResult =
   | {
@@ -71,6 +104,14 @@ export type ImportCadenceResult =
   | ActionFailure;
 
 export type SaveCadenceResult = { ok: true } | ActionFailure;
+
+export type SetMemberActiveResult = { ok: true; isActive: boolean } | ActionFailure;
+
+export type DeleteMemberResult = { ok: true } | ActionFailure;
+
+export type MergeMembersResult = { ok: true; id: string } | ActionFailure;
+
+export type MemberHistoryResult = ({ ok: true } & MemberHistory) | ActionFailure;
 
 /**
  * Test-only GitHub base override (`GITHUB_API_BASE_URL`) — lets the Playwright
@@ -89,22 +130,26 @@ function jiraBaseOverride(): string | undefined {
   return process.env.JIRA_API_BASE_URL || undefined;
 }
 
-function toClientMember(m: TeamMemberRow): ClientMember {
+function toClientPreviewMember(m: PreviewMember): ClientPreviewMember {
   return {
     id: m.id,
     name: m.name,
-    githubUsername: m.githubUsername,
-    jiraAccountId: m.jiraAccountId,
-    role: m.role,
-    spCapacity: m.spCapacity,
-    technologyTrack: m.technologyTrack,
+    githubUsername: m.githubUsername ?? null,
+    jiraAccountId: m.jiraAccountId ?? null,
+    role: m.role ?? null,
+    spCapacity: m.spCapacity ?? null,
+    technologyTrack: m.technologyTrack ?? null,
     source: m.source,
+    isActive: m.isActive ?? true,
+    proposed: m.proposed,
+    upstreamMissing: m.upstreamMissing,
   };
 }
 
 /**
- * Auto-import the roster from GitHub collaborators + Jira project members. A
- * GitHub scope/auth failure is surfaced as `githubDegraded` (still `ok: true`),
+ * PROPOSE the roster from GitHub collaborators + Jira project members. Persists
+ * nothing (S-15): the editor shows the diff and the owner's Save is what writes.
+ * A GitHub scope/auth failure is surfaced as `githubDegraded` (still `ok: true`),
  * never a hard failure — the step continues with Jira-seeded + manual members.
  */
 export async function importRosterAction(): Promise<ImportRosterResult> {
@@ -113,7 +158,7 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
   const db = getDb(env);
 
   try {
-    const result = await importRosterService({
+    const result = await previewRosterImportService({
       db,
       ownerId: session.user.id,
       env,
@@ -122,12 +167,14 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
     });
     return {
       ok: true,
-      members: result.members.map(toClientMember),
+      members: result.members.map(toClientPreviewMember),
+      added: result.added,
+      missing: result.missing,
       githubDegraded: result.githubDegraded,
       reason: result.reason,
     };
   } catch (err) {
-    return toFailure(err, "[setup/team] importRoster");
+    return toFailure(err, "[setup/team] previewRosterImport");
   }
 }
 
@@ -148,8 +195,12 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
   const db = getDb(env);
 
   try {
-    await saveRosterService({ db, ownerId: session.user.id, members: parsed.data.members });
-    return { ok: true };
+    const { ids } = await saveRosterService({
+      db,
+      ownerId: session.user.id,
+      members: parsed.data.members,
+    });
+    return { ok: true, ids };
   } catch (err) {
     return toFailure(err, "[setup/team] saveRoster");
   }
@@ -221,6 +272,115 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
   }
 }
 
+// ============================================================================
+// Member lifecycle (S-15) — the roster's per-member operations
+//
+// They live beside the roster save so every `team_member` mutation stays in one
+// module; the Settings surface imports from here, following the precedent at
+// `settings/connections/page.tsx`.
+// ============================================================================
+
+/** What a permanent delete would destroy — drives the confirmation's copy. */
+export async function getMemberHistoryAction(
+  memberId: unknown,
+): Promise<MemberHistoryResult> {
+  const session = await requireSession();
+
+  const parsed = memberIdSchema.safeParse(memberId);
+  if (!parsed.success) return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const history = await getMemberHistoryService({
+      db,
+      ownerId: session.user.id,
+      memberId: parsed.data,
+    });
+    return { ok: true, ...history };
+  } catch (err) {
+    return toFailure(err, "[setup/team] getMemberHistory");
+  }
+}
+
+/** Deactivate or reactivate a member. Destroys nothing; freely reversible. */
+export async function setMemberActiveAction(
+  memberId: unknown,
+  isActive: unknown,
+): Promise<SetMemberActiveResult> {
+  const session = await requireSession();
+
+  const parsedId = memberIdSchema.safeParse(memberId);
+  if (!parsedId.success) return invalidInput("Pick a member and try again.");
+  if (typeof isActive !== "boolean") return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await setMemberActiveService({
+      db,
+      ownerId: session.user.id,
+      memberId: parsedId.data,
+      isActive,
+    });
+    return { ok: true, isActive };
+  } catch (err) {
+    return toFailure(err, "[setup/team] setMemberActive");
+  }
+}
+
+/** Permanently delete a member. Refused when they carry history or are the last. */
+export async function deleteMemberAction(memberId: unknown): Promise<DeleteMemberResult> {
+  const session = await requireSession();
+
+  const parsed = memberIdSchema.safeParse(memberId);
+  if (!parsed.success) return invalidInput("Pick a member and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await deleteMemberService({ db, ownerId: session.user.id, memberId: parsed.data });
+    return { ok: true };
+  } catch (err) {
+    return toFailure(err, "[setup/team] deleteMember");
+  }
+}
+
+/** Fuse two imported rows into one member. `keepId` is the row the grid keeps. */
+export async function mergeMembersAction(input: unknown): Promise<MergeMembersResult> {
+  const session = await requireSession();
+
+  const parsed = mergeMembersSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidInput(
+      parsed.error.issues[0]?.message ?? "Check the members and try again.",
+    );
+  }
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const result = await mergeMembersService({
+      db,
+      ownerId: session.user.id,
+      keepId: parsed.data.keepId,
+      dropId: parsed.data.dropId,
+      merged: parsed.data.merged,
+    });
+    return { ok: true, id: result.id };
+  } catch (err) {
+    return toFailure(err, "[setup/team] mergeMembers");
+  }
+}
+
+function invalidInput(message: string): ActionFailure {
+  return { ok: false, error: "invalid_input", message };
+}
+
 /**
  * Map a service/client error to a typed, token-free failure. `*AuthError` (401)
  * is the only "invalid token" verdict; `*UnavailableError` and
@@ -257,10 +417,40 @@ function toFailure(err: unknown, tag: string): ActionFailure {
       message: "An integration is not connected. Complete the earlier steps and try again.",
     };
   }
+  // A submitted row id outside the caller's roster — a stale grid, or a crafted
+  // payload. Never re-inserted; refused (PRD cross-account isolation).
+  if (err instanceof UnknownMemberError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "That roster is out of date. Reload the page and try again.",
+    };
+  }
+  // The counts are what makes the refusal actionable: they name what the owner
+  // would have destroyed, and point at the non-destructive alternative.
+  if (err instanceof MemberHasHistoryError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: `This member has ${plural(err.absences, "recorded absence", "recorded absences")} and ${plural(err.anomalies, "attributed anomaly", "attributed anomalies")}. Deactivate them instead — a permanent delete would destroy that history.`,
+    };
+  }
+  if (err instanceof LastMemberError) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "This is your only team member. Add someone else before removing them.",
+    };
+  }
   console.error(`${tag} unexpected error:`, err);
   return {
     ok: false,
     error: "integration_unavailable",
     message: "Something went wrong. Please try again.",
   };
+}
+
+/** "1 recorded absence" / "2 recorded absences" — the refusal copy reads badly otherwise. */
+function plural(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
 }

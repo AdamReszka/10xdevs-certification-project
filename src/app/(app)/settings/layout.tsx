@@ -1,13 +1,15 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+
+import SettingsTabs from "@/components/molecules/settings-tabs";
 
 /**
  * Settings shell (S-10 Phase 8).
  *
- * Built as a TABBED shell with one tab today, deliberately: S-14 (anomaly
- * thresholds + severity tiers) is already on the roadmap as "a dedicated
- * settings page", and giving it a second route would leave the account with two
- * unrelated configuration surfaces. It slots in here as a second entry instead.
+ * Built as a TABBED shell so every post-setup configuration surface lands in one
+ * place rather than at its own top-level route. S-15 added Team as the second
+ * tab — and with it the active-tab styling the nav had been missing, invisible
+ * while there was only one tab. S-14 (anomaly thresholds + severity tiers) slots
+ * in as a third entry.
  *
  * Inherits `requireSession()` + `force-dynamic` from `(app)/layout.tsx` — do NOT
  * re-declare either.
@@ -15,6 +17,7 @@ import Link from "next/link";
 
 const TABS: { label: string; href: string }[] = [
   { label: "Connections", href: "/settings/connections" },
+  { label: "Team", href: "/settings/team" },
   // S-14 adds { label: "Anomaly rules", href: "/settings/anomalies" } here.
 ];
 
@@ -28,17 +31,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         </p>
       </div>
 
-      <nav className="flex gap-4 border-b text-sm" aria-label="Settings sections">
-        {TABS.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className="-mb-px border-b-2 border-transparent pb-2 text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <SettingsTabs tabs={TABS} />
 
       {children}
     </div>
