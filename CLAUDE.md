@@ -21,8 +21,26 @@ npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 - **Tailwind CSS 4** + **shadcn/ui** (new-york style, zinc base, OKLCH tokens) — all UI must be built with shadcn/ui components; use the `@shadcn` MCP server to look up available components before implementing any UI surface; add components with `npx shadcn add <name>`
 - **Component architecture: atomic design** — `src/components/ui/` (shadcn-generated primitives), `atoms/` (custom stateless primitives), `molecules/` (composite widgets), `organisms/{anomaly,dashboard,auth,setup}/` (feature sections), `templates/` (page-level shells), `providers/` (React context wrappers)
 - **Deployment target: Cloudflare Workers** — do not suggest Vercel-specific APIs or config; adapter is `@opennextjs/cloudflare` (not the deprecated `@cloudflare/next-on-pages`)
-- No test framework installed yet — add one before implementing business logic
-- No CI workflows yet (`.github/workflows/` is empty)
+- **Testing** — Vitest 4, split into two projects that must not be merged:
+  `npm test` (`vitest.config.ts`) is hermetic and DB-free and EXCLUDES
+  `*.integration.test.ts`; `npm run test:integration`
+  (`vitest.integration.config.ts`) runs those against real Postgres and refuses
+  any `DATABASE_URL` that is not local Supabase `127.0.0.1:54322`. Also
+  `npm run test:e2e` (Playwright) and `npm run test:mutation` (Stryker).
+  **There is no component-test harness** — no jsdom, no RTL — so decision logic
+  in a `.tsx` is extracted to a pure `.ts` sibling to be unit-testable
+  (`roster-merge.ts`, `inbox-controls.ts`, `absence-calendar-view.ts`).
+  ⚠️ Two Stryker configs exist: `stryker.conf.json` (scoped to the anomaly
+  rules, `break: 70`) wins by filename precedence over the stale
+  `stryker.config.json` (crypto-only, no break threshold). Renaming either
+  silently changes what is mutated.
+- **CI** — `.github/workflows/ci.yml`, triggered on `pull_request` only (not on
+  push to main). Two parallel jobs: `test` (lint → typecheck → unit) and
+  `integration` (supabase CLI pinned to 2.101.0 → Postgres-only `supabase start`
+  → `db:migrate` → integration suite with a per-run generated
+  `TOKEN_ENCRYPTION_KEY`). Node is pinned via `.nvmrc` (24). No secrets. A third
+  PR check, `Workers Builds`, comes from the Cloudflare GitHub app, not from
+  this repo.
 
 ## Security constraints (non-negotiable)
 
