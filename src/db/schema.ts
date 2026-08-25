@@ -452,7 +452,12 @@ export const absence = pgTable(
     type: absenceType("type").notNull(),
     startDate: timestamp("start_date").notNull(),
     endDate: timestamp("end_date").notNull(),
-    isPlanned: boolean("is_planned"),
+    // NOT NULL with a default (S-08): FR-010 keys SPRINT_AT_RISK off
+    // "unplanned", and a NULL would mean only "the form did not ask" — a UI gap,
+    // not a domain fact. Defaults to `true` because an absence recorded before a
+    // sprint starts is planned by D2's definition; the form overrides it when
+    // the sprint is already running.
+    isPlanned: boolean("is_planned").default(true).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
