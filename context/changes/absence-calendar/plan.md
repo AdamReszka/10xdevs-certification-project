@@ -842,6 +842,8 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Manual
 
+> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-25) — deferred, not dropped. Kept unticked here because this plan stays canonical.
+
 - [ ] 5.5 The availability tab shows the current sprint and the next window with the right people on the right days
 - [ ] 5.6 Recording an absence lowers the capacity number plausibly
 - [ ] 5.7 A team with no `sp_capacity` set sees the explanatory note, not "0 SP"
