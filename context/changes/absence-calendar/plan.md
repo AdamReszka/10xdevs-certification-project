@@ -812,6 +812,8 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Manual
 
+> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-26) — NOT performed. Kept unticked here because this plan stays canonical.
+
 - [ ] 2.3 Recording a vacation persists across a refresh
 - [ ] 2.4 The delete dialog names the absence it will remove
 - [ ] 2.5 Editing a window changes it rather than creating a second row
@@ -837,6 +839,8 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Manual
 
+> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-26) — NOT performed. Kept unticked here because this plan stays canonical.
+
 - [ ] 4.5 Recording an absence clears that member's `DEVELOPER_INACTIVE` without waiting for the next sync
 
 ### Phase 5: Capacity and the dashboard availability tab
@@ -850,7 +854,7 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Manual
 
-> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-25) — deferred, not dropped. Kept unticked here because this plan stays canonical.
+> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-25) — NOT performed. Kept unticked here because this plan stays canonical.
 
 - [ ] 5.5 The availability tab shows the current sprint and the next window with the right people on the right days
 - [ ] 5.6 Recording an absence lowers the capacity number plausibly
@@ -865,6 +869,8 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 - [x] 6.3 `npm test`, `npm run test:integration`, `npm run typecheck`, `npm run lint` all pass — 417b969
 
 #### Manual
+
+> Moved to `context/foundation/manual-test-backlog.md` §8 (2026-08-26) — NOT performed. Kept unticked here because this plan stays canonical.
 
 - [ ] 6.4 A member with a recorded absence cannot be permanently deleted; the dialog offers Deactivate only and names the count
 - [ ] 6.5 The seeded demo shows all three effects on the dashboard
