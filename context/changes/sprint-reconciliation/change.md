@@ -41,3 +41,14 @@ re-stamped, so an absence entered between sprints keeps `NULL` and can never rai
 concern, so decide here whether re-stamping belongs in scope.
 
 Prerequisite S-05 is done. No blockers recorded.
+
+## Scope decision (2026-08-26, owner)
+
+**Research the full blast radius first; do not fix the scope up front.** The
+rollover touches more than the `sprint` row — `jira_ticket.sprint_id`,
+`anomaly.sprint_id` and `absence.sprint_id` all point at it, and
+`sprint.cadence_overridden` exists because FR-007 lets the owner override the
+auto-pulled cadence, so a reconcile must not stomp it.
+
+Research maps what breaks at rollover, then comes back with "this belongs in
+S-16 / this is its own slice" and the owner picks. Nothing is pre-committed.
