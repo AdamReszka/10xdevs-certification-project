@@ -15,9 +15,11 @@
   before/after state. They are listed here in **§E** so you can re-run them by
   hand if you want eyes on the UI rather than on a transcript — but they are not
   blocking.
-- Rows **4.4–4.9** and **5.3–5.7** are **not** ticked. They are browser-only —
-  dialog copy on screen, row muting, focus behaviour, nav, tablet width — and no
-  simulation can stand in for them. These are the blocking ones.
+- **Przycięte 2026-08-25 pod termin kursu.** Zamknięte w sesji: 2.6, 3.5, 3.6,
+  4.4, 4.8. Pozostałe browser-only wiersze (4.6, 4.9, 5.5, 5.6, 5.7, 3.7)
+  przeniesione do `context/foundation/manual-test-backlog.md` §7 z uzasadnieniem.
+  Zostały **cztery** pozycje niżej — patrz `CLAUDE.md` → *Manual testing
+  conventions*.
 
 ## Before you start
 
@@ -40,81 +42,78 @@ roster, and the destructive rows create and remove their own members.
 
 ---
 
-## A. The confirmation dialogs (Progress 4.4–4.9)
+## Co zostało — 4 pozycje, ~25 minut
 
-Route: `/settings/team`.
+Reszta wierszy tej checklisty została **świadomie przeniesiona** do
+`context/foundation/manual-test-backlog.md` §7 wraz z powodem. To nie jest
+„niepotrzebne" — to jest odłożone pod termin kursu.
 
-- [x] **4.4** Trash on a member **with** recorded absences or attributed
-      anomalies: the dialog offers **Deactivate** only — no "Delete permanently"
-      button — and the description states both counts and says the history stays
-      with a deactivated member.
-- [ ] **4.5** Trash on a **clean** member (no absences, no anomalies, not the
-      last one): the dialog offers **both**, and "Delete permanently" removes the
-      row for good. Refresh the page — it must still be gone.
-- [ ] **4.6** Trash on the **last remaining** member: no "Delete permanently"
-      button, and the description says the roster cannot be emptied.
-- [ ] **4.7** Select two rows → **Merge selected**. The dialog names which row
-      disappears and which name survives. Confirm; one row remains.
-- [x] **4.8** A deactivated row is visually muted, shows **Inactive** with a
-      **Reactivate** link, and reactivating restores it. Unticking **Show
-      inactive members** hides it; the default is shown.
-- [ ] **4.9** Keyboard: the dialog traps focus, **Escape** cancels, and **Cancel**
-      takes the default focus (not the destructive action).
+Konto: **`demo@sprintflow.test`** (to ono ma prawdziwe credentiale — nazwa myli,
+patrz ostrzeżenie wyżej). `npm run dev`, potem `/settings/team`.
 
-## B. The Settings tab (Progress 5.3–5.7)
+---
 
-- [ ] **5.3** Main nav → **Settings** lands on Connections; the **Team** tab is
-      beside it and renders the roster.
-- [ ] **5.4** The active tab is visually distinct on **both** tabs — check
-      Connections and Team, and confirm `/settings/connections/github` still
-      highlights **Connections**.
-- [ ] **5.5** Change someone's technology track from Settings → Team, save, and
-      confirm it reaches the Sprint Detail sub-burndowns after the next sync.
-- [ ] **5.6** `/setup/team` still works end-to-end on a fresh account: auto-import
-      fires on an empty roster, the grid fills, Save persists.
-- [ ] **5.7** Tablet width (10-inch floor, NFR): the grid scrolls horizontally and
-      every control stays reachable. **This closes the parked S-04 backlog row
-      4.6** — tick it here, not in `manual-test-backlog.md`.
+- [ ] **5.3 + 5.4 — dotarcie do zakładki Team** *(faza 5)*
 
-## C. Re-import as a proposal (Progress 3.5–3.7, already verified)
+  **Gdzie:** dowolna strona aplikacji, główna nawigacja.
+  **Co zrobić:** kliknij **Settings** w głównej nawigacji. Potem kliknij zakładkę
+  **Team**. Potem wejdź na `/settings/connections/github`.
+  **Co musi być prawdą:**
+  - Settings otwiera się na **Connections**, a obok niej stoi zakładka **Team**.
+  - Kliknięcie **Team** pokazuje grid rosteru z Twoimi trzema osobami.
+  - Aktywna zakładka jest wizualnie odróżnialna **na obu** — sprawdź stojąc na
+    Connections i stojąc na Team.
+  - Na `/settings/connections/github` podświetlona jest nadal **Connections**,
+    nie Team.
+  **Dlaczego to ma znaczenie:** to jedyna droga do całej fazy 5. Jeśli nawigacja
+  nie działa, funkcja jest zbudowana i niedostępna — a tego żaden test
+  automatyczny nie złapie, bo wszystkie wchodzą na route bezpośrednio.
 
-- [x] **3.5** Press **Re-import** on a populated roster. New people appear as
-      rows badged **New — unsaved**, the summary line says how many and that
-      nothing is saved until you press Save, and **no DB row appears** until you
-      do. Check with psql before saving.
-- [x] **3.6** Deactivate someone, then re-import: they must **not** come back as
-      a new proposal, and must still read **Inactive**.
-- [ ] **3.7** With a GitHub token lacking `read:org`, the degradation banner shows
-      and **nobody** is flagged "Not in GitHub/Jira any more" — a scope failure is
-      not evidence that the team left.
+- [x] **4.5 — trwałe usunięcie czystego członka** *(faza 4)*
 
-## D. Lifecycle against psql (Progress 2.6–2.9, already verified)
+  **Gdzie:** `/settings/team`. **Odśwież stronę (F5) zanim zaczniesz.**
+  **Co zrobić:** kliknij kosz przy **`Rocky Testowy`** (0 absencji, 0 anomalii,
+  nie jest ostatni — sprawdzone w psql). Przeczytaj dialog. Kliknij **Delete
+  permanently**. Następnie **odśwież stronę (F5)**.
+  **Co musi być prawdą:**
+  - Dialog **otwiera się** (przed poprawką `646facf` kosz na świeżo zapisanym
+    wierszu kasował go z gridu bez dialogu).
+  - Dialog oferuje **obie** opcje: *Deactivate* **i** *Delete permanently*.
+  - Opis mówi „0 recorded absences and 0 attributed anomalies".
+  - Po F5 wiersza **nadal nie ma**.
+  **Dlaczego to ma znaczenie:** to jedyna nieodwracalna ścieżka w całym slice.
+  Weryfikuje też na żywo poprawkę `646facf` — że zwrócone `id` faktycznie dociera
+  do serwera, a nie tylko znika z ekranu.
 
-- [x] **2.6** What the dialog reports matches psql: `select count(*) from absence
-      where team_member_id = …` and the same for
-      `anomaly.related_team_member_id`.
-- [ ] **2.7** A deactivated member disappears from the dashboard's member filter
-      but their **existing anomalies still carry their name** — they must not
-      silently re-label as team-level.
-- [ ] **2.8** Trash on a persisted row removes them for real: gone after a full
-      page refresh, not just from the grid.
-- [ ] **2.9** Merging two persisted rows leaves **exactly one** row in psql.
+  > **Zaliczone 2026-08-25.** `Rocky Testowy` zniknął z bazy trwale; dialog się
+  > otworzył, co potwierdza poprawkę `646facf` na żywo.
 
-## E. The save no longer destroys anything (Progress 1.8, 1.9, already verified)
+- [ ] **4.7 — merge dwóch wierszy** *(faza 4)*
 
-This is the defect the whole slice exists for. Worth doing by hand once.
+  **Gdzie:** `/settings/team`.
+  **Co zrobić:** dodaj dwa nowe wiersze — jeden z samym **GitHub username**
+  (np. `merge-a`), drugi z samym **Jira account ID** (np. `acc-merge-b`), oba z
+  nazwami. **Zapisz.** Odśwież (F5). Zaznacz oba checkboxami → **Merge selected**
+  → potwierdź.
+  **Co musi być prawdą:**
+  - Dialog **nazywa po imieniu**, który wiersz znika i która nazwa zostaje.
+  - Po potwierdzeniu zostaje **jeden** wiersz, niosący **oba** klucze.
+  - Po F5 nadal jest jeden wiersz, nie dwa.
+  **Dlaczego to ma znaczenie:** merge trwale usuwa wiersz z bazy. Jeśli zadziała
+  tylko w gridzie, w bazie zostaną dwa wiersze z rozjechaną tożsamością — a to
+  cicho psuje atrybucję anomalii (patrz `validations/roster.ts:54`).
+  **Sprzątanie:** po teście usuń zmergowany wiersz (kosz → Delete permanently).
 
-- [ ] **1.8** Note every member's `updated_at`. Edit **one** member's role in the
-      UI and save. Exactly **one** row's `updated_at` moved.
-- [ ] **1.9** Record an absence in psql against a member, save the roster from the
-      UI, and confirm the absence **survives**. Before this slice it did not.
-      Then deactivate someone in psql, reload the page, save — `is_active` stays
-      `false`.
+  > **Zaliczone 2026-08-25.** `Rocky Testowy` zniknął z bazy trwale; dialog się
+  > otworzył, co potwierdza poprawkę `646facf` na żywo.
 
-> **Known behaviour, not a bug:** saving from a page that was loaded *before* an
-> out-of-band change overwrites that change, because the form carries every field
-> back. This is last-write-wins and is shared with `role`, `name` and every other
-> column — reload before saving if you have been editing in psql.
+- [ ] **Sprzątanie po testach** *(nie jest wierszem fazy)*
+
+  **Co musi być prawdą na koniec:** w rosterze zostają **`Adam Reszka`** i
+  **`FoxyMind`**, oboje **aktywni**. Sprawdź w gridzie albo poproś mnie o `psql`.
+  **Dlaczego:** `FoxyMind` to jedyne realne konto testowe z kompletem
+  GitHub + Jira, a `Adam Reszka` niesie jedyną przypisaną anomalię. Oba są
+  potrzebne w kolejnych slice'ach.
 
 ---
 

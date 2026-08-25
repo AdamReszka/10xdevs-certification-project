@@ -882,7 +882,7 @@ No schema migration. Two behavioural migrations to be aware of:
 #### Manual
 
 - [x] 4.4 Trash on a member with history offers Deactivate only, with counts stated
-- [ ] 4.5 Trash on a clean member offers both; permanent delete works
+- [x] 4.5 Trash on a clean member offers both; permanent delete works
 - [ ] 4.6 Permanent delete refused for the last remaining member
 - [ ] 4.7 Merge confirms and names the dropped row
 - [x] 4.8 Deactivated rows are muted and reactivatable
