@@ -789,18 +789,18 @@ STABLE in `context/changes/data-schema-baseline/research.md:108` and stays that 
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly against local Supabase
-- [x] 1.2 `npm run typecheck` passes and `SelectAbsence.isPlanned` is `boolean`
-- [x] 1.3 `npm run lint` passes
-- [x] 1.4 `npm test` passes with unit tests for `absence-dates.ts` and the zod schemas
-- [x] 1.5 `npm run test:integration` passes: CRUD round-trip, cross-owner refusal, foreign-member refusal, overlap rejected / self-overlap allowed on edit, failed re-detect does not fail the save
+- [x] 1.1 Migration applies cleanly against local Supabase — 7f2249f
+- [x] 1.2 `npm run typecheck` passes and `SelectAbsence.isPlanned` is `boolean` — 7f2249f
+- [x] 1.3 `npm run lint` passes — 7f2249f
+- [x] 1.4 `npm test` passes with unit tests for `absence-dates.ts` and the zod schemas — 7f2249f
+- [x] 1.5 `npm run test:integration` passes: CRUD round-trip, cross-owner refusal, foreign-member refusal, overlap rejected / self-overlap allowed on edit, failed re-detect does not fail the save — 7f2249f
 
 ### Phase 2: Absence management surface
 
 #### Automated
 
-- [ ] 2.1 `npm run typecheck`, `npm run lint`, `npm test` pass including `absence-calendar-view.ts` unit tests
-- [ ] 2.2 Production build succeeds and lists `/settings/absences`
+- [x] 2.1 `npm run typecheck`, `npm run lint`, `npm test` pass including `absence-calendar-view.ts` unit tests
+- [x] 2.2 Production build succeeds and lists `/settings/absences`
 
 #### Manual
 
