@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-21
+updated: 2026-08-25
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -582,3 +582,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-05: system pulls GitHub commit, PR, and review data (15-min cycle by default) and Jira active-sprint tickets + status-change history (incremental delta since last successful sync) for the configured team and repositories; sync results stored in DB; last-sync timestamp per integration stored and readable by the dashboard.** — Archived 2026-08-20 → `context/archive/2026-08-20-data-sync-engine/`. Lesson: —.
 - **S-06: system detects all 8 anomaly types (`PR_REVIEW_STALLED`, `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`, `TICKET_NO_COMMIT_LINK`, `SPRINT_AT_RISK`, `PR_TOO_BIG`, `SCOPE_CREEP`, `PR_TICKET_DESYNC`) by correlating synced Jira + GitHub data against configurable thresholds (FR-009 defaults); each anomaly carries severity, description, contextual data, one-line suggested action, and source deep-link; inbox ordered by raw severity (high → medium → low, then recency); severity-weighted sprint-risk score computed and stored per anomaly.** — Archived 2026-08-21 → `context/archive/2026-08-20-anomaly-detection-engine/`. Lesson: —.
 - **S-07: user can open Dashboard "Today" and see the Anomaly Inbox as the default view — every detected anomaly with all 5 attributes + risk score, in FR-015 default order (severity → recency), with client re-sort (severity/age/ticket/developer) and filter (type/member incl. team-level bucket); per-integration last-sync timestamp always visible; error banner on sync failure with the last cached inbox still shown; three distinct empty states. US-01 inbox-core (Sprint Pulse + Yesterday's Activity panels deferred to S-10).** — Archived 2026-08-21 → `context/archive/2026-08-21-dashboard-today/`. Lesson: —.
+- **S-08: user can record per-sprint team member absences (vacation, sickness, training) on a simple calendar; recorded absences: (1) suppress `DEVELOPER_INACTIVE` anomalies for the absent developer during the window, (2) raise the `SPRINT_AT_RISK` score for unplanned mid-sprint absences, (3) feed into sprint capacity calculation.** — Archived 2026-08-25 → `context/archive/2026-08-25-absence-calendar/`. Lesson: two caught in impl-review — `timestamp at time zone` INTERPRETS a naive column rather than converting it (so it cannot verify zone-aware writes), and a test that restates the implementation's arithmetic back to itself cannot fail. See `context/archive/2026-08-25-absence-calendar/reviews/impl-review.md`.
