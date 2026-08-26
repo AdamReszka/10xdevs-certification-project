@@ -797,12 +797,12 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npx tsc --noEmit`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Unit tests pass: `npm test`
-- [x] 2.4 Integration tests pass: `npm run test:integration`
-- [x] 2.5 Exactly one non-test file still upserts the sprint
-- [x] 2.6 The `cadence_overridden` SET exists in one file
+- [x] 2.1 Type checking passes: `npx tsc --noEmit` — 3679cd2
+- [x] 2.2 Linting passes: `npm run lint` — 3679cd2
+- [x] 2.3 Unit tests pass: `npm test` — 3679cd2
+- [x] 2.4 Integration tests pass: `npm run test:integration` — 3679cd2
+- [x] 2.5 Exactly one non-test file still upserts the sprint — 3679cd2
+- [x] 2.6 The `cadence_overridden` SET exists in one file — 3679cd2
 
 #### Manual
 
@@ -812,11 +812,11 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `npx tsc --noEmit`
-- [ ] 3.2 Linting passes: `npm run lint`
-- [ ] 3.3 Unit tests pass: `npm test`
-- [ ] 3.4 Integration tests pass: `npm run test:integration`
-- [ ] 3.5 Mutation score holds: `npm run test:mutation` (regression guard only — Stryker is scoped to the anomaly rules)
+- [x] 3.1 Type checking passes: `npx tsc --noEmit`
+- [x] 3.2 Linting passes: `npm run lint`
+- [x] 3.3 Unit tests pass: `npm test`
+- [x] 3.4 Integration tests pass: `npm run test:integration`
+- [x] 3.5 Mutation score holds: `npm run test:mutation` (regression guard only — Stryker is scoped to the anomaly rules)
 
 #### Manual
 

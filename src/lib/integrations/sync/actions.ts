@@ -37,7 +37,21 @@ import { syncOwner, type IntegrationOutcome } from "@/lib/integrations/sync/run-
  */
 export type SyncNowOutcome =
   | { status: "OK" }
-  | { status: "SKIPPED"; reason: "leased" | "not_due" | "not_connected" | "no_sprint" }
+  | {
+      status: "SKIPPED";
+      reason:
+        | "leased"
+        | "not_due"
+        | "not_connected"
+        | "no_sprint"
+        // Kept in lockstep with `IntegrationOutcome` (S-16). `sync-now-button`
+        // renders reasons generically (`reason.replace(/_/g, " ")`), so widening
+        // the union needs no UI switch.
+        | "board_ambiguous"
+        | "no_board"
+        | "no_active_sprint"
+        | "sprint_undated";
+    }
   | { status: "ERROR" | "RATE_LIMITED" };
 
 export type SyncNowResult = {
