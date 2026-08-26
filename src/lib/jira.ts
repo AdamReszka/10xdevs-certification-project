@@ -60,6 +60,19 @@ export class JiraUnavailableError extends Error {
   }
 }
 
+/**
+ * The board named in the request does not exist in Jira (404 from an Agile
+ * board endpoint). Deliberately narrower than `JiraUnavailableError`: a stored
+ * `jira_project.board_id` that was deleted in Jira must trigger board
+ * re-discovery, whereas a 5xx or a rate-limit must NOT. Never carries the token.
+ */
+export class JiraBoardNotFoundError extends Error {
+  constructor(message = "The Jira board no longer exists.") {
+    super(message);
+    this.name = "JiraBoardNotFoundError";
+  }
+}
+
 /** The 5 fixed SprintFlow categories (mirrors the `status_category` pgEnum). */
 export type StatusCategory =
   | "TODO"
@@ -448,8 +461,10 @@ const MAX_AGILE_PAGES = 20;
  * (no server-directed `nextPage` — the URL is self-constructed from `baseUrl`,
  * so there is no cross-origin link to chase). Capped at `MAX_AGILE_PAGES`.
  *
- * Runs only after `validateCredentials` accepted the creds, so a 401 here is an
- * availability blip → `JiraUnavailableError`.
+ * A 401 here is `JiraAuthError`, not an availability blip. `validateCredentials`
+ * accepting the creds does not imply Agile access: a PAT that `/myself` accepts
+ * can still lack board permission, and that case must reach the owner as
+ * "reconnect Jira" rather than "rate-limited, nothing to do".
  */
 export async function listBoards(
   baseUrl: string,
@@ -478,6 +493,9 @@ export async function listBoards(
       creds,
       opts,
     );
+    if (res.status === 401) {
+      throw new JiraAuthError();
+    }
     if (!res.ok) {
       throw new JiraUnavailableError(
         `Jira responded with ${res.status} while listing boards. Please try again.`,
@@ -524,6 +542,12 @@ export async function listBoards(
  * between sprints legitimately has no active sprint → `null`, which the cadence
  * importer treats as the no-active-sprint degradation path. Returns the first
  * active sprint (a scrum board has at most one).
+ *
+ * Two narrow error branches sit above the generic one: 401 → `JiraAuthError`
+ * (a PAT without Agile permission must say "reconnect", not "rate-limited"), and
+ * 404 → `JiraBoardNotFoundError`, so a caller passing a stored board id that was
+ * deleted in Jira can fall back to re-discovery without treating a 5xx the same
+ * way.
  */
 export async function getActiveSprint(
   baseUrl: string,
@@ -537,6 +561,12 @@ export async function getActiveSprint(
     creds,
     opts,
   );
+  if (res.status === 401) {
+    throw new JiraAuthError();
+  }
+  if (res.status === 404) {
+    throw new JiraBoardNotFoundError(`Jira board ${boardId} no longer exists.`);
+  }
   if (!res.ok) {
     throw new JiraUnavailableError(
       `Jira responded with ${res.status} while reading the active sprint. Please try again.`,
