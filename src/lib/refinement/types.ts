@@ -235,4 +235,19 @@ export type TicketVerdict = {
   taskKind: TaskKind;
   verdict: Verdict;
   gaps: Gap[];
+  /**
+   * Gap classes the task-kind gate threw away because
+   * {@link GAP_CLASS_OBLIGATIONS} does not oblige them for {@link taskKind}.
+   *
+   * NOT diagnostics. `lessons.md` records that a narrowing predicate turns a
+   * wrong value into an empty result that reads as success, and it puts two
+   * obligations on the mitigation: record the predicate's VALUE, and record
+   * which predicate produced the empty set. `taskKind` satisfies only the
+   * first. A ticket misclassified as `BUG`, whose four
+   * `FRONTEND_ON_BACKEND_DATA` gaps the gate discarded, reaches the lead as a
+   * clean `DOR_MET` unless this list travels with it — so it is persisted and
+   * shown whenever it is non-empty. This is what separates "nothing was wrong"
+   * from "the classifier was wrong".
+   */
+  droppedClasses: GapClass[];
 };

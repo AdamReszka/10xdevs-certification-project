@@ -961,20 +961,20 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 3.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — a93ff61
-- [x] 3.2 One test file per P0 detector, plus helpers and index — a93ff61
-- [x] 3.3 `index.test.ts` asserts every detector is registered — a93ff61
-- [x] 3.4 `GAP_CLASS_OBLIGATIONS` has an entry for every `TaskKind` — a93ff61
-- [x] 3.5 `parsePastedTicket` splits summary/description, raises on empty, and yields no absence-based P2 gap — a93ff61
+- [x] 3.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — 3c785e4
+- [x] 3.2 One test file per P0 detector, plus helpers and index — 3c785e4
+- [x] 3.3 `index.test.ts` asserts every detector is registered — 3c785e4
+- [x] 3.4 `GAP_CLASS_OBLIGATIONS` has an entry for every `TaskKind` — 3c785e4
+- [x] 3.5 `parsePastedTicket` splits summary/description, raises on empty, and yields no absence-based P2 gap — 3c785e4
 
 ### Phase 4: The analysis, the task-kind gate, and the corpus
 
 #### Automated
 
-- [ ] 4.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [ ] 4.2 Gate (incl. `droppedClasses`), merge precedence, verdict reduction, schema-invalid raise, `MAX_TICKETS_PER_RUN` covered
-- [ ] 4.3 Corpus contains at least three tickets expecting `DOR_MET`
-- [ ] 4.4 `buildSystemPrompt()` is byte-identical across calls
+- [x] 4.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
+- [x] 4.2 Gate (incl. `droppedClasses`), merge precedence, verdict reduction, schema-invalid raise, `MAX_TICKETS_PER_RUN` covered
+- [x] 4.3 Corpus contains at least three tickets expecting `DOR_MET`
+- [x] 4.4 `buildSystemPrompt()` is byte-identical across calls
 
 #### Manual
 

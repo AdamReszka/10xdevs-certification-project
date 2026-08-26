@@ -79,6 +79,11 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
 
 ## Faza 4
 
+Oba wiersze zamyka jedno uruchomienie: `npm run eval:refinement`
+(10 prawdziwych wywołań modelu, ~kilkadziesiąt groszy). Skrypt na końcu wypisuje
+tabelę i podsumowanie — wiersze 4.5, 4.7 i 4.9 są w niej asercjami albo
+licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oceny.
+
 - [ ] **4.6 — kompletny ticket nie generuje żadnego braku** *(faza 4)*
 
   **Gdzie:** terminal, `npm run eval:refinement` z ustawionym `ANTHROPIC_API_KEY`.
@@ -94,6 +99,26 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
   po trzecim refinemencie. Recall na ticketach niekompletnych mierzy ten sam
   eval automatycznie; tylko brak fałszywych alarmów wymaga ludzkiego spojrzenia
   na to, *co* zostało zgłoszone.
+
+- [ ] **4.8 — `MAX_TICKETS_PER_RUN` ustawiony z pomiaru, nie z przeczucia** *(faza 4)*
+
+  **Gdzie:** terminal, ten sam wynik `npm run eval:refinement`, blok
+  `MAX_TICKETS_PER_RUN candidates at p95 …` na końcu.
+
+  **Co zrobić:** przeczytaj `p95` oraz dwie zaproponowane wartości (budżet
+  requestu 60 s i TTL cache'u 5 min). Wybierz mniejszą z nich i powiedz mi,
+  jaką — wpiszę ją do `src/lib/refinement/analyze.ts` i do `plan.md`.
+  Sprawdź przy okazji `cache reads after ticket 1` — musi być pełne.
+
+  **Co musi być prawdą:** wybrana liczba pochodzi z wypisanego `p95`, a nie
+  z obecnej prowizorycznej ósemki. Jeśli `p95 × wybrany limit` przekracza
+  5 minut, na bloku systemowym ląduje `ttl: "1h"` w tym samym przebiegu.
+
+  **Dlaczego to ma znaczenie:** cały przebieg dzieje się wewnątrz jednego
+  requestu Workers, trzymając pulę Hyperdrive. Czego nie zdąży, to nie jest
+  wolna funkcja, tylko zawieszona strona. Faza 6 buduje synchroniczną
+  powierzchnię wprost na tej liczbie — limit, którego nikt nie zmierzył, to
+  limit, którego nikt nie ustawił.
 
 ---
 
