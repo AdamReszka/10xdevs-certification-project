@@ -27,6 +27,15 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
       *Dlaczego to ma znaczenie:* przed Phase 1 §3 nic poza seedem nie zapisywało
       tych skalarów, więc Reliability KPI był dla realnego ownera permanentnie
       pusty. To jedyny dowód, że zapis faktycznie działa na żywych danych.
+      ⚠️ **Ustalenie 2026-08-26: tego wiersza NIE DA SIĘ zamknąć na obecnym
+      koncie.** Prawdziwy cykl `syncOwner` na `demo@sprintflow.test` zapisał
+      `committed_sp/completed_sp = 0/0`, i to jest arytmetycznie poprawne —
+      wszystkie 4 tickety projektu FM (FM-1, FM-2, FM-3, FM-6) mają
+      `story_points = NULL`, bo ta Jira nie ma żadnych estymat. Ścieżka zapisu
+      **działa** (skalary zostały zapisane, nie zostawione jako NULL), ale
+      porównanie „z sumą SP w Jirze" jest puste po obu stronach. Żeby wiersz miał
+      sens, potrzeba projektu Jira z wypełnionymi story pointami — albo trzeba go
+      przepisać na „skalary są zapisywane, nie NULL", co jest już potwierdzone.
 
 - [ ] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
       obu dashboardach.
@@ -40,18 +49,19 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
 
 ---
 
-## 1a. Teraz — S-16 sprint-reconciliation (PR #52)
+## 1a. S-16 sprint-reconciliation — zmergowane (PR #52) i zarchiwizowane
 
-Kod dowieziony i zmergowalny; wszystkie 16 kryteriów automatycznych zielone.
-Te 5 wierszy zostało otwartych **świadomie** — merge bez nich jest decyzją, nie
-przeoczeniem. Pełne instrukcje krok po kroku:
-`context/changes/sprint-reconciliation/MANUAL-CHECKLIST.md`.
+Kod dowieziony, PR #52 zmergowany, slice zarchiwizowany. Wszystkie 16 kryteriów
+automatycznych zielone. Instrukcje krok po kroku:
+`context/archive/2026-08-26-sprint-reconciliation/MANUAL-CHECKLIST.md`.
 
-> 🔴 **3.6 to jest cały sens slice'u.** Dopóki nikt nie potwierdzi, że po
-> rollowerze w Jirze „Sync now" tworzy wiersz z **nowym** `jira_sprint_id`,
-> FR-007 nie ma dowodu na żywych danych. Tryb porażki jest podstępny: sync
-> raportuje zielono niezależnie od wyniku — dokładnie ten objaw uzasadnił
-> powstanie S-16.
+> ✅ **3.6 i 3.8 zamknięte 2026-08-26 dowodem na żywych danych** — bez klikania,
+> przez jednorazowy runner `syncOwner` przeciwko prawdziwej Jirze. Szczegóły przy
+> wierszach niżej. **FR-007 ma teraz dowód na żywych danych**, czego nie miał od
+> początku projektu.
+>
+> Zostają **3 wiersze wymagające przeglądarki** (2.7, 3.7, 4.6) — tych z CLI
+> zasymulować się nie da.
 
 - [ ] **2.7** Kreator `/setup/team` nadal działa po przepięciu na
       `reconcile-sprint.ts` (nazwa aktywnego sprintu + chooser tablic).
@@ -60,14 +70,27 @@ przeoczeniem. Pełne instrukcje krok po kroku:
       pokrywają serwis, ale nie spięcie Server Action → formularz → chooser.
       To jedyna ścieżka kadencji, jaka dziś istnieje w produkcie.
 
-- [ ] **3.6** Realny „Sync now" tworzy wiersz `sprint` zgodny z aktywnym
-      sprintem w Jirze. *Źródło:* `plan.md:823`
+- [x] **3.6** Realny „Sync now" tworzy wiersz `sprint` zgodny z aktywnym
+      sprintem w Jirze. **Zamknięte 2026-08-26 dowodem na żywych danych** —
+      zamiast czekać na prawdziwy rollover zainscenizowano jego *skutek*:
+      na koncie `demo@sprintflow.test` (prawdziwe credentiale, last4 `B9D0`)
+      wstawiono lewy wiersz `jira_sprint_id=999999` ACTIVE z późniejszą
+      `start_date`, żeby wygrywał `getActiveSprintRow` — czyli dokładnie kształt
+      incydentu `1001`. Jeden prawdziwy cykl `syncOwner` przeciwko żywej Jirze:
+      phantom → `CLOSED`, sprint Jiry (`jira_sprint_id=1`) → `ACTIVE`, 4 tickety
+      na właściwym sprincie, `cadence_overridden=true` i `length_days=14`
+      nietknięte, wynik `OK`. Konto przywrócone do stanu wyjściowego.
+      ⚠️ **Czego to NIE dowodzi:** gałąź INSERT. Jira miała ten sam sprint, więc
+      upsert poszedł gałęzią CONFLICT. Nadpisana kadencja na **nowo utworzonym**
+      wierszu jest pokryta tylko testem integracyjnym (case (i)), nie na żywo.
 
 - [ ] **3.7** Dashboard „Today" renderuje ticket'y i anomalie **nowego**
       sprintu, ze świeżym timestampem. *Źródło:* `plan.md:824`
+      *Wymaga przeglądarki* — nie da się zasymulować z CLI.
 
-- [ ] **3.8** `select count(*) from sprint where owner_id = $1 and state = 'ACTIVE'`
-      zwraca 1. *Źródło:* `plan.md:825`
+- [x] **3.8** `select count(*) from sprint where owner_id = $1 and state = 'ACTIVE'`
+      zwraca 1. **Zamknięte 2026-08-26** tym samym przebiegiem co 3.6: przed
+      cyklem 2 wiersze ACTIVE, po cyklu 1.
 
 - [ ] **4.6** Zmiana projektu Jiry w kreatorze nie zostawia starego sprintu.
       *Źródło:* `plan.md:839`
@@ -80,6 +103,11 @@ przeoczeniem. Pełne instrukcje krok po kroku:
 **Nie pokryte automatyką z innego powodu:** „okno pustki" po rollowerze
 (checklista, faza 3) — udokumentowane i zaakceptowane przy planowaniu, ale
 warto zobaczyć na oczy, że trwa sekundy, a nie minuty.
+
+**Uwaga o kanoniczności.** S-16 jest już zarchiwizowany, a
+`context/archive/**` jest read-only z konwencji, więc kratek w jego `plan.md`
+nie odhaczamy — **ten plik jest teraz jedynym aktualnym rejestrem** dla S-16.
+Zarchiwizowany plan pokazuje 5 pustych kratek i tak zostanie.
 
 ---
 

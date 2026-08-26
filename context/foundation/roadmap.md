@@ -499,13 +499,19 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-05       | data-sync-engine          | 15-min GitHub + Jira sync engine with Cloudflare Cron Trigger          | done                   | ✅ Implemented, reviewed & archived — PR #43 (2026-08-20) |
 | S-06       | anomaly-detection-engine  | 8-rule anomaly detection engine with default thresholds                | done                   | ✅ Implemented, reviewed & archived — PR #44 (2026-08-21) |
 | S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox (north-star core)                    | done                   | ✅ Implemented, reviewed & archived — PR #45 (2026-08-21); US-01 inbox-core (Sprint Pulse + Yesterday's Activity deferred to S-10) |
-| S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | yes                    | Prereqs S-04, S-06 done; parallel with S-10–S-14 |
-| S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | S-07 prereq done, but still blocked on Open Question #1 (demo↔real interaction) |
-| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | yes                    | Prereqs S-05, S-07 done; parallel with S-08, S-11–S-14 |
-| S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | yes                    | Prereqs S-06, S-07 done; parallel with S-08, S-10, S-13, S-14 |
+| S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | done                   | ✅ Implemented, reviewed & archived — PR #47 (2026-08-25) |
+| S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | Prereqs S-07, S-10 done; blocked on the demo↔real interaction decision (roadmap Open Question #1 = PRD Open Question #2). S-16 removed the wizard-side entry point to the `jira_sprint_id=1001` incident, but the full delineation is still this slice's call |
+| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | done                   | ✅ Implemented & reviewed — PR #46 (2026-08-23); change folder not yet archived |
+| S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | yes                    | **Next up.** Prereqs S-06, S-07 done; unblocks S-12. Resend not yet installed |
 | S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | no                     | Awaits S-11 |
-| S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; runs in parallel with most of Stream A |
-| S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | yes                    | Prereqs S-06, S-07 done; parallel with S-08–S-13 |
+| S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; the only AI surface. `@anthropic-ai/sdk` not yet installed |
+| S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | yes                    | Prereqs S-06, S-07 done; parallel with S-11–S-13 |
+| S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); change folder not yet archived |
+| S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |
+| S-17       | working-days-calendar     | Public holidays + company days off stop counting as working days        | yes                    | Prereq S-08 done. Post-MVP — no unshipped FR depends on it |
+| S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP |
+| S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
+| S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
 
 ## Open Roadmap Questions
 
