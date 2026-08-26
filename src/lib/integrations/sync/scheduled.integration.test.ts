@@ -122,3 +122,90 @@ describe("runScheduledSync", () => {
     expect(waitUntil).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * S-11 — the recap's own `try` is a SIBLING of the sync's, not nested inside it
+ * (plan-review F3). Nesting reads naturally as "a third step", and is wrong: a
+ * throw from `runOwner` or `runDetect` jumps straight to that catch and the
+ * recap is never reached — silencing the day's email for exactly the off-hours
+ * lead FR-018 exists for, who cannot see the dashboard's error banner.
+ */
+describe("runScheduledSync — daily recap", () => {
+  const noopSync = vi.fn(async () => ({
+    github: { status: "OK" as const },
+    jira: { status: "OK" as const },
+  })) as unknown as typeof import("@/lib/integrations/sync/run-sync").syncOwner;
+  const noopDetect = vi.fn(async () => undefined) as unknown as typeof import("@/lib/anomaly/detect").detectAnomalies;
+
+  function harness() {
+    return {
+      getDbWithPool: () => ({ db, pool: { end: vi.fn().mockResolvedValue(undefined) } as unknown as Pool }),
+      syncOwner: noopSync,
+      detectAnomalies: noopDetect,
+    };
+  }
+
+  it("counts recapsSent and leaves failed at 0 when the transport throws", async () => {
+    await seedUser(true);
+
+    const recap = vi.fn(async () => {
+      throw new Error("Could not reach Resend. Please try again.");
+    }) as unknown as typeof import("@/lib/recap/send").sendDailyRecap;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      sendDailyRecap: recap,
+    });
+
+    // A Resend failure is NOT a sync failure (`actions.ts:90-97` is the mirror).
+    expect(result.failed).toBe(0);
+    expect(result.recapsSent).toBe(0);
+    expect(result.synced).toBeGreaterThanOrEqual(1);
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain("[recap]");
+    errorSpy.mockRestore();
+  });
+
+  it("STILL reaches the recap for an owner whose sync threw", async () => {
+    const owner = await seedUser(true);
+
+    const throwingSync = vi.fn(async () => {
+      throw new Error("GitHub rejected the token (invalid or expired).");
+    }) as unknown as typeof import("@/lib/integrations/sync/run-sync").syncOwner;
+    const seen: string[] = [];
+    const recap = vi.fn(async ({ ownerId }: { ownerId: string }) => {
+      seen.push(ownerId);
+      return { status: "SENT" as const };
+    }) as unknown as typeof import("@/lib/recap/send").sendDailyRecap;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      syncOwner: throwingSync,
+      sendDailyRecap: recap,
+    });
+
+    // The whole point: an expired PAT or a Hyperdrive blip must not cost the
+    // owner their email. Every reader the recap calls is DB-only.
+    expect(seen).toContain(owner);
+    expect(result.failed).toBeGreaterThanOrEqual(1);
+    expect(result.recapsSent).toBeGreaterThanOrEqual(1);
+    errorSpy.mockRestore();
+  });
+
+  it("counts only SENT results, not SKIPPED ones", async () => {
+    await seedUser(true);
+
+    const recap = vi.fn(async () => ({
+      status: "SKIPPED" as const,
+      reason: "not_due",
+    })) as unknown as typeof import("@/lib/recap/send").sendDailyRecap;
+
+    const result = await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      sendDailyRecap: recap,
+    });
+
+    expect(result.recapsSent).toBe(0);
+  });
+});

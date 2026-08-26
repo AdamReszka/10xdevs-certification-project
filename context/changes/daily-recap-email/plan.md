@@ -1216,18 +1216,18 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `npm test`
-- [x] 4.2 Unit test: `toInboxAnomalies` null-coalesces and preserves order
-- [x] 4.3 Unit test: recap action strings are identical to the `AnomalyView` rows'
-- [x] 4.4 Unit tests: `escapeHtml` neutralizes markup, quotes and ampersands
-- [x] 4.5 Unit tests: renderer covers null `sourceUrl`, zero anomalies, null churn, non-OK integration status
-- [x] 4.6 Unit test: the renderer never emits `lastError` in the HTML or text body
-- [x] 4.7 Unit test: renderer preserves HIGH → MEDIUM → LOW order
-- [x] 4.8 Unit tests: `countTicketsMovedToDone` distinct-ticket counting and range bounds
-- [x] 4.9 Integration test: `getTicketsMovedToDone` is owner-scoped
-- [x] 4.10 Integration test: `buildRecapPayload` matches `listAnomaliesForSprint`
-- [x] 4.11 Type checking passes: `npx tsc --noEmit`
-- [x] 4.12 Linting passes: `npm run lint`
+- [x] 4.1 Unit tests pass: `npm test` — c51fe6b
+- [x] 4.2 Unit test: `toInboxAnomalies` null-coalesces and preserves order — c51fe6b
+- [x] 4.3 Unit test: recap action strings are identical to the `AnomalyView` rows' — c51fe6b
+- [x] 4.4 Unit tests: `escapeHtml` neutralizes markup, quotes and ampersands — c51fe6b
+- [x] 4.5 Unit tests: renderer covers null `sourceUrl`, zero anomalies, null churn, non-OK integration status — c51fe6b
+- [x] 4.6 Unit test: the renderer never emits `lastError` in the HTML or text body — c51fe6b
+- [x] 4.7 Unit test: renderer preserves HIGH → MEDIUM → LOW order — c51fe6b
+- [x] 4.8 Unit tests: `countTicketsMovedToDone` distinct-ticket counting and range bounds — c51fe6b
+- [x] 4.9 Integration test: `getTicketsMovedToDone` is owner-scoped — c51fe6b
+- [x] 4.10 Integration test: `buildRecapPayload` matches `listAnomaliesForSprint` — c51fe6b
+- [x] 4.11 Type checking passes: `npx tsc --noEmit` — c51fe6b
+- [x] 4.12 Linting passes: `npm run lint` — c51fe6b
 
 #### Manual
 
@@ -1237,20 +1237,20 @@ is exercised by the very first email.
 
 #### Automated
 
-- [ ] 5.1 Unit tests pass: `npm test`
-- [ ] 5.2 Unit tests: `localTimeOfDay` across DST both directions and a half-hour zone
-- [ ] 5.3 Unit tests: `isRecapDue` boundaries, disabled, null zone
-- [ ] 5.4 Integration test: concurrent sends produce exactly one transport call and one `SENT` row
-- [ ] 5.5 Integration test: FAILED retries and stops at `attempt_count = 3`
-- [ ] 5.6 Integration test: stale PENDING reclaimed, fresh PENDING skipped
-- [ ] 5.7 Integration test: an owner with no sprint row is `SKIPPED("no_sprint")` and no row is written
-- [ ] 5.8 Integration test: an owner with `enabled: false` is skipped
-- [ ] 5.9 Integration test: a retry re-sends the stored `rendered_message` byte-for-byte and does not re-render
-- [ ] 5.10 Unit test: a transport throw leaves `runScheduledSync`'s `failed` at 0
-- [ ] 5.11 Unit test: a `runOwner` throw still reaches `sendDailyRecap` for that owner
-- [ ] 5.12 Type checking passes: `npx tsc --noEmit`
-- [ ] 5.13 Linting passes: `npm run lint`
-- [ ] 5.14 Integration suite passes: `npm run test:integration`
+- [x] 5.1 Unit tests pass: `npm test`
+- [x] 5.2 Unit tests: `localTimeOfDay` across DST both directions and a half-hour zone
+- [x] 5.3 Unit tests: `isRecapDue` boundaries, disabled, null zone
+- [x] 5.4 Integration test: concurrent sends produce exactly one transport call and one `SENT` row
+- [x] 5.5 Integration test: FAILED retries and stops at `attempt_count = 3`
+- [x] 5.6 Integration test: stale PENDING reclaimed, fresh PENDING skipped
+- [x] 5.7 Integration test: an owner with no sprint row is `SKIPPED("no_sprint")` and no row is written
+- [x] 5.8 Integration test: an owner with `enabled: false` is skipped
+- [x] 5.9 Integration test: a retry re-sends the stored `rendered_message` byte-for-byte and does not re-render
+- [x] 5.10 Unit test: a transport throw leaves `runScheduledSync`'s `failed` at 0
+- [x] 5.11 Unit test: a `runOwner` throw still reaches `sendDailyRecap` for that owner
+- [x] 5.12 Type checking passes: `npx tsc --noEmit`
+- [x] 5.13 Linting passes: `npm run lint`
+- [x] 5.14 Integration suite passes: `npm run test:integration`
 
 #### Manual
 
