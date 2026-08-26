@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { jiraCredential, jiraProject, statusMapping, user } from "@/db/schema";
+import { jiraCredential, jiraProject, sprint, statusMapping, user } from "@/db/schema";
 import { JiraAuthError } from "@/lib/jira";
 import {
   disconnectJira,
@@ -330,6 +330,99 @@ describe("jira-store service — credential security (integration)", () => {
         .from(statusMapping)
         .where(eq(statusMapping.jiraProjectId, projects[0].id));
       expect(mappings).toHaveLength(3);
+    });
+  });
+
+  // S-16 item E — symmetry with the settings path (`connection-service.ts:405-411`).
+  // `storeJiraIntegration` upserts `jira_project` IN PLACE, preserving the row id
+  // so `status_mapping`'s FK stays valid — which means nothing cascades on a
+  // project switch and the sprint has to be discarded explicitly. Without it, a
+  // demo-seeded sprint survives and is silently re-parented onto the real
+  // project: `project_key` flips while `jira_sprint_id` stays `1001`, the
+  // documented "green sync, empty dashboard" incident.
+  describe("S-16 changing the monitored project discards the previous sprint", () => {
+    async function connect(ownerId: string, jiraProjectId: string) {
+      await storeJiraIntegration({
+        db,
+        ownerId,
+        baseUrl: BASE,
+        workspaceUrl: BASE,
+        creds: CREDS,
+        jiraProjectId,
+        mappings: FULL_MAPPINGS,
+        opts: { fetchImpl: makeFetch() },
+      });
+      const [proj] = await db
+        .select()
+        .from(jiraProject)
+        .where(eq(jiraProject.ownerId, ownerId));
+      return proj;
+    }
+
+    async function seedSprintFor(ownerId: string, projectRowId: string) {
+      await db.insert(sprint).values({
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId: projectRowId,
+        jiraSprintId: "1001",
+        name: "Sprint 24",
+        state: "ACTIVE",
+        startDate: new Date("2026-08-17T08:00:00.000Z"),
+        endDate: new Date("2026-08-31T08:00:00.000Z"),
+      });
+    }
+
+    it("switching from project A to project B leaves zero sprints", async () => {
+      const ownerId = await seedUser();
+      owners.push(ownerId);
+
+      const projA = await connect(ownerId, "10000");
+      await seedSprintFor(ownerId, projA.id);
+      // `board_id` / `time_zone` both describe the project being left behind.
+      await db
+        .update(jiraProject)
+        .set({ boardId: "77", timeZone: "Europe/Warsaw" })
+        .where(eq(jiraProject.id, projA.id));
+
+      await connect(ownerId, "10001");
+
+      const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+      expect(rows).toHaveLength(0);
+
+      const [proj] = await db
+        .select()
+        .from(jiraProject)
+        .where(eq(jiraProject.ownerId, ownerId));
+      expect(proj.projectKey).toBe("EX");
+      expect(proj.boardId).toBeNull();
+      expect(proj.timeZone).toBeNull();
+    });
+
+    // The control: the settings path draws the same distinction
+    // (`connection-service.ts:404`). Re-storing the SAME project is a credential
+    // refresh, not a switch, and must not destroy synced history.
+    it("re-storing the SAME project keeps the sprint", async () => {
+      const ownerId = await seedUser();
+      owners.push(ownerId);
+
+      const projA = await connect(ownerId, "10000");
+      await seedSprintFor(ownerId, projA.id);
+      await db
+        .update(jiraProject)
+        .set({ boardId: "77" })
+        .where(eq(jiraProject.id, projA.id));
+
+      await connect(ownerId, "10000");
+
+      const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].jiraSprintId).toBe("1001");
+
+      const [proj] = await db
+        .select()
+        .from(jiraProject)
+        .where(eq(jiraProject.ownerId, ownerId));
+      expect(proj.boardId).toBe("77");
     });
   });
 

@@ -21,7 +21,12 @@ import { getActiveSprintRow } from "@/lib/sprint";
  * sprint's absences" would hide two things the owner needs: a vacation booked
  * for next month (entered, then apparently vanished) and a past absence they
  * want to correct. At the PRD's 3–10-person scale the whole set is a handful of
- * rows, and retention already bounds it to current + 2 previous sprints.
+ * rows, and retention is *planned* to bound it to current + 2 previous sprints
+ * (PRD FR-019; the purge itself is S-12 and does not exist yet — the only
+ * retention in the codebase today is `SYNC_ATTEMPT_RETENTION` for the
+ * operational log). S-16 turned "one sprint row per owner" into a growing
+ * series, so the unbounded list is a real, if small, growth path rather than a
+ * bounded one. The reasoning above still holds; the bound does not yet.
  */
 export default async function AbsenceSettingsPage() {
   const session = await requireSession();

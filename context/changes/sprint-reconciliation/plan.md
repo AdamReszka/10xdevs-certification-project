@@ -812,11 +812,11 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `npx tsc --noEmit`
-- [x] 3.2 Linting passes: `npm run lint`
-- [x] 3.3 Unit tests pass: `npm test`
-- [x] 3.4 Integration tests pass: `npm run test:integration`
-- [x] 3.5 Mutation score holds: `npm run test:mutation` (regression guard only — Stryker is scoped to the anomaly rules)
+- [x] 3.1 Type checking passes: `npx tsc --noEmit` — 5912485
+- [x] 3.2 Linting passes: `npm run lint` — 5912485
+- [x] 3.3 Unit tests pass: `npm test` — 5912485
+- [x] 3.4 Integration tests pass: `npm run test:integration` — 5912485
+- [x] 3.5 Mutation score holds: `npm run test:mutation` (regression guard only — Stryker is scoped to the anomaly rules) — 5912485
 
 #### Manual
 
@@ -828,11 +828,11 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Automated
 
-- [ ] 4.1 Type checking passes: `npx tsc --noEmit`
-- [ ] 4.2 Linting passes: `npm run lint`
-- [ ] 4.3 Unit tests pass: `npm test`
-- [ ] 4.4 Integration tests pass: `npm run test:integration`
-- [ ] 4.5 The lesson landed: `grep -c "^## " context/foundation/lessons.md` returns `6`
+- [x] 4.1 Type checking passes: `npx tsc --noEmit`
+- [x] 4.2 Linting passes: `npm run lint`
+- [x] 4.3 Unit tests pass: `npm test`
+- [x] 4.4 Integration tests pass: `npm run test:integration`
+- [x] 4.5 The lesson landed: `grep -c "^## " context/foundation/lessons.md` returns `6`
 
 #### Manual
 

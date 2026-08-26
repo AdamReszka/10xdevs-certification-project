@@ -115,20 +115,37 @@ Jiry. Na lokalnej bazie to `demo@sprintflow.test` — nazwy kont są mylące, pa
 
 ## Faza 4
 
-- [ ] **4.6 — zmiana projektu Jiry w kreatorze kasuje stary sprint** *(faza 4)*
+- [ ] **4.6 — zmiana projektu Jiry w kreatorze nie zostawia starego sprintu** *(faza 4)*
 
   **Gdzie:** `/setup/jira` na koncie lokalnym (**nie** na tym z prawdziwymi
   tokenami — ten wiersz celowo niszczy dane).
 
+  ⚠️ **Przeczytaj najpierw — wiersz jest inny, niż zakładał plan.** Podczas
+  fazy 4 ustaliliśmy (pre-condition F6 z review), że kreator **nie renderuje**
+  formularza wyboru projektu, dopóki konto ma wiersz `jira_credential` —
+  `setup/jira/page.tsx:64-66` pokazuje wtedy kartę „Jira connected". Żeby wrócić
+  do wyboru projektu, trzeba nacisnąć **Disconnect**, a to kasuje credential →
+  `jira_project` leci CASCADE → `sprint` leci CASCADE (zweryfikowane na żywej
+  bazie). Delete dopisany w fazie 4 jest więc **zabezpieczeniem**, nie ścieżką
+  utraty danych — i dlatego celowo nie ma confirmation dialogu, który ma
+  odpowiednik w `/settings/connections`.
+
   **Co zrobić:**
   1. Ustaw projekt A, dojedź kreator do końca tak, żeby powstał wiersz `sprint`.
-  2. Wróć do kroku Jiry i wybierz **inny** projekt (B).
-  3. Sprawdź: `select count(*) from sprint where owner_id = '<id>';`
+     Potwierdź: `select count(*) from sprint where owner_id = '<id>';` → 1.
+  2. Wróć na `/setup/jira`. **Sprawdź, co widzisz** — powinna być karta
+     „Jira connected", *nie* formularz wyboru projektu.
+  3. Naciśnij **Disconnect**, wybierz projekt B i dojedź kreator.
+  4. Sprawdź ponownie: `select count(*) from sprint where owner_id = '<id>';`
 
-  **Co musi być prawdą:** zero wierszy `sprint` po zmianie projektu — tak samo
-  jak robi to już ścieżka z `/settings/connections`.
+  **Co musi być prawdą:** po kroku 2 widzisz kartę statusu (a nie picker); po
+  kroku 4 nie ma ani jednego wiersza `sprint` należącego do projektu A.
+  Jeśli w kroku 2 **zobaczysz picker projektu** — to jest znalezisko: znaczy,
+  że guard się zmienił i defensywny delete z fazy 4 stał się ścieżką realną,
+  a wtedy potrzebuje confirmation dialogu tak jak ścieżka w ustawieniach.
 
   **Dlaczego to ma znaczenie:** to jest wejście do udokumentowanego incydentu
   `jira_sprint_id=1001` — sprint z demo-seeda przeżywał podłączenie prawdziwej
   Jiry i był cicho przepinany pod prawdziwy projekt, przez co sync raportował
-  zielono, a dashboard był pusty.
+  zielono, a dashboard był pusty. Krok 2 jest tu ważniejszy od kroku 4: pilnuje
+  założenia, na którym oparliśmy brak confirmation dialogu.
