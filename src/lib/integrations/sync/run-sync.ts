@@ -644,6 +644,20 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
     // permission. It also supplies the IANA zone `deriveCadence` needs (F3).
     const identity = await validateCredentials(baseUrl, jiraCreds, args.jiraOpts);
 
+    // Persist the zone HERE, not in the transaction below — that one sits under
+    // the `!chosenSprint` early return, so a between-sprints owner never got a
+    // zone written and their "15:00 local" recap (S-11, FR-018) silently meant
+    // 15:00 UTC. A single-statement UPDATE outside a transaction does not
+    // violate the reads-before-txn rule (F1): it is a DB write, not a network
+    // call, and it has no other statement to be atomic with.
+    //
+    // `ownerId` asserted, not inherited from the upstream read (impl-review F9).
+    // There is no RLS behind this — every table carries its own scope.
+    await db
+      .update(jiraProject)
+      .set({ timeZone: identity.timeZone ?? null })
+      .where(and(eq(jiraProject.ownerId, ownerId), eq(jiraProject.id, project.id)));
+
     // --- The reconcile seam (S-16, FR-007 "on each sync") -----------------
     // Ask Jira which sprint is actually active BEFORE deciding what to pull, so
     // a rollover is followed within one cycle and an owner who onboarded
@@ -719,13 +733,9 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
     // --- Pure DB writes inside one short transaction ----------------------
     await db.transaction(async (tx) => {
-      await tx
-        .update(jiraProject)
-        .set({ timeZone: identity.timeZone ?? null })
-        // `ownerId` asserted, not inherited from the upstream read (impl-review
-        // F9). There is no RLS behind this — every table carries its own scope,
-        // the way the `sprint` update below does.
-        .where(and(eq(jiraProject.ownerId, ownerId), eq(jiraProject.id, project.id)));
+      // NOTE: `jiraProject.timeZone` is written ABOVE, right after
+      // `validateCredentials` — deliberately outside this transaction so it also
+      // lands for an owner the `!chosenSprint` early return sends home.
 
       for (const issue of issues) {
         const lastStatusChangeAt = issue.statusHistory.reduce<Date | null>((acc, h) => {

@@ -1,7 +1,7 @@
 ---
 change_id: daily-recap-email
 title: Send the lead a daily recap email so the off-hours case is covered
-status: preparing
+status: implementing
 created: 2026-08-26
 updated: 2026-08-26
 archived_at: null
@@ -118,7 +118,16 @@ Checked against the live account on 2026-08-26: **two ACTIVE anomalies**,
 theoretical edge — it is in the very first email this project will ever send.
 The template must handle it from day one, and the manual checklist should say so.
 
-## Open at plan time
+## Open at plan time — RESOLVED in `plan.md` (2026-08-26)
+
+All three are settled; kept below for the reasoning trail. Resolutions: the send
+fires on the **first cron tick at-or-after the owner's local send time**, made
+exactly-once by `unique(owner_id, recap_day)` plus a claim-first insert (not by a
+crossing-detector); the stored row keys off `recap_day` with `sprint_id`
+**excluded from the dedup key** but retained for S-12's sprint-scoped purge; and
+the configured time gets a full `/settings/recap` surface with hour **and**
+minute, labelled as the *earliest* send time because the cron resolves to 15 min.
+
 
 - **Scheduling.** `wrangler.jsonc` already runs a 15-minute cron
   (`*/15 * * * *` → `scheduled` in `src/worker.ts`) for the sync loop. FR-018's
