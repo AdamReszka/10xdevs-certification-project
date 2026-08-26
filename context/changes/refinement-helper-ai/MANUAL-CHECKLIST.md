@@ -34,6 +34,49 @@ Jiry. Na lokalnej bazie to `demo@sprintflow.test` — nazwy kont są mylące, pa
 
 ---
 
+## Faza 2
+
+Oba wiersze zamyka jedno uruchomienie:
+`npx vitest run --config vitest.eval.config.ts scripts/jira-refinement.eval.ts`
+Skrypt sam znajduje konto po `token_last4` (`B9D0`) i odmawia startu na innej
+bazie niż lokalna Supabase. Tokenu nie wypisuje.
+
+- [ ] **2.5 — ścieżka boardu zwraca BACKLOG, nie aktywny sprint** *(faza 2)*
+
+  **Gdzie:** terminal, komenda wyżej. Konto z prawdziwymi credentialami Jiry.
+
+  **Co zrobić:** przeczytaj wiersz `2.5` w wyniku oraz dwie linie `[eval]`:
+  listę kluczy backlogu i listę kluczy aktywnego sprintu.
+
+  **Co musi być prawdą:** test `2.5` jest zielony (części wspólnej brak) **oraz**
+  lista backlogu nie jest pusta. Jeśli skrypt wypisze ostrzeżenie „no active
+  sprint", rozstrzygnięcie należy do Ciebie — spójrz na listę kluczy i potwierdź,
+  że to backlog, a nie zawartość sprintu.
+
+  **Dlaczego to ma znaczenie:** cykl sync czyta wyłącznie `sprint = <id>`, więc
+  backlog to zupełnie inna ścieżka (`/rest/agile/1.0/board/{id}/backlog`).
+  `lessons.md` ostrzega, że zawężenie na złej wartości zwraca pustkę, która
+  czyta się jak sukces — dlatego rozłączność zbiorów jest asercją, a nie oceną.
+
+- [ ] **2.4 — prawdziwy ADF spłaszcza się do czytelnego tekstu** *(faza 2)*
+
+  **Gdzie:** ten sam wynik, wiersz `2.4` i wypisane ramki ticketów.
+
+  **Co zrobić:** przeczytaj bloki `DESCRIPTION` i `COMMENTS` dla wypisanych
+  ticketów. Jeśli backlog jest pusty albo chcesz wskazać konkretne zadania,
+  ustaw `JIRA_EVAL_KEYS=FM-1,FM-2` przed komendą.
+
+  **Co musi być prawdą:** tekst da się przeczytać — listy wyglądają jak listy
+  (`- `), nagłówki mają `#`, a linki niosą swój URL w nawiasie. Załączniki
+  pokazują nazwę i typ MIME. Ściana tekstu bez podziału na linie albo puste
+  `DESCRIPTION` przy tickecie, który w Jirze opis ma, to porażka.
+
+  **Dlaczego to ma znaczenie:** fixture'y dowodzą tylko tych typów węzłów, które
+  przewidzieliśmy. Prawdziwy opis jest jedynym dowodem na te, których nie —
+  a URL linku jest wprost dowodem dla klasy braku `MOCKUP_MISSING` w fazie 4.
+
+---
+
 ## Faza 4
 
 - [ ] **4.6 — kompletny ticket nie generuje żadnego braku** *(faza 4)*

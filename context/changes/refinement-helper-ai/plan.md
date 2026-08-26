@@ -933,24 +933,24 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 1.1 `npm run lint` passes
-- [x] 1.2 `npx tsc --noEmit` passes
-- [x] 1.3 `npm test` passes with `anthropic.test.ts` and collects nothing from `scripts/`
-- [x] 1.4 A test asserts `AnthropicConfigError` through the real resolver with no key
-- [x] 1.7 A test asserts `AnthropicTruncatedError` on `stop_reason: "max_tokens"`
+- [x] 1.1 `npm run lint` passes — 806fc2b
+- [x] 1.2 `npx tsc --noEmit` passes — 806fc2b
+- [x] 1.3 `npm test` passes with `anthropic.test.ts` and collects nothing from `scripts/` — 806fc2b
+- [x] 1.4 A test asserts `AnthropicConfigError` through the real resolver with no key — 806fc2b
+- [x] 1.7 A test asserts `AnthropicTruncatedError` on `stop_reason: "max_tokens"` — 806fc2b
 
 #### Manual
 
-- [x] 1.5 `scripts/anthropic-smoke.eval.ts` returns parsed JSON from the real API
-- [x] 1.6 Key unset yields the config error naming both provisioning routes
+- [x] 1.5 `scripts/anthropic-smoke.eval.ts` returns parsed JSON from the real API — 806fc2b
+- [x] 1.6 Key unset yields the config error naming both provisioning routes — 806fc2b
 
 ### Phase 2: Reading the real ticket out of Jira
 
 #### Automated
 
-- [ ] 2.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [ ] 2.2 ADF flattening covers every contracted node type plus malformed and over-deep inputs
-- [ ] 2.3 `fetchRefinementTickets` reports requested keys Jira did not return
+- [x] 2.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
+- [x] 2.2 ADF flattening covers every contracted node type plus malformed and over-deep inputs
+- [x] 2.3 `fetchRefinementTickets` reports requested keys Jira did not return
 
 #### Manual
 

@@ -20,6 +20,8 @@
  * return value.
  */
 
+import { flattenAdf } from "@/lib/jira-adf";
+
 const API_VERSION_PATH = "/rest/api/3";
 /** Jira Agile (Software) API — same host + Basic auth as v3, different base path (S-04 cadence). */
 const AGILE_API_PATH = "/rest/agile/1.0";
@@ -978,4 +980,409 @@ export async function resolveStoryPointFieldId(
     }
   }
   return null;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Refinement reader (S-13 phase 2)
+ * ------------------------------------------------------------------------- */
+
+/** One hop out of a ticket — a subtask or an issue link — with enough status to
+ * answer "is the thing this depends on done?" without a second round trip. The
+ * walk is deliberately ONE hop: a two-step blockage stays invisible (plan,
+ * "What We're NOT Doing"). */
+export type JiraRefinementRelation = {
+  key: string;
+  summary: string | null;
+  status: string | null;
+  /** Jira's own coarse `statusCategory.key` (`new` / `indeterminate` / `done`) —
+   * raw, because the owner's 5-category mapping is the store's business, not the
+   * client's. */
+  category: string | null;
+  /** `"subtask"`, or the link type's directional name ("is blocked by"). */
+  relation: string;
+};
+
+/** A ticket as the Refinement analysis reads it: everything a lead would look at
+ * during refinement, flattened to text. Deliberately NOT persisted — the plan
+ * stores verdicts, never ticket bodies. */
+export type JiraRefinementTicket = {
+  key: string;
+  summary: string | null;
+  issueType: string | null;
+  /** ADF flattened to text; `""` when Jira sent no description. */
+  description: string;
+  /** Flattened comment bodies, newest-last, capped at
+   * {@link MAX_COMMENTS_PER_TICKET}. */
+  comments: string[];
+  /** Names and mime types ONLY. The user's test is whether the *name* implies
+   * the right file, so no attachment bytes are ever fetched. */
+  attachments: { filename: string; mimeType: string | null }[];
+  links: JiraRefinementRelation[];
+  subtasks: JiraRefinementRelation[];
+  dueDate: string | null;
+  labels: string[];
+  priority: string | null;
+  sourceUrl: string | null;
+};
+
+/**
+ * The caller asked for something this reader will not do: no keys at all, a key
+ * that is not a Jira key, or more tickets than one call may carry. Distinct from
+ * `JiraAuthError` / `JiraUnavailableError` because Jira was never asked — the
+ * fault is in the request, and the surface must say so rather than offering a
+ * retry that cannot help. Never carries the token.
+ */
+export class JiraRefinementInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "JiraRefinementInputError";
+  }
+}
+
+/** Tickets one call may read. Equal to the search page size, so the keys path is
+ * always a single request. Exported so the surface can reject an oversized
+ * selection before spending a model call on it. */
+export const MAX_REFINEMENT_TICKETS_PER_CALL = 50;
+
+/** Jira issue-key shape (`FM-12`). Validated rather than escaped: the key is
+ * interpolated into JQL, and the only safe input is one that cannot contain a
+ * quote in the first place — the discipline already applied to `projectKey`. */
+const JIRA_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
+
+/** Newest comments kept per ticket. Refinement context lives at the end of a
+ * thread; the first ten comments of a year-old ticket are noise in the prompt. */
+const MAX_COMMENTS_PER_TICKET = 10;
+
+/** Everything the analysis reads off an issue. `searchSprintIssues` asks for
+ * four of these; refinement needs the ticket's actual content. */
+const REFINEMENT_FIELDS = [
+  "summary",
+  "status",
+  "issuetype",
+  "description",
+  "comment",
+  "attachment",
+  "issuelinks",
+  "subtasks",
+  "duedate",
+  "labels",
+  "priority",
+  "created",
+];
+
+export type FetchRefinementTicketsParams =
+  | { keys: string[] }
+  | { boardId: number };
+
+/** What the reader returns. Not a bare array: `lessons.md` — an empty result
+ * from a narrowed query must be distinguishable from "the narrowing value was
+ * wrong", so keys Jira did not answer for are named, not silently absent. */
+export type RefinementTicketsResult = {
+  tickets: JiraRefinementTicket[];
+  /** Requested keys Jira returned nothing for (typo, wrong project, no
+   * permission). Empty on the board path. */
+  missingKeys: string[];
+};
+
+function relationOf(
+  raw: unknown,
+  relation: string,
+): JiraRefinementRelation | null {
+  if (!raw || typeof raw !== "object") return null;
+  const issue = raw as { key?: unknown; fields?: Record<string, unknown> };
+  if (typeof issue.key !== "string") return null;
+  const fields = issue.fields ?? {};
+  const status = fields.status as
+    | { name?: unknown; statusCategory?: { key?: unknown } }
+    | undefined;
+  return {
+    key: issue.key,
+    summary: typeof fields.summary === "string" ? fields.summary : null,
+    status: typeof status?.name === "string" ? status.name : null,
+    category:
+      typeof status?.statusCategory?.key === "string"
+        ? status.statusCategory.key
+        : null,
+    relation,
+  };
+}
+
+function parseIssueLinks(raw: unknown): JiraRefinementRelation[] {
+  if (!Array.isArray(raw)) return [];
+  const links: JiraRefinementRelation[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const link = entry as {
+      type?: { inward?: unknown; outward?: unknown };
+      inwardIssue?: unknown;
+      outwardIssue?: unknown;
+    };
+    if (link.inwardIssue) {
+      const name =
+        typeof link.type?.inward === "string" ? link.type.inward : "relates to";
+      const rel = relationOf(link.inwardIssue, name);
+      if (rel) links.push(rel);
+    }
+    if (link.outwardIssue) {
+      const name =
+        typeof link.type?.outward === "string" ? link.type.outward : "relates to";
+      const rel = relationOf(link.outwardIssue, name);
+      if (rel) links.push(rel);
+    }
+  }
+  return links;
+}
+
+function parseAttachments(
+  raw: unknown,
+): { filename: string; mimeType: string | null }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { filename: string; mimeType: string | null }[] = [];
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue;
+    const att = entry as { filename?: unknown; mimeType?: unknown };
+    if (typeof att.filename !== "string") continue;
+    out.push({
+      filename: att.filename,
+      mimeType: typeof att.mimeType === "string" ? att.mimeType : null,
+    });
+  }
+  return out;
+}
+
+function parseComments(raw: unknown): string[] {
+  const comments =
+    raw && typeof raw === "object" && "comments" in raw
+      ? (raw as { comments?: unknown }).comments
+      : undefined;
+  if (!Array.isArray(comments)) return [];
+  return comments
+    .slice(-MAX_COMMENTS_PER_TICKET)
+    .map((c) =>
+      flattenAdf(
+        c && typeof c === "object" ? (c as { body?: unknown }).body : null,
+      ),
+    )
+    .filter((text) => text.length > 0);
+}
+
+/** Map one raw Jira issue onto the refinement shape. */
+function toRefinementTicket(
+  baseUrl: string,
+  issue: { key?: unknown; fields?: Record<string, unknown> },
+): JiraRefinementTicket | null {
+  if (typeof issue.key !== "string") return null;
+  const f = issue.fields ?? {};
+  const issueType = f.issuetype as { name?: unknown } | undefined;
+  const priority = f.priority as { name?: unknown } | undefined;
+
+  return {
+    key: issue.key,
+    summary: typeof f.summary === "string" ? f.summary : null,
+    issueType: typeof issueType?.name === "string" ? issueType.name : null,
+    description: flattenAdf(f.description),
+    comments: parseComments(f.comment),
+    attachments: parseAttachments(f.attachment),
+    links: parseIssueLinks(f.issuelinks),
+    subtasks: Array.isArray(f.subtasks)
+      ? f.subtasks
+          .map((s) => relationOf(s, "subtask"))
+          .filter((s): s is JiraRefinementRelation => s !== null)
+      : [],
+    dueDate: typeof f.duedate === "string" ? f.duedate : null,
+    labels: Array.isArray(f.labels)
+      ? f.labels.filter((l): l is string => typeof l === "string")
+      : [],
+    priority: typeof priority?.name === "string" ? priority.name : null,
+    sourceUrl: `${baseUrl}/browse/${issue.key}`,
+  };
+}
+
+/** Uppercase, de-duplicate and validate the caller's keys, or refuse. */
+function normalizeRequestedKeys(raw: string[]): string[] {
+  const keys: string[] = [];
+  for (const key of raw) {
+    const trimmed = typeof key === "string" ? key.trim() : "";
+    if (!JIRA_KEY_PATTERN.test(trimmed)) {
+      throw new JiraRefinementInputError(
+        `"${trimmed}" is not a Jira issue key (expected a form like FM-12).`,
+      );
+    }
+    const upper = trimmed.toUpperCase();
+    if (!keys.includes(upper)) keys.push(upper);
+  }
+  if (keys.length === 0) {
+    throw new JiraRefinementInputError(
+      "No tickets were selected to analyse.",
+    );
+  }
+  if (keys.length > MAX_REFINEMENT_TICKETS_PER_CALL) {
+    throw new JiraRefinementInputError(
+      `Too many tickets in one request (${keys.length}); the limit is ${MAX_REFINEMENT_TICKETS_PER_CALL}.`,
+    );
+  }
+  return keys;
+}
+
+/** Read `fields` off one page of issues into refinement tickets. */
+function collectPage(
+  baseUrl: string,
+  issues: unknown,
+  into: JiraRefinementTicket[],
+): number {
+  const list = Array.isArray(issues) ? issues : [];
+  for (const issue of list) {
+    if (!issue || typeof issue !== "object") continue;
+    const ticket = toRefinementTicket(
+      baseUrl,
+      issue as { key?: unknown; fields?: Record<string, unknown> },
+    );
+    if (ticket) into.push(ticket);
+  }
+  return list.length;
+}
+
+/** The keys route: one `/search/jql` call, because the per-call cap equals the
+ * page size, so there is never a second page to chase. */
+async function fetchTicketsByKey(
+  baseUrl: string,
+  creds: JiraCreds,
+  requested: string[],
+  opts: JiraClientOpts | undefined,
+): Promise<RefinementTicketsResult> {
+  const keys = normalizeRequestedKeys(requested);
+  const jql = `key IN (${keys.map((k) => `"${k}"`).join(", ")}) ORDER BY key ASC`;
+
+  const query = new URLSearchParams({
+    jql,
+    fields: REFINEMENT_FIELDS.join(","),
+    maxResults: String(MAX_REFINEMENT_TICKETS_PER_CALL),
+  });
+
+  const res = await jiraGet(
+    `${baseUrl}${API_VERSION_PATH}/search/jql?${query.toString()}`,
+    creds,
+    opts,
+  );
+  if (res.status === 401) {
+    throw new JiraAuthError();
+  }
+  if (!res.ok) {
+    throw new JiraUnavailableError(
+      `Jira responded with ${res.status} while reading tickets. Please try again.`,
+    );
+  }
+
+  let page: { issues?: unknown };
+  try {
+    page = (await res.json()) as typeof page;
+  } catch {
+    throw new JiraUnavailableError(
+      "Jira returned an unreadable ticket response. Please try again.",
+    );
+  }
+
+  const tickets: JiraRefinementTicket[] = [];
+  collectPage(baseUrl, page.issues, tickets);
+
+  // lessons.md: a narrowed query returning less than was asked for must name
+  // what is missing. A typo'd key, a key in another project, or one the token
+  // cannot see all come back as silence from Jira — and silence that reads as
+  // "that ticket is fine" is the failure this reporting exists to prevent.
+  const returned = new Set(tickets.map((t) => t.key.toUpperCase()));
+  return { tickets, missingKeys: keys.filter((k) => !returned.has(k)) };
+}
+
+/**
+ * The board route: the Agile **backlog** endpoint, which is a different read
+ * from anything the sync cycle does. `searchSprintIssues` narrows on
+ * `sprint = <id>` and therefore can only ever see the active sprint; refinement
+ * is about what has NOT entered a sprint yet. Offset-paginated like `listBoards`
+ * (no server-directed link to chase) and capped at `MAX_AGILE_PAGES`.
+ */
+async function fetchBacklogTickets(
+  baseUrl: string,
+  creds: JiraCreds,
+  boardId: number,
+  opts: JiraClientOpts | undefined,
+): Promise<JiraRefinementTicket[]> {
+  if (!Number.isInteger(boardId) || boardId <= 0) {
+    throw new JiraRefinementInputError(
+      `"${boardId}" is not a Jira board id.`,
+    );
+  }
+
+  const tickets: JiraRefinementTicket[] = [];
+  const maxResults = 50;
+  let startAt = 0;
+  let pageCount = 0;
+
+  for (;;) {
+    if (++pageCount > MAX_AGILE_PAGES) {
+      throw new JiraUnavailableError(
+        `Jira backlog exceeded ${MAX_AGILE_PAGES} pages. Please try again.`,
+      );
+    }
+    const query = new URLSearchParams({
+      startAt: String(startAt),
+      maxResults: String(maxResults),
+      fields: REFINEMENT_FIELDS.join(","),
+    });
+    const res = await jiraGet(
+      `${baseUrl}${AGILE_API_PATH}/board/${boardId}/backlog?${query.toString()}`,
+      creds,
+      opts,
+    );
+    if (res.status === 401) {
+      throw new JiraAuthError();
+    }
+    if (res.status === 404) {
+      throw new JiraBoardNotFoundError();
+    }
+    if (!res.ok) {
+      throw new JiraUnavailableError(
+        `Jira responded with ${res.status} while reading the backlog. Please try again.`,
+      );
+    }
+
+    let page: { issues?: unknown; total?: unknown };
+    try {
+      page = (await res.json()) as typeof page;
+    } catch {
+      throw new JiraUnavailableError(
+        "Jira returned an unreadable backlog. Please try again.",
+      );
+    }
+
+    const seen = collectPage(baseUrl, page.issues, tickets);
+    if (seen === 0 || seen < maxResults) break;
+    startAt += seen;
+    if (typeof page.total === "number" && startAt >= page.total) break;
+  }
+
+  return tickets;
+}
+
+/**
+ * Read the full analysis-relevant content of a set of tickets, either by key or
+ * from a board's backlog (S-13 phase 2). FR-020's three input routes minus the
+ * pasted one, which never touches Jira.
+ *
+ * Nothing here is persisted: descriptions, comments and attachment names are
+ * read on demand and dropped once the verdict is formed.
+ */
+export async function fetchRefinementTickets(
+  baseUrl: string,
+  creds: JiraCreds,
+  params: FetchRefinementTicketsParams,
+  opts?: JiraClientOpts,
+): Promise<RefinementTicketsResult> {
+  if ("boardId" in params) {
+    return {
+      tickets: await fetchBacklogTickets(baseUrl, creds, params.boardId, opts),
+      // Nothing was requested by key, so nothing can be missing.
+      missingKeys: [],
+    };
+  }
+  return fetchTicketsByKey(baseUrl, creds, params.keys, opts);
 }
