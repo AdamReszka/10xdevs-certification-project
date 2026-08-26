@@ -12,6 +12,11 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 
+// Type-only (erased at compile time), so the JSONB `$type<>()` annotations below
+// cost this module no runtime dependency on the recap module. See the header of
+// `src/lib/recap/types.ts`.
+import type { RecapPayload, RenderedEmail } from "@/lib/recap/types";
+
 /**
  * Central Postgres enums (F-02). Declared once via `pgEnum` so every table
  * references the same DB-enforced type. Postgres enum names are snake_case;
@@ -708,6 +713,42 @@ export const anomalySettings = pgTable(
   ],
 );
 
+/**
+ * Per-owner Daily Recap send time (S-11, FR-018).
+ *
+ * DELIBERATELY NOT A COLUMN ON `user`: that table is contractually Better Auth's
+ * (`auth.ts:46,67-72`) — a hand-added column would be dropped the next time
+ * `@better-auth/cli generate` runs, and a NOT NULL column without a DB default
+ * would break the sign-up INSERT because `autoSignIn: true` (`auth.ts:53-56`).
+ *
+ * NO TIMEZONE COLUMN, also deliberately: `jira_project.time_zone` is rewritten
+ * 1:1 by every Jira cycle and read through `getJiraTimeZone`. A second stored
+ * zone would drift from it, and the drift would be invisible.
+ */
+export const recapSettings = pgTable(
+  "recap_settings",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Local (team-zone) wall-clock hour, 0–23. FR-018's default is 15:00. */
+    sendHour: integer("send_hour").default(15).notNull(),
+    sendMinute: integer("send_minute").default(0).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    // Singleton per owner — the `githubCredential` / `jiraCredential` /
+    // `jiraProject` shape.
+    unique("recap_settings_owner_uq").on(table.ownerId),
+  ],
+);
+
 export const dailyRecap = pgTable(
   "daily_recap",
   {
@@ -716,19 +757,58 @@ export const dailyRecap = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     // NOT NULL: the S-12 retention purge is keyed to sprint boundaries.
+    //
+    // ACCEPTED CONSEQUENCE (plan-review F5): a Jira PROJECT SWITCH deletes the
+    // owner's sprint rows (`connection-service.ts:405-411`), which cascades
+    // today's claim row away — so the next tick re-claims and sends a SECOND
+    // email for the same local day, and the stored recap history for that sprint
+    // goes with it. Bounded to a deliberate, confirmed, destructive action; the
+    // fix (nullable `sprint_id` + `ON DELETE SET NULL` + a `recap_day`-keyed
+    // purge) belongs to S-12, where the retention logic lives. What S-11 owes it
+    // is honest confirmation copy — see `jira-project-editor.tsx`.
     sprintId: text("sprint_id")
       .notNull()
       .references(() => sprint.id, { onDelete: "cascade" }),
-    recapDate: timestamp("recap_date"),
+    /**
+     * The local calendar day this recap is for — a `DayKey` (`YYYY-MM-DD` in the
+     * team's zone), matching `day-bucket.ts:17`.
+     *
+     * NOT NULL because it is half of the dedup key: Postgres treats NULLs as
+     * DISTINCT in a UNIQUE constraint, so a nullable member would silently let
+     * duplicates through (lessons.md #1). It replaces the old nullable
+     * `recap_date` timestamp, which could not represent a local day at all.
+     */
+    recapDay: text("recap_day").notNull(),
     sentAt: timestamp("sent_at"),
-    sendStatus: recapSendStatus("send_status"),
-    payload: jsonb("payload"),
+    sendStatus: recapSendStatus("send_status").default("PENDING").notNull(),
+    /** Incremented at CLAIM time, so a crash mid-send still counts against the cap. */
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    /**
+     * Claim TTL marker. A PENDING row older than the TTL was orphaned by a
+     * crashed invocation and may be reclaimed — the `claimed_until` reasoning at
+     * `run-sync.ts:80-83`, kept deliberately under the 15-minute cron interval.
+     */
+    lastAttemptAt: timestamp("last_attempt_at"),
+    payload: jsonb("payload").$type<RecapPayload>(),
+    /**
+     * The exact bytes handed to the transport, written BEFORE the first send and
+     * re-sent verbatim by every retry. This is what keeps the `Idempotency-Key`
+     * payload byte-identical across attempts (plan-review F1).
+     */
+    renderedMessage: jsonb("rendered_message").$type<RenderedEmail>(),
     anomalyIds: jsonb("anomaly_ids").$type<string[]>(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
+    // Kept: this is what S-12's sprint-scoped retention purge will use.
     index("daily_recap_owner_sprint_idx").on(table.ownerId, table.sprintId),
-    index("daily_recap_date_idx").on(table.recapDate),
+    /**
+     * The exactly-once guarantee. `sprint_id` is EXCLUDED from the key on
+     * purpose: S-16's reconcile can create a new sprint row mid-cycle
+     * (`run-sync.ts:654-661`), and a key including it would let one local day
+     * produce two recaps.
+     */
+    unique("daily_recap_owner_day_uq").on(table.ownerId, table.recapDay),
   ],
 );
 
@@ -768,6 +848,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   syncStates: many(syncState),
   anomalies: many(anomaly),
   anomalySettings: many(anomalySettings),
+  recapSettings: one(recapSettings),
   dailyRecaps: many(dailyRecap),
   refinementSessions: many(refinementSession),
 }));
@@ -1007,6 +1088,13 @@ export const anomalySettingsRelations = relations(
   }),
 );
 
+export const recapSettingsRelations = relations(recapSettings, ({ one }) => ({
+  owner: one(user, {
+    fields: [recapSettings.ownerId],
+    references: [user.id],
+  }),
+}));
+
 export const dailyRecapRelations = relations(dailyRecap, ({ one }) => ({
   owner: one(user, {
     fields: [dailyRecap.ownerId],
@@ -1044,6 +1132,8 @@ export type SelectAnomaly = typeof anomaly.$inferSelect;
 export type InsertAnomaly = typeof anomaly.$inferInsert;
 export type SelectAnomalySettings = typeof anomalySettings.$inferSelect;
 export type InsertAnomalySettings = typeof anomalySettings.$inferInsert;
+export type SelectRecapSettings = typeof recapSettings.$inferSelect;
+export type InsertRecapSettings = typeof recapSettings.$inferInsert;
 export type SelectDailyRecap = typeof dailyRecap.$inferSelect;
 export type InsertDailyRecap = typeof dailyRecap.$inferInsert;
 export type SelectRefinementSession = typeof refinementSession.$inferSelect;

@@ -483,3 +483,101 @@ zdemolowania rosteru konta testowego, co jest droższe niż samo sprawdzenie.
 *Dlaczego mimo to warto:* `NULL` czytany jako zero to dokładnie ta klasa błędu,
 która daje leadowi liczbę wyglądającą na prawdziwą — a on nie ma jak poznać, że
 jest zaniżona.
+
+---
+
+## 9. S-11 `daily-recap-email` — otwarte (2026-08-26)
+
+Kod dowieziony w 6 fazach (`1478a80` → `38f049d`), wszystkie **57** kryteriów
+automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
+`lint`. Otwarte zostaje **13 wierszy manualnych**. Krótka lista dla operatora:
+`context/changes/daily-recap-email/MANUAL-CHECKLIST.md` (5 pozycji).
+
+> ⚠️ **Twarda zależność: konto Resend + zweryfikowana domena `sprintflow.pl`.**
+> Wiersze 3.7–3.9, 5.15 i 5.16 są **nieosiągalne**, dopóki nie powstanie konto,
+> rekordy SPF/DKIM/DMARC nie wylądują w Cloudflare DNS, a `RESEND_API_KEY` +
+> `RESEND_FROM_ADDRESS` nie zostaną wrzucone przez `wrangler secret put`. To
+> zadanie operatorskie, nie programistyczne — instrukcja krok po kroku jest w
+> `MANUAL-CHECKLIST.md` na górze. **Bez tego kod działa i wszystkie bramki
+> przechodzą** (lokalny dev używa transportu konsolowego), ale żaden mail nie
+> wychodzi.
+
+### Osiągalne od razu — nie wymagają Resenda
+
+- [ ] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
+      pokazują zamierzony kształt.
+      *Źródło:* `context/changes/daily-recap-email/plan.md` faza 1
+      *Co musi być prawdą:* brak kolumny `recap_date`; `recap_day text NOT NULL`;
+      `daily_recap_owner_day_uq UNIQUE (owner_id, recap_day)`; `send_status NOT
+      NULL DEFAULT 'PENDING'`; kolumny `attempt_count`, `last_attempt_at`,
+      `rendered_message`; `recap_settings` z `recap_settings_owner_uq`.
+      *Status:* **zweryfikowane w sesji** przez `psql` przeciwko `:54322` —
+      wyszło zgodnie z planem. Zostawione nieodhaczone, bo checklisty manualne
+      zamyka użytkownik, nie agent.
+      *Dlaczego to ma znaczenie:* cała gwarancja exactly-once opiera się na tym
+      unique key. Nullowalny człon klucza nie kolidowałby nigdy (lessons.md #1).
+
+- [ ] **4.13** Dashboard „Today" renderuje się identycznie po wyciągnięciu
+      mapowania anomalii z RSC do `lib/anomaly/inbox-view.ts`.
+      *Jak:* `/dashboard` → Anomaly Inbox. Porównaj z tym, co pamiętasz sprzed
+      slice'a: te same anomalie, ta sama kolejność, te same context chips,
+      działające sortowanie i filtry.
+      *Dlaczego:* to refaktor bez zmiany zachowania, ale dotyka jedynej ścieżki
+      renderującej nagłówkową powierzchnię produktu. Test integracyjny dowodzi,
+      że mail i inbox wołają tę samą funkcję — nie że komponent nadal ją dobrze
+      konsumuje.
+
+- [ ] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
+      *Jak:* `/settings/connections` → zmiana projektu Jira → **przeczytaj
+      ostrzeżenie, nie potwierdzaj**.
+      *Dlaczego:* `daily_recap` kaskaduje po `sprint`, więc przełączenie projektu
+      kasuje archiwum recapów. Potwierdzenie, które niedomawia, co kasuje, jest
+      defektem.
+
+- [ ] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
+- [ ] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
+- [ ] **6.13** Linia „Last send" odzwierciedla ostatni recap.
+      *Dlaczego (6.11–6.13):* to jedyne miejsce w produkcie, gdzie owner w ogóle
+      widzi, czy wysyłka zadziałała — świadomie *pull*, nie banner na
+      dashboardzie, żeby awaria recapa nie rozcieńczała bannera US-01 o
+      nieświeżych danych z integracji.
+
+### Zablokowane do czasu Resenda
+
+- [ ] **3.7** Panel Resend pokazuje `sprintflow.pl` zweryfikowaną (SPF, DKIM, DMARC).
+- [ ] **3.8** Prawdziwy request resetu dowozi maila, którego link loguje na
+      `/reset/confirm`.
+- [ ] **3.9** Log Workera z tego requestu **nie zawiera URL-a resetu**.
+      *Dlaczego:* URL resetu jest sekretem na okaziciela — wyciek do logu to
+      przejęcie konta przez każdego z dostępem do logów. To też najtańszy
+      konsument transportu: jeśli tu działa, klucz i DKIM są dobrze ustawione,
+      zanim zależy od nich recap.
+
+- [ ] **5.15** Prawdziwy recap przychodzi i zgadza się z `/dashboard` co do
+      znaku, łącznie z anomalią o `source_url = NULL` renderowaną jako tekst.
+      *Dlaczego:* rozbieżność inbox↔mail to nagłówkowe ryzyko slice'a, a gałąź
+      NULL-owego linku jest w **pierwszym mailu, jaki ten system wyśle** —
+      konto projektu ma dziś żywą anomalię `DEVELOPER_INACTIVE` bez linku.
+
+- [ ] **5.16** Kolejny tick crona nie wysyła drugiego maila.
+      *Dlaczego:* dowód, że na produkcji cron faktycznie wchodzi w ścieżkę
+      claimu, a nie omija ją np. przez inną strefę czasową.
+
+- [ ] **6.14** Wyłączenie recapa (`enabled: false`) zatrzymuje wysyłkę nazajutrz.
+      *Co musi być prawdą:* brak maila **i brak nowego wiersza** `daily_recap` —
+      skip następuje przed claimem.
+
+- [ ] **6.15** Parasol — `MANUAL-CHECKLIST.md` podpisany w całości.
+      *Nie odhaczaj ręcznie, dopóki 5 wierszy checklisty nie padnie.*
+
+### Świadomie NIE zrobione w tym slice'ie
+
+**Obsługa bounce'ów i skarg nie istnieje** (plan §What We're NOT Doing, F6 z
+review planu). 200 od Resenda znaczy „przyjęte", nie „dostarczone", więc wiersz
+`SENT` niczego nie dowodzi o doręczeniu. Przy `requireEmailVerification: false`
+(`auth.ts:52`) i `enabled` domyślnie włączonym literówka w adresie rejestracji
+dostaje maila codziennie i codziennie twardo odbija — tak umiera reputacja
+świeżej domeny i tak zawiesza się konto Resend. Zamknięcie = webhook Resenda +
+ścieżka bounce → `enabled: false`; zapisane jako zakres **S-12**, obok historii
+recapów, która i tak by to renderowała. **Do tego czasu: jeśli w panelu Resend
+pojawią się bounce'y, wyłącz recap dla tego konta ręcznie.**

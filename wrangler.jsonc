@@ -32,8 +32,9 @@
 			"localConnectionString": "postgresql://user:password@localhost:5432/db"
 		}
 	],
-	// Public, client-safe Supabase config. NOTE: BETTER_AUTH_SECRET and
-	// BETTER_AUTH_URL are Workers *secrets* (wrangler secret put), NOT vars —
+	// Public, client-safe Supabase config. NOTE: BETTER_AUTH_SECRET,
+	// BETTER_AUTH_URL, RESEND_API_KEY and RESEND_FROM_ADDRESS are Workers
+	// *secrets* (wrangler secret put), NOT vars —
 	// plain vars did not surface in getCloudflareContext().env on this OpenNext
 	// version (resolved to null), whereas secrets do. Never put secret values here.
 	"vars": {

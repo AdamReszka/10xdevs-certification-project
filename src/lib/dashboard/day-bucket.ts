@@ -49,6 +49,49 @@ export function dayKeyInTimeZone(date: Date, timeZone?: string | null): DayKey {
   return dayKeyFormatter(safeZone(timeZone)).format(date);
 }
 
+// Same cache-per-resolved-zone pattern as above, and for the same reason: the
+// recap's send predicate runs once per owner per 15-minute tick, and formatter
+// construction dominates `.format()`.
+const timeOfDayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function timeOfDayFormatter(resolvedZone: string): Intl.DateTimeFormat {
+  let formatter = timeOfDayFormatters.get(resolvedZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-GB", {
+      timeZone: resolvedZone,
+      hour: "2-digit",
+      minute: "2-digit",
+      // `h23` is load-bearing: without it midnight formats as `24:00` in some
+      // locale/zone combinations, and `24 >= 15` would fire a 15:00 recap at
+      // midnight.
+      hourCycle: "h23",
+    });
+    timeOfDayFormatters.set(resolvedZone, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * The WALL-CLOCK hour and minute `date` shows in `timeZone` (S-11, FR-018).
+ *
+ * The tempting alternative — `dayRangeInTimeZone(today, tz).from + hour × 3_600_000`
+ * — is WRONG on DST-transition days: local midnight plus 15h is 14:00 or 16:00
+ * local, not 15:00, so an owner's recap would arrive an hour early or late twice
+ * a year. Reading the wall clock directly is the only formulation that has no
+ * such edge.
+ *
+ * Degrades to UTC through the shared `safeZone`, like every other helper here.
+ */
+export function localTimeOfDay(
+  date: Date,
+  timeZone?: string | null,
+): { hour: number; minute: number } {
+  const parts = timeOfDayFormatter(safeZone(timeZone)).formatToParts(date);
+  const read = (type: "hour" | "minute"): number =>
+    Number(parts.find((p) => p.type === type)?.value ?? "0");
+  return { hour: read("hour"), minute: read("minute") };
+}
+
 /**
  * The instant range covering one local calendar day, as an inclusive
  * `[from, to]`.

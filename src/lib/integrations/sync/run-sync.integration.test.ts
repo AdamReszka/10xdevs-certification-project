@@ -530,6 +530,26 @@ describe("syncOwner — Jira time zone (S-10)", () => {
     const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
     expect(proj.timeZone).toBeNull();
   });
+
+  it("persists the zone even when the cycle finds NO active sprint (S-11)", async () => {
+    // The zone write used to sit inside the ticket transaction, which is BELOW
+    // the `!chosenSprint` early return — so an owner between sprints never got
+    // one. That is not cosmetic: S-11's recap fires at the owner's LOCAL send
+    // time, resolved through this column, so a missing zone silently turned
+    // "15:00 local" into 15:00 UTC for exactly the owners least likely to notice.
+    const { ownerId, jiraProjectId } = await newOwner();
+    // Both halves absent — a stored sprint alone would let the cycle proceed past
+    // the early return and prove nothing.
+    await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ activeSprint: null }).fetchImpl),
+    );
+    expect(result.jira).toEqual({ status: "SKIPPED", reason: "no_active_sprint" });
+
+    const [proj] = await db.select().from(jiraProject).where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.timeZone).toBe(JIRA_TIME_ZONE);
+  });
 });
 
 describe("syncOwner — sprint commitment scalars (S-10)", () => {

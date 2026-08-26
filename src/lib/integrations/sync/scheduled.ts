@@ -4,6 +4,7 @@ import { githubCredential, jiraProject } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner } from "@/lib/integrations/sync/run-sync";
+import { sendDailyRecap } from "@/lib/recap/send";
 
 /**
  * The cron entry point (S-05, Phase 5). A single global `scheduled()` invocation
@@ -20,6 +21,11 @@ type ScheduledEnv = {
   TOKEN_ENCRYPTION_KEY?: string;
   GITHUB_API_BASE_URL?: string;
   JIRA_API_BASE_URL?: string;
+  // S-11: the recap rides this same cycle, so its transport config comes down
+  // the same path.
+  RESEND_API_KEY?: string;
+  RESEND_FROM_ADDRESS?: string;
+  BETTER_AUTH_URL?: string;
 };
 
 /** The single capability we need off the Workers `ExecutionContext` — kept
@@ -51,6 +57,8 @@ export type ScheduledSyncResult = {
   enumerated: number;
   synced: number;
   failed: number;
+  /** S-11: recaps actually handed to the transport this cycle. */
+  recapsSent: number;
 };
 
 /**
@@ -64,12 +72,14 @@ export async function runScheduledSync(
     getDbWithPool?: typeof getDbWithPool;
     syncOwner?: typeof syncOwner;
     detectAnomalies?: typeof detectAnomalies;
+    sendDailyRecap?: typeof sendDailyRecap;
     now?: Date;
   },
 ): Promise<ScheduledSyncResult> {
   const { db, pool } = (deps?.getDbWithPool ?? getDbWithPool)(env);
   const runOwner = deps?.syncOwner ?? syncOwner;
   const runDetect = deps?.detectAnomalies ?? detectAnomalies;
+  const runRecap = deps?.sendDailyRecap ?? sendDailyRecap;
   const now = deps?.now ?? new Date();
 
   try {
@@ -78,6 +88,7 @@ export async function runScheduledSync(
 
     let synced = 0;
     let failed = 0;
+    let recapsSent = 0;
     for (const ownerId of batch) {
       try {
         await runOwner({ db, ownerId, env, now });
@@ -94,9 +105,31 @@ export async function runScheduledSync(
           err instanceof Error ? err.message : err,
         );
       }
+
+      // A SIBLING `try`, NOT nested inside the one above (plan-review F3).
+      // Nesting reads naturally — "a third step" — but a throw from `runOwner`
+      // or `runDetect` jumps straight to that catch and the recap is never
+      // reached at all. The recap depends on none of the sync: every reader it
+      // calls is DB-only. Silencing the day's email on an expired PAT or a Jira
+      // 401 would blind exactly the off-hours lead FR-018 exists for, who cannot
+      // see the dashboard's error banner. Ordered AFTER detection so it observes
+      // the anomalies that run just wrote.
+      try {
+        const result = await runRecap({ db, ownerId, env, now });
+        if (result.status === "SENT") recapsSent += 1;
+      } catch (err) {
+        // NOT counted as a sync failure (`actions.ts:90-97` is the mirror), and
+        // `err.message` only — never the error object. `run-sync.ts:90-91`
+        // records that sync errors are token-free BY CONSTRUCTION; a third-party
+        // email error does not inherit that invariant.
+        console.error(
+          `[recap] daily recap failed for owner ${ownerId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
-    return { enumerated: ownerIds.length, synced, failed };
+    return { enumerated: ownerIds.length, synced, failed, recapsSent };
   } finally {
     // Close the Hyperdrive-backed pool AFTER the handler returns (lesson #3): the
     // scheduled path has no request after-hook, so it owns teardown.

@@ -3,6 +3,13 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { cache } from "react";
 import { getDb } from "@/lib/db";
 import * as schema from "@/db/schema";
+import { dispatchPasswordReset } from "@/lib/auth-email";
+import {
+  resolveApiKey,
+  resolveEmailTransport,
+  resolveFromAddress,
+} from "@/lib/email-transport";
+import type { EmailTransport } from "@/lib/email-transport";
 
 /**
  * Runtime/CLI env surface. On Workers it comes from `getCloudflareContext().env`;
@@ -12,7 +19,45 @@ type AuthEnv = {
   HYPERDRIVE?: { connectionString: string };
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  // S-11: FR-001's reset email finally has a transport. Both optional — with no
+  // key, `resolveEmailTransport` logs instead of sending outside production.
+  RESEND_API_KEY?: string;
+  RESEND_FROM_ADDRESS?: string;
 };
+
+/** Injectable seam for the unit tests — production always resolves from env. */
+export type AuthDeps = {
+  emailTransport?: EmailTransport;
+  /** Stand-in for `getCloudflareContext().ctx.waitUntil`. */
+  waitUntil?: (promise: Promise<unknown>) => void;
+};
+
+/**
+ * `ctx.waitUntil` when the Workers context is reachable from inside the Better
+ * Auth callback, `undefined` otherwise.
+ *
+ * `getCloudflareContext()` throws outside a request (the Node build, the
+ * schema-gen CLI, a unit test), which is exactly the case that must degrade to
+ * fire-and-forget rather than crash the reset endpoint.
+ */
+async function resolveWaitUntil(): Promise<
+  ((promise: Promise<unknown>) => void) | undefined
+> {
+  try {
+    // Lazily imported for the same reason `getOptionalSession` does it: the
+    // static `auth` export below is loaded by the Node build and the schema-gen
+    // CLI, where this module is not safe at import time.
+    const { getCloudflareContext } = await import("@opennextjs/cloudflare");
+    const ctx = (
+      getCloudflareContext() as unknown as {
+        ctx?: { waitUntil?: (p: Promise<unknown>) => void };
+      }
+    ).ctx;
+    return ctx?.waitUntil ? ctx.waitUntil.bind(ctx) : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Build a Better Auth instance per call.
@@ -23,7 +68,7 @@ type AuthEnv = {
  * `getCloudflareContext().env`. The static `auth` export below is for the
  * schema-gen CLI only (Node, build time) and is never used by the Worker.
  */
-export function createAuth(env?: AuthEnv) {
+export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
   const db = getDb(env);
   const secret = env?.BETTER_AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET;
   const baseURL = env?.BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL;
@@ -53,9 +98,57 @@ export function createAuth(env?: AuthEnv) {
       autoSignIn: true,
       // MVP: no email-verification gate (FR-001 is email+password). Hardening later.
       requireEmailVerification: false,
-      // Reset email transport is S-01/S-11; for now log the link so the flow is exercisable.
+      /**
+       * FR-001's reset email (S-11 Phase 3). Resolves the transport, then hands
+       * the send off WITHOUT awaiting it — see `dispatchPasswordReset` for why
+       * (Better Auth calls this only for addresses that EXIST, so awaiting turns
+       * `/request-password-reset` into an account-enumeration oracle).
+       *
+       * Nothing here may throw: a transport-resolution failure must not take the
+       * endpoint down, and must not distinguish a known address from an unknown
+       * one by producing an error the caller can observe.
+       */
       sendResetPassword: async ({ user, url }) => {
-        console.log(`[auth] password reset requested for ${user.email}: ${url}`);
+        try {
+          const transport = deps?.emailTransport ?? resolveEmailTransport(env);
+          const from = resolveFromAddress(env);
+
+          // Gated on there being no API KEY, not on there being no sender:
+          // outside production `resolveFromAddress` now yields a dev placeholder
+          // so the recap's console transport works, and gating on the sender
+          // here would silently stop printing the link — leaving a local
+          // password reset impossible to click through.
+          //
+          // The URL is a bearer secret, so this is the ONLY place it is ever
+          // printed, and only when no real transport exists to carry it.
+          const hasRealTransport = deps?.emailTransport != null || resolveApiKey(env) != null;
+          if (!hasRealTransport) {
+            console.log(`[auth] password reset requested for ${user.email}: ${url}`);
+            return;
+          }
+          // A key but no sender is a real misconfiguration, not a dev path.
+          if (!from) {
+            console.error(
+              `[auth] RESEND_API_KEY is set but RESEND_FROM_ADDRESS is not — ` +
+                `password reset for ${user.email} was not sent.`,
+            );
+            return;
+          }
+
+          dispatchPasswordReset({
+            transport,
+            from,
+            to: user.email,
+            url,
+            waitUntil: deps?.waitUntil ?? (await resolveWaitUntil()),
+          });
+        } catch (err) {
+          // `err.message` only — never the error object, and never `url`.
+          console.error(
+            `[auth] password reset dispatch failed for ${user.email}:`,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       },
     },
     session: {

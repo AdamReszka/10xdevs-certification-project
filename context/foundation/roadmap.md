@@ -616,9 +616,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
   raise risk — `sprint-at-risk.ts:135-140`) is largely dissolved by S-16's
   between-sprints fix, which makes a sprint row exist from the first cycle after
   a sprint goes active. What survives F10 is the disagreement above.
-- **Also in range:** `src/app/(app)/settings/absences/page.tsx:24` tells the
-  reader retention already bounds the list to current + 2 previous sprints. No
-  retention purge exists (that is S-12), so the claim is false today.
+- **Also in range — CLOSED 2026-08-26 by S-16 Phase 4.**
+  `src/app/(app)/settings/absences/page.tsx:24` used to tell the reader that
+  retention already bounds the list to current + 2 previous sprints. It does not:
+  the only retention in the codebase is `SYNC_ATTEMPT_RETENTION` for the
+  operational log. The comment now names the bound as *planned* (PRD FR-019,
+  owned by S-12) and records that S-16 turned "one sprint row per owner" into a
+  growing series, which makes the unbounded list a real if small growth path.
+  No behaviour changed; the list stays unwindowed for the reasons it already gave.
 
 ---
 
