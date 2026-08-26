@@ -423,7 +423,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   via `anomaly.related_team_member_id`'s `ON DELETE SET NULL`, and reset
   `is_active`. Defect 4 above framed this as "the damage lands on Save" after a
   removal; in fact no removal was needed. It is documented in
-  `context/changes/team-management-surface/research.md` and in
+  `context/archive/2026-08-23-team-management-surface/research.md` and in
   `context/foundation/lessons.md` § "Delete-then-insert is only safe for tables
   with no hand-entered children". Fixing it first is what made the rest of the
   slice safe: with the bulk save no longer deleting, a stray trash click became
@@ -459,7 +459,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   green sync while showing an empty dashboard — the stored sprint was the demo
   seed's `jira_sprint_id=1001`, which does not exist in that Jira, so
   `searchSprintIssues` correctly returned nothing and the cycle reported OK.
-  Root-cause write-up: `context/changes/dashboard-sprint-detail/plan.md:1020-1052`.
+  Root-cause write-up: `context/archive/2026-08-21-dashboard-sprint-detail/plan.md:1020-1052`.
 - **Related, already fixed:** the sibling defect — `getActiveSprintRow`'s ACTIVE
   branch selecting nondeterministically between two ACTIVE rows — was closed in
   S-10 (`src/lib/sprint.ts`, ordered by `startDate desc`). Reconciliation should
@@ -501,12 +501,12 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-07       | dashboard-today           | Dashboard "Today" — Anomaly Inbox (north-star core)                    | done                   | ✅ Implemented, reviewed & archived — PR #45 (2026-08-21); US-01 inbox-core (Sprint Pulse + Yesterday's Activity deferred to S-10) |
 | S-08       | absence-calendar          | Absence calendar + DEVELOPER_INACTIVE suppression wiring               | done                   | ✅ Implemented, reviewed & archived — PR #47 (2026-08-25) |
 | S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | no                     | Prereqs S-07, S-10 done; blocked on the demo↔real interaction decision (roadmap Open Question #1 = PRD Open Question #2). S-16 removed the wizard-side entry point to the `jira_sprint_id=1001` incident, but the full delineation is still this slice's call |
-| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | done                   | ✅ Implemented & reviewed — PR #46 (2026-08-23); change folder not yet archived |
+| S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | done                   | ✅ Implemented & reviewed — PR #46 (2026-08-23); archived 2026-08-26 |
 | S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | done                   | ✅ Implemented, reviewed & archived — PR #53 (2026-08-26). ⚠️ No email sends until the Resend account + `sprintflow.pl` domain verification are provisioned — 5 manual rows blocked on it (`manual-test-backlog.md` §9) |
 | S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | no                     | Awaits S-11 |
 | S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; the only AI surface. `@anthropic-ai/sdk` not yet installed |
 | S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | yes                    | Prereqs S-06, S-07 done; parallel with S-11–S-13 |
-| S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); change folder not yet archived |
+| S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); archived 2026-08-26 |
 | S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |
 | S-17       | working-days-calendar     | Public holidays + company days off stop counting as working days        | yes                    | Prereq S-08 done. Post-MVP — no unshipped FR depends on it |
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP |
@@ -655,3 +655,5 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-08: user can record per-sprint team member absences (vacation, sickness, training) on a simple calendar; recorded absences: (1) suppress `DEVELOPER_INACTIVE` anomalies for the absent developer during the window, (2) raise the `SPRINT_AT_RISK` score for unplanned mid-sprint absences, (3) feed into sprint capacity calculation.** — Archived 2026-08-25 → `context/archive/2026-08-25-absence-calendar/`. Lesson: two caught in impl-review — `timestamp at time zone` INTERPRETS a naive column rather than converting it (so it cannot verify zone-aware writes), and a test that restates the implementation's arithmetic back to itself cannot fail. See `context/archive/2026-08-25-absence-calendar/reviews/impl-review.md`.
 - **S-16: when the team starts a new sprint in Jira, SprintFlow follows it automatically. Today it does not: the sprint captured at setup is synced forever until someone manually re-runs a wizard step.** — Archived 2026-08-26 → `context/archive/2026-08-26-sprint-reconciliation/`. Lesson: a narrowing predicate turns "wrong value" into "empty result", which reads as success.
 - **S-11: system sends a daily-recap email at the user-configured time (default 15:00 local) containing the day's detected anomalies, an activity summary, sprint progress, and a one-line suggested action per anomaly; each sent email is stored for S-12's recap history view.** — Archived 2026-08-26 → `context/archive/2026-08-26-daily-recap-email/`. Lesson: test the no-configuration path through the real resolver — fully-injected tests bypass the code that runs first in production.
+- **S-10: user can open Dashboard "Sprint Detail" and see: (1) a workflow aging report — tickets sorted by time-since-last-movement with cumulative time-in-each-status shown inline; (2) Team Activity Matrix — Developer × Day with commit, line, PR, and review counts; (3) per-technology sub-burndowns (SP burndown filtered by frontend / backend / mobile / QA track).** — Archived 2026-08-26 → `context/archive/2026-08-21-dashboard-sprint-detail/`. Lesson: null is not zero — an unmeasured value rendered as 0 reads as a real measurement.
+- **S-15: the owner can review, edit, merge and remove team members after first run, from a **Settings tab** — without re-entering the setup wizard. Re-import reconciles against the existing roster instead of only appending.** — Archived 2026-08-26 → `context/archive/2026-08-23-team-management-surface/`. Lesson: delete-then-insert is only safe for tables with no hand-entered children. NOTE: no impl-review on disk; PR #49 was reviewed on GitHub.

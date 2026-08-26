@@ -1,10 +1,10 @@
 ---
 change_id: team-management-surface
 title: Team management surface
-status: implementing
+status: archived
 created: 2026-08-23
-updated: 2026-08-23
-archived_at: null
+updated: 2026-08-26
+archived_at: 2026-08-26T10:56:34Z
 ---
 
 ## Notes
