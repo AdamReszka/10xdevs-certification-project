@@ -44,7 +44,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns; **plus** the Today tab shell with Sprint Pulse, Yesterday's Activity and the Reliability KPI, and the three sync writes they need (commit churn, Jira time zone, sprint SP scalars) | S-05, S-07 | FR-016, FR-017 | done     |
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | done     |
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
-| S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
+| S-13 | refinement-helper-ai      | pick tickets from the backlog (or by key, or pasted); each gets a readiness verdict — "DOR met", or the specific gaps blocking it, stated in the ticket's own terms; session saved | S-01, F-02, S-03 | FR-020, FR-021 | proposed |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
 | S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | done |
@@ -64,7 +64,7 @@ Navigation aid — groups items that share a Prerequisites chain. Canonical orde
 | A      | Core anomaly pipeline     | `F-01` / `F-02` / `F-03` → `S-01` → `S-02` / `S-03` → `S-04` → `S-05` → `S-06` → `S-07`        | The north star path; `speed` main goal means every tie-break favours this stream's advancement. |
 | B      | Post-north-star features  | `S-07` → `S-08` / `S-09` / `S-10` / `S-14`                                                       | All four start once S-07 lands; S-09 additionally requires Open Question #1 resolution.      |
 | C      | Email recap               | `S-11` → `S-12`                                                                                   | Joins Stream A at S-06/S-07 (anomaly data + dashboard validation required).                  |
-| D      | AI refinement             | `S-13`                                                                                            | Joins Stream A at S-01 + F-02; runs in parallel with the sync pipeline — no Jira/GitHub client dependency. |
+| D      | AI refinement             | `S-13`                                                                                            | Joins Stream A at S-01 + F-02 + **S-03** — reframed 2026-08-26: the backlog is read through the Jira client, so the "no Jira dependency" note no longer holds. Still independent of the *sync* pipeline (S-05) and of anomaly detection. |
 
 ## Baseline
 
@@ -165,7 +165,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** setup-jira-integration
 - **PRD refs:** FR-003, FR-004, FR-005
 - **Prerequisites:** S-01 (authenticated user), F-02 (Jira credential + project + status-mapping tables)
-- **Parallel with:** S-02, S-13
+- **Parallel with:** S-02
 - **Blockers:** —
 - **Unknowns:**
   - Jira REST API v3 endpoint for listing projects + workflow statuses for a given workspace — Owner: TBD. Block: no (standard API; verify pagination handling during implementation).
@@ -329,16 +329,18 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-13: Refinement Helper (AI)
 
-- **Outcome:** user can submit a user-story description (pasted text or selected Jira ticket); system generates 5–8 DOR-checking questions explicitly grounded in the story's specific actors, capabilities, and gaps (not generic template questions); system produces a DOR Compliance Score plus a fill-in checklist of missing elements; session saved for later review.
+- **Outcome:** at refinement time the lead picks tickets to check — from the monitored project's Jira backlog, by ticket key, or pasted as text — and each one comes back with a readiness verdict: "DOR met", or the specific gaps blocking it, each stated in that ticket's own terms ("this ticket is about publishing a policy document, but no attachment is present"). Gap count follows the ticket, not a quota. A verdict may also be that the ticket should not enter the sprint at all (FR-021). Session saved for later review.
 - **Change ID:** refinement-helper-ai
-- **PRD refs:** FR-020
-- **Prerequisites:** S-01 (authenticated user — session ownership), F-02 (refinement session storage table)
-- **Parallel with:** S-02, S-03, S-04, S-05, S-06, S-07, S-08, S-09, S-10, S-11, S-12, S-14
+- **PRD refs:** FR-020, FR-021
+- **Prerequisites:** S-01 (authenticated user — session ownership), F-02 (refinement session storage table), **S-03 (Jira credentials + monitored project — the backlog is read through them)**
+- **Parallel with:** S-02, S-04, S-05, S-06, S-07, S-08, S-09, S-10, S-11, S-12, S-14
 - **Blockers:** —
+- **Framing:** `context/changes/refinement-helper-ai/frame.md` (2026-08-26) — read it before `/10x-plan`. The domain rubric FR-020 always presupposed but never stated is in the sibling `dor-notes.md`: four levels of gap detectability (P0 field presence → P3 project state beyond the ticket) and nine gap classes taken from the user's real tickets.
 - **Unknowns:**
   - `@anthropic-ai/sdk` to be installed; model `claude-haiku-4-5` as specified in CLAUDE.md — Owner: user. Block: no (straightforward SDK install; Anthropic API key set as a Workers Secret).
-  - Prompt design: grounding DOR questions in the specific story's content (not a template) is the key FR-020 constraint — Owner: TBD. Block: no (prompt engineering is part of this slice's implementation scope).
-- **Risk:** This slice depends only on S-01 + F-02 and is nearly independent of the sync pipeline — useful for maintaining development momentum while the sync engine and detection engine are being built and tested.
+  - **Where the MVP boundary falls between detection levels P2 and P3** — P3 checks ("is the backend subtask Done?", "is this content CMS-editable?") need inputs the product does not hold. Owner: `/10x-plan`. Block: no (the mechanism may raise a question it cannot itself answer).
+  - **One-shot or conversational** — whether the analysis returns a verdict and stops, or asks the lead follow-up questions and re-derives the verdict (`dor-notes.md` §8.4). Owner: user. Block: no — explicitly marked reversible ("najwyżej to zmienimy").
+- **Risk:** ~~depends only on S-01 + F-02~~ **Two risks replaced the original one at framing time.** (1) *Scope*: `jira_ticket` stores only `summary` and `src/lib/jira.ts:845` requests only `summary, status, assignee, created` — of the seven ticket fields the analysis reads, one exists. The transport is reusable (`searchSprintIssues` is a generic JQL search; `listBoards` already speaks Agile 1.0, where `/board/{id}/backlog` lives), but Jira v3 returns description and comments as ADF, which must be flattened to text. (2) *Over-flagging*: a mechanism that reports eight gaps on every ticket is abandoned as fast as one that asks templated questions. The falsifiable corpus must include complete tickets whose only correct verdict is "DOR met".
 - **Status:** proposed
 
 ---
@@ -506,7 +508,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | done                   | ✅ Implemented & reviewed — PR #46 (2026-08-23); archived 2026-08-26 |
 | S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | done                   | ✅ Implemented, reviewed & archived — PR #53 (2026-08-26). ⚠️ No email sends until the Resend account + `sprintflow.pl` domain verification are provisioned — 5 manual rows blocked on it (`manual-test-backlog.md` §9) |
 | S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | yes                    | **Unblocked** — S-11 shipped and `daily_recap` now stores a versioned `payload` + `rendered_message` per send. Also the home for the deferred Resend bounce/complaint webhook |
-| S-13       | refinement-helper-ai      | Refinement Helper: story-grounded DOR questions via Anthropic SDK      | yes                    | Prereqs S-01, F-02 done; the only AI surface. `@anthropic-ai/sdk` not yet installed |
+| S-13       | refinement-helper-ai      | Refinement Helper: per-ticket DOR readiness verdict over the Jira backlog | yes                    | Prereqs S-01, F-02, S-03 done; the only AI surface. Framed 2026-08-26 (`frame.md` + `dor-notes.md`); `@anthropic-ai/sdk` not yet installed; needs the Jira ticket fetch widened beyond `summary` |
 | S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | yes                    | Prereqs S-06, S-07 done; parallel with S-11–S-13 |
 | S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); archived 2026-08-26 |
 | S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |

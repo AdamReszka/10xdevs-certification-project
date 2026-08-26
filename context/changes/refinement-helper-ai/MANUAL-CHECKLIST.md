@@ -1,0 +1,107 @@
+# S-13 refinement-helper-ai — checklista testów manualnych
+
+Krótka lista: tylko to, co realnie blokuje slice. Reszta idzie do
+`context/foundation/manual-test-backlog.md`. Odhaczając cokolwiek tutaj,
+odhacz też odpowiedni wiersz w `plan.md` `## Progress` — **plan jest kanoniczny**.
+
+**Konto:** wiersze 2.4, 6.4 i 6.6 wymagają konta z **prawdziwymi** credentialami
+Jiry. Na lokalnej bazie to `demo@sprintflow.test` — nazwy kont są mylące, patrz
+`manual-test-backlog.md` §5. Identyfikuj po `token_last4` (`B9D0`), nigdy po nazwie.
+
+**Klucz API:** wiersze 1.6, 4.6 i 6.7 dotyczą `ANTHROPIC_API_KEY` w `.env.local`.
+⚠️ Nie odpalaj `db:seed:demo` na koncie z prawdziwymi tokenami — seed je kasuje.
+
+---
+
+## Faza 1
+
+- [ ] **1.6 — brak klucza daje błąd konfiguracji, nie 401** *(faza 1)*
+
+  **Gdzie:** terminal, `scripts/anthropic-smoke.eval.ts` (faza 1).
+
+  **Co zrobić:** usuń (albo zakomentuj) `ANTHROPIC_API_KEY` z `.env.local`
+  i uruchom `npx vitest run --config vitest.eval.config.ts scripts/anthropic-smoke.eval.ts`.
+
+  **Co musi być prawdą:** wypisany błąd to `AnthropicConfigError` i wymienia
+  **obie** drogi skonfigurowania klucza — Workers Secret oraz `.env.local`.
+  Nie może to być `401`, `Invalid API key` ani surowy błąd z SDK.
+
+  **Dlaczego to ma znaczenie:** `lessons.md` #7 opisuje dokładnie tę pułapkę —
+  w S-11 210 zielonych testów integracyjnych przechodziło, a `sendDailyRecap`
+  nie potrafił wysłać niczego, bo żaden test nie przeszedł przez prawdziwy
+  resolver z pustą konfiguracją. To jedyny wiersz, który sprawdza ścieżkę,
+  którą kod napotka jako pierwszą po deployu.
+
+---
+
+## Faza 4
+
+- [ ] **4.6 — kompletny ticket nie generuje żadnego braku** *(faza 4)*
+
+  **Gdzie:** terminal, `npm run eval:refinement` z ustawionym `ANTHROPIC_API_KEY`.
+
+  **Co zrobić:** uruchom eval i przeczytaj wiersze dotyczące fixture'ów
+  oznaczonych jako kompletne (te, których oczekiwany werdykt to `DOR_MET`).
+
+  **Co musi być prawdą:** każdy z co najmniej trzech kompletnych ticketów kończy
+  się werdyktem `DOR_MET` i **pustą** listą braków. Ani jednego zgłoszenia.
+
+  **Dlaczego to ma znaczenie:** nadgorliwość jest głównym ryzykiem tego slice'u —
+  mechanizm, który na każdym tickecie znajdzie osiem braków, zostanie wyłączony
+  po trzecim refinemencie. Recall na ticketach niekompletnych mierzy ten sam
+  eval automatycznie; tylko brak fałszywych alarmów wymaga ludzkiego spojrzenia
+  na to, *co* zostało zgłoszone.
+
+---
+
+## Faza 6
+
+- [ ] **6.4 — `/refinement` pokazuje prawdziwy backlog projektu** *(faza 6)*
+
+  **Gdzie:** `/refinement`, konto z prawdziwymi credentialami Jiry.
+
+  **Co zrobić:** zaloguj się, wejdź w Refinement z górnej nawigacji.
+
+  **Co musi być prawdą:** lista zawiera zadania z **backlogu** monitorowanego
+  projektu — nie tickety aktywnego sprintu i nie pustą listę. Link w nawigacji
+  przenosi na stronę, zamiast nie robić nic.
+
+  **Dlaczego to ma znaczenie:** cykl sync filtruje po aktywnym sprincie, więc
+  backlog to zupełnie inna ścieżka odczytu (`/board/{id}/backlog`). Jeśli
+  zwróci aktywny sprint albo pustkę, cała powierzchnia jest bezużyteczna —
+  a `lessons.md` ostrzega, że pusty wynik z zawężonego zapytania czyta się
+  jak sukces.
+
+- [ ] **6.6 — braki nazywają coś z tego konkretnego ticketu** *(faza 6)*
+
+  **Gdzie:** `/refinement`, to samo konto.
+
+  **Co zrobić:** zaznacz trzy tickety, w tym jeden, o którym wiesz, że jest
+  niekompletny. Uruchom analizę. Rozwiń wiersz z brakami.
+
+  **Co musi być prawdą:** każdy wiersz pokazuje **rozpoznany rodzaj zadania**
+  i werdykt, a każde zdanie braku odnosi się do treści tego ticketu
+  („Zadanie dotyczy publikacji regulaminu, ale…"). Zdanie typu „Czy są kryteria
+  akceptacji?" bez odniesienia do treści oznacza porażkę.
+
+  **Dlaczego to ma znaczenie:** to jest całe FR-020. Osadzenie w treści jest
+  wymaganym kształtem zdania, a widoczny rodzaj zadania jest jedynym
+  zabezpieczeniem przed cichą błędną klasyfikacją, która wycina całą grupę
+  sprawdzeń.
+
+- [ ] **6.7 — brak klucza degraduje z bannerem i nic nie zapisuje** *(faza 6)*
+
+  **Gdzie:** `/refinement`, `ANTHROPIC_API_KEY` usunięty z `.env.local`,
+  serwer dev zrestartowany.
+
+  **Co zrobić:** wejdź na `/refinement`, zaznacz ticket, uruchom analizę.
+  Następnie sprawdź `select count(*) from refinement_run`.
+
+  **Co musi być prawdą:** widoczny czytelny banner mówiący, że klucz AI nie jest
+  skonfigurowany — nie biały ekran, nie stacktrace. Licznik `refinement_run`
+  **nie rośnie**.
+
+  **Dlaczego to ma znaczenie:** PRD wymaga graceful degradation, a `lessons.md` #7
+  ma korolarium: warunek wstępny, który nie poprawi się przy kolejnej próbie,
+  sprawdza się **przed** zapisem i kończy pominięciem, nigdy trwałym rekordem
+  porażki.

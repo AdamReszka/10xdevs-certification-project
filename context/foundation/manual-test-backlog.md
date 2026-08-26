@@ -37,6 +37,37 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
       sens, potrzeba projektu Jira z wypełnionymi story pointami — albo trzeba go
       przepisać na „skalary są zapisywane, nie NULL", co jest już potwierdzone.
 
+      ✅ **Droga wyjścia (ustalone 2026-08-26): wpisać estymaty w Jirze.**
+      Kod nie wymaga żadnej zmiany — `storyPointFieldId` jest rozwiązywany na
+      żywo w każdym cyklu (`src/lib/integrations/sync/run-sync.ts:635`), nie jest
+      zapisaną konfiguracją konta, a skalary liczą się `SUM`-em po **tabeli**
+      `jira_ticket`, nie po delcie (`run-sync.ts:817-822`), więc jeden „Sync now"
+      po wpisaniu wycen daje pełny obraz. Edycja SP bumpuje `updated`, więc
+      kursor delty te tickety ponownie zaciągnie.
+
+      ⚠️ **Pułapka przy wypełnianiu — wybór pola.**
+      `resolveStoryPointFieldId` (`src/lib/jira.ts:969-980`) zwraca **pierwsze**
+      pole custom, którego `schema.custom` zawiera `story-point` albo którego
+      nazwa pasuje do `/story point/`. Bez tie-breaka i bez logu, które wybrał.
+      Jeśli site ma i „Story Points" (company-managed), i „Story point estimate"
+      (team-managed), bierze to, które `/rest/api/3/field` wyliczy pierwsze.
+      Wpisanie wyceny w to drugie da **ponownie `0/0`** — arytmetycznie poprawne,
+      bo `story_points` zostaną NULL-ami. To ten sam kształt co `lessons.md`
+      „narrowing predicate": zawężenie na złej wartości zwraca pustkę, która
+      czyta się jak sukces.
+
+      *Kolejność kroków:* wpisz wyceny w **jednym** polu → „Sync now" →
+      `select key, story_points, added_after_sprint_start, current_category from
+      jira_ticket where owner_id = '<owner FM>' order by key;` → dopiero potem
+      porównuj sumy. Liczby w Jirze + NULL-e w tabeli = przypadek złego pola
+      (poprawka jednolinijkowa: preferować pole, które faktycznie niesie
+      wartości, zamiast pierwszego z brzegu).
+
+      *Przy samym porównaniu:* `committed_sp` **wyklucza** tickety z
+      `added_after_sprint_start = true`, a `completed_sp` liczy tylko kategorię
+      `DONE`. Ręczna suma w Jirze musi iść tą samą regułą, inaczej rozjazd nie
+      będzie bugiem.
+
 - [ ] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
       obu dashboardach.
       *Źródło:* `plan.md:1288` + `MANUAL-CHECKLIST.md` sekcja G

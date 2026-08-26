@@ -44,7 +44,7 @@ The insight is that the missing tool isn't another metrics dashboard — it's an
 - The full demo (sign-up through both dashboards + Daily Recap preview) is completable in under 15 minutes with no external API calls.
 - After one week of real use on a real team, the lead reports having taken at least one action they would not have taken without SprintFlow (the "acted on an alert they'd otherwise miss" signal).
 - Daily Recap email contains a concrete actionable suggestion per anomaly ("ping reviewer for PR #X", "check-in with Y"), not just a metric.
-- Refinement Helper surfaces at least two missing DOR elements on a typical hastily-written user story (validates the AI feature isn't just rephrasing).
+- Refinement Helper surfaces at least two missing DOR elements on a typical hastily-written user story (validates the AI feature isn't just rephrasing), AND returns "DOR met" on a ticket that is genuinely complete (validates it isn't just fault-finding). Both halves are required — a mechanism that only ever finds gaps is as useless as one that only ever rephrases.
 
 ### Guardrails
 
@@ -166,8 +166,12 @@ All FRs are `must-have` for the MVP. Each FR carries a `> Socratic:` blockquote 
 
 ### Refinement Helper
 
-- FR-020: User can submit a user-story description (pasted text OR a selected Jira ticket); the system responds with 5–8 AI-generated DOR-checking questions explicitly grounded in the submitted story's content — questions must reference the story's specific actors, capabilities, and gaps (e.g., "You mentioned an 'admin user' — what should *non-admin* users see in this flow?") rather than generic templated DOR questions ("Are there access controls?"). The system produces a DOR Compliance Score plus a fill-in checklist of missing elements and saves the refinement session for later review. Priority: must-have
-  > Socratic: Counter accepted: AI-generated DOR questions that are template-shaped get ignored once the user sees the pattern. The fix is to bind question generation to the story's specific content via prompt design — questions become value the user can't get from a checklist.
+- FR-020: User can select tickets to refine — from the monitored Jira project's backlog, by ticket key, or as pasted text — and for each one the system returns a **readiness verdict**: either "DOR met", or a list of the specific gaps that block it. Each gap is stated as a sentence grounded in that ticket's own content ("This ticket is about publishing a policy document, but no attachment is present"; "This ticket consumes new endpoints — I see no contract. Is the backend done?"), never as a generic DOR question ("Are there access controls?"). A gap may also be a closing question the lead takes to the ticket's author; naming who should close it is not required. The number of gaps is whatever the ticket warrants — there is no fixed question count. The system saves the refinement session for later review. Priority: must-have
+  > Socratic: Counter accepted (revised 2026-08-26 — `context/changes/refinement-helper-ai/frame.md`): the original wording specified the *shape of the answer* (a score, 5–8 questions, a checklist) without ever specifying the *subject of the assessment* — what makes a ticket ready. Three downstream gaps followed from that one omission: no DOR rubric existed anywhere, `dor_score` had no documented producer, and the grounding requirement had no test. The domain rubric now lives in `context/changes/refinement-helper-ai/dor-notes.md` (four detection levels, nine gap classes). With it, the score disappears — the goal is to name what is missing, not to grade a degree — and grounding stops being a style property to judge and becomes the required sentence shape, which a corpus of tickets with known gaps can assert directly.
+  > Socratic (over-flagging): Counter accepted: a mechanism that finds eight gaps on every ticket dies as fast as one that asks templated questions — the lead stops opening it. Relevance is contextual (some absent fields do not matter for a given ticket), so the falsifiable corpus must include **complete** tickets whose only correct verdict is "DOR met".
+
+- FR-021: A readiness verdict may also be that the ticket should not enter the sprint at all — not because content is missing, but because the work as described is infeasible or no longer meaningful given the project's state. Priority: must-have
+  > Socratic: Counter accepted: FR-020 as originally written could only ever answer "what is missing", which silently assumes every submitted ticket is worth doing once completed. The real refinement decision includes rejecting a ticket outright. Scope note: detecting this generally requires project state beyond the ticket text (level P3 in `dor-notes.md` §4); the MVP boundary for how far this reaches is settled at `/10x-plan`.
 
 ## Non-Functional Requirements
 
@@ -209,7 +213,7 @@ Third-party API credentials (GitHub Personal Access Token, Jira API token + work
 
 - **No mobile-native app.** Web-responsive only, with a 10-inch tablet floor for usable form factors. Sub-tablet phone-sized devices are explicitly out of scope.
 - **No enterprise compliance surface.** No SSO, no audit logs, no enterprise-tier GDPR or SOC2 certification, no data-residency controls. Single-tenant per account; the product targets individual leads, not legal/compliance/IT functions.
-- **No ML / AI prediction for sprint outcomes.** Anomaly detection is exclusively threshold-based; SprintFlow will not predict "this task won't fit in the sprint" or forecast sprint outcomes via models. The AI inside the Refinement Helper (FR-020) is a separate concern and is in scope.
+- **No ML / AI prediction for sprint outcomes.** Anomaly detection is exclusively threshold-based; SprintFlow will not predict "this task won't fit in the sprint" or forecast sprint outcomes via models. The AI inside the Refinement Helper (FR-020, FR-021) is a separate concern and is in scope — note that FR-021's "this should not enter the sprint" is a **readiness judgment about the ticket's own content and the project's current state**, not a capacity or throughput forecast; the two must not be conflated.
 - **No data retention beyond current + 2 previous sprints.** Inter-sprint trend dashboards, multi-quarter history, year-over-year analytics — all explicit phase-2.
 
 ## Open Questions
