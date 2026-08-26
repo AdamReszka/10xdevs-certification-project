@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-25
+updated: 2026-08-26
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -47,7 +47,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-13 | refinement-helper-ai      | submit user story; receive 5–8 story-specific DOR questions + compliance score; session saved | S-01, F-02        | FR-020                                          | proposed |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
 | S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
-| S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | proposed |
+| S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | done |
 | S-17 | working-days-calendar     | public holidays + per-sprint company days off stop counting as working days everywhere         | S-08               | FR-009, FR-010                                  | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
@@ -445,7 +445,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** sprint-reconciliation
 - **PRD refs:** FR-007
 - **Prerequisites:** S-05
-- **Status:** proposed
+- **Status:** done
 
 - **Why this exists (S-10 impl-review F7, 2026-08-23):** FR-007 says the system
   "pulls sprint cadence from the monitored Jira project's active-sprint
@@ -642,3 +642,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-06: system detects all 8 anomaly types (`PR_REVIEW_STALLED`, `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`, `TICKET_NO_COMMIT_LINK`, `SPRINT_AT_RISK`, `PR_TOO_BIG`, `SCOPE_CREEP`, `PR_TICKET_DESYNC`) by correlating synced Jira + GitHub data against configurable thresholds (FR-009 defaults); each anomaly carries severity, description, contextual data, one-line suggested action, and source deep-link; inbox ordered by raw severity (high → medium → low, then recency); severity-weighted sprint-risk score computed and stored per anomaly.** — Archived 2026-08-21 → `context/archive/2026-08-20-anomaly-detection-engine/`. Lesson: —.
 - **S-07: user can open Dashboard "Today" and see the Anomaly Inbox as the default view — every detected anomaly with all 5 attributes + risk score, in FR-015 default order (severity → recency), with client re-sort (severity/age/ticket/developer) and filter (type/member incl. team-level bucket); per-integration last-sync timestamp always visible; error banner on sync failure with the last cached inbox still shown; three distinct empty states. US-01 inbox-core (Sprint Pulse + Yesterday's Activity panels deferred to S-10).** — Archived 2026-08-21 → `context/archive/2026-08-21-dashboard-today/`. Lesson: —.
 - **S-08: user can record per-sprint team member absences (vacation, sickness, training) on a simple calendar; recorded absences: (1) suppress `DEVELOPER_INACTIVE` anomalies for the absent developer during the window, (2) raise the `SPRINT_AT_RISK` score for unplanned mid-sprint absences, (3) feed into sprint capacity calculation.** — Archived 2026-08-25 → `context/archive/2026-08-25-absence-calendar/`. Lesson: two caught in impl-review — `timestamp at time zone` INTERPRETS a naive column rather than converting it (so it cannot verify zone-aware writes), and a test that restates the implementation's arithmetic back to itself cannot fail. See `context/archive/2026-08-25-absence-calendar/reviews/impl-review.md`.
+- **S-16: when the team starts a new sprint in Jira, SprintFlow follows it automatically. Today it does not: the sprint captured at setup is synced forever until someone manually re-runs a wizard step.** — Archived 2026-08-26 → `context/archive/2026-08-26-sprint-reconciliation/`. Lesson: a narrowing predicate turns "wrong value" into "empty result", which reads as success.

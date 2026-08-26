@@ -1,10 +1,10 @@
 ---
 change_id: sprint-reconciliation
 title: Follow the team's active sprint on every sync, not just at setup
-status: impl_reviewed
+status: archived
 created: 2026-08-26
 updated: 2026-08-26
-archived_at: null
+archived_at: 2026-08-26T08:06:16Z
 ---
 
 ## Notes
