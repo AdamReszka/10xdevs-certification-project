@@ -10,7 +10,7 @@ import YesterdayActivity from "@/components/organisms/dashboard/yesterday-activi
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listAnomaliesForSprint } from "@/lib/anomaly/reader";
-import { anomalyContextChips, anomalyIdentity } from "@/lib/anomaly/context";
+import { toInboxAnomalies } from "@/lib/anomaly/inbox-view";
 import { getActivityRollup } from "@/lib/dashboard/activity";
 import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
@@ -63,7 +63,8 @@ export default async function DashboardPage() {
       sprint
         ? getBurndownSeries(db, ownerId, sprint.id, now)
         : Promise.resolve(EMPTY_BURNDOWN),
-      getActivityRollup(db, ownerId, yesterdayRange),
+      // The zone is already resolved above — pass it rather than re-reading it.
+      getActivityRollup(db, ownerId, yesterdayRange, timeZone),
       // S-08: who is away, plus the capacity number absences reduce.
       getSprintCapacity(db, ownerId),
     ]);
@@ -73,28 +74,9 @@ export default async function DashboardPage() {
   // only the active subset.
   const memberNameById = new Map(roster.map((m) => [m.id, m.name]));
 
-  const anomalies: InboxAnomaly[] = rows.map((r) => {
-    const identity = anomalyIdentity(r);
-    return {
-      id: r.id,
-      type: r.type,
-      severity: r.severity,
-      description: r.description ?? "",
-      suggestedAction: r.suggestedAction ?? "",
-      sourceUrl: r.sourceUrl,
-      riskScore: r.riskScore,
-      detectedAt: r.detectedAt ? r.detectedAt.toISOString() : null,
-      memberId: r.relatedTeamMemberId,
-      memberName: r.relatedTeamMemberId
-        ? (memberNameById.get(r.relatedTeamMemberId) ?? null)
-        : null,
-      identityKind: identity.kind,
-      identityLabel: identity.label,
-      identitySortKey: identity.sortKey,
-      contextChips: anomalyContextChips(r),
-      dedupKey: r.dedupKey,
-    };
-  });
+  // ONE mapping, shared with the S-11 recap email (`inbox-view.ts`). Inlining it
+  // here again is how the two surfaces would drift.
+  const anomalies: InboxAnomaly[] = toInboxAnomalies(rows, memberNameById);
 
   const syncState: InboxSyncState = {
     // Raw `lastError` is intentionally NOT forwarded to the client — see

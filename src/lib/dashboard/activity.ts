@@ -32,12 +32,24 @@ export async function getActivityRollup(
   db: Db,
   ownerId: string,
   { from, to }: { from: Date; to: Date },
+  /**
+   * Pre-resolved team zone. The dashboard already reads it to build `from`/`to`
+   * and the recap builder resolves it once per owner (S-11), so passing it down
+   * saves a redundant single-row read per call. Omit it and this reader resolves
+   * the zone itself, which is what the Sprint Detail matrix does.
+   */
+  timeZone?: string | null,
 ): Promise<ActivityGrid> {
-  const [projectRow] = await db
-    .select({ timeZone: jiraProject.timeZone })
-    .from(jiraProject)
-    .where(eq(jiraProject.ownerId, ownerId))
-    .limit(1);
+  const resolvedZone =
+    timeZone !== undefined
+      ? timeZone
+      : (
+          await db
+            .select({ timeZone: jiraProject.timeZone })
+            .from(jiraProject)
+            .where(eq(jiraProject.ownerId, ownerId))
+            .limit(1)
+        )[0]?.timeZone ?? null;
 
   // The FULL roster including deactivated members (S-07 impl-review F1): a
   // member who left mid-sprint still authored this sprint's commits, and their
@@ -103,6 +115,6 @@ export async function getActivityRollup(
     members,
     from,
     to,
-    timeZone: projectRow?.timeZone ?? null,
+    timeZone: resolvedZone,
   });
 }

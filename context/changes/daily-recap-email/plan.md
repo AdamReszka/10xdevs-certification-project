@@ -1199,12 +1199,12 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `npm test`
-- [x] 3.2 Unit test: `sendResetPassword` sends the URL via the transport and does not log it
-- [x] 3.3 Unit test: a transport rejection does not propagate out of `sendResetPassword`
-- [x] 3.4 Type checking passes: `npx tsc --noEmit`
-- [x] 3.5 Linting passes: `npm run lint`
-- [x] 3.6 Integration suite passes: `npm run test:integration`
+- [x] 3.1 Unit tests pass: `npm test` — f32aea7
+- [x] 3.2 Unit test: `sendResetPassword` sends the URL via the transport and does not log it — f32aea7
+- [x] 3.3 Unit test: a transport rejection does not propagate out of `sendResetPassword` — f32aea7
+- [x] 3.4 Type checking passes: `npx tsc --noEmit` — f32aea7
+- [x] 3.5 Linting passes: `npm run lint` — f32aea7
+- [x] 3.6 Integration suite passes: `npm run test:integration` — f32aea7
 
 #### Manual
 
@@ -1216,18 +1216,18 @@ is exercised by the very first email.
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `npm test`
-- [ ] 4.2 Unit test: `toInboxAnomalies` null-coalesces and preserves order
-- [ ] 4.3 Unit test: recap action strings are identical to the `AnomalyView` rows'
-- [ ] 4.4 Unit tests: `escapeHtml` neutralizes markup, quotes and ampersands
-- [ ] 4.5 Unit tests: renderer covers null `sourceUrl`, zero anomalies, null churn, non-OK integration status
-- [ ] 4.6 Unit test: the renderer never emits `lastError` in the HTML or text body
-- [ ] 4.7 Unit test: renderer preserves HIGH → MEDIUM → LOW order
-- [ ] 4.8 Unit tests: `countTicketsMovedToDone` distinct-ticket counting and range bounds
-- [ ] 4.9 Integration test: `getTicketsMovedToDone` is owner-scoped
-- [ ] 4.10 Integration test: `buildRecapPayload` matches `listAnomaliesForSprint`
-- [ ] 4.11 Type checking passes: `npx tsc --noEmit`
-- [ ] 4.12 Linting passes: `npm run lint`
+- [x] 4.1 Unit tests pass: `npm test`
+- [x] 4.2 Unit test: `toInboxAnomalies` null-coalesces and preserves order
+- [x] 4.3 Unit test: recap action strings are identical to the `AnomalyView` rows'
+- [x] 4.4 Unit tests: `escapeHtml` neutralizes markup, quotes and ampersands
+- [x] 4.5 Unit tests: renderer covers null `sourceUrl`, zero anomalies, null churn, non-OK integration status
+- [x] 4.6 Unit test: the renderer never emits `lastError` in the HTML or text body
+- [x] 4.7 Unit test: renderer preserves HIGH → MEDIUM → LOW order
+- [x] 4.8 Unit tests: `countTicketsMovedToDone` distinct-ticket counting and range bounds
+- [x] 4.9 Integration test: `getTicketsMovedToDone` is owner-scoped
+- [x] 4.10 Integration test: `buildRecapPayload` matches `listAnomaliesForSprint`
+- [x] 4.11 Type checking passes: `npx tsc --noEmit`
+- [x] 4.12 Linting passes: `npm run lint`
 
 #### Manual
 
