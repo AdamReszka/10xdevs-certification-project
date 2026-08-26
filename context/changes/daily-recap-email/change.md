@@ -67,6 +67,57 @@ provider is one implementation of a small interface: local dev renders the recap
 without a key, production uses Resend. The key then becomes configuration, not a
 prerequisite.
 
+## Scope decision — approved (2026-08-26, owner, after research)
+
+Research: `research.md`. Four scope forks resolved:
+
+- **Configured send time: full surface.** A new owner-unique `recap_settings`
+  table (send hour + enabled) **plus** a `/settings/recap` tab following the
+  `/settings/absences` pattern. The cheaper options were declined because FR-018
+  says "at the **user-configured** time" — shipping a hard-coded 15:00 would
+  leave the requirement unmet, not merely undecorated. Deliberately **not** a
+  column on `user`: that table is contractually Better Auth's
+  (`auth.ts:46,67-72`), and a NOT NULL column without a default breaks the
+  sign-up INSERT because `autoSignIn: true` (`auth.ts:53-56`).
+
+- **An owner without Jira gets no recap — accepted and documented.** The cron
+  enumerates via a `jira_project ⋈ github_credential` join
+  (`scheduled.ts:42-48`). Without Jira there is no sprint, no anomalies, and no
+  timezone source, so the recap would be empty *and* mis-timed. Recorded as a
+  decision rather than left as an accident. Not a live concern for this project's
+  own account, which has Jira, `board_id=1` and an active sprint.
+
+- **FR-001's password-reset email is closed here.** `auth.ts:56-59` logs the
+  reset link to the server console and its own comment names S-11 as the slice
+  that replaces it. The whole reset UI already exists (`/reset`,
+  `/reset/confirm`), so "reset your password by email" is currently undelivered.
+  Once the transport exists this is ~3 lines, and it closes a real gap in a
+  must-have FR.
+
+- **Activity summary is a TEAM rollup, not a per-person matrix.** Commits, PRs
+  opened/merged/reviewed, and tickets moved to Done — for the whole team. Cheaper
+  than the dashboard's per-person grid, and materially safer: the PRD Guardrail
+  forbids per-developer performance framing, and a "who did how much" table in an
+  email is exactly that. The "tickets moved to Done" reducer does not exist yet
+  (`activity-grid.ts:14-28`) and is new work at team granularity.
+
+### Folded in as a prerequisite, not a separate slice
+
+**The timezone refresh gap** (`research.md`, finding 3). `jira_project.timeZone`
+is written at `run-sync.ts:721-728`, below the `!chosenSprint` early return at
+`:677-687`, while `identity.timeZone` has been in scope since `:645`. An owner
+between sprints therefore never gets a zone persisted, and their "15:00 local"
+silently becomes 15:00 UTC. Pre-existing (pre-S-16 the return sat even higher),
+one line to fix, and S-11 is the first feature that visibly depends on it.
+
+### What the first real recap will contain
+
+Checked against the live account on 2026-08-26: **two ACTIVE anomalies**,
+`TICKET_NO_COMMIT_LINK` (with a Jira deep-link) and `DEVELOPER_INACTIVE`
+(**`source_url` NULL**). So the "anomaly with no deep-link" branch is not a
+theoretical edge — it is in the very first email this project will ever send.
+The template must handle it from day one, and the manual checklist should say so.
+
 ## Open at plan time
 
 - **Scheduling.** `wrangler.jsonc` already runs a 15-minute cron
