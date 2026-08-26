@@ -168,10 +168,32 @@ const JIRA_ISSUE = {
 
 const JIRA_TIME_ZONE = "Europe/Warsaw";
 
+/** The board `seedOwner` stamps onto `jira_project.board_id`. */
+const JIRA_BOARD = { id: 77, name: "SF Scrum", type: "scrum" };
+
+/** Default active sprint the agile mock reports — matches the SEEDED row
+ *  (`jira_sprint_id: "42"`, same dates), so every pre-existing test sees a
+ *  no-op reconcile rather than a rollover. */
+const JIRA_ACTIVE_SPRINT = {
+  id: 42,
+  state: "active",
+  name: "Sprint 7",
+  startDate: "2026-08-17T08:00:00.000Z",
+  endDate: "2026-08-31T08:00:00.000Z",
+};
+
 function jiraFetch(opts?: {
   failStatus?: number;
   issues?: unknown[];
   timeZone?: string | null;
+  /** Override the agile active-sprint response; `null` = between sprints. */
+  activeSprint?: typeof JIRA_ACTIVE_SPRINT | null;
+  /** Override the board list — more than one drives `board_ambiguous`. */
+  boards?: Array<{ id: number; name: string; type: string }>;
+  /** Status returned by the AGILE endpoints only, leaving `/myself` at 200.
+   *  A blanket `failStatus` is caught by `validateCredentials` first and would
+   *  never exercise the reconcile's own 401 branch. */
+  agileStatus?: number;
 }): {
   fetchImpl: typeof fetch;
   calls: string[];
@@ -181,6 +203,19 @@ function jiraFetch(opts?: {
     const url = typeof input === "string" ? input : (input as Request).url;
     calls.push(url);
     if (opts?.failStatus) return jsonRes({ message: "Unauthorized" }, opts.failStatus);
+    if (url.includes("/rest/agile/1.0/")) {
+      if (opts?.agileStatus && opts.agileStatus !== 200) {
+        return jsonRes({ message: "Unauthorized" }, opts.agileStatus);
+      }
+      if (url.includes("/sprint?")) {
+        const active =
+          opts?.activeSprint === undefined ? JIRA_ACTIVE_SPRINT : opts.activeSprint;
+        return jsonRes({ values: active ? [active] : [] });
+      }
+      if (url.includes("/board?")) {
+        return jsonRes({ isLast: true, values: opts?.boards ?? [JIRA_BOARD] });
+      }
+    }
     if (url.includes("/rest/api/3/myself")) {
       const zone = opts?.timeZone === undefined ? JIRA_TIME_ZONE : opts.timeZone;
       return jsonRes({
@@ -248,7 +283,16 @@ async function seedOwner(): Promise<{
 
   const [proj] = await db
     .insert(jiraProject)
-    .values({ id: randomUUID(), ownerId, credentialId: jiraCred.id, jiraProjectId: "10000", projectKey: "SF" })
+    .values({
+      id: randomUUID(),
+      ownerId,
+      credentialId: jiraCred.id,
+      jiraProjectId: "10000",
+      projectKey: "SF",
+      // S-16: without a stored board the reconcile pays a `listBoards` every
+      // cycle. Seeded so the default path costs ONE agile subrequest.
+      boardId: String(JIRA_BOARD.id),
+    })
     .returning({ id: jiraProject.id });
 
   await db.insert(statusMapping).values([
@@ -657,6 +701,173 @@ describe("syncOwner — the delta cursor is scoped to its sprint", () => {
   });
 });
 
+describe("syncOwner — the reconcile inside the cycle (S-16, FR-007)", () => {
+  /** JQL of the issue search on the given mock, decoded. */
+  function searchJql(calls: string[]): string {
+    const url = calls.find((u) => u.includes("/search/jql"))!;
+    return decodeURIComponent(url.replace(/\+/g, " "));
+  }
+
+  const SPRINT_8 = {
+    id: 43,
+    state: "active",
+    name: "Sprint 8",
+    startDate: "2026-08-31T08:00:00.000Z",
+    endDate: "2026-09-14T08:00:00.000Z",
+  };
+
+  // (a) The slice itself: Jira names a different sprint, and the cycle FOLLOWS
+  // it within one run instead of syncing the setup-time sprint forever.
+  it("(a) follows a rollover: pulls the new sprint and leaves one ACTIVE row", async () => {
+    const { ownerId, sprintId } = await newOwner();
+    // First cycle records a cursor against the OLD sprint.
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl));
+
+    const jira = jiraFetch({ activeSprint: SPRINT_8 });
+    const result = await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jira.fetchImpl),
+      bypassDueCheck: true,
+    });
+
+    expect(result.jira).toEqual({ status: "OK" });
+
+    const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    const created = rows.find((r) => r.jiraSprintId === "43")!;
+    expect(created.state).toBe("ACTIVE");
+    expect(created.name).toBe("Sprint 8");
+    expect(rows.find((r) => r.id === sprintId)?.state).toBe("CLOSED");
+    expect(rows.filter((r) => r.state === "ACTIVE")).toHaveLength(1);
+
+    // The cursor guard must drop the delta clause: the stored cursor describes
+    // the PREVIOUS sprint, and reusing it would hide every ticket in the new one
+    // that has not been edited since — silently, with the cycle reporting OK.
+    expect(searchJql(jira.calls)).not.toContain("updated >=");
+
+    // Tickets are re-stamped onto the new sprint.
+    const tickets = await db
+      .select({ sprintId: jiraTicket.sprintId })
+      .from(jiraTicket)
+      .where(eq(jiraTicket.ownerId, ownerId));
+    expect(tickets.every((t) => t.sprintId === created.id)).toBe(true);
+  });
+
+  // (b) C4 — the between-sprints onboarding case. Before S-16 this owner was
+  // permanently dead AND permanently green: SKIPPED{no_sprint} forever while
+  // stamping a fresh OK.
+  it("(b) creates a sprint row for an owner seeded with none, and syncs it", async () => {
+    const { ownerId } = await newOwner();
+    await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
+
+    const result = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    expect(result.jira).toEqual({ status: "OK" });
+    const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].jiraSprintId).toBe("42");
+    expect(rows[0].state).toBe("ACTIVE");
+    // Cadence was derived, not left NULL — a dateless row would outrank a dated
+    // one in both branches of `getActiveSprintRow`.
+    expect(rows[0].lengthDays).toBe(14);
+  });
+
+  // (c) C5 — a PAT that `/myself` accepts but that lacks Agile permission. The
+  // mock must answer 200 on /myself and 401 on the agile endpoints: a blanket
+  // 401 is caught by `validateCredentials` first and would never reach here.
+  it("(c) an agile-only 401 classifies as ERROR, not RATE_LIMITED", async () => {
+    const { ownerId } = await newOwner();
+
+    const result = await syncOwner(
+      baseArgs(
+        ownerId,
+        githubFetch().fetchImpl,
+        jiraFetch({ agileStatus: 401 }).fetchImpl,
+      ),
+    );
+
+    // Before Phase 1 this was JiraUnavailableError → RATE_LIMITED, i.e. the
+    // owner was told "nothing to do" instead of "reconnect Jira".
+    expect(result.jira.status).toBe("ERROR");
+  });
+
+  // (d) C3 — a reconcile that cannot conclude must not stop a working account.
+  it("(d) no active sprint but a stored one present: still pulls, row unchanged", async () => {
+    const { ownerId, sprintId } = await newOwner();
+    // Keep the stored sprint inside its window so the ended-sprint demotion
+    // (plan-review F4) does not fire — this case is about the PULL continuing.
+    await db
+      .update(sprint)
+      .set({ endDate: new Date(Date.now() + 5 * 86_400_000) })
+      .where(eq(sprint.id, sprintId));
+    const [before] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+
+    const result = await syncOwner(
+      baseArgs(
+        ownerId,
+        githubFetch().fetchImpl,
+        jiraFetch({ activeSprint: null }).fetchImpl,
+      ),
+    );
+
+    expect(result.jira).toEqual({ status: "OK" });
+    const [after] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(after.state).toBe("ACTIVE");
+    expect(after.jiraSprintId).toBe(before.jiraSprintId);
+    expect(after.name).toBe(before.name);
+
+    const tickets = await db
+      .select()
+      .from(jiraTicket)
+      .where(eq(jiraTicket.ownerId, ownerId));
+    expect(tickets.length).toBeGreaterThan(0);
+  });
+
+  // (e) An ambiguous board must degrade, not halt. The cost, accepted at plan
+  // time: an owner WITH a stored sprint is never told to pick a board, because
+  // the cycle reports plain OK. Only an owner without one records the diagnostic.
+  it("(e) ambiguous board: syncs normally with a stored sprint, skips without one", async () => {
+    const { ownerId, jiraProjectId } = await newOwner();
+    // board_id NULL forces discovery, and two sprint-capable boards make the
+    // choice ambiguous with no UI to ask in a headless cycle.
+    await db
+      .update(jiraProject)
+      .set({ boardId: null })
+      .where(eq(jiraProject.id, jiraProjectId));
+    const twoBoards = {
+      boards: [JIRA_BOARD, { id: 78, name: "SF Delivery", type: "scrum" }],
+    };
+
+    const withStored = await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch(twoBoards).fetchImpl),
+    );
+    expect(withStored.jira).toEqual({ status: "OK" });
+    // Nothing was persisted, so the ambiguity is still there next cycle.
+    const [proj] = await db
+      .select({ boardId: jiraProject.boardId })
+      .from(jiraProject)
+      .where(eq(jiraProject.id, jiraProjectId));
+    expect(proj.boardId).toBeNull();
+
+    await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
+    const withoutStored = await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch(twoBoards).fetchImpl),
+      bypassDueCheck: true,
+    });
+    expect(withoutStored.jira).toEqual({
+      status: "SKIPPED",
+      reason: "board_ambiguous",
+    });
+
+    const attempts = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    // No ORDER BY on the select, so assert membership rather than position.
+    expect(attempts.map((a) => a.outcome)).toContain("board_ambiguous");
+  });
+});
+
 describe("syncOwner — attempt history (S-10 Phase 7)", () => {
   it("records one attempt per integration per cycle", async () => {
     const { ownerId } = await newOwner();
@@ -693,20 +904,30 @@ describe("syncOwner — attempt history (S-10 Phase 7)", () => {
 
   it("labels a no-op Jira cycle so 'OK but nothing happened' is legible", async () => {
     const { ownerId } = await newOwner();
-    // Remove the sprint so Jira reports no_sprint.
+    // Remove the sprint AND have Jira report none active. Deleting the row alone
+    // is no longer a no-op cycle: since S-16 the reconcile CREATES one, which is
+    // the whole point of C4 — see "creates a sprint row for an owner seeded with
+    // none" below. A genuinely empty cycle now needs both halves absent.
     await db.delete(sprint).where(eq(sprint.ownerId, ownerId));
 
     const result = await syncOwner(
-      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+      baseArgs(
+        ownerId,
+        githubFetch().fetchImpl,
+        jiraFetch({ activeSprint: null }).fetchImpl,
+      ),
     );
-    expect(result.jira).toEqual({ status: "SKIPPED", reason: "no_sprint" });
+    // The reason now names the reconcile's own verdict rather than the generic
+    // `no_sprint`, so an operator reading the log can tell "Jira has no sprint
+    // running" apart from "we never resolved one".
+    expect(result.jira).toEqual({ status: "SKIPPED", reason: "no_active_sprint" });
 
     const [jira] = await db
       .select()
       .from(syncAttempt)
       .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
     expect(jira.status).toBe("OK");
-    expect(jira.outcome).toBe("no_sprint");
+    expect(jira.outcome).toBe("no_active_sprint");
   });
 
   it("prunes to the retention cap so the log cannot grow unbounded", async () => {

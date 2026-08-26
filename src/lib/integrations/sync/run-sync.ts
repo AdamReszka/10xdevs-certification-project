@@ -44,6 +44,10 @@ import {
   loadGithubToken,
   loadJiraCredentials,
 } from "@/lib/integrations/credentials";
+import {
+  coerceStoredBoardId,
+  reconcileActiveSprint,
+} from "@/lib/integrations/reconcile-sprint";
 import { linkTicketKey } from "@/lib/integrations/sync/link-ticket";
 
 /**
@@ -112,7 +116,21 @@ const DEFAULT_MAX_COMMIT_STATS_PER_REPO = 30;
 
 export type IntegrationOutcome =
   | { status: "OK" }
-  | { status: "SKIPPED"; reason: "leased" | "not_due" | "not_connected" | "no_sprint" }
+  | {
+      status: "SKIPPED";
+      reason:
+        | "leased"
+        | "not_due"
+        | "not_connected"
+        | "no_sprint"
+        // S-16: the sprint reconcile could not conclude AND the owner has no
+        // stored sprint to fall back on. No `sync_status` enum value is added —
+        // these stay `status: OK` with a diagnostic `sync_attempt.outcome`.
+        | "board_ambiguous"
+        | "no_board"
+        | "no_active_sprint"
+        | "sprint_undated";
+    }
   | { status: "ERROR" | "RATE_LIMITED"; error: string };
 
 export type SyncResult = {
@@ -590,40 +608,27 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
   }
 
   const [project] = await db
-    .select({ id: jiraProject.id, projectKey: jiraProject.projectKey })
+    .select({
+      id: jiraProject.id,
+      projectKey: jiraProject.projectKey,
+      boardId: jiraProject.boardId,
+    })
     .from(jiraProject)
     .where(eq(jiraProject.ownerId, ownerId))
     .limit(1);
   if (!project) return { status: "SKIPPED", reason: "not_connected" };
 
   // Prefer the ACTIVE sprint; else the most recently started. No sprint row is a
-  // legitimate between-sprints state → nothing to pull.
-  const chosenSprint = await getActiveSprintRow(db, ownerId);
+  // legitimate between-sprints state. This is the FALLBACK for the reconcile
+  // below — a reconcile that cannot conclude must not stop a working account
+  // from syncing the sprint it already has.
+  const storedSprint = await getActiveSprintRow(db, ownerId);
 
   const lease = await acquireLease(db, ownerId, "JIRA", now, args.bypassDueCheck ?? false);
   if (!lease.claimed) return { status: "SKIPPED", reason: lease.reason };
 
-  if (!chosenSprint) {
-    // Jira is connected but there's no sprint to sync — stamp fresh OK so the
-    // dashboard shows the integration as healthy, not stale. The attempt log
-    // records WHY it was a no-op, so "OK but nothing happened" is legible in
-    // the history rather than looking like a normal successful pull.
-    await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now, outcome: "no_sprint" });
-    return { status: "SKIPPED", reason: "no_sprint" };
-  }
-
   const baseUrl = args.jiraBaseUrl ?? env?.JIRA_API_BASE_URL ?? creds.baseUrl;
   const jiraCreds = { email: creds.email, token: creds.token };
-  // Delta only applies to the sprint the cursor was recorded against. On a
-  // sprint switch the stored cursor describes the PREVIOUS sprint, and reusing
-  // it hides every ticket in the new one that has not been edited since —
-  // silently, with the cycle still reporting OK. Mismatch (or a first-ever
-  // cursor) means pull the sprint in full.
-  const cursorMatchesSprint = lease.jiraCursorSprintId === chosenSprint.id;
-  const updatedSince =
-    cursorMatchesSprint && lease.jiraHistoryCursor
-      ? new Date(lease.jiraHistoryCursor)
-      : null;
 
   try {
     // --- All Jira reads complete BEFORE the txn (F1) ----------------------
@@ -632,7 +637,67 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
     // self-heals when they change their Jira profile. Its JiraAuthError /
     // JiraUnavailableError throws land in the surrounding catch like any other
     // Jira read — no second handler.
+    //
+    // Ordered ABOVE the reconcile deliberately: it is what classifies a wholly
+    // revoked token, so the reconcile's own agile 401 branch only has to cover
+    // the narrow case of a PAT that `/myself` accepts but that lacks Agile
+    // permission. It also supplies the IANA zone `deriveCadence` needs (F3).
     const identity = await validateCredentials(baseUrl, jiraCreds, args.jiraOpts);
+
+    // --- The reconcile seam (S-16, FR-007 "on each sync") -----------------
+    // Ask Jira which sprint is actually active BEFORE deciding what to pull, so
+    // a rollover is followed within one cycle and an owner who onboarded
+    // between sprints finally gets a row. Placed after `acquireLease` on
+    // purpose: it inherits the `claimed_until` + SELECT … FOR UPDATE guard for
+    // free, where placing it above would let cron and a `syncNow` click race.
+    //
+    // ONE-CYCLE EMPTY WINDOW, accepted: the reconcile's transaction commits the
+    // new sprint row before the ticket re-stamp below commits, so a dashboard
+    // loaded in between reads a sprint with zero tickets and no error banner.
+    // Both transactions live inside this one call, so the window is seconds —
+    // not the 15-minute freshness interval. Merging them is NOT available:
+    // `searchSprintIssues` sits between them, and network-inside-transaction is
+    // exactly what the reads-before-txn rule (F1, Hyperdrive single-connection)
+    // forbids.
+    const reconcile = await reconcileActiveSprint({
+      db,
+      ownerId,
+      baseUrl,
+      creds: jiraCreds,
+      projectId: project.id,
+      projectKey: project.projectKey,
+      storedBoardId: coerceStoredBoardId(project.boardId),
+      timeZone: identity.timeZone,
+      jiraOpts: args.jiraOpts,
+    });
+
+    const chosenSprint =
+      reconcile.status === "reconciled" ? reconcile.sprint : storedSprint;
+
+    if (!chosenSprint) {
+      // Jira is connected but there's no sprint to sync — stamp fresh OK so the
+      // dashboard shows the integration as healthy, not stale. The attempt log
+      // records WHY it was a no-op, so "OK but nothing happened" is legible in
+      // the history rather than looking like a normal successful pull. Since
+      // S-16 the reason names the reconcile's own verdict where it has one,
+      // which is what makes `board_ambiguous` reachable by an operator at all.
+      const reason = reconcile.status === "reconciled" ? "no_sprint" : reconcile.status;
+      await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now, outcome: reason });
+      return { status: "SKIPPED", reason };
+    }
+
+    // Delta only applies to the sprint the cursor was recorded against. On a
+    // sprint switch the stored cursor describes the PREVIOUS sprint, and reusing
+    // it hides every ticket in the new one that has not been edited since —
+    // silently, with the cycle still reporting OK. Mismatch (or a first-ever
+    // cursor) means pull the sprint in full. Reads `chosenSprint.id`, so it
+    // moved below the reconcile with it.
+    const cursorMatchesSprint = lease.jiraCursorSprintId === chosenSprint.id;
+    const updatedSince =
+      cursorMatchesSprint && lease.jiraHistoryCursor
+        ? new Date(lease.jiraHistoryCursor)
+        : null;
+
     const issues = await searchSprintIssues(
       baseUrl,
       jiraCreds,

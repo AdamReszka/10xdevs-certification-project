@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
-import { jiraCredential, jiraProject, statusMapping } from "@/db/schema";
+import { jiraCredential, jiraProject, sprint, statusMapping } from "@/db/schema";
 import { encryptToken, redactToken } from "@/lib/crypto";
 import type { getDb } from "@/lib/db";
 import {
@@ -197,6 +197,18 @@ export async function storeJiraIntegration({
 
     const credentialId = cred.id;
 
+    // Which project (if any) is being LEFT BEHIND. Read before the upsert, which
+    // overwrites the column in place — the row id is deliberately preserved so
+    // `status_mapping`'s FK stays valid, which is exactly why nothing cascades
+    // off a project switch here and the sprint has to be discarded explicitly.
+    const [previous] = await tx
+      .select({ id: jiraProject.id, jiraProjectId: jiraProject.jiraProjectId })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId))
+      .limit(1);
+    const projectChanged =
+      previous != null && previous.jiraProjectId !== project.jiraProjectId;
+
     const [proj] = await tx
       .insert(jiraProject)
       .values({
@@ -215,11 +227,36 @@ export async function storeJiraIntegration({
           jiraProjectId: project.jiraProjectId,
           projectKey: project.key,
           projectName: project.name,
+          // Both describe the project being left behind — mirrors
+          // `connection-service.ts:396-400`.
+          ...(projectChanged ? { boardId: null, timeZone: null } : {}),
         },
       })
       .returning({ id: jiraProject.id });
 
     const projectRowId = proj.id;
+
+    if (projectChanged) {
+      // Symmetry with the settings path (`connection-service.ts:405-411`):
+      // `jira_ticket` and `jira_status_history` cascade off `sprint`, so this
+      // one delete discards the whole previous project's synced history.
+      //
+      // REACHABILITY, established 2026-08-26 (S-16 plan-review F6): this is a
+      // DEFENSIVE invariant, not a live data-loss path, and that is why it
+      // carries no destructive confirmation where the settings path does
+      // (`jira-project-editor.tsx:24`). `/setup/jira` renders `JiraConnectForm`
+      // only when the owner has NO `jira_credential` row
+      // (`setup/jira/page.tsx:64-66`); reaching it therefore requires
+      // `disconnectJira`, which deletes that row — and `jira_project` cascades
+      // off `jira_credential` while `sprint` cascades off `jira_project`
+      // (both verified as ON DELETE CASCADE). So by the time this branch could
+      // run, the sprint is already gone. Kept anyway: it costs one predicate,
+      // and it is what stops a future change to that page guard from silently
+      // re-opening the `jira_sprint_id=1001` incident.
+      await tx
+        .delete(sprint)
+        .where(and(eq(sprint.ownerId, ownerId), eq(sprint.jiraProjectId, previous.id)));
+    }
 
     // Replace the mapping set for this project row.
     await tx

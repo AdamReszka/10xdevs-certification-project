@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   JiraAuthError,
+  JiraBoardNotFoundError,
   JiraUnavailableError,
   type JiraStatus,
   getActiveSprint,
@@ -460,6 +461,16 @@ describe("listBoards", () => {
     );
   });
 
+  // A PAT that `/myself` accepts can still lack Agile permission; that 401 must
+  // reach the owner as "reconnect Jira", not as a rate-limit no-op.
+  it("throws JiraAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "nope" }, { status: 401 }));
+
+    await expect(listBoards(BASE, CREDS, "SF", { fetchImpl })).rejects.toBeInstanceOf(
+      JiraAuthError,
+    );
+  });
+
   it("never includes the token in a thrown error", async () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
 
@@ -519,6 +530,31 @@ describe("getActiveSprint", () => {
     await expect(getActiveSprint(BASE, CREDS, 1, { fetchImpl })).rejects.toBeInstanceOf(
       JiraUnavailableError,
     );
+  });
+
+  it("throws JiraAuthError on 401", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "nope" }, { status: 401 }));
+
+    await expect(getActiveSprint(BASE, CREDS, 1, { fetchImpl })).rejects.toBeInstanceOf(
+      JiraAuthError,
+    );
+  });
+
+  // 404 is narrower than "unavailable" on purpose: the reconciler retries with a
+  // freshly discovered board on this error only, never on a 5xx or a rate limit.
+  it("throws JiraBoardNotFoundError on 404 (board deleted in Jira)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "gone" }, { status: 404 }));
+
+    await expect(getActiveSprint(BASE, CREDS, 1, { fetchImpl })).rejects.toBeInstanceOf(
+      JiraBoardNotFoundError,
+    );
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({ message: "gone" }, { status: 404 }));
+
+    const err = await getActiveSprint(BASE, CREDS, 1, { fetchImpl }).catch((e) => e);
+    expect(String(err)).not.toContain(TOKEN);
   });
 });
 

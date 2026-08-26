@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-21
+updated: 2026-08-25
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -51,6 +51,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-17 | working-days-calendar     | public holidays + per-sprint company days off stop counting as working days everywhere         | S-08               | FR-009, FR-010                                  | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
+| S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 
 ## Streams
 
@@ -463,6 +464,24 @@ Foundations below assume these are present and do NOT re-scaffold them.
   branch selecting nondeterministically between two ACTIVE rows — was closed in
   S-10 (`src/lib/sprint.ts`, ordered by `startDate desc`). Reconciliation should
   still avoid *creating* a second ACTIVE row rather than relying on that ordering.
+- **Worse than "week 1 vs week 3" (research, 2026-08-26):** an owner who onboards
+  *between* sprints gets no `sprint` row at all, and never gets one. S-04 recorded
+  "cadence re-pulls on the next sync (FR-007)" as the accepted degradation for
+  that path (`archive/2026-08-20-setup-team-roster-cadence/plan.md:63`, `:277`,
+  carried into `changes/onboarding-routing/change.md:60-67`) — and that re-pull
+  does not exist. `syncJira` returns `SKIPPED/no_sprint` forever while stamping a
+  fresh **OK**, so the account is permanently dead and permanently green. S-16 is
+  therefore a first-run correctness fix, not only a rollover fix.
+- **Scope, decided by the owner 2026-08-26 after research:** the reconcile itself;
+  at most one ACTIVE row per owner (which also closes the two unfixed twins of the
+  S-10 F7 nondeterminism); never blanking the row on failure or on a legitimate
+  no-active-sprint; the between-sprints onboarding case; a 401 branch on
+  `listBoards`/`getActiveSprint` so failure classification does not regress; the
+  integration-test mock; closing old-sprint anomalies; and the wizard-side sprint
+  delete on a project change that the settings path already has. Deferred with
+  reasons: absence re-stamping, retention purge, post-setup cadence UI,
+  `timestamptz`. Full record: `context/changes/sprint-reconciliation/change.md`
+  § *Scope decision — approved*; blast-radius map: `.../research.md`.
 
 ---
 
@@ -557,6 +576,46 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ---
 
+### S-20: Absence sprint scoping
+
+- **Outcome:** a recorded absence means the same thing to all three of its
+  consumers. Today `SPRINT_AT_RISK` filters absences by `sprint_id` while sprint
+  capacity and `DEVELOPER_INACTIVE` filter the same rows by date overlap, so one
+  absence can simultaneously reduce a sprint's capacity, suppress an inactivity
+  anomaly in it, and be invisible to its risk score.
+- **Change ID:** absence-sprint-scoping
+- **PRD refs:** FR-010
+- **Prerequisites:** S-08, S-16
+- **Status:** proposed
+
+- **Why this exists (S-16 research, 2026-08-26):** `absence.sprint_id` is stamped
+  once at record time (`src/lib/absence-store.ts:157`) and `updateAbsence`
+  deliberately never re-stamps it (`:169-173`). Three consumers then disagree:
+  `src/lib/anomaly/rules/sprint-at-risk.ts:141` skips any absence whose
+  `sprint_id` differs from the snapshot's sprint, while
+  `src/lib/dashboard/capacity.ts:170-176` and
+  `src/lib/anomaly/rules/developer-inactive.ts:47-51` never look at `sprint_id`
+  at all and match on date overlap alone. An absence recorded in sprint N whose
+  range extends into N+1 therefore lowers N+1's capacity and suppresses
+  `DEVELOPER_INACTIVE` there, but cannot raise `SPRINT_AT_RISK` there.
+- **This is not simply a bug to fix.** The `sprint-at-risk` behaviour is the
+  *recorded intent* of S-08's D2 definition of planned-ness — an absence carried
+  into a later sprint is "planned there" and should stop raising risk
+  (`context/archive/2026-08-25-absence-calendar/plan.md:154-163`). The defect is
+  that the other two consumers were never brought in line with that rule, and
+  that nothing states which reading is canonical. The slice is the *decision*
+  plus its consistent application, not a one-line filter change.
+- **Related, deliberately excluded from S-16:** impl-review F10's narrower
+  complaint (an absence recorded with no active sprint stores NULL and can never
+  raise risk — `sprint-at-risk.ts:135-140`) is largely dissolved by S-16's
+  between-sprints fix, which makes a sprint row exist from the first cycle after
+  a sprint goes active. What survives F10 is the disagreement above.
+- **Also in range:** `src/app/(app)/settings/absences/page.tsx:24` tells the
+  reader retention already bounds the list to current + 2 previous sprints. No
+  retention purge exists (that is S-12), so the claim is false today.
+
+---
+
 ## Parked
 
 - **Linear / ClickUp / Asana / Jira Server / GitLab / Bitbucket / GitHub Enterprise support** — Why parked: PRD §Non-Goals (only Jira Cloud + github.com for MVP).
@@ -582,3 +641,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-05: system pulls GitHub commit, PR, and review data (15-min cycle by default) and Jira active-sprint tickets + status-change history (incremental delta since last successful sync) for the configured team and repositories; sync results stored in DB; last-sync timestamp per integration stored and readable by the dashboard.** — Archived 2026-08-20 → `context/archive/2026-08-20-data-sync-engine/`. Lesson: —.
 - **S-06: system detects all 8 anomaly types (`PR_REVIEW_STALLED`, `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`, `TICKET_NO_COMMIT_LINK`, `SPRINT_AT_RISK`, `PR_TOO_BIG`, `SCOPE_CREEP`, `PR_TICKET_DESYNC`) by correlating synced Jira + GitHub data against configurable thresholds (FR-009 defaults); each anomaly carries severity, description, contextual data, one-line suggested action, and source deep-link; inbox ordered by raw severity (high → medium → low, then recency); severity-weighted sprint-risk score computed and stored per anomaly.** — Archived 2026-08-21 → `context/archive/2026-08-20-anomaly-detection-engine/`. Lesson: —.
 - **S-07: user can open Dashboard "Today" and see the Anomaly Inbox as the default view — every detected anomaly with all 5 attributes + risk score, in FR-015 default order (severity → recency), with client re-sort (severity/age/ticket/developer) and filter (type/member incl. team-level bucket); per-integration last-sync timestamp always visible; error banner on sync failure with the last cached inbox still shown; three distinct empty states. US-01 inbox-core (Sprint Pulse + Yesterday's Activity panels deferred to S-10).** — Archived 2026-08-21 → `context/archive/2026-08-21-dashboard-today/`. Lesson: —.
+- **S-08: user can record per-sprint team member absences (vacation, sickness, training) on a simple calendar; recorded absences: (1) suppress `DEVELOPER_INACTIVE` anomalies for the absent developer during the window, (2) raise the `SPRINT_AT_RISK` score for unplanned mid-sprint absences, (3) feed into sprint capacity calculation.** — Archived 2026-08-25 → `context/archive/2026-08-25-absence-calendar/`. Lesson: two caught in impl-review — `timestamp at time zone` INTERPRETS a naive column rather than converting it (so it cannot verify zone-aware writes), and a test that restates the implementation's arithmetic back to itself cannot fail. See `context/archive/2026-08-25-absence-calendar/reviews/impl-review.md`.

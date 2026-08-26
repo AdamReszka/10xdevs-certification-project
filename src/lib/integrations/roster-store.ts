@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 
 import {
   absence,
@@ -9,6 +9,7 @@ import {
   monitoredRepo,
   sprint,
   teamMember,
+  type SelectSprint,
   type technologyTrack,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
@@ -21,9 +22,7 @@ import {
 import {
   type JiraBoard,
   type JiraClientOpts,
-  getActiveSprint,
   listAssignableUsers,
-  listBoards,
   validateCredentials,
 } from "@/lib/jira";
 
@@ -31,8 +30,8 @@ import {
   DEFAULT_WORKING_DAYS,
   type DerivedCadence,
   type WeekdayCode,
-  deriveCadence,
 } from "./cadence";
+import { reconcileActiveSprint } from "./reconcile-sprint";
 import {
   MissingCredentialError,
   loadGithubToken,
@@ -716,35 +715,19 @@ export type ImportCadenceResult = {
   noActiveSprint: boolean;
 };
 
-/** Map Jira's lowercase sprint state to the `sprint_state` enum, else null. */
-function toSprintState(state: string): "ACTIVE" | "CLOSED" | "FUTURE" | null {
-  switch (state.toLowerCase()) {
-    case "active":
-      return "ACTIVE";
-    case "closed":
-      return "CLOSED";
-    case "future":
-      return "FUTURE";
-    default:
-      return null;
-  }
-}
-
 /**
  * Derive sprint cadence from the monitored project's active sprint and persist it.
  *
- * - Reads owner `timeZone` from `/myself` (F3 — reliable, unlike the `assignable`
- *   email join), the project's scrum boards, and the chosen board's active sprint,
- *   ALL before the transaction.
- * - Board selection: exactly one scrum board → auto; multiple → returns
- *   `boardCandidates` for a chooser unless `chosenBoardId` picks one; zero →
- *   editable defaults, nothing persisted.
- * - Persists `jira_project.board_id` whenever a board is selected.
- * - Upserts the `sprint` row ONLY when an active sprint exists. On conflict the
- *   sprint METADATA always refreshes, but cadence columns refresh only when the
- *   existing row's `cadence_overridden = false` (FR-007 "override persists").
- * - No active sprint → writes NO sprint row (`jira_sprint_id` is NOT NULL, no id
- *   to key on) and returns `noActiveSprint` with editable defaults.
+ * Since S-16 this is a THIN WRAPPER over `reconcileActiveSprint`: it resolves the
+ * wizard's credentials + project row and maps the reconciler's discriminated
+ * union back onto `ImportCadenceResult`, which the chooser UI depends on. The
+ * board selection, the upsert, and the `cadence_overridden` three-way SET all
+ * live in `reconcile-sprint.ts` now, so the headless sync cycle and the wizard
+ * cannot drift apart (FR-007 "on each sync").
+ *
+ * What the wizard gains for free from the shared path: the previous ACTIVE row
+ * is demoted rather than accumulating a second one, and an override carried on
+ * the outgoing row survives a rollover.
  */
 export async function importCadence({
   db,
@@ -766,7 +749,11 @@ export async function importCadence({
   const creds = { email: jira.email, token: jira.token };
 
   const [project] = await db
-    .select({ id: jiraProject.id, projectKey: jiraProject.projectKey })
+    .select({
+      id: jiraProject.id,
+      projectKey: jiraProject.projectKey,
+      boardId: jiraProject.boardId,
+    })
     .from(jiraProject)
     .where(eq(jiraProject.ownerId, ownerId));
   if (!project) {
@@ -775,106 +762,90 @@ export async function importCadence({
     );
   }
 
-  // --- Network reads BEFORE the transaction (lesson: reads-before-tx) -----
+  // Network read BEFORE the transaction (lesson: reads-before-tx). The zone is
+  // what `deriveCadence` needs (F3); the reconciler takes it as an argument
+  // rather than re-fetching it.
   const identity = await validateCredentials(baseUrl, creds, jiraOpts);
-  const boards = await listBoards(baseUrl, creds, project.projectKey, jiraOpts);
 
-  // Board selection.
-  let board: JiraBoard | undefined;
-  if (boards.length === 1) {
-    board = boards[0];
-  } else if (boards.length > 1) {
-    board =
-      chosenBoardId != null
-        ? boards.find((b) => b.id === chosenBoardId)
-        : undefined;
-    if (!board) {
+  const result = await reconcileActiveSprint({
+    db,
+    ownerId,
+    baseUrl,
+    creds,
+    projectId: project.id,
+    projectKey: project.projectKey,
+    // ALWAYS null — the wizard re-discovers rather than trusting a stored board,
+    // matching what `importCadence` did before S-16 (it called `listBoards`
+    // unconditionally). This step exists so the owner can CHANGE the board, and
+    // both the chooser branch and `chosenBoardId` are only reachable when
+    // discovery runs: short-circuiting to `jira_project.board_id` would mean a
+    // board picked once could never be changed, since /setup/team is the only
+    // mount of the chooser and nothing clears the column within one project.
+    // The headless cycle keeps the stored-board fast path — that is where the
+    // per-cycle subrequest cost actually matters.
+    storedBoardId: null,
+    timeZone: identity.timeZone,
+    chosenBoardId,
+    jiraOpts,
+  });
+
+  switch (result.status) {
+    case "reconciled":
+      return {
+        cadence: cadenceFromRow(result.sprint),
+        boardId: result.boardId,
+        jiraSprintId: result.sprint.jiraSprintId,
+        sprintName: result.sprint.name,
+        boardCandidates: [],
+        noActiveSprint: false,
+      };
+    case "board_ambiguous":
       // Multiple boards, none chosen → surface the chooser, persist nothing yet.
       return {
         cadence: DEFAULT_CADENCE,
         boardId: null,
         jiraSprintId: null,
         sprintName: null,
-        boardCandidates: boards,
+        boardCandidates: result.candidates,
         noActiveSprint: false,
       };
-    }
-  } else {
-    // No scrum board → nothing to derive from; editable defaults, persist nothing.
-    return {
-      cadence: DEFAULT_CADENCE,
-      boardId: null,
-      jiraSprintId: null,
-      sprintName: null,
-      boardCandidates: [],
-      noActiveSprint: true,
-    };
+    case "no_board":
+      // No sprint-capable board → nothing to derive from; editable defaults.
+      return {
+        cadence: DEFAULT_CADENCE,
+        boardId: null,
+        jiraSprintId: null,
+        sprintName: null,
+        boardCandidates: [],
+        noActiveSprint: true,
+      };
+    case "no_active_sprint":
+    case "sprint_undated":
+      // Between sprints, or a sprint Jira left undated: no row is written
+      // (`jira_sprint_id` is NOT NULL, and a NULL-dated row would outrank a
+      // correctly dated one in `getActiveSprintRow`). Editable defaults.
+      return {
+        cadence: DEFAULT_CADENCE,
+        boardId: result.boardId,
+        jiraSprintId: null,
+        sprintName: null,
+        boardCandidates: [],
+        noActiveSprint: true,
+      };
   }
+}
 
-  const activeSprint = await getActiveSprint(baseUrl, creds, board.id, jiraOpts);
-  const hasDates =
-    activeSprint != null && !!activeSprint.startDate && !!activeSprint.endDate;
-
-  const cadence = hasDates
-    ? deriveCadence({
-        startDate: activeSprint!.startDate!,
-        endDate: activeSprint!.endDate!,
-        timeZone: identity.timeZone,
-      })
-    : DEFAULT_CADENCE;
-
-  // --- DB writes inside the transaction -----------------------------------
-  await db.transaction(async (tx) => {
-    // Persist the discovered board id (deferred from S-03) whenever selected.
-    await tx
-      .update(jiraProject)
-      .set({ boardId: String(board.id) })
-      .where(eq(jiraProject.ownerId, ownerId));
-
-    if (hasDates) {
-      const jiraSprintId = String(activeSprint!.id);
-      const newWorkingDays = JSON.stringify(cadence.workingDays);
-      await tx
-        .insert(sprint)
-        .values({
-          id: randomUUID(),
-          ownerId,
-          jiraProjectId: project.id,
-          jiraSprintId,
-          name: activeSprint!.name,
-          state: toSprintState(activeSprint!.state),
-          startDate: new Date(activeSprint!.startDate!),
-          endDate: new Date(activeSprint!.endDate!),
-          lengthDays: cadence.lengthDays,
-          startDay: cadence.startDay,
-          workingDays: cadence.workingDays,
-          cadenceOverridden: false,
-        })
-        .onConflictDoUpdate({
-          target: [sprint.ownerId, sprint.jiraSprintId],
-          set: {
-            // Metadata ALWAYS refreshes.
-            name: activeSprint!.name,
-            state: toSprintState(activeSprint!.state),
-            startDate: new Date(activeSprint!.startDate!),
-            endDate: new Date(activeSprint!.endDate!),
-            // Cadence refreshes ONLY when the existing row was not user-overridden
-            // (FR-007). Unqualified column = existing row; `excluded` = proposed.
-            lengthDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.lengthDays} else ${cadence.lengthDays} end`,
-            startDay: sql`case when ${sprint.cadenceOverridden} then ${sprint.startDay} else ${cadence.startDay} end`,
-            workingDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.workingDays} else ${newWorkingDays}::jsonb end`,
-          },
-        });
-    }
-  });
-
+/**
+ * Read cadence back off the persisted row rather than re-deriving it, so the
+ * form shows what is actually stored — which differs from `deriveCadence`'s
+ * output exactly when the owner's override was carried forward.
+ */
+function cadenceFromRow(row: SelectSprint): DerivedCadence {
   return {
-    cadence,
-    boardId: board.id,
-    jiraSprintId: hasDates ? String(activeSprint!.id) : null,
-    sprintName: hasDates ? activeSprint!.name : null,
-    boardCandidates: [],
-    noActiveSprint: !hasDates,
+    lengthDays: row.lengthDays ?? DEFAULT_CADENCE.lengthDays,
+    startDay: (row.startDay as WeekdayCode | null) ?? DEFAULT_CADENCE.startDay,
+    workingDays:
+      (row.workingDays as WeekdayCode[] | null) ?? [...DEFAULT_CADENCE.workingDays],
   };
 }
 

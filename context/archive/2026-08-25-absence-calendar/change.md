@@ -1,10 +1,10 @@
 ---
 change_id: absence-calendar
 title: Absence calendar
-status: impl_reviewed
+status: archived
 created: 2026-08-25
 updated: 2026-08-25
-archived_at: null
+archived_at: 2026-08-25T22:13:37Z
 ---
 
 ## Notes
