@@ -1,10 +1,10 @@
 ---
 change_id: daily-recap-email
 title: Send the lead a daily recap email so the off-hours case is covered
-status: impl_reviewed
+status: archived
 created: 2026-08-26
 updated: 2026-08-26
-archived_at: null
+archived_at: 2026-08-26T10:52:36Z
 ---
 
 ## Notes
