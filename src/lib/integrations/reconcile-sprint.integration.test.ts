@@ -78,10 +78,18 @@ function jiraFetch(opts?: {
   sprint?: JiraSprintFixture;
   boards?: Array<{ id: number; name: string; type: string }>;
   sprintStatus?: number;
+  /** This board id 404s on its sprint endpoint — a board deleted in Jira. */
+  goneBoardId?: number;
 }): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0]) => {
     const url = typeof input === "string" ? input : (input as Request).url;
     if (url.includes("/sprint")) {
+      // A board that no longer exists in Jira answers 404 on its sprint endpoint;
+      // every OTHER board still works. This is what separates "stale board_id"
+      // from "Jira is down" — only the former may retry against a new board.
+      if (opts?.goneBoardId != null && url.includes(`/board/${opts.goneBoardId}/`)) {
+        return jsonRes({ message: "gone" }, 404);
+      }
       if (opts?.sprintStatus && opts.sprintStatus !== 200) {
         return jsonRes({ message: "boom" }, opts.sprintStatus);
       }
@@ -391,6 +399,52 @@ describe("reconcileActiveSprint — never blanks the stored row (C3)", () => {
       .where(eq(jiraProject.ownerId, seeded.ownerId));
     expect(proj.boardId).toBeNull();
     expect(await rows(seeded.ownerId)).toHaveLength(0);
+  });
+});
+
+describe("reconcileActiveSprint — a stale board_id degrades, never fails (Phase 1)", () => {
+  // The branch `JiraBoardNotFoundError` exists for, and the one that justified
+  // Phase 1 at all: a board deleted in Jira must fall back to DISCOVERY, where a
+  // 5xx or a rate limit must NOT. Without a test here, widening the catch back to
+  // `JiraUnavailableError` would still pass every gate.
+  it("(l) a stored board that 404s falls back to discovery and repoints board_id", async () => {
+    const seeded = await newOwner({ boardId: "999" });
+
+    const result = await reconcileActiveSprint({
+      db,
+      ownerId: seeded.ownerId,
+      baseUrl: JIRA_BASE,
+      creds: CREDS,
+      projectId: seeded.projectId,
+      projectKey: "SF",
+      storedBoardId: 999,
+      timeZone: "UTC",
+      jiraOpts: { fetchImpl: jiraFetch({ goneBoardId: 999 }) },
+    });
+
+    expect(result.status).toBe("reconciled");
+    if (result.status === "reconciled") expect(result.boardId).toBe(BOARD.id);
+
+    // The dead board id is replaced, so the next cycle costs one subrequest again.
+    const [proj] = await db
+      .select({ boardId: jiraProject.boardId })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, seeded.ownerId));
+    expect(proj.boardId).toBe(String(BOARD.id));
+
+    const all = await rows(seeded.ownerId);
+    expect(all).toHaveLength(1);
+    expect(all[0].jiraSprintId).toBe("4242");
+  });
+
+  // The narrowing that makes the 404 branch worth having: a 5xx on the SAME call
+  // must propagate untouched rather than triggering a re-discovery retry.
+  it("(m) a 5xx on the stored board propagates instead of re-discovering", async () => {
+    const seeded = await newOwner();
+
+    await expect(run(seeded, { sprintStatus: 503 })).rejects.toBeInstanceOf(
+      JiraUnavailableError,
+    );
   });
 });
 

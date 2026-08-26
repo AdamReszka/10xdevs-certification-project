@@ -31,7 +31,7 @@ import {
   type DerivedCadence,
   type WeekdayCode,
 } from "./cadence";
-import { coerceStoredBoardId, reconcileActiveSprint } from "./reconcile-sprint";
+import { reconcileActiveSprint } from "./reconcile-sprint";
 import {
   MissingCredentialError,
   loadGithubToken,
@@ -774,10 +774,16 @@ export async function importCadence({
     creds,
     projectId: project.id,
     projectKey: project.projectKey,
-    // The wizard deliberately re-discovers rather than trusting a stored board:
-    // this step exists so the user can CHANGE the board, and `chosenBoardId`
-    // only reaches the chooser branch when discovery runs.
-    storedBoardId: chosenBoardId != null ? null : coerceStoredBoardId(project.boardId),
+    // ALWAYS null — the wizard re-discovers rather than trusting a stored board,
+    // matching what `importCadence` did before S-16 (it called `listBoards`
+    // unconditionally). This step exists so the owner can CHANGE the board, and
+    // both the chooser branch and `chosenBoardId` are only reachable when
+    // discovery runs: short-circuiting to `jira_project.board_id` would mean a
+    // board picked once could never be changed, since /setup/team is the only
+    // mount of the chooser and nothing clears the column within one project.
+    // The headless cycle keeps the stored-board fast path — that is where the
+    // per-cycle subrequest cost actually matters.
+    storedBoardId: null,
     timeZone: identity.timeZone,
     chosenBoardId,
     jiraOpts,
