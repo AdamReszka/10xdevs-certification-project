@@ -23,6 +23,11 @@ type Env = {
   TOKEN_ENCRYPTION_KEY?: string;
   GITHUB_API_BASE_URL?: string;
   JIRA_API_BASE_URL?: string;
+  // S-11: the recap rides on the same 15-min cycle, so the cron handler is what
+  // carries the transport config down to `sendDailyRecap`.
+  RESEND_API_KEY?: string;
+  RESEND_FROM_ADDRESS?: string;
+  BETTER_AUTH_URL?: string;
 };
 
 type ExecCtx = { waitUntil: (promise: Promise<unknown>) => void };

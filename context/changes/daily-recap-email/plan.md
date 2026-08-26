@@ -1169,14 +1169,14 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly against local Supabase: `npm run db:migrate`
-- [x] 1.2 Type checking passes: `npx tsc --noEmit`
-- [x] 1.3 Linting passes: `npm run lint`
-- [x] 1.4 Unit tests pass: `npm test`
-- [x] 1.5 Integration suite passes: `npm run test:integration`
-- [x] 1.6 Integration test: duplicate `(owner_id, recap_day)` insert is rejected
-- [x] 1.7 Integration test: `getRecapSettings` defaults + `saveRecapSettings` round-trip
-- [x] 1.8 Integration test: a no-active-sprint Jira cycle still persists `jira_project.time_zone`
+- [x] 1.1 Migration applies cleanly against local Supabase: `npm run db:migrate` — 1478a80
+- [x] 1.2 Type checking passes: `npx tsc --noEmit` — 1478a80
+- [x] 1.3 Linting passes: `npm run lint` — 1478a80
+- [x] 1.4 Unit tests pass: `npm test` — 1478a80
+- [x] 1.5 Integration suite passes: `npm run test:integration` — 1478a80
+- [x] 1.6 Integration test: duplicate `(owner_id, recap_day)` insert is rejected — 1478a80
+- [x] 1.7 Integration test: `getRecapSettings` defaults + `saveRecapSettings` round-trip — 1478a80
+- [x] 1.8 Integration test: a no-active-sprint Jira cycle still persists `jira_project.time_zone` — 1478a80
 
 #### Manual
 
@@ -1186,14 +1186,14 @@ is exercised by the very first email.
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `npm test`
-- [ ] 2.2 Unit tests: 401 → `EmailAuthError`; 429/500/network → `EmailUnavailableError`, no `cause`
-- [ ] 2.3 Unit tests: 400/403/409/422 → non-retryable `EmailRequestError` carrying the status
-- [ ] 2.4 Unit test: request carries `User-Agent`, `Authorization`, `Content-Type`, `Idempotency-Key`, caller headers; a caller `Authorization` is ignored
-- [ ] 2.5 Unit test: the API key appears in no error `message`, `stack`, or `cause`
-- [ ] 2.6 Unit test: `resolveEmailTransport` throws in production without a key, console transport otherwise
-- [ ] 2.7 Type checking passes: `npx tsc --noEmit`
-- [ ] 2.8 Linting passes: `npm run lint`
+- [x] 2.1 Unit tests pass: `npm test`
+- [x] 2.2 Unit tests: 401 → `EmailAuthError`; 429/500/network → `EmailUnavailableError`, no `cause`
+- [x] 2.3 Unit tests: 400/403/409/422 → non-retryable `EmailRequestError` carrying the status
+- [x] 2.4 Unit test: request carries `User-Agent`, `Authorization`, `Content-Type`, `Idempotency-Key`, caller headers; a caller `Authorization` is ignored
+- [x] 2.5 Unit test: the API key appears in no error `message`, `stack`, or `cause`
+- [x] 2.6 Unit test: `resolveEmailTransport` throws in production without a key, console transport otherwise
+- [x] 2.7 Type checking passes: `npx tsc --noEmit`
+- [x] 2.8 Linting passes: `npm run lint`
 
 ### Phase 3: Password-reset email (closes FR-001)
 

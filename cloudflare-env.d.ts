@@ -13,6 +13,12 @@ declare global {
     // Public Supabase config (wrangler.toml [vars]).
     NEXT_PUBLIC_SUPABASE_URL: string;
     NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: string;
+    // Resend transport (S-11, FR-018 + FR-001's password-reset email). BOTH are
+    // Workers *secrets*, not vars — RESEND_FROM_ADDRESS is not sensitive, but
+    // plain vars resolve to null in getCloudflareContext().env on this OpenNext
+    // version, and a null sender fails every send with a 422.
+    RESEND_API_KEY?: string;
+    RESEND_FROM_ADDRESS?: string;
   }
 }
 
