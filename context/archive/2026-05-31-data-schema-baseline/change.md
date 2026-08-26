@@ -1,10 +1,10 @@
 ---
 change_id: data-schema-baseline
 title: Data schema baseline
-status: impl_reviewed
+status: archived
 created: 2026-05-31
-updated: 2026-06-01
-archived_at: null
+updated: 2026-08-26
+archived_at: 2026-08-26T11:07:10Z
 ---
 
 ## Notes

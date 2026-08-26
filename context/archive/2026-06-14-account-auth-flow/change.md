@@ -1,10 +1,10 @@
 ---
 change_id: account-auth-flow
 title: Account auth flow
-status: impl_reviewed
+status: archived
 created: 2026-06-14
-updated: 2026-06-14
-archived_at: null
+updated: 2026-08-26
+archived_at: 2026-08-26T11:07:10Z
 ---
 
 ## Notes

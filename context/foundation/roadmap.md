@@ -52,6 +52,8 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
+| S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
+| S-22 | onboarding-routing        | a newly signed-up user lands in the setup wizard instead of an empty dashboard                 | S-01, S-04         | PRD Access Control ("lands in the setup wizard") | proposed |
 
 ## Streams
 
@@ -489,10 +491,10 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 | Roadmap ID | Change ID                 | Suggested issue title                                                  | Ready for `/10x-plan` | Notes |
 |------------|---------------------------|------------------------------------------------------------------------|------------------------|-------|
-| F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | done                   | ✅ Implemented & reviewed — PR #27 |
-| F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | done                   | ✅ Implemented (branch F-02) |
-| F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | done                   | ✅ Implemented (branch F-03, PR #30) |
-| S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | done                   | ✅ Implemented & reviewed — PR #34 |
+| F-01       | auth-provider-scaffold    | Set up auth provider scaffold (session middleware + gated routes)      | done                   | ✅ Implemented & reviewed — PR #27; archived 2026-08-26 |
+| F-02       | data-schema-baseline      | Land Drizzle schema + Supabase migration for all product entities      | done                   | ✅ Implemented (branch F-02); archived 2026-08-26 |
+| F-03       | ui-component-foundation   | Install shadcn/ui + base layout shell for Tailwind CSS 4               | done                   | ✅ Implemented (branch F-03, PR #30); archived 2026-08-26 |
+| S-01       | account-auth-flow         | Auth pages: sign-up, sign-in, sign-out, password reset                 | done                   | ✅ Implemented & reviewed — PR #34; archived 2026-08-26 |
 | S-02       | setup-github-integration  | Setup wizard: GitHub PAT connection + repo selection                   | done                   | ✅ Implemented, reviewed & archived (2026-08-19) |
 | S-03       | setup-jira-integration    | Setup wizard: Jira token + project selection + status mapping          | done                   | ✅ Implemented, reviewed & archived — PR #41 (2026-08-20) |
 | S-04       | setup-team-roster-cadence | Setup wizard: team roster auto-import + sprint cadence                 | done                   | ✅ Implemented, reviewed & archived — PR #42 (2026-08-20) |
@@ -512,6 +514,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP |
 | S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
 | S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
+| S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
+| S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04 done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers |
 
 ## Open Roadmap Questions
 
@@ -627,6 +631,66 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ---
 
+### S-21: Request-path DB pool teardown
+
+- **Outcome:** (foundation) a request, Server Action or gated render stops
+  pinning a Hyperdrive-backed Postgres connection for the isolate's lifetime.
+  Today every `getDb(env)` call builds `new Pool({ max: 1 })` and nothing ever
+  closes it, so under sustained traffic the account runs out of connections.
+- **Change ID:** db-pool-teardown
+- **PRD refs:** — (serves the graceful-degradation guardrail rather than an FR)
+- **Prerequisites:** F-02
+- **Status:** proposed
+
+- **Why this exists:** spun out of S-02's impl-review as finding F3 and recorded
+  as `lessons.md` #3, then never given a slice. It is still live: `src/lib/db.ts`
+  says so in its own doc comment — *"The pre-existing request-path leak (lesson
+  #3) is out of scope for S-05 and stays a separate ticket"*. S-05 solved it only
+  for the **cron/sync** path, by adding `getDbWithPool` so that path can call
+  `ctx.waitUntil(pool.end())` itself. Every request-path caller still uses the
+  leaking `getDb`.
+- **The naive fix is wrong, which is why this needs a plan and not a one-liner.**
+  `ctx.waitUntil(pool.end())` inside `getDb` fires immediately and closes the
+  pool before the caller's queries run. The correct shape is one pool per
+  request, cached on request context, torn down by the request's after-hook —
+  without exposing the pool to call sites, because `createAuth` holds its handle
+  for the instance's lifetime.
+- **Not urgent at MVP traffic, and that is the trap:** a connection leak is
+  invisible until it is not, and the symptom (a dashboard that suddenly cannot
+  reach the database) reads as an outage rather than as a resource bug.
+
+---
+
+### S-22: First-run routing into the setup wizard
+
+- **Outcome:** a user who signs up lands in `/setup` and is carried through the
+  wizard; a user whose onboarding is already complete lands on `/dashboard`.
+  Today both go to `/dashboard`, and `/setup` is reachable only by typing the URL.
+- **Change ID:** onboarding-routing
+- **PRD refs:** Access Control — *"Sign-up: on success, the user lands in the setup wizard."*
+- **Prerequisites:** S-01, S-04
+- **Status:** proposed
+
+- **Half of the original change is already delivered.** The folder's second scope
+  item — a persistent entry point for returning users to manage integrations —
+  shipped with S-10 as the **Settings** nav tab. What remains is the first-run
+  routing.
+- **The predicate is BUILT AND UNUSED.** `isOnboardingComplete`
+  (`src/lib/onboarding.ts:28`) exists, is owner-scoped, and has its own
+  integration test — and has **zero production callers**. Nothing imports it
+  outside `onboarding.integration.test.ts`. This slice is mostly wiring an
+  existing, tested predicate to the two places that need it (post-sign-up
+  redirect, and a "finish setup" affordance for a returning half-onboarded user),
+  not building new logic.
+- **Do NOT add "Setup" as a standalone nav item** — that contradicts the
+  onboarding-flow intent recorded in the original change folder. Post-sign-up
+  routing plus a prompt on the dashboard until onboarding completes.
+- **Watch the cost:** `scheduled.ts:43` already records that
+  `isOnboardingComplete` is 6 sequential queries, too expensive to run per owner
+  in a loop. On a single request path that is fine; do not let it drift into one.
+
+---
+
 ## Parked
 
 - **Linear / ClickUp / Asana / Jira Server / GitLab / Bitbucket / GitHub Enterprise support** — Why parked: PRD §Non-Goals (only Jira Cloud + github.com for MVP).
@@ -646,6 +710,10 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 (Empty on first generation. `/10x-archive` appends an entry here — and flips that item's `Status` to `done` — when a change whose `Change ID` matches the item is archived.)
 
+- **F-01: (foundation) auth library installed and configured; email+password session issuing + verification; `middleware.ts` protecting gated routes (redirect to `/login`); no user-facing pages — UI lives in S-01.** — Archived 2026-08-26 → `context/archive/2026-05-30-auth-provider-scaffold/`. Lesson: —.
+- **F-02: (foundation) Drizzle schema for all product entities landed with a Supabase migration applied; DB connection helper uses `node-postgres` (`pg`) over Cloudflare Hyperdrive (Workers-safe TCP — no HTTP-mode driver); `src/db/schema.ts` no longer a placeholder.** — Archived 2026-08-26 → `context/archive/2026-05-31-data-schema-baseline/`. Lesson: a nullable column in a UNIQUE dedup key defeats deduplication.
+- **F-03: (foundation) shadcn/ui installed and configured for Tailwind CSS 4; base layout component (nav, main, page shell); auth page shells (`/signup`, `/login`, `/reset`) with placeholder content ready for S-01 to populate.** — Archived 2026-08-26 → `context/archive/2026-06-01-ui-component-foundation/`. Lesson: pin turbopack.root to neutralize workspace-root OOM crashes.
+- **S-01: user can sign up, sign in, sign out, and reset their password by email+password; authenticated session persists across gated routes; unauthenticated requests redirect to `/login`.** — Archived 2026-08-26 → `context/archive/2026-06-14-account-auth-flow/`. Lesson: —.
 - **S-02: user can connect a GitHub Personal Access Token, select which repositories to monitor, and have the token validated against the GitHub API before it is stored encrypted; setup wizard step 1 of 4 complete.** — Archived 2026-08-19 → `context/archive/2026-06-14-setup-github-integration/`. Lesson: —.
 - **S-03: user can connect a Jira API token + workspace URL, select a single Jira project to monitor, have the credentials validated against Jira before storing encrypted, and map the project's workflow statuses onto the 5 standard categories (To Do / In Progress / Code Review / Testing / Done); setup wizard step 2 of 4 complete.** — Archived 2026-08-20 → `context/archive/2026-08-19-setup-jira-integration/`. Lesson: —.
 - **S-04: user can review and edit the auto-imported team roster (names, GitHub usernames, Jira account IDs, roles, SP capacity, technology tracks); sprint cadence (length, start day, working days) is auto-pulled from the Jira project's active sprint and is overridable; setup wizard step 3 of 3 complete (the wizard reconciled to 3 steps — GitHub/Jira/Team — during implementation, F4).** — Archived 2026-08-20 → `context/archive/2026-08-20-setup-team-roster-cadence/`. Lesson: —.

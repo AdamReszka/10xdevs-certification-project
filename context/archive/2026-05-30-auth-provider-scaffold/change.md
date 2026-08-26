@@ -1,10 +1,10 @@
 ---
 change_id: auth-provider-scaffold
 title: Auth provider scaffold
-status: impl_reviewed
+status: archived
 created: 2026-05-30
-updated: 2026-05-30
-archived_at: null
+updated: 2026-08-26
+archived_at: 2026-08-26T11:07:10Z
 ---
 
 ## Notes

@@ -1,10 +1,10 @@
 ---
 change_id: testing-harness-credential-security
 title: Test rollout Phase 1 — harness bootstrap + credential security
-status: implementing
+status: archived
 created: 2026-06-23
-updated: 2026-06-23
-archived_at: null
+updated: 2026-08-26
+archived_at: 2026-08-26T11:07:10Z
 ---
 
 ## Notes
