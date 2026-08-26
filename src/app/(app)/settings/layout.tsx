@@ -8,8 +8,9 @@ import SettingsTabs from "@/components/molecules/settings-tabs";
  * Built as a TABBED shell so every post-setup configuration surface lands in one
  * place rather than at its own top-level route. S-15 added Team as the second
  * tab — and with it the active-tab styling the nav had been missing, invisible
- * while there was only one tab. S-08 added Absences as the third. S-14 (anomaly
- * thresholds + severity tiers) slots in as a fourth entry.
+ * while there was only one tab. S-08 added Absences as the third, S-11 the
+ * Daily recap as the fourth. S-14 (anomaly thresholds + severity tiers) slots in
+ * as a fifth entry.
  *
  * Inherits `requireSession()` + `force-dynamic` from `(app)/layout.tsx` — do NOT
  * re-declare either.
@@ -19,6 +20,7 @@ const TABS: { label: string; href: string }[] = [
   { label: "Connections", href: "/settings/connections" },
   { label: "Team", href: "/settings/team" },
   { label: "Absences", href: "/settings/absences" },
+  { label: "Daily recap", href: "/settings/recap" },
   // S-14 adds { label: "Anomaly rules", href: "/settings/anomalies" } here.
 ];
 

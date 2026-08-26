@@ -1237,20 +1237,20 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 5.1 Unit tests pass: `npm test`
-- [x] 5.2 Unit tests: `localTimeOfDay` across DST both directions and a half-hour zone
-- [x] 5.3 Unit tests: `isRecapDue` boundaries, disabled, null zone
-- [x] 5.4 Integration test: concurrent sends produce exactly one transport call and one `SENT` row
-- [x] 5.5 Integration test: FAILED retries and stops at `attempt_count = 3`
-- [x] 5.6 Integration test: stale PENDING reclaimed, fresh PENDING skipped
-- [x] 5.7 Integration test: an owner with no sprint row is `SKIPPED("no_sprint")` and no row is written
-- [x] 5.8 Integration test: an owner with `enabled: false` is skipped
-- [x] 5.9 Integration test: a retry re-sends the stored `rendered_message` byte-for-byte and does not re-render
-- [x] 5.10 Unit test: a transport throw leaves `runScheduledSync`'s `failed` at 0
-- [x] 5.11 Unit test: a `runOwner` throw still reaches `sendDailyRecap` for that owner
-- [x] 5.12 Type checking passes: `npx tsc --noEmit`
-- [x] 5.13 Linting passes: `npm run lint`
-- [x] 5.14 Integration suite passes: `npm run test:integration`
+- [x] 5.1 Unit tests pass: `npm test` — 6adcb2d
+- [x] 5.2 Unit tests: `localTimeOfDay` across DST both directions and a half-hour zone — 6adcb2d
+- [x] 5.3 Unit tests: `isRecapDue` boundaries, disabled, null zone — 6adcb2d
+- [x] 5.4 Integration test: concurrent sends produce exactly one transport call and one `SENT` row — 6adcb2d
+- [x] 5.5 Integration test: FAILED retries and stops at `attempt_count = 3` — 6adcb2d
+- [x] 5.6 Integration test: stale PENDING reclaimed, fresh PENDING skipped — 6adcb2d
+- [x] 5.7 Integration test: an owner with no sprint row is `SKIPPED("no_sprint")` and no row is written — 6adcb2d
+- [x] 5.8 Integration test: an owner with `enabled: false` is skipped — 6adcb2d
+- [x] 5.9 Integration test: a retry re-sends the stored `rendered_message` byte-for-byte and does not re-render — 6adcb2d
+- [x] 5.10 Unit test: a transport throw leaves `runScheduledSync`'s `failed` at 0 — 6adcb2d
+- [x] 5.11 Unit test: a `runOwner` throw still reaches `sendDailyRecap` for that owner — 6adcb2d
+- [x] 5.12 Type checking passes: `npx tsc --noEmit` — 6adcb2d
+- [x] 5.13 Linting passes: `npm run lint` — 6adcb2d
+- [x] 5.14 Integration suite passes: `npm run test:integration` — 6adcb2d
 
 #### Manual
 
@@ -1261,15 +1261,15 @@ is exercised by the very first email.
 
 #### Automated
 
-- [ ] 6.1 Unit tests pass: `npm test`
-- [ ] 6.2 Unit tests: `recapSettingsSchema` rejects hour 24, minute 60, negatives
-- [ ] 6.3 Unit tests: `describeLastSend` covers never-sent, sent, failed
-- [ ] 6.4 Integration test: `saveRecapSettings` is owner-scoped
-- [ ] 6.5 Integration test: `getLastRecap` newest-first and null when none
-- [ ] 6.6 Type checking passes: `npx tsc --noEmit`
-- [ ] 6.7 Linting passes: `npm run lint`
-- [ ] 6.8 Integration suite passes: `npm run test:integration`
-- [ ] 6.9 E2E suite passes: `npm run test:e2e`
+- [x] 6.1 Unit tests pass: `npm test`
+- [x] 6.2 Unit tests: `recapSettingsSchema` rejects hour 24, minute 60, negatives
+- [x] 6.3 Unit tests: `describeLastSend` covers never-sent, sent, failed
+- [x] 6.4 Integration test: `saveRecapSettings` is owner-scoped
+- [x] 6.5 Integration test: `getLastRecap` newest-first and null when none
+- [x] 6.6 Type checking passes: `npx tsc --noEmit`
+- [x] 6.7 Linting passes: `npm run lint`
+- [x] 6.8 Integration suite passes: `npm run test:integration`
+- [x] 6.9 E2E suite passes: `npm run test:e2e`
 
 #### Manual
 

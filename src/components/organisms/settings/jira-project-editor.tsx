@@ -22,10 +22,11 @@ import {
  * (S-10 Phase 8). Reuses the wizard's project selector and status mapper.
  *
  * DESTRUCTIVE, so it opens with a confirmation rather than the picker. `sprint`
- * hangs off `jira_project`, and `jira_ticket` + `jira_status_history` hang off
- * `sprint`, all cascading — switching projects discards the account's synced
- * sprint history, and the owner has to know that before the picker appears, not
- * after they have chosen.
+ * hangs off `jira_project`, and `jira_ticket`, `jira_status_history` and — since
+ * S-11 — `daily_recap` all hang off `sprint`, cascading. Switching projects
+ * discards the account's synced sprint history AND its stored daily recaps, and
+ * the owner has to know that before the picker appears, not after they have
+ * chosen. A confirmation that undersells what it deletes is the defect.
  */
 
 type Stage =
@@ -76,7 +77,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           <AlertTitle>This discards synced sprint data</AlertTitle>
           <AlertDescription>
             Pointing the account at a different project deletes the sprints,
-            tickets, and status history synced from
+            tickets, status history, and daily recaps synced from
             {currentProjectKey ? ` ${currentProjectKey}` : " the current project"}.
             Anomalies detected from that data go with it. Re-syncing rebuilds
             only what the new project&apos;s Jira history contains.
@@ -106,8 +107,8 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>{stage.summary}</AlertTitle>
           <AlertDescription>
-            The previous project&apos;s sprints, tickets and status history were
-            discarded, as warned. Nothing has imported a sprint for the new
+            The previous project&apos;s sprints, tickets, status history and
+            daily recaps were discarded, as warned. Nothing has imported a sprint for the new
             project yet, so both dashboards will stay empty until you re-run the
             cadence import.
           </AlertDescription>
