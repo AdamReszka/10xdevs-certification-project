@@ -828,11 +828,11 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Automated
 
-- [x] 4.1 Type checking passes: `npx tsc --noEmit`
-- [x] 4.2 Linting passes: `npm run lint`
-- [x] 4.3 Unit tests pass: `npm test`
-- [x] 4.4 Integration tests pass: `npm run test:integration`
-- [x] 4.5 The lesson landed: `grep -c "^## " context/foundation/lessons.md` returns `6`
+- [x] 4.1 Type checking passes: `npx tsc --noEmit` — 036d466
+- [x] 4.2 Linting passes: `npm run lint` — 036d466
+- [x] 4.3 Unit tests pass: `npm test` — 036d466
+- [x] 4.4 Integration tests pass: `npm run test:integration` — 036d466
+- [x] 4.5 The lesson landed: `grep -c "^## " context/foundation/lessons.md` returns `6` — 036d466
 
 #### Manual
 

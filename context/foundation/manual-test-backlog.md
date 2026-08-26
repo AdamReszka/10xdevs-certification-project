@@ -40,6 +40,49 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
 
 ---
 
+## 1a. Teraz — S-16 sprint-reconciliation (PR #52)
+
+Kod dowieziony i zmergowalny; wszystkie 16 kryteriów automatycznych zielone.
+Te 5 wierszy zostało otwartych **świadomie** — merge bez nich jest decyzją, nie
+przeoczeniem. Pełne instrukcje krok po kroku:
+`context/changes/sprint-reconciliation/MANUAL-CHECKLIST.md`.
+
+> 🔴 **3.6 to jest cały sens slice'u.** Dopóki nikt nie potwierdzi, że po
+> rollowerze w Jirze „Sync now" tworzy wiersz z **nowym** `jira_sprint_id`,
+> FR-007 nie ma dowodu na żywych danych. Tryb porażki jest podstępny: sync
+> raportuje zielono niezależnie od wyniku — dokładnie ten objaw uzasadnił
+> powstanie S-16.
+
+- [ ] **2.7** Kreator `/setup/team` nadal działa po przepięciu na
+      `reconcile-sprint.ts` (nazwa aktywnego sprintu + chooser tablic).
+      *Źródło:* `context/changes/sprint-reconciliation/plan.md:809`
+      *Dlaczego:* faza 2 wypatroszyła `importCadence`; testy integracyjne
+      pokrywają serwis, ale nie spięcie Server Action → formularz → chooser.
+      To jedyna ścieżka kadencji, jaka dziś istnieje w produkcie.
+
+- [ ] **3.6** Realny „Sync now" tworzy wiersz `sprint` zgodny z aktywnym
+      sprintem w Jirze. *Źródło:* `plan.md:823`
+
+- [ ] **3.7** Dashboard „Today" renderuje ticket'y i anomalie **nowego**
+      sprintu, ze świeżym timestampem. *Źródło:* `plan.md:824`
+
+- [ ] **3.8** `select count(*) from sprint where owner_id = $1 and state = 'ACTIVE'`
+      zwraca 1. *Źródło:* `plan.md:825`
+
+- [ ] **4.6** Zmiana projektu Jiry w kreatorze nie zostawia starego sprintu.
+      *Źródło:* `plan.md:839`
+      ⚠️ **Wiersz zmienił sens** — patrz checklista. Ustalenie z fazy 4:
+      `/setup/jira` nie pokazuje pickera projektu, dopóki istnieje
+      `jira_credential`, a Disconnect i tak kasuje sprint kaskadą. Nośną
+      połową jest teraz **krok 2** (potwierdź, że widzisz kartę statusu, a nie
+      picker) — pilnuje założenia, na którym oparto brak confirmation dialogu.
+
+**Nie pokryte automatyką z innego powodu:** „okno pustki" po rollowerze
+(checklista, faza 3) — udokumentowane i zaakceptowane przy planowaniu, ale
+warto zobaczyć na oczy, że trwa sekundy, a nie minuty.
+
+---
+
 ## 2. Zaległości z wcześniejszych slice'ów
 
 Wszystkie poniższe zostały **zarchiwizowane z niezaznaczonymi kratkami**. Nie
