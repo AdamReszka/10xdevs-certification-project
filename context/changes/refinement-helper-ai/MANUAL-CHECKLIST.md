@@ -15,7 +15,7 @@ Jiry. Na lokalnej bazie to `demo@sprintflow.test` — nazwy kont są mylące, pa
 
 ## Faza 1
 
-- [ ] **1.6 — brak klucza daje błąd konfiguracji, nie 401** *(faza 1)*
+- [x] **1.6 — brak klucza daje błąd konfiguracji, nie 401** *(faza 1)* ✅ 2026-08-26
 
   **Gdzie:** terminal, `scripts/anthropic-smoke.eval.ts` (faza 1).
 

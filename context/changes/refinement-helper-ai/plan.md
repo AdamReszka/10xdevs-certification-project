@@ -933,16 +933,16 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [ ] 1.1 `npm run lint` passes
-- [ ] 1.2 `npx tsc --noEmit` passes
-- [ ] 1.3 `npm test` passes with `anthropic.test.ts` and collects nothing from `scripts/`
-- [ ] 1.4 A test asserts `AnthropicConfigError` through the real resolver with no key
-- [ ] 1.7 A test asserts `AnthropicTruncatedError` on `stop_reason: "max_tokens"`
+- [x] 1.1 `npm run lint` passes
+- [x] 1.2 `npx tsc --noEmit` passes
+- [x] 1.3 `npm test` passes with `anthropic.test.ts` and collects nothing from `scripts/`
+- [x] 1.4 A test asserts `AnthropicConfigError` through the real resolver with no key
+- [x] 1.7 A test asserts `AnthropicTruncatedError` on `stop_reason: "max_tokens"`
 
 #### Manual
 
-- [ ] 1.5 `scripts/anthropic-smoke.eval.ts` returns parsed JSON from the real API
-- [ ] 1.6 Key unset yields the config error naming both provisioning routes
+- [x] 1.5 `scripts/anthropic-smoke.eval.ts` returns parsed JSON from the real API
+- [x] 1.6 Key unset yields the config error naming both provisioning routes
 
 ### Phase 2: Reading the real ticket out of Jira
 
