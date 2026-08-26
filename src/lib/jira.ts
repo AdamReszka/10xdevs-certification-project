@@ -1002,6 +1002,10 @@ export type JiraRefinementRelation = {
   relation: string;
 };
 
+/** How the analysis got hold of the ticket (FR-020 offers three input routes;
+ * two of them are Jira reads, the third is a paste). */
+export type RefinementTicketOrigin = "JIRA" | "PASTE";
+
 /** A ticket as the Refinement analysis reads it: everything a lead would look at
  * during refinement, flattened to text. Deliberately NOT persisted — the plan
  * stores verdicts, never ticket bodies. */
@@ -1023,6 +1027,11 @@ export type JiraRefinementTicket = {
   labels: string[];
   priority: string | null;
   sourceUrl: string | null;
+  /** Where the ticket came from. Load-bearing rather than cosmetic: a pasted
+   * story has no attachments and no links because a paste carries none, not
+   * because the author omitted them, so absence-based checks must read this
+   * flag instead of inferring absence from the empty arrays. */
+  origin: RefinementTicketOrigin;
 };
 
 /**
@@ -1195,6 +1204,7 @@ function toRefinementTicket(
       : [],
     priority: typeof priority?.name === "string" ? priority.name : null,
     sourceUrl: `${baseUrl}/browse/${issue.key}`,
+    origin: "JIRA",
   };
 }
 

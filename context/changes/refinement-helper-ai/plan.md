@@ -948,9 +948,9 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 2.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [x] 2.2 ADF flattening covers every contracted node type plus malformed and over-deep inputs
-- [x] 2.3 `fetchRefinementTickets` reports requested keys Jira did not return
+- [x] 2.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — 7b6bd65
+- [x] 2.2 ADF flattening covers every contracted node type plus malformed and over-deep inputs — 7b6bd65
+- [x] 2.3 `fetchRefinementTickets` reports requested keys Jira did not return — 7b6bd65
 
 #### Manual
 
@@ -961,11 +961,11 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [ ] 3.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [ ] 3.2 One test file per P0 detector, plus helpers and index
-- [ ] 3.3 `index.test.ts` asserts every detector is registered
-- [ ] 3.4 `GAP_CLASS_OBLIGATIONS` has an entry for every `TaskKind`
-- [ ] 3.5 `parsePastedTicket` splits summary/description, raises on empty, and yields no absence-based P2 gap
+- [x] 3.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — a93ff61
+- [x] 3.2 One test file per P0 detector, plus helpers and index — a93ff61
+- [x] 3.3 `index.test.ts` asserts every detector is registered — a93ff61
+- [x] 3.4 `GAP_CLASS_OBLIGATIONS` has an entry for every `TaskKind` — a93ff61
+- [x] 3.5 `parsePastedTicket` splits summary/description, raises on empty, and yields no absence-based P2 gap — a93ff61
 
 ### Phase 4: The analysis, the task-kind gate, and the corpus
 
