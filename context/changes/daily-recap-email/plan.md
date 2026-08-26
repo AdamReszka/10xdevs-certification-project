@@ -1186,25 +1186,25 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `npm test`
-- [x] 2.2 Unit tests: 401 → `EmailAuthError`; 429/500/network → `EmailUnavailableError`, no `cause`
-- [x] 2.3 Unit tests: 400/403/409/422 → non-retryable `EmailRequestError` carrying the status
-- [x] 2.4 Unit test: request carries `User-Agent`, `Authorization`, `Content-Type`, `Idempotency-Key`, caller headers; a caller `Authorization` is ignored
-- [x] 2.5 Unit test: the API key appears in no error `message`, `stack`, or `cause`
-- [x] 2.6 Unit test: `resolveEmailTransport` throws in production without a key, console transport otherwise
-- [x] 2.7 Type checking passes: `npx tsc --noEmit`
-- [x] 2.8 Linting passes: `npm run lint`
+- [x] 2.1 Unit tests pass: `npm test` — 3b43323
+- [x] 2.2 Unit tests: 401 → `EmailAuthError`; 429/500/network → `EmailUnavailableError`, no `cause` — 3b43323
+- [x] 2.3 Unit tests: 400/403/409/422 → non-retryable `EmailRequestError` carrying the status — 3b43323
+- [x] 2.4 Unit test: request carries `User-Agent`, `Authorization`, `Content-Type`, `Idempotency-Key`, caller headers; a caller `Authorization` is ignored — 3b43323
+- [x] 2.5 Unit test: the API key appears in no error `message`, `stack`, or `cause` — 3b43323
+- [x] 2.6 Unit test: `resolveEmailTransport` throws in production without a key, console transport otherwise — 3b43323
+- [x] 2.7 Type checking passes: `npx tsc --noEmit` — 3b43323
+- [x] 2.8 Linting passes: `npm run lint` — 3b43323
 
 ### Phase 3: Password-reset email (closes FR-001)
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `npm test`
-- [ ] 3.2 Unit test: `sendResetPassword` sends the URL via the transport and does not log it
-- [ ] 3.3 Unit test: a transport rejection does not propagate out of `sendResetPassword`
-- [ ] 3.4 Type checking passes: `npx tsc --noEmit`
-- [ ] 3.5 Linting passes: `npm run lint`
-- [ ] 3.6 Integration suite passes: `npm run test:integration`
+- [x] 3.1 Unit tests pass: `npm test`
+- [x] 3.2 Unit test: `sendResetPassword` sends the URL via the transport and does not log it
+- [x] 3.3 Unit test: a transport rejection does not propagate out of `sendResetPassword`
+- [x] 3.4 Type checking passes: `npx tsc --noEmit`
+- [x] 3.5 Linting passes: `npm run lint`
+- [x] 3.6 Integration suite passes: `npm run test:integration`
 
 #### Manual
 
