@@ -5,7 +5,11 @@ import { and, eq, sql } from "drizzle-orm";
 import { dailyRecap, user } from "@/db/schema";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
-import { EmailRequestError, EmailUnavailableError } from "@/lib/email";
+import {
+  CONCURRENT_IDEMPOTENT_REQUESTS,
+  EmailRequestError,
+  EmailUnavailableError,
+} from "@/lib/email";
 import {
   resolveEmailTransport,
   resolveFromAddress,
@@ -124,6 +128,17 @@ export async function sendDailyRecap({
     return { status: "SKIPPED", reason: due.reason === "disabled" ? "disabled" : "not_due" };
   }
 
+  // --- 2a. Sender, resolved BEFORE the claim (impl-review F1) ---------------
+  // A deployment with no sender cannot send today and cannot send in fifteen
+  // minutes either. Checked here, beside `no_sprint` and `disabled`, so it
+  // SKIPS without writing anything — claiming first and then failing would mark
+  // the day FAILED at the attempt cap, and provisioning the secrets that same
+  // afternoon would not un-burn it. Outside production `resolveFromAddress`
+  // yields a dev placeholder, so this branch is a production misconfiguration
+  // only.
+  const from = resolveFromAddress(env);
+  if (!from) return { status: "SKIPPED", reason: "no_sender" };
+
   // --- 3. Claim the day's slot ---------------------------------------------
   const [claimed] = await db
     .insert(dailyRecap)
@@ -204,21 +219,23 @@ export async function sendDailyRecap({
     frozen = existing.renderedMessage ?? null;
   }
 
-  // --- 5. Recipient + sender ------------------------------------------------
+  // --- 5. Recipient ---------------------------------------------------------
   const [recipient] = await db
     .select({ email: user.email })
     .from(user)
     .where(eq(user.id, ownerId))
     .limit(1);
+  // `user.email` is NOT NULL, so this is unreachable short of the row vanishing
+  // mid-call. Terminal rather than retryable: nothing about it improves in 15
+  // minutes.
   if (!recipient?.email) return await fail(db, rowId, ownerId, "no_recipient");
-
-  const from = resolveFromAddress(env);
-  if (!from) return await fail(db, rowId, ownerId, "no_sender");
 
   // --- 6. Render once, persist, then send -----------------------------------
   if (!frozen) {
     const payload = await buildPayload({ db, ownerId, now, timeZone, sprint });
-    frozen = render(payload);
+    // Headers are frozen WITH the body (impl-review F4): they travel in the
+    // request body, so Resend compares them for the Idempotency-Key.
+    frozen = { ...render(payload), headers: unsubscribeHeaders(env) };
     // Persist BEFORE calling the transport. Load-bearing, not tidiness: this is
     // what makes attempts 2 and 3 byte-identical to attempt 1.
     await db
@@ -244,12 +261,23 @@ export async function sendDailyRecap({
       // accepted the message, replaying this exact key is what prevents a second
       // email; an attempt suffix would send one.
       idempotencyKey: `${ownerId}:${due.dayKey}`,
-      headers: unsubscribeHeaders(env),
+      // Re-sent verbatim from the claim row, NOT recomputed. A row written
+      // before `headers` existed simply carries none.
+      headers: frozen.headers,
     });
   } catch (err) {
     // `409 concurrent_idempotent_requests` means another attempt is mid-flight at
     // Resend — come back later, never "give up".
-    if (err instanceof EmailRequestError && err.status === 409) {
+    //
+    // The OTHER 409, `invalid_idempotent_request` (this key already carried a
+    // different payload), is permanent and must fall through to the FAILED
+    // branch. Branching on the status alone left that case stuck `PENDING`
+    // forever, so `/settings/recap` reported "being sent right now" indefinitely
+    // (impl-review F2).
+    if (
+      err instanceof EmailRequestError &&
+      err.code === CONCURRENT_IDEMPOTENT_REQUESTS
+    ) {
       return { status: "SKIPPED", reason: "in_flight" };
     }
     // A retryable failure leaves `attempt_count` where the claim put it, so the

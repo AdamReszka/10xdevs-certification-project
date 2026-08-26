@@ -235,6 +235,50 @@ describe("sendDailyRecap — skip paths", () => {
     await expect(rowFor(ownerId)).resolves.toHaveLength(0);
   });
 
+  it("SKIPS an unconfigured production deployment WITHOUT poisoning the row", async () => {
+    // impl-review F1. The sender check used to sit after the claim, so a
+    // deployment with no RESEND_FROM_ADDRESS marked the day FAILED at the
+    // attempt cap — and provisioning the secrets that same afternoon did not
+    // un-burn it. Skipping before the claim is what makes the day still sendable
+    // the moment the config lands.
+    const { ownerId } = await newOwner();
+    const { transport, sent } = recordingTransport();
+    vi.stubEnv("NODE_ENV", "production");
+
+    const result = await sendDailyRecap({
+      db,
+      ownerId,
+      env: { RESEND_API_KEY: "re_test" },
+      now: NOW,
+      deps: { transport },
+    });
+
+    expect(result).toEqual({ status: "SKIPPED", reason: "no_sender" });
+    expect(sent).toHaveLength(0);
+    await expect(rowFor(ownerId)).resolves.toHaveLength(0);
+    vi.unstubAllEnvs();
+  });
+
+  it("uses the dev placeholder sender outside production, so the console path works", async () => {
+    // The other half of F1: `resolveEmailTransport` degrades to a console
+    // transport without a key, but the recap could never reach it because it had
+    // no sender. Phase 2's whole premise — "the key becomes configuration, not a
+    // prerequisite" — depends on this resolving.
+    const { ownerId } = await newOwner();
+    const { transport, sent } = recordingTransport();
+
+    const result = await sendDailyRecap({
+      db,
+      ownerId,
+      env: {},
+      now: NOW,
+      deps: { transport },
+    });
+
+    expect(result).toEqual({ status: "SENT" });
+    expect(sent[0].from).toContain("dev");
+  });
+
   it("skips before the configured send time", async () => {
     const { ownerId } = await newOwner();
     const { transport, sent } = recordingTransport();
@@ -279,12 +323,20 @@ describe("sendDailyRecap — concurrency", () => {
     await db.insert(anomaly).values(anomalyRow(ownerId, sprintId!));
     const { transport, sent } = recordingTransport();
 
+    // A SECOND POOL, so the two claims genuinely contend inside Postgres
+    // (impl-review F5). Sharing the suite's `max: 1` pool would serialize them
+    // on one connection: the ON CONFLICT branch would still be taken, but the
+    // slice's headline guarantee — two simultaneous transactions resolve to one
+    // winner — would go untested.
+    const rival = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+    const rivalDb = drizzle(rival);
+
     // Two overlapping `scheduled()` invocations, the case an in-process lease
     // cannot cover.
     const [a, b] = await Promise.all([
       sendDailyRecap({ db, ownerId, env: ENV, now: NOW, deps: { transport } }),
-      sendDailyRecap({ db, ownerId, env: ENV, now: NOW, deps: { transport } }),
-    ]);
+      sendDailyRecap({ db: rivalDb, ownerId, env: ENV, now: NOW, deps: { transport } }),
+    ]).finally(() => rival.end());
 
     expect(sent).toHaveLength(1);
     const statuses = [a.status, b.status].sort();
@@ -403,13 +455,45 @@ describe("sendDailyRecap — retry and the attempt cap", () => {
     const { ownerId } = await newOwner();
 
     const { transport } = recordingTransport(() => {
-      throw new EmailRequestError(409);
+      throw new EmailRequestError(409, "concurrent_idempotent_requests");
     });
     const result = await sendDailyRecap({ db, ownerId, env: ENV, now: NOW, deps: { transport } });
 
     expect(result).toEqual({ status: "SKIPPED", reason: "in_flight" });
     // Left claimable, NOT marked FAILED: another attempt is mid-flight at Resend.
     expect((await rowFor(ownerId))[0].sendStatus).toBe("PENDING");
+  });
+
+  it("treats the OTHER 409 as terminal, so the row does not sit PENDING forever", async () => {
+    // impl-review F2. `invalid_idempotent_request` means this key already
+    // carried a different payload — permanent. Branching on the status alone
+    // left it PENDING indefinitely, and `/settings/recap` reported "being sent
+    // right now" for a day that would never send.
+    const { ownerId } = await newOwner();
+
+    const { transport } = recordingTransport(() => {
+      throw new EmailRequestError(409, "invalid_idempotent_request");
+    });
+    const result = await sendDailyRecap({ db, ownerId, env: ENV, now: NOW, deps: { transport } });
+
+    expect(result.status).toBe("FAILED");
+    const [row] = await rowFor(ownerId);
+    expect(row.sendStatus).toBe("FAILED");
+    expect(row.attemptCount).toBe(3);
+  });
+
+  it("treats a 409 with no readable name as terminal too", async () => {
+    // Fail closed: an unknown 409 is more likely permanent than transient, and a
+    // wrongly-terminal one still costs only that day's email.
+    const { ownerId } = await newOwner();
+
+    const { transport } = recordingTransport(() => {
+      throw new EmailRequestError(409);
+    });
+    const result = await sendDailyRecap({ db, ownerId, env: ENV, now: NOW, deps: { transport } });
+
+    expect(result.status).toBe("FAILED");
+    expect((await rowFor(ownerId))[0].sendStatus).toBe("FAILED");
   });
 });
 

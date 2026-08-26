@@ -106,6 +106,12 @@ export type LastRecap = {
   sendStatus: "PENDING" | "SENT" | "FAILED";
   sentAt: Date | null;
   attemptCount: number;
+  /**
+   * When the current attempt claimed the row. Read so the settings page can tell
+   * "sending right now" from a claim orphaned by a dead Worker (impl-review F6)
+   * — without it, a stalled PENDING renders as in-progress indefinitely.
+   */
+  lastAttemptAt: Date | null;
 };
 
 /**
@@ -132,6 +138,7 @@ export async function getLastRecap({
       sendStatus: dailyRecap.sendStatus,
       sentAt: dailyRecap.sentAt,
       attemptCount: dailyRecap.attemptCount,
+      lastAttemptAt: dailyRecap.lastAttemptAt,
     })
     .from(dailyRecap)
     .where(eq(dailyRecap.ownerId, ownerId))

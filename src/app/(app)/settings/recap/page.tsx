@@ -58,6 +58,7 @@ export default async function RecapSettingsPage() {
                 // `organisms/anomaly/types.ts`.
                 sentAt: lastRecap.sentAt?.toISOString() ?? null,
                 attemptCount: lastRecap.attemptCount,
+                lastAttemptAt: lastRecap.lastAttemptAt?.toISOString() ?? null,
               }
             : null
         }

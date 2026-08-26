@@ -97,12 +97,32 @@ export class EmailUnavailableError extends Error {
 export class EmailRequestError extends Error {
   readonly status: number;
 
-  constructor(status: number, message?: string) {
+  /**
+   * The provider's machine-readable error name, populated for 409 ONLY.
+   *
+   * A deliberate, narrow exception to "the response body is never read on an
+   * error path". Two 409s mean opposite things —
+   * `concurrent_idempotent_requests` is "another attempt is in flight, come back
+   * later", `invalid_idempotent_request` is "this key already carried a
+   * different payload" and is permanent — and the status alone cannot tell them
+   * apart. Conflating them leaves the day's row stuck `PENDING` forever.
+   *
+   * Only this one enum-ish field crosses over. It is NEVER interpolated into
+   * `message`, never attached as `cause`, and no other status reads the body.
+   * Do not widen this.
+   */
+  readonly code?: string;
+
+  constructor(status: number, code?: string, message?: string) {
     super(message ?? `Resend refused the request (HTTP ${status}).`);
     this.name = "EmailRequestError";
     this.status = status;
+    this.code = code;
   }
 }
+
+/** Resend's name for a 409 whose first request has not settled yet. */
+export const CONCURRENT_IDEMPOTENT_REQUESTS = "concurrent_idempotent_requests";
 
 /**
  * Headers for the single authenticated POST.
@@ -120,6 +140,23 @@ function emailHeaders(apiKey: string, extra?: Record<string, string>): HeadersIn
     // official SDKs set it automatically; a raw-fetch client must do it itself.
     "User-Agent": USER_AGENT,
   };
+}
+
+/**
+ * Read ONLY the `name` field, and ONLY for a 409. See `EmailRequestError.code`.
+ *
+ * Everything else about the body is discarded unread, including on failure to
+ * parse — a provider that echoed the request back must not be able to put the
+ * API key anywhere near an error surface.
+ */
+async function readErrorCode(res: Response): Promise<string | undefined> {
+  if (res.status !== 409) return undefined;
+  try {
+    const body = (await res.json()) as { name?: unknown } | null;
+    return typeof body?.name === "string" ? body.name : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The provider message id — S-12's recap history wants it. */
@@ -167,7 +204,7 @@ export async function sendEmail(
       `Resend is temporarily unavailable (HTTP ${res.status}). Please try again.`,
     );
   }
-  if (!res.ok) throw new EmailRequestError(res.status);
+  if (!res.ok) throw new EmailRequestError(res.status, await readErrorCode(res));
 
   let body: unknown;
   try {

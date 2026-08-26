@@ -205,6 +205,38 @@ describe("sendEmail — error mapping", () => {
     },
   );
 
+  it("carries the provider's error name on a 409, and only on a 409", async () => {
+    // The two 409s mean OPPOSITE things and the status alone cannot tell them
+    // apart — see EmailRequestError.code. The narrow body read exists for this.
+    const concurrent = oneShot(jsonRes({ name: "concurrent_idempotent_requests" }, 409));
+    const a = await sendEmail(KEY, MESSAGE, { baseUrl: BASE, fetchImpl: concurrent.fetchImpl }).catch(
+      (e) => e,
+    );
+    expect(a.code).toBe("concurrent_idempotent_requests");
+
+    const invalid = oneShot(jsonRes({ name: "invalid_idempotent_request" }, 409));
+    const b = await sendEmail(KEY, MESSAGE, { baseUrl: BASE, fetchImpl: invalid.fetchImpl }).catch(
+      (e) => e,
+    );
+    expect(b.code).toBe("invalid_idempotent_request");
+
+    // Every other status leaves the body unread.
+    const unprocessable = oneShot(jsonRes({ name: "validation_error" }, 422));
+    const c = await sendEmail(KEY, MESSAGE, {
+      baseUrl: BASE,
+      fetchImpl: unprocessable.fetchImpl,
+    }).catch((e) => e);
+    expect(c.code).toBeUndefined();
+  });
+
+  it("leaves code undefined when a 409 body is unreadable", async () => {
+    const { fetchImpl } = oneShot(new Response("not json", { status: 409 }));
+
+    const err = await sendEmail(KEY, MESSAGE, { baseUrl: BASE, fetchImpl }).catch((e) => e);
+    expect(err).toBeInstanceOf(EmailRequestError);
+    expect(err.code).toBeUndefined();
+  });
+
   it("treats an unreadable 200 body as retryable", async () => {
     const { fetchImpl } = oneShot(
       new Response("not json", { status: 200, headers: { "content-type": "application/json" } }),
@@ -230,6 +262,7 @@ describe("sendEmail — the key never leaks", () => {
     ["429", () => oneShot(jsonRes({ message: `key ${KEY} throttled` }, 429))],
     ["500", () => oneShot(jsonRes({ message: `key ${KEY} exploded` }, 500))],
     ["422", () => oneShot(jsonRes({ message: `key ${KEY} invalid from` }, 422))],
+    ["409 name", () => oneShot(jsonRes({ name: `invalid_${KEY}` }, 409))],
     [
       "network",
       () =>

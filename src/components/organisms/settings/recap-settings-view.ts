@@ -13,7 +13,16 @@ export type LastRecapRow = {
   /** ISO instant, or null when the send never completed. */
   sentAt: string | null;
   attemptCount: number;
+  /** ISO instant the current attempt claimed the row; null on an unclaimed one. */
+  lastAttemptAt: string | null;
 };
+
+/**
+ * The claim TTL from `recap/send.ts`. A PENDING row older than this was orphaned
+ * by a crashed invocation and the next cron tick reclaims it — so the copy must
+ * stop saying "being sent right now".
+ */
+const CLAIM_TTL_MS = 10 * 60 * 1000;
 
 /**
  * The one "did it actually work" line.
@@ -23,7 +32,7 @@ export type LastRecapRow = {
  * banner, which means "your Jira/GitHub data is stale" and is a different thing
  * to act on.
  */
-export function describeLastSend(row: LastRecapRow | null): string {
+export function describeLastSend(row: LastRecapRow | null, now: Date = new Date()): string {
   if (!row) {
     return "No recap has been sent yet. The first one goes out at your chosen time, once Jira has an active sprint.";
   }
@@ -31,11 +40,17 @@ export function describeLastSend(row: LastRecapRow | null): string {
   switch (row.sendStatus) {
     case "SENT":
       return `Last recap sent for ${row.recapDay}.`;
-    case "PENDING":
-      // Reachable in normal operation: the row is claimed for a few seconds
-      // during the send, and stays PENDING if the Worker died mid-flight (the
-      // next tick reclaims it).
-      return `A recap for ${row.recapDay} is being sent right now.`;
+    case "PENDING": {
+      // Two different situations wear the same status. Inside the claim TTL the
+      // send really is in flight; past it, the Worker died mid-send and the row
+      // is waiting to be reclaimed. Reporting the second as the first is how a
+      // stalled recap reads as healthy indefinitely (impl-review F6).
+      const claimedAt = row.lastAttemptAt ? Date.parse(row.lastAttemptAt) : NaN;
+      const stalled = Number.isNaN(claimedAt) || now.getTime() - claimedAt >= CLAIM_TTL_MS;
+      return stalled
+        ? `The recap for ${row.recapDay} stalled mid-send. SprintFlow will retry it within 15 minutes.`
+        : `A recap for ${row.recapDay} is being sent right now.`;
+    }
     case "FAILED":
       return row.attemptCount >= 3
         ? `The recap for ${row.recapDay} could not be delivered after 3 attempts. The next one is tomorrow.`

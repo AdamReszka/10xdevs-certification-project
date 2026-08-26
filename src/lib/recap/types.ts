@@ -136,4 +136,15 @@ export type RenderedEmail = {
   subject: string;
   html: string;
   text: string;
+  /**
+   * Message headers (`List-Unsubscribe` + `List-Unsubscribe-Post`), frozen here
+   * rather than recomputed per attempt.
+   *
+   * They travel in the request BODY, so they are part of what Resend compares
+   * for an `Idempotency-Key`. Deriving them at send time from live
+   * `BETTER_AUTH_URL` made the byte-identical-across-attempts invariant rest on
+   * "that config never changes" instead of on the mechanism chosen to guarantee
+   * it (impl-review F4). Optional so rows written before this shape still read.
+   */
+  headers?: Record<string, string>;
 };

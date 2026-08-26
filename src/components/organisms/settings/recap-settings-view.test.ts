@@ -19,6 +19,7 @@ function row(over: Partial<LastRecapRow> = {}): LastRecapRow {
     sendStatus: "SENT",
     sentAt: "2026-08-26T13:00:12.000Z",
     attemptCount: 1,
+    lastAttemptAt: "2026-08-26T13:00:00.000Z",
     ...over,
   };
 }
@@ -47,12 +48,43 @@ describe("describeLastSend", () => {
     expect(exhausted).not.toContain("try again");
   });
 
-  it("covers the in-flight PENDING row", () => {
-    // Reachable in normal operation — the row is claimed for the few seconds a
-    // send takes, and stays PENDING if the Worker died mid-flight.
-    expect(describeLastSend(row({ sendStatus: "PENDING", sentAt: null }))).toContain(
-      "being sent right now",
+  it("reports a FRESH PENDING claim as in flight", () => {
+    const now = new Date("2026-08-26T13:02:00.000Z"); // 2 min into the claim
+    expect(
+      describeLastSend(
+        row({
+          sendStatus: "PENDING",
+          sentAt: null,
+          lastAttemptAt: "2026-08-26T13:00:00.000Z",
+        }),
+        now,
+      ),
+    ).toContain("being sent right now");
+  });
+
+  it("reports a STALE PENDING claim as stalled, not as in flight", () => {
+    // impl-review F6. Past the 10-minute claim TTL the Worker died mid-send and
+    // the row is waiting to be reclaimed. Saying "being sent right now" here is
+    // how a stalled recap reads as healthy indefinitely.
+    const now = new Date("2026-08-26T13:20:00.000Z"); // 20 min — past the TTL
+    const out = describeLastSend(
+      row({
+        sendStatus: "PENDING",
+        sentAt: null,
+        lastAttemptAt: "2026-08-26T13:00:00.000Z",
+      }),
+      now,
     );
+    expect(out).toContain("stalled");
+    expect(out).not.toContain("being sent right now");
+  });
+
+  it("treats a PENDING row with no claim timestamp as stalled", () => {
+    // Fail toward the honest reading: without a timestamp we cannot claim a send
+    // is in progress.
+    expect(
+      describeLastSend(row({ sendStatus: "PENDING", sentAt: null, lastAttemptAt: null })),
+    ).toContain("stalled");
   });
 });
 

@@ -112,18 +112,38 @@ describe("createAuth — sendResetPassword", () => {
     error.mockRestore();
   });
 
-  it("falls back to the dev log line only when no sender is configured", async () => {
+  it("falls back to the dev log line only when there is NO real transport", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const { transport, sent } = spyTransport();
 
-    const handler = resetHandler({}, { emailTransport: transport });
+    // No injected transport and no RESEND_API_KEY: nothing exists that could
+    // carry the link, so the log line is the only way a local password reset is
+    // clickable at all. Gated on the TRANSPORT, not on the sender — outside
+    // production `resolveFromAddress` yields a dev placeholder (so the recap's
+    // console transport works), and gating on the sender would silently stop
+    // printing the link (impl-review F1).
+    const instance = createAuth({ BETTER_AUTH_SECRET: "test-secret" });
+    const handler = instance.options.emailAndPassword?.sendResetPassword;
+    if (!handler) throw new Error("sendResetPassword is not configured");
     await handler({ user: USER, url: URL_WITH_TOKEN, token: "t" });
 
-    expect(sent).toHaveLength(0);
-    // Gated on the transport being unconfigured, not on NODE_ENV — this is the
-    // only place the bearer URL is ever printed, and it exists to keep the local
-    // flow exercisable before the Resend domain is verified.
     expect(JSON.stringify(log.mock.calls)).toContain(URL_WITH_TOKEN);
+    log.mockRestore();
+  });
+
+  it("prefers an injected transport over the dev log line", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { transport, sent } = spyTransport();
+    const pending: Array<Promise<unknown>> = [];
+
+    // A transport handed in explicitly IS a real transport, key or no key —
+    // otherwise every test below would silently exercise the log branch instead
+    // of the send it means to assert.
+    const handler = resetHandler({}, { emailTransport: transport, waitUntil: (p) => pending.push(p) });
+    await handler({ user: USER, url: URL_WITH_TOKEN, token: "t" });
+    await Promise.all(pending);
+
+    expect(sent).toHaveLength(1);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("secret-bearer-token");
     log.mockRestore();
   });
 });

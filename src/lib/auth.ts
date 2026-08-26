@@ -4,7 +4,11 @@ import { cache } from "react";
 import { getDb } from "@/lib/db";
 import * as schema from "@/db/schema";
 import { dispatchPasswordReset } from "@/lib/auth-email";
-import { resolveEmailTransport, resolveFromAddress } from "@/lib/email-transport";
+import {
+  resolveApiKey,
+  resolveEmailTransport,
+  resolveFromAddress,
+} from "@/lib/email-transport";
 import type { EmailTransport } from "@/lib/email-transport";
 
 /**
@@ -109,12 +113,25 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
           const transport = deps?.emailTransport ?? resolveEmailTransport(env);
           const from = resolveFromAddress(env);
 
-          if (!from) {
-            // Development without a configured sender. The URL is a bearer
-            // secret, so this log line — the ONLY place it is ever printed —
-            // exists solely to keep the flow exercisable locally, and is gated
-            // on the transport being unconfigured rather than on NODE_ENV.
+          // Gated on there being no API KEY, not on there being no sender:
+          // outside production `resolveFromAddress` now yields a dev placeholder
+          // so the recap's console transport works, and gating on the sender
+          // here would silently stop printing the link — leaving a local
+          // password reset impossible to click through.
+          //
+          // The URL is a bearer secret, so this is the ONLY place it is ever
+          // printed, and only when no real transport exists to carry it.
+          const hasRealTransport = deps?.emailTransport != null || resolveApiKey(env) != null;
+          if (!hasRealTransport) {
             console.log(`[auth] password reset requested for ${user.email}: ${url}`);
+            return;
+          }
+          // A key but no sender is a real misconfiguration, not a dev path.
+          if (!from) {
+            console.error(
+              `[auth] RESEND_API_KEY is set but RESEND_FROM_ADDRESS is not — ` +
+                `password reset for ${user.email} was not sent.`,
+            );
             return;
           }
 

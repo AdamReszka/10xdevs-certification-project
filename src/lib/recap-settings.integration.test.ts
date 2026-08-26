@@ -256,6 +256,9 @@ describe("getLastRecap", () => {
       sendStatus: "SENT",
       attemptCount: 1,
     });
+    // `lastAttemptAt` is projected so the settings page can tell an in-flight
+    // claim from one orphaned by a dead Worker (impl-review F6).
+    expect(last).toHaveProperty("lastAttemptAt");
   });
 
   it("does not read another owner's recap", async () => {

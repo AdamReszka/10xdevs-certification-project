@@ -55,9 +55,32 @@ export function resolveApiKey(env?: EmailEnv): string | undefined {
   return env?.RESEND_API_KEY ?? process.env.RESEND_API_KEY;
 }
 
-/** Resolve the verified sender the same way. */
+/**
+ * Sender used by the console transport when nothing is configured. NEVER
+ * reachable in production — `resolveFromAddress` returns it only on the same
+ * no-key, non-production branch that selects the console transport, and
+ * `resolveEmailTransport` throws in production before any send can use it.
+ */
+const DEV_FROM_ADDRESS = "SprintFlow (dev) <recap@localhost>";
+
+/**
+ * Resolve the verified sender.
+ *
+ * FALLS BACK TO A DEV PLACEHOLDER on the no-key path outside production, so the
+ * console transport can actually run end to end. Without this the recap has no
+ * sender in exactly the environments that have no key, and the whole point of
+ * the console transport — *"local development renders and logs the recap without
+ * any API key at all"* — is unreachable from `sendDailyRecap`, which is its main
+ * consumer. `auth.ts` has its own no-sender fallback and so hid the asymmetry.
+ *
+ * A real `RESEND_FROM_ADDRESS` always wins, including in development, so pointing
+ * a local run at a real Resend account still works.
+ */
 export function resolveFromAddress(env?: EmailEnv): string | undefined {
-  return env?.RESEND_FROM_ADDRESS ?? process.env.RESEND_FROM_ADDRESS;
+  const configured = env?.RESEND_FROM_ADDRESS ?? process.env.RESEND_FROM_ADDRESS;
+  if (configured) return configured;
+  if (resolveApiKey(env)) return undefined; // a key but no sender is a real misconfiguration
+  return process.env.NODE_ENV === "production" ? undefined : DEV_FROM_ADDRESS;
 }
 
 /**
