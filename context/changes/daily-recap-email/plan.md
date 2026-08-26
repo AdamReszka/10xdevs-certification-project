@@ -1261,15 +1261,15 @@ is exercised by the very first email.
 
 #### Automated
 
-- [x] 6.1 Unit tests pass: `npm test`
-- [x] 6.2 Unit tests: `recapSettingsSchema` rejects hour 24, minute 60, negatives
-- [x] 6.3 Unit tests: `describeLastSend` covers never-sent, sent, failed
-- [x] 6.4 Integration test: `saveRecapSettings` is owner-scoped
-- [x] 6.5 Integration test: `getLastRecap` newest-first and null when none
-- [x] 6.6 Type checking passes: `npx tsc --noEmit`
-- [x] 6.7 Linting passes: `npm run lint`
-- [x] 6.8 Integration suite passes: `npm run test:integration`
-- [x] 6.9 E2E suite passes: `npm run test:e2e`
+- [x] 6.1 Unit tests pass: `npm test` — 38f049d
+- [x] 6.2 Unit tests: `recapSettingsSchema` rejects hour 24, minute 60, negatives — 38f049d
+- [x] 6.3 Unit tests: `describeLastSend` covers never-sent, sent, failed — 38f049d
+- [x] 6.4 Integration test: `saveRecapSettings` is owner-scoped — 38f049d
+- [x] 6.5 Integration test: `getLastRecap` newest-first and null when none — 38f049d
+- [x] 6.6 Type checking passes: `npx tsc --noEmit` — 38f049d
+- [x] 6.7 Linting passes: `npm run lint` — 38f049d
+- [x] 6.8 Integration suite passes: `npm run test:integration` — 38f049d
+- [x] 6.9 E2E suite passes: `npm run test:e2e` — 38f049d
 
 #### Manual
 
