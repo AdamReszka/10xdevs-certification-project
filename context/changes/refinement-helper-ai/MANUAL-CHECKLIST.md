@@ -172,7 +172,7 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
 
 ## Faza 6
 
-- [ ] **6.4 — `/refinement` pokazuje prawdziwy backlog projektu** *(faza 6)*
+- [x] **6.4 — `/refinement` pokazuje prawdziwy backlog projektu** *(faza 6)* ✅ 2026-08-27
 
   **Gdzie:** `/refinement`, konto z prawdziwymi credentialami Jiry.
 
@@ -188,7 +188,7 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
   a `lessons.md` ostrzega, że pusty wynik z zawężonego zapytania czyta się
   jak sukces.
 
-- [ ] **6.6 — braki nazywają coś z tego konkretnego ticketu** *(faza 6)*
+- [x] **6.6 — braki nazywają coś z tego konkretnego ticketu** *(faza 6)* ✅ 2026-08-27
 
   **Gdzie:** `/refinement`, to samo konto.
 
@@ -200,12 +200,19 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
   („Zadanie dotyczy publikacji regulaminu, ale…"). Zdanie typu „Czy są kryteria
   akceptacji?" bez odniesienia do treści oznacza porażkę.
 
+  **Wynik (2026-08-27, FM-7).** Zweryfikowane na prawdziwym tickecie z backlogu,
+  celowo niedopracowanym. Pięć braków, każdy osadzony w treści — m.in. cytat
+  „Formularz jest walidowany” przy `ACCEPTANCE_CRITERIA_UNVERIFIABLE`. Przy
+  okazji odsłoniło dwa fałszywe alarmy P0 (nierozpoznana etykietowa forma
+  `JAKO:`/`Potrzebuję:` oraz nagłówek `KA:`) i brak strażnika spójności między
+  P0 „X_MISSING" a P1 „X_UNCLEAR" — wszystkie trzy naprawione przed tickiem.
+
   **Dlaczego to ma znaczenie:** to jest całe FR-020. Osadzenie w treści jest
   wymaganym kształtem zdania, a widoczny rodzaj zadania jest jedynym
   zabezpieczeniem przed cichą błędną klasyfikacją, która wycina całą grupę
   sprawdzeń.
 
-- [ ] **6.7 — brak klucza degraduje z bannerem i nic nie zapisuje** *(faza 6)*
+- [x] **6.7 — brak klucza degraduje z bannerem i nic nie zapisuje** *(faza 6)* ✅ 2026-08-27
 
   **Gdzie:** `/refinement`, `ANTHROPIC_API_KEY` usunięty z `.env.local`,
   serwer dev zrestartowany.

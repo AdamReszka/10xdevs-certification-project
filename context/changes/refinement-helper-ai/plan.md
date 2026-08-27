@@ -1044,7 +1044,7 @@ references it; the grep in Phase 5 proves that.
 - [x] 6.4 `/refinement` lists the real project backlog
 - [x] 6.5 A run produces one row per ticket with task kind and verdict
 - [x] 6.6 Expanded gaps name something from that specific ticket
-- [ ] 6.7 Missing `ANTHROPIC_API_KEY` degrades with a banner and saves nothing
+- [x] 6.7 Missing `ANTHROPIC_API_KEY` degrades with a banner and saves nothing
 - [x] 6.8 The Refinement nav link navigates
-- [ ] 6.11 A typed key outside the backlog analyses; an unknown key is reported, not dropped
-- [ ] 6.12 A pasted story analyses with no attachment- or mockup-absence gap invented
+- [x] 6.11 A typed key outside the backlog analyses; an unknown key is reported, not dropped
+- [x] 6.12 A pasted story analyses with no attachment- or mockup-absence gap invented
