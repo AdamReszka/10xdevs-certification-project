@@ -139,22 +139,43 @@ full capacity, absence-adjusted capacity and delivered SP — the last computed
 from first-entry-into-DONE (`burndown-series.ts:135-153`), which the repo
 already implements correctly and simply never persists as velocity.
 
-Four decisions belong to planning, not to this brief:
+### Settled at framing (2026-08-27, owner) — do not re-open
 
-1. **PRD retention (`prd.md:217`) must be consciously amended**, not worked
-   around — the notes' raw-data-vs-aggregate distinction (§6.1) is a proposal,
-   not yet a decision, and `roadmap.md` is canonical for scope.
-2. **S-17 (holiday calendar) stops being post-MVP.** `roadmap.md:516` says
-   *"no unshipped FR depends on it"*; an MD capacity makes that false, because
-   MD **is** the working-day count. Decide whether S-17 becomes a prerequisite
-   or the inflation is accepted and named on screen.
-3. **`cel_SP` is out of the named scope and collides with `prd.md:216`.** The
-   owner named capacity, velocity and reliability. Confirm whether the target
-   is in or out before it is planned in by momentum.
-4. **The `sp_capacity` migration destroys data.** Every stored non-null value is
-   un-reinterpretable; NULLing the column throws every team that filled it into
-   the "no capacity set for anyone" empty state. That is a user-visible
-   regression that needs a decision and copy, not a silent migration.
+These three were resolved before this brief was handed on, and the canonical
+documents were amended in the same pass. The slice is **roadmap S-23**.
+
+1. **Retention — amended, not circumvented.** `prd.md` § Non-functional
+   non-goals now bounds *raw synced data* to current + 2 sprints and exempts the
+   FR-023 per-sprint measurement record, retained for the team's whole lifetime.
+   Inter-sprint **trend dashboards** stay parked, for a narrowed reason: the
+   surface is phase-2, the data is no longer forbidden.
+2. **Holidays — in scope here, entered by hand.** A holiday reduces capacity by
+   one man-day per person (the owner's framing: *"to tak jakby wszyscy
+   jednocześnie mieli wolne"*). The lead records team-wide days off per sprint
+   (FR-007 extended); deriving them from a country stays **S-17**, which is now
+   *downstream* of S-23. `roadmap.md`'s "no unshipped FR depends on it" note was
+   retired.
+3. **`cel_SP` — out of scope; the guardrail was clarified, not loosened.**
+   Measuring and normalising past sprints is measurement of the past and is in;
+   a computed "aim for N SP next sprint" target is out. Recorded on the
+   no-forecasting non-goal itself, so a future reader cannot mistake FR-023 for
+   a violation.
+
+### Still open for /10x-plan
+
+1. **The `sp_capacity` migration destroys data.** Every stored non-null value is
+   un-reinterpretable — an `8` is indistinguishable as 8 SP or 8 FTE — so the
+   migration must NULL them, throwing any team that filled the field into the
+   "no capacity set for anyone" empty state. A user-visible regression needing a
+   decision and copy, not a silent migration.
+2. **Where the per-sprint record is written, and what happens to sprints that
+   closed before it existed.** The rollover hook exists (`reconcile-sprint.ts:288`)
+   but the series only starts accumulating from the first write; there is no
+   backfill, and S-16 means sprint rows themselves date only from 2026-08-26.
+3. **A Jira-project switch still erases the whole substrate**
+   (`connection-service.ts:405-411`, `jira-store.ts:255-259`) — one settings
+   action deletes every sprint row and cascades. Decide whether the measurement
+   record survives it.
 
 Two smaller items the notes did not anticipate, both cheap and both load-bearing
 for a ratio measured to a few percent: `story_points` is an `integer` column
