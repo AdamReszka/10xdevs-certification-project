@@ -1,9 +1,9 @@
 ---
 change_id: refinement-helper-ai
-title: Refinement Helper — story-grounded DOR questions, a compliance score and a saved session
-status: new
+title: Refinement Helper — a per-ticket DOR readiness verdict grounded in the ticket's own content
+status: implemented
 created: 2026-08-26
-updated: 2026-08-26
+updated: 2026-08-27
 archived_at: null
 ---
 
@@ -54,14 +54,46 @@ not `@anthropic-ai/sdk` wiring.
   resolver — an `ANTHROPIC_API_KEY` that is absent must have defined, tested
   behaviour, not a claim-then-fail.
 
-**Open questions for research/planning:**
+**Framing done (2026-08-26) — read `frame.md` + `dor-notes.md` before planning.**
 
-1. Is the Anthropic SDK Workers-compatible at module scope, or does this need the
+The framing round rewrote the slice. `prd.md` (FR-020, new FR-021),
+`roadmap.md` (S-13) and `test-plan.md:115` were updated to match; those documents
+are canonical, this file is the pointer.
+
+What changed, in one line each:
+
+- **The rubric FR-020 presupposed but never stated now exists** — `dor-notes.md`:
+  four levels of gap detectability (P0 field presence → P3 project state beyond
+  the ticket), nine gap classes from the user's real tickets, seven proposed
+  thinking models (§5a, M7 already rejected by the user).
+- **`dor_score` is dead.** The verdict is "DOR met" or a list of gaps; the user
+  ruled the score "secondary or unnecessary". `refinement_session` needs the
+  S-11 reshape treatment (`archive/2026-08-26-daily-recap-email/plan.md:257`).
+- **"5–8 questions" is gone.** Gap count follows the ticket.
+- **The input is a backlog review**, not one pasted story — the lead refines next
+  sprint's candidates while the current sprint runs. Hence the added S-03
+  prerequisite.
+- **The grounding requirement is testable without an LLM judge.** A gap is stated
+  as "this ticket is about X, but Y is missing" — grounding is the required
+  sentence shape, and gap-class detection is an ordinary assertion over a corpus
+  that must include complete tickets whose only correct verdict is "DOR met".
+
+**Open questions that survive into planning:**
+
+1. **Where the MVP boundary falls between P2 and P3** — P3 checks ("is the
+   backend subtask Done?", "is this CMS-editable?") need inputs the product does
+   not hold. The mechanism may raise a question it cannot itself answer; how far
+   that reaches is a planning decision.
+2. **One-shot or conversational** (`dor-notes.md` §8.4) — Owner: user, explicitly
+   marked reversible.
+3. **Is the Anthropic SDK Workers-safe at module scope**, or does this need the
    raw-`fetch` treatment `github.ts` and `email.ts` both ended up with?
-2. How is question quality tested at all? Model output is non-deterministic; the
-   repo's whole test culture is deterministic assertions. Some seam has to make
-   the grounding requirement falsifiable.
-3. Does `refinement_session` need reshaping (S-11 precedent), and where does the
-   DOR Compliance Score live — computed, stored, or both?
-4. Cost/rate limits per owner: nothing in the product currently meters an
-   external paid API.
+4. **Cost/rate limits per owner** — nothing in the product currently meters an
+   external paid API, and a backlog review is N tickets per run, not one.
+
+**Settled, do not re-litigate:** the Jira transport is reusable
+(`searchSprintIssues` is a generic JQL search; `listBoards` already speaks Agile
+1.0, where `/board/{id}/backlog` lives). The ticket fetch must widen beyond
+`summary` (`src/lib/jira.ts:845`) and Jira v3 returns description/comments as
+ADF, which must be flattened to text. Changing the team's ticket-writing
+convention to Markdown was considered and ruled unnecessary.

@@ -20,6 +20,16 @@ npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 - **TypeScript 5 strict mode** — path alias `@/*` → `./src/*`
 - **Tailwind CSS 4** + **shadcn/ui** (new-york style, zinc base, OKLCH tokens) — all UI must be built with shadcn/ui components; use the `@shadcn` MCP server to look up available components before implementing any UI surface; add components with `npx shadcn add <name>`
 - **Component architecture: atomic design** — `src/components/ui/` (shadcn-generated primitives), `atoms/` (custom stateless primitives), `molecules/` (composite widgets), `organisms/{anomaly,dashboard,auth,setup}/` (feature sections), `templates/` (page-level shells), `providers/` (React context wrappers)
+- **AI (S-13, FR-020/FR-021 — Refinement Helper only)** — `@anthropic-ai/sdk`
+  behind the `src/lib/anthropic.ts` seam, model pinned to **`claude-sonnet-5`**
+  (`ANTHROPIC_MODEL`). Sonnet rather than the originally-planned
+  `claude-haiku-4-5` because the P2/P3 rubric levels
+  (`context/changes/refinement-helper-ai/dor-notes.md`) are judgment work, not
+  extraction, and at realistic usage — a handful of tickets per refinement, a
+  cached rubric prefix — the cost difference is under a dollar a month. The
+  client MUST be constructed inside the request path (Workers expose no secrets
+  at module scope), and `ANTHROPIC_API_KEY` is a Workers **secret**, never a
+  `var`
 - **Deployment target: Cloudflare Workers** — do not suggest Vercel-specific APIs or config; adapter is `@opennextjs/cloudflare` (not the deprecated `@cloudflare/next-on-pages`)
 - **Testing** — Vitest 4, split into two projects that must not be merged:
   `npm test` (`vitest.config.ts`) is hermetic and DB-free and EXCLUDES
@@ -53,7 +63,6 @@ npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 These are required by the PRD but not wired yet:
 - Auth: NextAuth or Better Auth (FR-001, email + password)
 - Database: PostgreSQL + Drizzle ORM via Neon or Supabase
-- AI: `@anthropic-ai/sdk`, model `claude-haiku-4-5` (FR-020, Refinement Helper only)
 - Email: Resend (FR-018, Daily Recap)
 - Background jobs: node-cron or Cloudflare Cron Triggers (15-min sync loops)
 - Cloudflare adapter: `@opennextjs/cloudflare` (Workers target; `@cloudflare/next-on-pages` is deprecated)

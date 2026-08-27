@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   JiraAuthError,
   JiraBoardNotFoundError,
+  JiraRefinementInputError,
   JiraUnavailableError,
   type JiraStatus,
   getActiveSprint,
@@ -12,6 +13,8 @@ import {
   listProjectStatuses,
   normalizeWorkspaceUrl,
   resolveStoryPointFieldId,
+  MAX_REFINEMENT_TICKETS_PER_CALL,
+  fetchRefinementTickets,
   searchSprintIssues,
   suggestCategory,
   validateCredentials,
@@ -889,5 +892,392 @@ describe("resolveStoryPointFieldId", () => {
     const err = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }).catch((e) => e);
     expect(err).toBeInstanceOf(JiraUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+/**
+ * `fetchRefinementTickets` (S-13 phase 2) — the reader that feeds the Refinement
+ * analysis. It differs from `searchSprintIssues` in what it asks for, not in how
+ * it asks: same `/search/jql` transport, a much wider `fields` list, and ADF
+ * bodies flattened on the way out.
+ *
+ * The assertions that matter beyond mapping are the two the lesson register
+ * demands: a requested key Jira did not return is REPORTED, not silently
+ * absent (a narrowing predicate must not turn "wrong value" into "empty
+ * result"), and nothing that came from the caller reaches the JQL string
+ * unvalidated.
+ */
+
+const adfDoc = (...paragraphs: string[]) => ({
+  type: "doc",
+  version: 1,
+  content: paragraphs.map((t) => ({
+    type: "paragraph",
+    content: [{ type: "text", text: t }],
+  })),
+});
+
+describe("fetchRefinementTickets — keys path", () => {
+  it("asks /search/jql for the widened analysis fields with a key IN clause", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ issues: [], nextPageToken: null }),
+    ]);
+
+    await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-1", "FM-2"] },
+      { fetchImpl },
+    );
+
+    const url = new URL(calls[0]);
+    expect(url.pathname).toBe("/rest/api/3/search/jql");
+    expect(url.searchParams.get("jql")).toBe(
+      'key IN ("FM-1", "FM-2") ORDER BY key ASC',
+    );
+    const fields = (url.searchParams.get("fields") ?? "").split(",");
+    expect(fields).toEqual(
+      expect.arrayContaining([
+        "summary",
+        "status",
+        "issuetype",
+        "description",
+        "comment",
+        "attachment",
+        "issuelinks",
+        "subtasks",
+        "duedate",
+        "labels",
+        "priority",
+        "created",
+      ]),
+    );
+    // The changelog is what the sprint sync needs; refinement reads content.
+    expect(url.searchParams.get("expand")).toBeNull();
+  });
+
+  it("flattens the ADF description and the newest comments to text", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [
+          {
+            id: "10001",
+            key: "FM-1",
+            fields: {
+              summary: "Nowy regulamin",
+              issuetype: { name: "Task" },
+              description: adfDoc("Publikujemy nowy regulamin.", "Wchodzi wkrótce."),
+              comment: {
+                comments: [
+                  { body: adfDoc("Pierwszy komentarz.") },
+                  { body: adfDoc("Drugi komentarz.") },
+                ],
+              },
+            },
+          },
+        ],
+        nextPageToken: null,
+      }),
+    );
+
+    const { tickets } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-1"] },
+      { fetchImpl },
+    );
+
+    expect(tickets).toHaveLength(1);
+    expect(tickets[0].key).toBe("FM-1");
+    expect(tickets[0].summary).toBe("Nowy regulamin");
+    expect(tickets[0].issueType).toBe("Task");
+    expect(tickets[0].description).toBe(
+      "Publikujemy nowy regulamin.\nWchodzi wkrótce.",
+    );
+    expect(tickets[0].comments).toEqual([
+      "Pierwszy komentarz.",
+      "Drugi komentarz.",
+    ]);
+  });
+
+  it("keeps attachment names and mime types, never a byte of content", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [
+          {
+            id: "10001",
+            key: "FM-1",
+            fields: {
+              summary: "Nowy regulamin",
+              attachment: [
+                {
+                  filename: "regulamin-2026.pdf",
+                  mimeType: "application/pdf",
+                  content: "https://acme.atlassian.net/secure/attachment/1/x.pdf",
+                },
+                { filename: "notes.txt" },
+              ],
+            },
+          },
+        ],
+        nextPageToken: null,
+      }),
+    );
+
+    const { tickets } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-1"] },
+      { fetchImpl },
+    );
+
+    expect(tickets[0].attachments).toEqual([
+      { filename: "regulamin-2026.pdf", mimeType: "application/pdf" },
+      { filename: "notes.txt", mimeType: null },
+    ]);
+  });
+
+  it("maps subtasks and issue links to one hop with their statuses", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [
+          {
+            id: "10001",
+            key: "FM-4",
+            fields: {
+              summary: "Widok listy polis",
+              subtasks: [
+                {
+                  key: "FM-5",
+                  fields: {
+                    summary: "Endpoint /policies",
+                    status: {
+                      name: "In Progress",
+                      statusCategory: { key: "indeterminate" },
+                    },
+                  },
+                },
+              ],
+              issuelinks: [
+                {
+                  type: { inward: "is blocked by", outward: "blocks" },
+                  inwardIssue: {
+                    key: "FM-9",
+                    fields: {
+                      summary: "Kontrakt API",
+                      status: { name: "To Do", statusCategory: { key: "new" } },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        nextPageToken: null,
+      }),
+    );
+
+    const { tickets } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-4"] },
+      { fetchImpl },
+    );
+
+    expect(tickets[0].subtasks).toEqual([
+      {
+        key: "FM-5",
+        summary: "Endpoint /policies",
+        status: "In Progress",
+        category: "indeterminate",
+        relation: "subtask",
+      },
+    ]);
+    expect(tickets[0].links).toEqual([
+      {
+        key: "FM-9",
+        summary: "Kontrakt API",
+        status: "To Do",
+        category: "new",
+        relation: "is blocked by",
+      },
+    ]);
+  });
+
+  it("builds sourceUrl from the base so the lead can open the ticket", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [{ id: "1", key: "FM-1", fields: { summary: "x" } }],
+        nextPageToken: null,
+      }),
+    );
+    const { tickets } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-1"] },
+      { fetchImpl },
+    );
+    expect(tickets[0].sourceUrl).toBe("https://acme.atlassian.net/browse/FM-1");
+  });
+});
+
+describe("fetchRefinementTickets — the input the caller controls", () => {
+  it("reports requested keys Jira did not return instead of dropping them", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [{ id: "1", key: "FM-1", fields: { summary: "exists" } }],
+        nextPageToken: null,
+      }),
+    );
+
+    const { tickets, missingKeys } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["FM-1", "FM-404", "FM-999"] },
+      { fetchImpl },
+    );
+
+    expect(tickets.map((t) => t.key)).toEqual(["FM-1"]);
+    expect(missingKeys).toEqual(["FM-404", "FM-999"]);
+  });
+
+  it("matches a lowercase request against Jira's uppercase key", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse({
+        issues: [{ id: "1", key: "FM-1", fields: { summary: "exists" } }],
+        nextPageToken: null,
+      }),
+    );
+
+    const { missingKeys } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { keys: ["fm-1"] },
+      { fetchImpl },
+    );
+
+    expect(missingKeys).toEqual([]);
+  });
+
+  it("rejects a key outside Jira's key charset before issuing any request", async () => {
+    const { fetchImpl, calls } = seqFetch([]);
+
+    await expect(
+      fetchRefinementTickets(
+        BASE,
+        CREDS,
+        { keys: ['FM-1" OR project = "SECRET'] },
+        { fetchImpl },
+      ),
+    ).rejects.toBeInstanceOf(JiraRefinementInputError);
+    expect(calls).toEqual([]);
+  });
+
+  it("rejects an empty selection rather than searching for nothing", async () => {
+    const { fetchImpl, calls } = seqFetch([]);
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { keys: [] }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraRefinementInputError);
+    expect(calls).toEqual([]);
+  });
+
+  it("raises rather than silently truncating a selection above the per-call cap", async () => {
+    const { fetchImpl, calls } = seqFetch([]);
+    const tooMany = Array.from(
+      { length: MAX_REFINEMENT_TICKETS_PER_CALL + 1 },
+      (_, i) => `FM-${i + 1}`,
+    );
+
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { keys: tooMany }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraRefinementInputError);
+    expect(calls).toEqual([]);
+  });
+
+  it("never includes the token in a thrown error", async () => {
+    const fetchImpl = onceFetch(jsonResponse({}, { status: 500 }));
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { keys: ["FM-1"] }, { fetchImpl }),
+    ).rejects.toSatisfy((e) => !String((e as Error).message).includes(TOKEN));
+  });
+});
+
+describe("fetchRefinementTickets — board backlog path", () => {
+  const backlogIssue = (n: number) => ({
+    id: String(n),
+    key: `FM-${n}`,
+    fields: { summary: `Backlog item ${n}` },
+  });
+
+  it("reads the board's BACKLOG, not the active sprint", async () => {
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ startAt: 0, maxResults: 50, total: 0, issues: [] }),
+    ]);
+
+    await fetchRefinementTickets(BASE, CREDS, { boardId: 7 }, { fetchImpl });
+
+    const url = new URL(calls[0]);
+    expect(url.pathname).toBe("/rest/agile/1.0/board/7/backlog");
+    // The sprint search would be /rest/api/3/search/jql with a `sprint =` JQL —
+    // hitting it here is the exact defect manual row 2.5 exists to catch.
+    expect(url.searchParams.get("jql")).toBeNull();
+    const fields = (url.searchParams.get("fields") ?? "").split(",");
+    expect(fields).toEqual(expect.arrayContaining(["description", "comment", "attachment"]));
+  });
+
+  it("offset-paginates the backlog and assembles the pages", async () => {
+    const first = Array.from({ length: 50 }, (_, i) => backlogIssue(i + 1));
+    const { fetchImpl, calls } = seqFetch([
+      jsonResponse({ startAt: 0, maxResults: 50, total: 51, issues: first }),
+      jsonResponse({ startAt: 50, maxResults: 50, total: 51, issues: [backlogIssue(51)] }),
+    ]);
+
+    const { tickets, missingKeys } = await fetchRefinementTickets(
+      BASE,
+      CREDS,
+      { boardId: 7 },
+      { fetchImpl },
+    );
+
+    expect(tickets).toHaveLength(51);
+    expect(tickets[50].key).toBe("FM-51");
+    expect(new URL(calls[1]).searchParams.get("startAt")).toBe("50");
+    // Nothing was requested by key, so nothing can be missing.
+    expect(missingKeys).toEqual([]);
+  });
+
+  it("caps the page count on an unbounded backlog chain", async () => {
+    const full = Array.from({ length: 50 }, (_, i) => backlogIssue(i + 1));
+    const { fetchImpl } = seqFetch(
+      Array.from({ length: 25 }, () =>
+        jsonResponse({ startAt: 0, maxResults: 50, total: 100000, issues: full }),
+      ),
+    );
+
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { boardId: 7 }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraUnavailableError);
+  });
+
+  it("throws JiraBoardNotFoundError on 404 so a stale board id triggers re-discovery", async () => {
+    const fetchImpl = onceFetch(jsonResponse({}, { status: 404 }));
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { boardId: 7 }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraBoardNotFoundError);
+  });
+
+  it("throws JiraAuthError on 401 (a token without Agile permission)", async () => {
+    const fetchImpl = onceFetch(jsonResponse({}, { status: 401 }));
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { boardId: 7 }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraAuthError);
+  });
+
+  it("refuses a board id that is not a positive integer before requesting", async () => {
+    const { fetchImpl, calls } = seqFetch([]);
+    await expect(
+      fetchRefinementTickets(BASE, CREDS, { boardId: Number.NaN }, { fetchImpl }),
+    ).rejects.toBeInstanceOf(JiraRefinementInputError);
+    expect(calls).toEqual([]);
   });
 });
