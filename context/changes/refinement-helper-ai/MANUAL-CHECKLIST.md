@@ -94,10 +94,17 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
      traci podział na sekcje, a tak robią właśnie szablony Atlassiana. Dlatego
      wykrycie sekcji „Kryteria akceptacji" opiera się na węźle `heading`, nie na
      pogrubionej linijce.
-  2. Przecinek w nazwie pliku (`ChatGPT Image 23 sie 2026, 23_08_21.png`) jest
-     dwuznaczny tylko w funkcji wyświetlającej tego evala, która skleja
-     listę przecinkami. Prompt podawany modelowi (`prompt.ts:228-233`) wypisuje
-     załączniki po jednym w linii, więc realnej dwuznaczności nie ma.
+  2. Przecinek w nazwie pliku (`ChatGPT Image 23 sie 2026, 23_08_21.png`) nigdy
+     nie był dwuznaczny dla mechanizmu: lista załączników przychodzi z Jiry jako
+     tablica i tablicą pozostaje aż do promptu, który wypisuje ją po jednym
+     wpisie w linii (`prompt.ts:228-233`) — nic tego tekstu nie parsuje z
+     powrotem. Dwuznaczne było tylko wyjście `show()` w tym evalu, sklejane
+     przecinkami dla człowieka; poprawione na jeden plik w linii. Rozważana i
+     ODRZUCONA alternatywa: rozpoznawanie granicy rekordu po rozszerzeniu
+     (`.png`, `.jpeg`) przed przecinkiem. Zawodzi na nazwie `raport.pdf, wersja
+     ostateczna.pdf` i na plikach bez rozszerzenia (`Dockerfile`), a przede
+     wszystkim odtwarzałaby heurystyką strukturę, której nie trzeba było
+     niszczyć.
 
 ---
 

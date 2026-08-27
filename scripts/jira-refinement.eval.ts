@@ -84,10 +84,18 @@ function show(ticket: JiraRefinementTicket): void {
       ? ticket.comments.map((c, i) => `  | [${i + 1}] ${c.replace(/\n/g, "\n  |     ")}`).join("\n")
       : "  | (none)",
     "",
-    `  ATTACHMENTS: ${
+    // ONE PER LINE, not comma-joined. A real filename may contain a comma
+    // ("ChatGPT Image 23 sie 2026, 23_08_21.png"), and a comma-joined list
+    // leaves the reader guessing where one file ends and the next begins — on
+    // a display whose entire job is to be unambiguous to a human. Nothing
+    // parses this string back, and nothing should have to: the prompt handed
+    // to the model renders the same array one-per-line for the same reason.
+    `  ATTACHMENTS:${
       ticket.attachments.length > 0
-        ? ticket.attachments.map((a) => `${a.filename} (${a.mimeType ?? "?"})`).join(", ")
-        : "(none)"
+        ? `\n${ticket.attachments
+            .map((a) => `  | ${a.filename} (${a.mimeType ?? "?"})`)
+            .join("\n")}`
+        : " (none)"
     }`,
     `  SUBTASKS:    ${
       ticket.subtasks.length > 0
