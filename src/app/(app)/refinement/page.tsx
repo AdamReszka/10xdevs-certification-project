@@ -37,10 +37,14 @@ export default async function RefinementPage() {
     resolveApiKey(env as { ANTHROPIC_API_KEY?: string }) !== undefined;
 
   return (
-    <div className="flex flex-col gap-8">
+    // The `max-w-6xl` container is the page's own job: `AppShell` leaves
+    // `<main>` unconstrained, and every gated route under `(app)` carries this
+    // exact class list (`dashboard/page.tsx`, `settings/layout.tsx`). Without
+    // it the surface runs edge to edge and reads as unstyled.
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-12 sm:px-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-lg font-medium">Refinement</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight">Refinement</h1>
+        <p className="text-muted-foreground">
           Pick tickets and each one comes back with a readiness verdict — DOR met,
           the specific gaps that block it, or that it should not enter the sprint
           at all. Every gap names something from that ticket&apos;s own content.

@@ -31,7 +31,7 @@ export default async function RefinementRunPage({
   if (!run) notFound();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-12 sm:px-6">
       <div className="flex flex-col gap-1">
         <Link
           href="/refinement"
@@ -39,7 +39,7 @@ export default async function RefinementRunPage({
         >
           ← Refinement
         </Link>
-        <h1 className="text-lg font-medium">Refinement run</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Refinement run</h1>
       </div>
 
       <RunPanel
