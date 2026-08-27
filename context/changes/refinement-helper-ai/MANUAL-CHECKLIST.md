@@ -64,7 +64,7 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
   Uwaga do fazy 6: backlog ma dziś **dwa** tickety i oba to przykłady wgrane
   przez Atlassian, więc `/refinement` pokaże właśnie je.
 
-- [ ] **2.4 — prawdziwy ADF spłaszcza się do czytelnego tekstu** *(faza 2)*
+- [x] **2.4 — prawdziwy ADF spłaszcza się do czytelnego tekstu** *(faza 2)* ✅ 2026-08-27
 
   **Gdzie:** ten sam wynik, wiersz `2.4` i wypisane ramki ticketów.
 
@@ -80,6 +80,24 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
   **Dlaczego to ma znaczenie:** fixture'y dowodzą tylko tych typów węzłów, które
   przewidzieliśmy. Prawdziwy opis jest jedynym dowodem na te, których nie —
   a URL linku jest wprost dowodem dla klasy braku `MOCKUP_MISSING` w fazie 4.
+
+  **Wynik (2026-08-27, `JIRA_EVAL_KEYS=FM-1`).** FM-1 został w tym celu ręcznie
+  wzbogacony o wszystkie sześć poziomów nagłówka, listy, znaczniki i komentarz.
+  Każdy warunek ma dowód z prawdziwego ADF: nagłówki `#`…`######` zgodnie z
+  poziomem, listy punktowane `- `, numerowane `1.`/`2.`, linki z URL-em w
+  nawiasie, `COMMENTS (1)` z czytelną treścią, dwa załączniki z nazwą i typem
+  MIME — w tym nazwa ze spacjami i przecinkiem.
+
+  **Dwie obserwacje, świadomie NIEnaprawiane:**
+  1. Znaczniki (pogrubienie, kursywa, podkreślenie) są gubione — to `marks`, nie
+     struktura. Skutek uboczny: ticket używający pogrubienia zamiast nagłówków
+     traci podział na sekcje, a tak robią właśnie szablony Atlassiana. Dlatego
+     wykrycie sekcji „Kryteria akceptacji" opiera się na węźle `heading`, nie na
+     pogrubionej linijce.
+  2. Przecinek w nazwie pliku (`ChatGPT Image 23 sie 2026, 23_08_21.png`) jest
+     dwuznaczny tylko w funkcji wyświetlającej tego evala, która skleja
+     listę przecinkami. Prompt podawany modelowi (`prompt.ts:228-233`) wypisuje
+     załączniki po jednym w linii, więc realnej dwuznaczności nie ma.
 
 ---
 
