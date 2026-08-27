@@ -278,6 +278,37 @@ function dropContradictedPresence(gaps: Gap[]): Gap[] {
   });
 }
 
+/**
+ * Classes whose whole finding is "this thing is ABSENT" — and which therefore
+ * cannot be concluded about a ticket that could not have carried the thing in
+ * the first place.
+ *
+ * A pasted story has no attachments by construction. `prompt.ts` already tells
+ * the model so ("absence here proves nothing"), and the model reported
+ * MOCKUP_MISSING on a paste anyway — which is the point: the prompt is a
+ * REQUEST, the same reason `parseModelAnalysis` raises instead of repairing.
+ * An invariant that must hold is enforced in code.
+ *
+ * NOT added to `droppedClasses`. That list exists because a narrowing predicate
+ * may be WRONG — the classifier is a guess, so what it discarded has to travel
+ * with the verdict. `origin` is not a guess; it is a fact about where the text
+ * came from, and a lead who just pasted a story does not need to be told the
+ * attachment check was skipped.
+ */
+const ABSENCE_BASED_CLASSES: GapClass[] = [
+  "MOCKUP_MISSING",
+  "FILE_ATTACHMENT_MISSING",
+];
+
+/** Remove findings the ticket's origin makes unknowable. */
+function dropUnknowableAbsence(
+  ticket: JiraRefinementTicket,
+  gaps: Gap[],
+): Gap[] {
+  if (ticket.origin === "JIRA") return gaps;
+  return gaps.filter((gap) => !ABSENCE_BASED_CLASSES.includes(gap.gapClass));
+}
+
 /** Apply {@link GAP_CLASS_OBLIGATIONS} and keep what it threw away. */
 function gate(
   taskKind: TaskKind,
@@ -311,7 +342,9 @@ export async function analyzeTicket(
   const deterministic = ALL_P0_DETECTORS.flatMap((detect) => detect(ticket));
   const { kept, droppedClasses } = gate(
     analysis.taskKind,
-    dropContradictedPresence(merge(deterministic, analysis.gaps)),
+    dropContradictedPresence(
+      dropUnknowableAbsence(ticket, merge(deterministic, analysis.gaps)),
+    ),
   );
 
   // NOT_VIABLE outranks the gap count: "this should not enter the sprint" is a

@@ -367,3 +367,68 @@ describe("analyzeTicket — carriers the guard must keep apart", () => {
     expect(classes).toContain("TITLE_TOO_VAGUE");
   });
 });
+
+/**
+ * A pasted story carries no attachments BY CONSTRUCTION, so an absence-based
+ * finding about one is unknowable rather than true. `prompt.ts` says so in
+ * words; the model reported MOCKUP_MISSING on a real paste regardless, which is
+ * why this is enforced in code (criterion 6.12).
+ */
+describe("analyzeTicket — absence nobody could have proven", () => {
+  const pasted = makeTicket({
+    origin: "PASTE",
+    key: "PASTED",
+    sourceUrl: null,
+    description:
+      "Jako klient chcę widzieć powiadomienia o statusie zamówienia, żeby nie sprawdzać panelu co godzinę.",
+  });
+
+  it("drops MOCKUP_MISSING and FILE_ATTACHMENT_MISSING on a pasted story", async () => {
+    const verdict = await analyzeTicket(
+      pasted,
+      stub(
+        modelSays({
+          taskKind: "NEW_VIEW_OR_COMPONENT",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "MOCKUP_MISSING",
+              groundingClause: "Ten ticket opisuje nową zakładkę, ale nie ma makiety.",
+            },
+            {
+              gapClass: "DATA_SOURCE_UNSPECIFIED",
+              groundingClause: "Ten ticket nie mówi, skąd pochodzą powiadomienia.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const classes = verdict.gaps.map((gap) => gap.gapClass);
+    expect(classes).not.toContain("MOCKUP_MISSING");
+    expect(classes).toContain("DATA_SOURCE_UNSPECIFIED");
+    // A fact about the input, not a predicate that might be wrong — so it does
+    // NOT travel as a dropped class the way the task-kind gate's discards do.
+    expect(verdict.droppedClasses).not.toContain("MOCKUP_MISSING");
+  });
+
+  it("keeps MOCKUP_MISSING on a ticket actually read from Jira", async () => {
+    const verdict = await analyzeTicket(
+      makeTicket({ description: "Nowa zakładka w panelu klienta." }),
+      stub(
+        modelSays({
+          taskKind: "NEW_VIEW_OR_COMPONENT",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "MOCKUP_MISSING",
+              groundingClause: "Ten ticket opisuje nową zakładkę, ale nie ma makiety.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(verdict.gaps.map((gap) => gap.gapClass)).toContain("MOCKUP_MISSING");
+  });
+});
