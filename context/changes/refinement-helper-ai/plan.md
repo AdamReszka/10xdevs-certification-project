@@ -972,7 +972,7 @@ references it; the grep in Phase 5 proves that.
 #### Manual
 
 - [ ] 2.4 `scripts/jira-refinement.eval.ts` prints a readable flattened description and comments
-- [ ] 2.5 Board path returns the backlog, not the active sprint
+- [x] 2.5 Board path returns the backlog, not the active sprint
 
 ### Phase 3: The gap taxonomy and the deterministic detectors
 

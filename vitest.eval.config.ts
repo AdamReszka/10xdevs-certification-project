@@ -25,6 +25,15 @@ export default defineConfig({
     // Real network calls with a shared prompt cache — serial keeps the cache
     // read meaningful and the rate limit calm.
     fileParallelism: false,
+    // THE OUTPUT IS THE POINT OF THIS PROJECT. Several manual criteria are
+    // worded as "read the printed ticket / the printed table" — 2.4 and 2.5 in
+    // particular are human judgements over text these specs print. Vitest's
+    // default console interception swallowed every `console.info` made inside a
+    // `beforeAll` or an `it` body, so the command the manual checklist names
+    // showed the operator nothing at all and a green run proved only that
+    // nothing threw. An eval whose product is readable output must not have its
+    // output captured.
+    disableConsoleIntercept: true,
     // A thinking model on a real request outlives the 5s default comfortably.
     testTimeout: 120_000,
   },

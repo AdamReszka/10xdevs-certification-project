@@ -41,7 +41,7 @@ Oba wiersze zamyka jedno uruchomienie:
 Skrypt sam znajduje konto po `token_last4` (`B9D0`) i odmawia startu na innej
 bazie niż lokalna Supabase. Tokenu nie wypisuje.
 
-- [ ] **2.5 — ścieżka boardu zwraca BACKLOG, nie aktywny sprint** *(faza 2)*
+- [x] **2.5 — ścieżka boardu zwraca BACKLOG, nie aktywny sprint** *(faza 2)* ✅ 2026-08-27
 
   **Gdzie:** terminal, komenda wyżej. Konto z prawdziwymi credentialami Jiry.
 
@@ -57,6 +57,12 @@ bazie niż lokalna Supabase. Tokenu nie wypisuje.
   backlog to zupełnie inna ścieżka (`/rest/agile/1.0/board/{id}/backlog`).
   `lessons.md` ostrzega, że zawężenie na złej wartości zwraca pustkę, która
   czyta się jak sukces — dlatego rozłączność zbiorów jest asercją, a nie oceną.
+
+  **Wynik (2026-08-27, `foxmind.atlassian.net`, projekt FM, board 1):**
+  backlog `FM-4, FM-5`; aktywny sprint „SCRUM Sprint 1" `FM-3, FM-6, FM-1, FM-2`.
+  Zbiory rozłączne, backlog niepusty — obie połowy warunku spełnione maszynowo.
+  Uwaga do fazy 6: backlog ma dziś **dwa** tickety i oba to przykłady wgrane
+  przez Atlassian, więc `/refinement` pokaże właśnie je.
 
 - [ ] **2.4 — prawdziwy ADF spłaszcza się do czytelnego tekstu** *(faza 2)*
 
