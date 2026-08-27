@@ -155,11 +155,19 @@ documents were amended in the same pass. The slice is **roadmap S-23**.
    (FR-007 extended); deriving them from a country stays **S-17**, which is now
    *downstream* of S-23. `roadmap.md`'s "no unshipped FR depends on it" note was
    retired.
-3. **`cel_SP` — out of scope; the guardrail was clarified, not loosened.**
-   Measuring and normalising past sprints is measurement of the past and is in;
-   a computed "aim for N SP next sprint" target is out. Recorded on the
-   no-forecasting non-goal itself, so a future reader cannot mistake FR-023 for
-   a violation.
+3. **`cel_SP` — ruled out, then REVERSED the same day (2026-08-27).** It was
+   first out of scope, and the no-forecasting non-goal was clarified to say so.
+   The owner then supplied the arithmetic and asked for it, so it is now
+   **FR-024** and the guardrail was rewritten to prohibit *modelling* rather
+   than arithmetic over measured history. Both documents carry the reversal
+   explicitly; the earlier wording is superseded, not merely edited.
+4. **Manual entry survives, in two marked places.** Capacity is computed but the
+   lead may override the MD figure for a sprint (FR-022); velocity is computed
+   but the lead may correct it, with both values kept (FR-023). Note what this
+   settles about the existing UI: the roster's "Capacity" column already *is* a
+   hand-entered capacity in story points per person — the change replaces a
+   guess at a conversion with a fact the lead knows (does this person work
+   full-time), rather than removing manual entry.
 
 ### Still open for /10x-plan
 

@@ -54,7 +54,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
 | S-22 | onboarding-routing        | a newly signed-up user lands in the setup wizard instead of an empty dashboard                 | S-01, S-04         | PRD Access Control ("lands in the setup wizard") | proposed |
-| S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023 | proposed |
+| S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the history yields an estimated velocity for the next sprint | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | proposed |
 
 ## Streams
 
@@ -704,7 +704,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   sprint leaves a durable measurement record, and past sprints are normalised to
   full capacity before they are averaged.
 - **Change ID:** capacity-in-man-days
-- **PRD refs:** FR-006, FR-007, FR-010, FR-016, FR-022, FR-023
+- **PRD refs:** FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024
 - **Prerequisites:** S-08 (absences), S-16 (rollover detection)
 - **Status:** proposed — framed 2026-08-27,
   `context/changes/capacity-in-man-days/frame.md`
@@ -730,10 +730,20 @@ Foundations below assume these are present and do NOT re-scaffold them.
   built in S-11.
 - **Decisions taken at framing (owner, 2026-08-27).** A holiday reduces capacity
   by one man-day per person and its dates are entered by the lead per sprint
-  (FR-007) — automatic derivation stays in S-17. `cel_SP`, the computed
-  next-sprint target, is OUT of scope; the no-forecasting guardrail was clarified
-  rather than loosened. Per-sprint aggregates are retained for the team's whole
-  lifetime; raw synced data keeps the current + 2 sprints bound.
+  (FR-007) — automatic derivation stays in S-17. Per-sprint aggregates are
+  retained for the team's whole lifetime; raw synced data keeps the current + 2
+  sprints bound. Capacity is computed from availability fractions, absences and
+  team-wide days off, but the lead may **override the MD figure for a sprint**
+  (FR-022) — a marked exception, because an override also feeds the
+  normalisation. Velocity is computed from first-entry-into-Done and may be
+  **corrected** by the lead, with both values kept (FR-023).
+- **One decision reversed the same day.** `cel_SP` — the estimated velocity for
+  the next sprint — was first ruled OUT and the no-forecasting guardrail was
+  clarified to say so; the owner then supplied the arithmetic
+  (`average(normalised velocity) × capacity_current ÷ capacity_full`) and asked
+  for it. It is now **FR-024**, and the guardrail was rewritten to prohibit
+  *modelling* rather than arithmetic over measured history. The reversal is on
+  the record in both documents; do not read the earlier wording as current.
 - **Known destructive step.** Stored `sp_capacity` values cannot be reinterpreted
   as availability fractions — an `8` is indistinguishable as 8 SP or 8 FTE — so
   the migration must NULL them, throwing any team that filled the field into the
