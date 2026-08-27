@@ -1,7 +1,7 @@
 ---
 change_id: capacity-in-man-days
 title: Capacity in man-days, velocity in SP, with the conversion learned from history
-status: new
+status: preparing
 created: 2026-08-27
 updated: 2026-08-27
 archived_at: null
