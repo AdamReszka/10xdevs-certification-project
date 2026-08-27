@@ -971,10 +971,10 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 4.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [x] 4.2 Gate (incl. `droppedClasses`), merge precedence, verdict reduction, schema-invalid raise, `MAX_TICKETS_PER_RUN` covered
-- [x] 4.3 Corpus contains at least three tickets expecting `DOR_MET`
-- [x] 4.4 `buildSystemPrompt()` is byte-identical across calls
+- [x] 4.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — 1954f48
+- [x] 4.2 Gate (incl. `droppedClasses`), merge precedence, verdict reduction, schema-invalid raise, `MAX_TICKETS_PER_RUN` covered — 1954f48
+- [x] 4.3 Corpus contains at least three tickets expecting `DOR_MET` — 1954f48
+- [x] 4.4 `buildSystemPrompt()` is byte-identical across calls — 1954f48
 
 #### Manual
 
@@ -988,10 +988,10 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [ ] 5.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [ ] 5.2 `npm run db:migrate` applies `0010_*` cleanly
-- [ ] 5.3 `npm run test:integration` passes, including cross-owner isolation on `getRun`
-- [ ] 5.4 `grep -rn "refinementSession" src --include='*.ts' | grep -v migrations` returns nothing
+- [x] 5.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
+- [x] 5.2 `npm run db:migrate` applies `0010_*` cleanly
+- [x] 5.3 `npm run test:integration` passes, including cross-owner isolation on `getRun`
+- [x] 5.4 `grep -rn "refinementSession" src --include='*.ts' | grep -v migrations` returns nothing
 
 #### Manual
 

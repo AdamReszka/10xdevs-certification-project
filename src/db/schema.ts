@@ -16,6 +16,7 @@ import {
 // cost this module no runtime dependency on the recap module. See the header of
 // `src/lib/recap/types.ts`.
 import type { RecapPayload, RenderedEmail } from "@/lib/recap/types";
+import type { Gap, GapClass } from "@/lib/refinement/types";
 
 /**
  * Central Postgres enums (F-02). Declared once via `pgEnum` so every table
@@ -100,10 +101,14 @@ export const recapSendStatus = pgEnum("recap_send_status", [
   "FAILED",
 ]);
 
-// Refinement Helper input source (FR-020).
-export const refinementSourceType = pgEnum("refinement_source_type", [
+// How the lead handed the tickets to the Refinement Helper (FR-020's three
+// input routes). Replaces `refinement_source_type`, whose two values described
+// one story at a time — the input is a BACKLOG REVIEW, so "which route did this
+// batch come in by" is the question the column actually has to answer.
+export const refinementSource = pgEnum("refinement_source", [
+  "BACKLOG",
+  "KEYS",
   "PASTED_TEXT",
-  "JIRA_TICKET",
 ]);
 
 // How a roster member was discovered/created (FR-006 auto-import + manual edit).
@@ -812,27 +817,89 @@ export const dailyRecap = pgTable(
   ],
 );
 
-export const refinementSession = pgTable(
-  "refinement_session",
+/**
+ * One refinement run — the lead sat down with next sprint's candidates and
+ * pressed analyse (S-13 / FR-020).
+ *
+ * Replaces `refinement_session`, which F-02 provisioned from the original
+ * FR-020 wording (one story, a `dor_score`, a fixed question list) and which
+ * never had a single read or write. `frame.md` killed the score and made the
+ * input a batch, so the shape below is a run with children rather than a
+ * session with columns.
+ *
+ * A re-run after the tickets are fixed in Jira is a NEW run. Nothing here is
+ * ever rewritten — the point of history is being able to see that the same
+ * ticket was refined twice.
+ */
+export const refinementRun = pgTable(
+  "refinement_run",
   {
     id: text("id").primaryKey(),
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    sourceType: refinementSourceType("source_type").notNull(),
-    jiraTicketKey: text("jira_ticket_key"),
-    storyText: text("story_text"),
-    questions: jsonb("questions"),
-    dorScore: integer("dor_score"),
-    missingChecklist: jsonb("missing_checklist"),
-    model: text("model"),
+    source: refinementSource("source").notNull(),
+    /** The model that produced these verdicts. Stored because a verdict is only
+     * interpretable against the thing that made it — a prompt or model change
+     * makes old rows a different kind of artifact, not a comparable one. */
+    model: text("model").notNull(),
+    ticketCount: integer("ticket_count").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
-    index("refinement_session_owner_created_idx").on(
+    index("refinement_run_owner_created_idx").on(table.ownerId, table.createdAt),
+  ],
+);
+
+/**
+ * One ticket's verdict inside a run.
+ *
+ * TICKET BODIES ARE NOT STORED. Descriptions, comments and attachment names are
+ * fetched for the analysis and dropped; only `ticketSummary` survives, because
+ * it is the ticket's identity in the UI and a stored verdict has to stay
+ * legible after someone edits the ticket in Jira.
+ */
+export const refinementTicketVerdict = pgTable(
+  "refinement_ticket_verdict",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => refinementRun.id, { onDelete: "cascade" }),
+    /** Carried on the child as well as the parent, deliberately. `lessons.md`
+     * requires every read to be owner-scopable without a join after the roster
+     * incident: a query that reaches these rows through `run_id` alone is one
+     * forgotten predicate away from crossing accounts. */
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    ticketKey: text("ticket_key").notNull(),
+    ticketSummary: text("ticket_summary").notNull(),
+    /** The classifier's value. Stored, not derived: `lessons.md`'s
+     * narrowing-predicate rule says a wrong predicate must be visible, and this
+     * is the predicate. */
+    taskKind: text("task_kind").notNull(),
+    verdict: text("verdict").notNull(),
+    gaps: jsonb("gaps").$type<Gap[]>().notNull().default([]),
+    /** The other half of that rule: WHICH checks the gate threw away. A discard
+     * that lived only in a test assertion cannot tell the lead that a
+     * misclassification silently skipped a whole group of obligations, which is
+     * exactly how a `DOR_MET` that means "four checks were dropped" reaches
+     * them looking clean. */
+    droppedClasses: jsonb("dropped_classes")
+      .$type<GapClass[]>()
+      .notNull()
+      .default([]),
+    sourceUrl: text("source_url"),
+  },
+  (table) => [
+    // "Show me the verdict history for FM-42" — the query that closes the loop
+    // on whether a re-refined ticket actually improved.
+    index("refinement_verdict_owner_ticket_idx").on(
       table.ownerId,
-      table.createdAt,
+      table.ticketKey,
     ),
+    index("refinement_verdict_run_idx").on(table.runId),
   ],
 );
 
@@ -850,7 +917,8 @@ export const userRelations = relations(user, ({ one, many }) => ({
   anomalySettings: many(anomalySettings),
   recapSettings: one(recapSettings),
   dailyRecaps: many(dailyRecap),
-  refinementSessions: many(refinementSession),
+  refinementRuns: many(refinementRun),
+  refinementTicketVerdicts: many(refinementTicketVerdict),
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -1106,11 +1174,26 @@ export const dailyRecapRelations = relations(dailyRecap, ({ one }) => ({
   }),
 }));
 
-export const refinementSessionRelations = relations(
-  refinementSession,
-  ({ one }) => ({
+export const refinementRunRelations = relations(
+  refinementRun,
+  ({ one, many }) => ({
     owner: one(user, {
-      fields: [refinementSession.ownerId],
+      fields: [refinementRun.ownerId],
+      references: [user.id],
+    }),
+    verdicts: many(refinementTicketVerdict),
+  }),
+);
+
+export const refinementTicketVerdictRelations = relations(
+  refinementTicketVerdict,
+  ({ one }) => ({
+    run: one(refinementRun, {
+      fields: [refinementTicketVerdict.runId],
+      references: [refinementRun.id],
+    }),
+    owner: one(user, {
+      fields: [refinementTicketVerdict.ownerId],
       references: [user.id],
     }),
   }),
@@ -1136,5 +1219,9 @@ export type SelectRecapSettings = typeof recapSettings.$inferSelect;
 export type InsertRecapSettings = typeof recapSettings.$inferInsert;
 export type SelectDailyRecap = typeof dailyRecap.$inferSelect;
 export type InsertDailyRecap = typeof dailyRecap.$inferInsert;
-export type SelectRefinementSession = typeof refinementSession.$inferSelect;
-export type InsertRefinementSession = typeof refinementSession.$inferInsert;
+export type SelectRefinementRun = typeof refinementRun.$inferSelect;
+export type InsertRefinementRun = typeof refinementRun.$inferInsert;
+export type SelectRefinementTicketVerdict =
+  typeof refinementTicketVerdict.$inferSelect;
+export type InsertRefinementTicketVerdict =
+  typeof refinementTicketVerdict.$inferInsert;
