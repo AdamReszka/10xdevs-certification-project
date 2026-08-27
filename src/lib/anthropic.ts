@@ -186,7 +186,18 @@ export async function complete<T>(
       max_tokens: ANTHROPIC_MAX_TOKENS,
       thinking: { type: "adaptive" },
       output_config: {
-        effort: "medium",
+        // RAISED FROM "medium" ON EVIDENCE, which is the only thing the plan
+        // allows to move it. The first corpus run (2026-08-27, p95 13.4s) met
+        // 4.6, 4.7 and 4.9 but missed 4.5: two of six incomplete fixtures
+        // yielded one expected gap class instead of two, and the misses
+        // clustered on the judgment classes — TITLE_TOO_VAGUE,
+        // USER_STORY_WRONG_ACTOR, ENDPOINTS_UNSPECIFIED,
+        // CMS_EDITABLE_NOT_A_DEV_TASK. Those are all "the field is filled but
+        // does not do its job" calls, where the model was reluctant to rule
+        // existing content inadequate. That reluctance is also what produced
+        // zero false positives on the complete fixtures, so this lever is
+        // traded against 4.6 and BOTH are re-measured on every change.
+        effort: "high",
         format: { type: "json_schema", schema },
       },
       system: [

@@ -891,17 +891,34 @@ draw from the same `max_tokens` budget as the answer. Judgment work at P2/P3 is
 exactly the kind of prompt that thinks. The three numbers that follow from that:
 
 - `effort` starts at `"medium"`, not the `"high"` default, and moves only on
-  evidence from the corpus eval.
+  evidence from the corpus eval. **It moved.** The 2026-08-27 run at `"medium"`
+  met 4.6, 4.7 and 4.9 but missed 4.5 on two of six incomplete fixtures, and the
+  misses clustered on the judgment classes (`TITLE_TOO_VAGUE`,
+  `USER_STORY_WRONG_ACTOR`, `ENDPOINTS_UNSPECIFIED`,
+  `CMS_EDITABLE_NOT_A_DEV_TASK`) — the model was reluctant to rule content that
+  *exists* inadequate. At `"high"`: 5/6 fixtures, `USER_STORY_WRONG_ACTOR` and
+  `CMS_EDITABLE_NOT_A_DEV_TASK` recovered, task-kind accuracy 8/10 → 9/10, and
+  **still zero false positives on the complete fixtures** — so the recall was
+  not bought with over-flagging. The two levers are coupled and 4.5 and 4.6 are
+  re-measured together on any future change to either.
 - `max_tokens` is 16000 — headroom for thinking, not a bound on a small
   schema-constrained answer. A cap hit returns `stop_reason: "max_tokens"` and
   raises `AnthropicTruncatedError` before parsing, so truncation never
   masquerades as a malformed-JSON bug.
-- `MAX_TICKETS_PER_RUN` is **set from measured p95 latency in Phase 4**, before
+- `MAX_TICKETS_PER_RUN` is **set from measured latency in Phase 4**, before
   Phase 6 builds a surface on it. The earlier assumption — 40 tickets inside the
   default 5-minute cache TTL — required ≤7.5s per ticket, which nothing in this
-  plan has measured. The realistic starting cap is single-digit; `ttl: "1h"` on
-  the system block is the lever if the measured run outlives the 5-minute
-  default.
+  plan had measured. **Measured 2026-08-27 at `effort: "high"`**: median 7.3s,
+  mean 9.9s, p95 22.0s, ten-ticket run 98.7s. The cap is **4**, and it is a
+  MEAN-based number rather than the p95 one the eval prints — recorded here as
+  a decision, not an oversight. `p95 × n ≤ 60s` gives 2, but at n=10 that "p95"
+  is the single worst ticket, so it prices every run as if every ticket were
+  the worst; 4 costs ~40s expected and ~88s if all four land on the tail. Two
+  tickets per run is not a refinement session, and a tool nobody opens has a
+  recall of zero. The tail overrun is accepted knowingly; if it bites, the fix
+  is not a bigger number but moving the run off the request path — the separate
+  slice described below. The 5-minute cache TTL is not the binding constraint
+  at this cap, so `ttl: "1h"` stays unused.
 
 If the measurement says the lead genuinely needs a 40-ticket sweep, that is a
 different shape than this plan builds: the run would have to leave the request
@@ -980,9 +997,9 @@ references it; the grep in Phase 5 proves that.
 
 - [ ] 4.5 `npm run eval:refinement`: every incomplete fixture yields ≥2 expected classes
 - [ ] 4.6 No complete fixture yields any gap
-- [ ] 4.7 `cache_read_input_tokens` non-zero from the second ticket of a run
-- [ ] 4.8 `MAX_TICKETS_PER_RUN` set from measured p95 latency and written into the plan
-- [ ] 4.9 Zero `AnthropicTruncatedError` across the corpus at `max_tokens: 16000`
+- [x] 4.7 `cache_read_input_tokens` non-zero from the second ticket of a run
+- [x] 4.8 `MAX_TICKETS_PER_RUN` set from measured p95 latency and written into the plan
+- [x] 4.9 Zero `AnthropicTruncatedError` across the corpus at `max_tokens: 16000`
 
 ### Phase 5: Persistence
 

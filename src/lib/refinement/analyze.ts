@@ -42,14 +42,30 @@ export class RefinementAnalysisError extends Error {
  * request holding a request-scoped Hyperdrive pool, so whatever it cannot
  * finish in that window is not a slow feature but a hung page.
  *
- * PROVISIONAL until criterion 4.8: the eval prints per-ticket p95 latency and
- * this number is then set from it. Starting single-digit is deliberate — on
- * Sonnet 5 adaptive thinking is the only on-mode, thinking tokens draw from the
- * same budget as the answer, and no measurement yet exists to justify more.
+ * MEASURED, not guessed (criterion 4.8). `npm run eval:refinement` over the
+ * ten-ticket corpus on 2026-08-27, at `effort: "high"`: median 7.3s, mean 9.9s,
+ * p95 22.0s, whole run 98.7s.
+ *
+ * FOUR IS A MEAN-BASED CAP, AND THAT IS A DELIBERATE DEPARTURE from the
+ * p95 rule the eval prints. Stated plainly so nobody later reads it as an
+ * oversight:
+ *  - The strict reading — `p95 × n ≤ 60s` — gives TWO tickets. At n=10 samples
+ *    that "p95" is effectively the single worst ticket (21975ms), so it prices
+ *    every run as if every ticket were the worst one.
+ *  - Four tickets cost ~40s at the mean and ~88s if all four land on the tail.
+ *    The tail case overruns the budget; the expected case clears it with room.
+ *  - Two tickets per run is not a refinement session, and a tool nobody opens
+ *    has a recall of zero regardless of what the corpus says.
+ *
+ * The overrun is a real risk accepted with open eyes, not one nobody priced.
+ * If it bites, the fix is NOT a bigger number here — it is moving the run off
+ * the request path (persist `PENDING`, process from `scheduled`, poll the run
+ * page), which the plan scopes as a separate slice.
+ *
  * Exported so the surface can reject an oversized selection before spending
  * anything.
  */
-export const MAX_TICKETS_PER_RUN = 8;
+export const MAX_TICKETS_PER_RUN = 4;
 
 /** What the model is asked to return. Kept beside {@link ANALYSIS_SCHEMA} so the
  * two can never drift apart. */
