@@ -125,6 +125,13 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
   **Co musi być prawdą:** każdy z co najmniej trzech kompletnych ticketów kończy
   się werdyktem `DOR_MET` i **pustą** listą braków. Ani jednego zgłoszenia.
 
+  **Ponownie zweryfikowane po zaostrzeniu promptu (2026-08-27).** Pierwotny tick
+  dotyczył promptu, którego już nie wysyłamy. Zaostrzenie pod 4.5 raz ten wiersz
+  ZŁAMAŁO — `widok-ok` dostał `ENDPOINTS_UNSPECIFIED`, bo wyrazistsze opisy
+  endpointów przesunęły samą klasyfikację na `FRONTEND_ON_BACKEND_DATA`.
+  Naprawione opisaniem rodzajów zadań (patrz 4.5); w przebiegu, który shipujemy,
+  wszystkie cztery kompletne tickety wracają `DOR_MET` z pustą listą.
+
   **Dlaczego to ma znaczenie:** nadgorliwość jest głównym ryzykiem tego slice'u —
   mechanizm, który na każdym tickecie znajdzie osiem braków, zostanie wyłączony
   po trzecim refinemencie. Recall na ticketach niekompletnych mierzy ten sam

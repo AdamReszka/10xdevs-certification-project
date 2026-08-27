@@ -8,6 +8,7 @@ import {
   GAP_CLASS_OBLIGATIONS,
   TASK_KINDS,
   type GapClass,
+  type TaskKind,
 } from "@/lib/refinement/types";
 
 /**
@@ -42,7 +43,7 @@ const GAP_CLASS_BRIEF: Record<GapClass, string> = {
   ACCEPTANCE_CRITERIA_MISSING:
     "no acceptance criteria, AND the condition for 'done' cannot be inferred from what is written",
   TITLE_TOO_VAGUE:
-    "the title is at the wrong level of abstraction — reading it leaves basic questions about what is to be done ('Nowy regulamin' does not say which one)",
+    "the title is at the wrong level of abstraction — reading it leaves basic questions about what is to be done ('Nowy regulamin' does not say which one). JUDGE THE TITLE STANDING ALONE: a description that explains everything does not rescue a vague title, because the lead scanning a backlog sees titles and nothing else",
   USER_STORY_UNCLEAR:
     "a user story is present but the need it describes cannot be understood well enough to build against",
   USER_STORY_WRONG_ACTOR:
@@ -64,19 +65,53 @@ const GAP_CLASS_BRIEF: Record<GapClass, string> = {
   CMS_EDITABLE_NOT_A_DEV_TASK:
     "the content in question is plausibly editable in the CMS by the stakeholder themselves, so this may not be developer work at all",
   ENDPOINTS_UNSPECIFIED:
-    "the work consumes or exposes data and no endpoint, and no API it belongs to, is named",
+    "the work consumes or exposes data and no endpoint, and no API it belongs to, is named. A subtask or linked ticket that PROMISES an endpoint does not name one — the gap stands until this ticket says which endpoint or which API, and it is independent of whether that dependency is done",
   API_CONTRACT_MISSING:
-    "endpoints are named but there is no contract — no data structure, no payload shape, no auth or token expectation",
+    "there is no contract for the data exchanged — no data structure, no payload shape, no auth or token expectation. This does NOT require an endpoint to have been named: a ticket that names neither the endpoint nor the shape of what comes back is missing both things, so report both classes",
   DATA_SOURCE_UNSPECIFIED:
     "some of the data the work displays or writes has no stated source",
   BLOCKING_DEPENDENCY_NOT_DONE:
-    "a linked issue or subtask this work depends on is not Done, and the ticket does not say how to proceed without it",
+    "a linked issue or subtask this work depends on is not Done, and the ticket does not say how to proceed without it. EVIDENCE MEANS AN ENTRY IN THE 'Subtasks and links' SECTION with a status: a ticket key mentioned in the prose is not a link and carries no status, so it is not evidence for this class",
   MOCK_STRATEGY_MISSING:
     "the work depends on data that does not exist yet and there is no stated way to mock it",
   TASK_IS_MULTIPLE:
     "the ticket is several separable pieces of work in one, and cannot be judged or delivered as a unit",
   TASK_NOT_VIABLE:
     "the work as described should not enter the sprint at all — it is infeasible, contradicts what already exists, or is no longer meaningful (FR-021)",
+};
+
+/**
+ * What each task kind means.
+ *
+ * The same argument that produced {@link GAP_CLASS_BRIEF} applies here with
+ * more force, and it was missing: the kinds were handed to the model as bare
+ * identifiers, left to be inferred from their spelling. The kind is the GATE —
+ * it decides which obligations are even checked — so a guess here silently
+ * removes a whole group of questions, which is precisely the narrowing-predicate
+ * failure `lessons.md` records.
+ *
+ * The load-bearing entry is the NEW_VIEW_OR_COMPONENT / FRONTEND_ON_BACKEND_DATA
+ * boundary. Almost every new view consumes back-end data, so read literally the
+ * two kinds overlap on nearly every ticket — and they carry different
+ * obligations, so the overlap is not cosmetic. The distinguishing test is
+ * whether the data ALREADY EXISTS.
+ */
+const TASK_KIND_BRIEF: Record<TaskKind, string> = {
+  FILE_OR_DOCUMENT_SWAP:
+    "the deliverable is a file or document replacing an earlier version — a regulation, a PDF, a policy, a price list",
+  CONTENT_CHANGE:
+    "copy or content already published on a surface is being changed, with no new surface being built",
+  NEW_VIEW_OR_COMPONENT:
+    "a new view, page or component, or a visual change, whose data ALREADY EXISTS — it comes from something already shipped, so the work is the surface itself. A named existing table, report or feed is existing data",
+  FRONTEND_ON_BACKEND_DATA:
+    "front-end work that depends on back-end which does NOT exist yet or is being built alongside this ticket — the front end cannot be finished until that back end lands. If the data is already available from something shipped, this is NEW_VIEW_OR_COMPONENT instead",
+  BACKEND:
+    "server-side work: endpoints, jobs, schema, integrations. The deliverable is not a screen",
+  BUG: "a defect report — something already built behaves wrongly",
+  SPIKE:
+    "an investigation whose deliverable is a finding, a recommendation or a decision, not working software",
+  OTHER:
+    "none of the above genuinely fits. NOT a way to ask for fewer checks — it still carries the generic core, so prefer a real kind whenever one applies",
 };
 
 /** The obligations of one task kind, one line, in the record's own order. */
@@ -106,7 +141,7 @@ const SYSTEM_PROMPT = [
   "",
   "Pick exactly one `taskKind` from this closed set, reading the ticket's content rather than its Jira issue type:",
   "",
-  ...TASK_KINDS.map((kind) => `- ${kind}`),
+  ...TASK_KINDS.map((kind) => `- ${kind} — ${TASK_KIND_BRIEF[kind]}`),
   "",
   "The kind decides which obligations apply. Choose the kind that describes what will actually be built or changed.",
   "Use OTHER only when none of the others fit — it is not a way to ask for fewer checks, and it still carries the generic core.",

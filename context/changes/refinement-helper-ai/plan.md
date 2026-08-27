@@ -908,12 +908,13 @@ exactly the kind of prompt that thinks. The three numbers that follow from that:
 - `MAX_TICKETS_PER_RUN` is **set from measured latency in Phase 4**, before
   Phase 6 builds a surface on it. The earlier assumption — 40 tickets inside the
   default 5-minute cache TTL — required ≤7.5s per ticket, which nothing in this
-  plan had measured. **Measured 2026-08-27 at `effort: "high"`**: median 7.3s,
-  mean 9.9s, p95 22.0s, ten-ticket run 98.7s. The cap is **4**, and it is a
+  plan had measured. **Measured 2026-08-27 at `effort: "high"`, against the
+  sharpened prompt that ships**: median 8.6s, mean 11.2s, p95 20.7s, ten-ticket
+  run 112.0s. The cap is **4**, and it is a
   MEAN-based number rather than the p95 one the eval prints — recorded here as
   a decision, not an oversight. `p95 × n ≤ 60s` gives 2, but at n=10 that "p95"
   is the single worst ticket, so it prices every run as if every ticket were
-  the worst; 4 costs ~40s expected and ~88s if all four land on the tail. Two
+  the worst; 4 costs ~45s expected and ~83s if all four land on the tail. Two
   tickets per run is not a refinement session, and a tool nobody opens has a
   recall of zero. The tail overrun is accepted knowingly; if it bites, the fix
   is not a bigger number but moving the run off the request path — the separate
@@ -995,7 +996,7 @@ references it; the grep in Phase 5 proves that.
 
 #### Manual
 
-- [ ] 4.5 `npm run eval:refinement`: every incomplete fixture yields ≥2 expected classes
+- [x] 4.5 `npm run eval:refinement`: every incomplete fixture yields ≥2 expected classes
 - [x] 4.6 No complete fixture yields any gap
 - [x] 4.7 `cache_read_input_tokens` non-zero from the second ticket of a run
 - [x] 4.8 `MAX_TICKETS_PER_RUN` set from measured p95 latency and written into the plan

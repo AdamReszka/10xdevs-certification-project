@@ -43,16 +43,19 @@ export class RefinementAnalysisError extends Error {
  * finish in that window is not a slow feature but a hung page.
  *
  * MEASURED, not guessed (criterion 4.8). `npm run eval:refinement` over the
- * ten-ticket corpus on 2026-08-27, at `effort: "high"`: median 7.3s, mean 9.9s,
- * p95 22.0s, whole run 98.7s.
+ * ten-ticket corpus on 2026-08-27, at `effort: "high"` and against the
+ * SHARPENED prompt that ships today (the pre-sharpening run measured 7.3s /
+ * 9.9s / 22.0s — re-measured because a latency figure describing a prompt that
+ * is no longer sent is not a measurement): median 8.6s, mean 11.2s, p95 20.7s,
+ * whole run 112.0s.
  *
  * FOUR IS A MEAN-BASED CAP, AND THAT IS A DELIBERATE DEPARTURE from the
  * p95 rule the eval prints. Stated plainly so nobody later reads it as an
  * oversight:
  *  - The strict reading — `p95 × n ≤ 60s` — gives TWO tickets. At n=10 samples
- *    that "p95" is effectively the single worst ticket (21975ms), so it prices
- *    every run as if every ticket were the worst one.
- *  - Four tickets cost ~40s at the mean and ~88s if all four land on the tail.
+ *    that "p95" is effectively the single worst ticket, so it prices
+ *    every run as if every ticket were the worst one (20683ms here).
+ *  - Four tickets cost ~45s at the mean and ~83s if all four land on the tail.
  *    The tail case overruns the budget; the expected case clears it with room.
  *  - Two tickets per run is not a refinement session, and a tool nobody opens
  *    has a recall of zero regardless of what the corpus says.
