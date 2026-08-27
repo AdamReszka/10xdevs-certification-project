@@ -1013,7 +1013,7 @@ references it; the grep in Phase 5 proves that.
 
 #### Manual
 
-- [ ] 5.5 `\d` shows both new tables; `refinement_session` is gone
+- [x] 5.5 `\d` shows both new tables; `refinement_session` is gone
 
 ### Phase 6: The Refinement surface
 
