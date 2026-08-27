@@ -988,10 +988,10 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 5.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass
-- [x] 5.2 `npm run db:migrate` applies `0010_*` cleanly
-- [x] 5.3 `npm run test:integration` passes, including cross-owner isolation on `getRun`
-- [x] 5.4 `grep -rn "refinementSession" src --include='*.ts' | grep -v migrations` returns nothing
+- [x] 5.1 `npm run lint`, `npx tsc --noEmit`, `npm test` pass — 32e6432
+- [x] 5.2 `npm run db:migrate` applies `0010_*` cleanly — 32e6432
+- [x] 5.3 `npm run test:integration` passes, including cross-owner isolation on `getRun` — 32e6432
+- [x] 5.4 `grep -rn "refinementSession" src --include='*.ts' | grep -v migrations` returns nothing — 32e6432
 
 #### Manual
 
@@ -1001,11 +1001,11 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [ ] 6.1 `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:integration` pass
-- [ ] 6.2 `run-view.ts` unit tests for ordering, grouping, counting and the dropped-class summary
-- [ ] 6.3 No `href: "#"` remains in `main-nav.tsx`
-- [ ] 6.9 A test asserts a selection above `MAX_TICKETS_PER_RUN` is rejected before the model is called
-- [ ] 6.10 `.env.example` and the `wrangler.jsonc` secrets comment both name `ANTHROPIC_API_KEY`
+- [x] 6.1 `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:integration` pass
+- [x] 6.2 `run-view.ts` unit tests for ordering, grouping, counting and the dropped-class summary
+- [x] 6.3 No `href: "#"` remains in `main-nav.tsx`
+- [x] 6.9 A test asserts a selection above `MAX_TICKETS_PER_RUN` is rejected before the model is called
+- [x] 6.10 `.env.example` and the `wrangler.jsonc` secrets comment both name `ANTHROPIC_API_KEY`
 
 #### Manual
 
