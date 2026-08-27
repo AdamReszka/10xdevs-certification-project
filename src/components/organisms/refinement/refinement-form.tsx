@@ -81,9 +81,10 @@ export default function RefinementForm({
       {!aiConfigured ? (
         <Alert variant="destructive">
           <AlertDescription>
-            SprintFlow has no Claude API key configured, so refinement cannot run.
-            Set <code className="font-mono">ANTHROPIC_API_KEY</code> for this
-            deployment. Nothing will be saved until it is.
+            SprintFlow nie ma skonfigurowanego klucza API Claude, więc refinement
+            nie może się uruchomić. Ustaw{" "}
+            <code className="font-mono">ANTHROPIC_API_KEY</code> dla tego
+            wdrożenia. Do tego czasu nic nie zostanie zapisane.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -96,9 +97,9 @@ export default function RefinementForm({
 
       <Tabs defaultValue="backlog">
         <TabsList>
-          <TabsTrigger value="backlog">From the backlog</TabsTrigger>
-          <TabsTrigger value="keys">By ticket key</TabsTrigger>
-          <TabsTrigger value="paste">Paste a story</TabsTrigger>
+          <TabsTrigger value="backlog">Z backlogu</TabsTrigger>
+          <TabsTrigger value="keys">Po kluczu</TabsTrigger>
+          <TabsTrigger value="paste">Wklej historyjkę</TabsTrigger>
         </TabsList>
 
         <TabsContent value="backlog" className="flex flex-col gap-3 pt-4">
@@ -118,19 +119,17 @@ export default function RefinementForm({
               disabled={pending || selected.length === 0 || !jiraReady}
               onClick={() => run({ source: "BACKLOG", ticketKeys: selected })}
             >
-              {pending
-                ? "Analysing…"
-                : `Refine ${selected.length || ""} selected`.trim()}
+              {pending ? "Analizuję…" : "Sprawdź zaznaczone"}
             </Button>
             <p className="text-sm text-muted-foreground">
-              {selected.length} of at most {maxTickets} per run.
+              Zaznaczono {selected.length} z maksymalnie {maxTickets} na przebieg.
             </p>
           </div>
         </TabsContent>
 
         <TabsContent value="keys" className="flex flex-col gap-3 pt-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="refinement-keys">Ticket keys</Label>
+            <Label htmlFor="refinement-keys">Klucze zadań</Label>
             <Input
               id="refinement-keys"
               placeholder="FM-12, FM-18"
@@ -139,9 +138,9 @@ export default function RefinementForm({
               disabled={!jiraReady && backlog.status === "not_connected"}
             />
             <p className="text-sm text-muted-foreground">
-              Comma- or space-separated. A ticket outside the backlog is analysed
-              too; a key this project does not have is reported rather than
-              skipped. At most {maxTickets} per run.
+              Rozdzielone przecinkiem lub spacją. Zadanie spoza backlogu też
+              zostanie sprawdzone; klucz, którego ten projekt nie ma, zostanie
+              zgłoszony, a nie pominięty. Maksymalnie {maxTickets} na przebieg.
             </p>
           </div>
           <div>
@@ -151,14 +150,14 @@ export default function RefinementForm({
                 run({ source: "KEYS", ticketKeys: splitKeys(typedKeys) })
               }
             >
-              {pending ? "Analysing…" : "Refine these keys"}
+              {pending ? "Analizuję…" : "Sprawdź te klucze"}
             </Button>
           </div>
         </TabsContent>
 
         <TabsContent value="paste" className="flex flex-col gap-3 pt-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="refinement-paste">Ticket text</Label>
+            <Label htmlFor="refinement-paste">Treść zadania</Label>
             <Textarea
               id="refinement-paste"
               rows={10}
@@ -167,9 +166,9 @@ export default function RefinementForm({
               onChange={(e) => setPasted(e.target.value)}
             />
             <p className="text-sm text-muted-foreground">
-              First line is the title, the rest is the description. Needs no Jira
-              connection — a paste carries no attachments or links, and the
-              analysis knows not to report them as missing.
+              Pierwsza linia to tytuł, reszta to opis. Nie wymaga połączenia z
+              Jirą — wklejka nie niesie załączników ani linków, a analiza wie, że
+              nie wolno zgłaszać ich jako brakujących.
             </p>
           </div>
           <div>
@@ -177,7 +176,7 @@ export default function RefinementForm({
               disabled={pending || pasted.trim() === ""}
               onClick={() => run({ source: "PASTED_TEXT", text: pasted })}
             >
-              {pending ? "Analysing…" : "Refine this story"}
+              {pending ? "Analizuję…" : "Sprawdź tę historyjkę"}
             </Button>
           </div>
         </TabsContent>
@@ -207,9 +206,9 @@ function BacklogPicker({
     return (
       <Alert>
         <AlertDescription>
-          Board {boardId}&apos;s backlog is empty — every ticket is already in a
-          sprint, or the backlog lives on another board. Use a ticket key or paste
-          the text instead.
+          Backlog boardu {boardId} jest pusty — wszystkie zadania są już w
+          sprincie albo backlog leży na innym boardzie. Użyj klucza zadania albo
+          wklej treść.
         </AlertDescription>
       </Alert>
     );
@@ -247,11 +246,11 @@ function BacklogUnavailable({ backlog }: { backlog: BacklogResult }) {
 
   const message =
     backlog.status === "not_connected"
-      ? "Jira is not connected, so there is no backlog to pick from."
+      ? "Jira nie jest podłączona, więc nie ma backlogu do wyboru."
       : backlog.status === "no_board"
-        ? "Your Jira project has no board, so it has no backlog. Paste the ticket text instead."
+        ? "Twój projekt w Jirze nie ma boardu, więc nie ma backlogu. Wklej treść zadania."
         : backlog.status === "board_ambiguous"
-          ? "Your Jira project has several boards. Pick the one SprintFlow should follow in setup."
+          ? "Twój projekt w Jirze ma kilka boardów. Wskaż w konfiguracji ten, za którym SprintFlow ma podążać."
           : backlog.message;
 
   return (
@@ -259,7 +258,7 @@ function BacklogUnavailable({ backlog }: { backlog: BacklogResult }) {
       <AlertDescription className="flex flex-col gap-2">
         <span>{message}</span>
         <Link href="/settings/connections" className="underline underline-offset-4">
-          Open connection settings
+          Otwórz ustawienia połączeń
         </Link>
       </AlertDescription>
     </Alert>

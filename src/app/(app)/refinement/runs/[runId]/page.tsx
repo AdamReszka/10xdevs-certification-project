@@ -39,7 +39,7 @@ export default async function RefinementRunPage({
         >
           ← Refinement
         </Link>
-        <h1 className="text-2xl font-semibold tracking-tight">Refinement run</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Przebieg refinementu</h1>
       </div>
 
       <RunPanel

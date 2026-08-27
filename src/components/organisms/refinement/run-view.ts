@@ -19,6 +19,13 @@ import {
  * three lives under `src/lib/`.
  *
  * Every function is non-mutating.
+ *
+ * THE LABELS ARE POLISH, like the sentences they sit above. They name a gap
+ * whose grounding clause quotes a Polish ticket back at the lead, so an English
+ * label over a Polish finding reads as a half-finished page. The page's own
+ * chrome — headings, tabs, buttons — stays English with the rest of the app;
+ * the line is between vocabulary describing ticket content and the shell around
+ * it.
  */
 
 /** One stored verdict as the client renders it: fully serializable, no `Date`
@@ -38,59 +45,80 @@ export type RunVerdictView = {
  * because it is the narrowing predicate — a misclassification must be visible
  * rather than silently costing a group of checks. */
 export const TASK_KIND_LABEL: Record<TaskKind, string> = {
-  FILE_OR_DOCUMENT_SWAP: "document swap",
-  CONTENT_CHANGE: "content change",
-  NEW_VIEW_OR_COMPONENT: "new view or component",
-  FRONTEND_ON_BACKEND_DATA: "front-end on back-end data",
-  BACKEND: "back-end work",
-  BUG: "bug fix",
+  FILE_OR_DOCUMENT_SWAP: "podmiana dokumentu",
+  CONTENT_CHANGE: "zmiana treści",
+  NEW_VIEW_OR_COMPONENT: "nowy widok lub komponent",
+  FRONTEND_ON_BACKEND_DATA: "front-end na danych z backendu",
+  BACKEND: "praca backendowa",
+  BUG: "poprawka błędu",
   SPIKE: "spike",
-  OTHER: "unclassified work",
+  OTHER: "praca niesklasyfikowana",
 };
 
 export const VERDICT_LABEL: Record<Verdict, string> = {
-  DOR_MET: "DOR met",
-  GAPS: "Gaps",
-  NOT_VIABLE: "Should not enter the sprint",
+  DOR_MET: "DOR spełniony",
+  GAPS: "Braki",
+  NOT_VIABLE: "Nie powinno wejść do sprintu",
 };
 
 /** Short names for the closed gap vocabulary. Used in the gap list and in the
  * dropped-class summary, so both name the same thing the same way. */
 export const GAP_CLASS_LABEL: Record<GapClass, string> = {
-  DESCRIPTION_MISSING: "No description",
-  USER_STORY_MISSING: "No user story",
-  ACCEPTANCE_CRITERIA_MISSING: "No acceptance criteria",
+  DESCRIPTION_MISSING: "Brak opisu",
+  USER_STORY_MISSING: "Brak historyjki użytkownika",
+  ACCEPTANCE_CRITERIA_MISSING: "Brak kryteriów akceptacji",
 
-  TITLE_TOO_VAGUE: "Vague title",
-  USER_STORY_UNCLEAR: "Unclear user story",
-  USER_STORY_WRONG_ACTOR: "Wrong actor in the user story",
-  ACCEPTANCE_CRITERIA_UNVERIFIABLE: "Unverifiable acceptance criteria",
+  TITLE_TOO_VAGUE: "Zbyt ogólny tytuł",
+  USER_STORY_UNCLEAR: "Niejasna historyjka użytkownika",
+  USER_STORY_WRONG_ACTOR: "Zły aktor w historyjce",
+  ACCEPTANCE_CRITERIA_UNVERIFIABLE: "Nieweryfikowalne kryteria akceptacji",
 
-  MOCKUP_MISSING: "No mockup",
-  FILE_ATTACHMENT_MISSING: "No file attached",
-  EFFECTIVE_DATE_MISSING: "No effective date",
-  OLD_ARTIFACT_DISPOSITION_MISSING: "Old version's fate unstated",
-  CONTENT_LOCATION_UNSPECIFIED: "Location unspecified",
-  CONTENT_SCOPE_UNCHECKED: "Scope unchecked",
-  CMS_EDITABLE_NOT_A_DEV_TASK: "Editable in the CMS",
-  ENDPOINTS_UNSPECIFIED: "Endpoints unspecified",
-  API_CONTRACT_MISSING: "No API contract",
-  DATA_SOURCE_UNSPECIFIED: "Data source unspecified",
+  MOCKUP_MISSING: "Brak makiety",
+  FILE_ATTACHMENT_MISSING: "Brak załączonego pliku",
+  EFFECTIVE_DATE_MISSING: "Brak daty wejścia w życie",
+  OLD_ARTIFACT_DISPOSITION_MISSING: "Nie wiadomo, co ze starą wersją",
+  CONTENT_LOCATION_UNSPECIFIED: "Nieokreślone miejsce",
+  CONTENT_SCOPE_UNCHECKED: "Niesprawdzony zasięg zmiany",
+  CMS_EDITABLE_NOT_A_DEV_TASK: "Do edycji w CMS",
+  ENDPOINTS_UNSPECIFIED: "Nieokreślone endpointy",
+  API_CONTRACT_MISSING: "Brak kontraktu API",
+  DATA_SOURCE_UNSPECIFIED: "Nieokreślone źródło danych",
 
-  BLOCKING_DEPENDENCY_NOT_DONE: "Blocking dependency not done",
-  MOCK_STRATEGY_MISSING: "No mock strategy",
-  TASK_IS_MULTIPLE: "More than one task",
-  TASK_NOT_VIABLE: "Not viable as described",
+  BLOCKING_DEPENDENCY_NOT_DONE: "Blokująca zależność nieukończona",
+  MOCK_STRATEGY_MISSING: "Brak strategii mockowania",
+  TASK_IS_MULTIPLE: "To więcej niż jedno zadanie",
+  TASK_NOT_VIABLE: "Niewykonalne w opisanej formie",
 };
 
 /** How the finding was reached. The lead treats "the field is empty" and "the
  * model judged the field inadequate" differently, so the surface says which. */
 export const LEVEL_LABEL: Record<DetectionLevel, string> = {
-  P0: "Field is missing",
-  P1: "Content does not do its job",
-  P2: "Implied by this kind of work",
-  P3: "Needs project context",
+  P0: "Brakuje pola",
+  P1: "Treść nie spełnia swojej roli",
+  P2: "Wynika z rodzaju zadania",
+  P3: "Wymaga kontekstu projektu",
 };
+
+/**
+ * Polish plural: 1 takes the singular, 2–4 the "few" form, everything else the
+ * "many" form — except the teens, which take "many" despite ending in 2–4.
+ * That exception is why a bare `n % 10` is wrong and why this lives here, in
+ * the file the tests can reach, rather than inline in a `.tsx`.
+ */
+export function plural(
+  n: number,
+  [one, few, many]: [string, string, string],
+): string {
+  if (n === 1) return one;
+  const teen = n % 100 >= 12 && n % 100 <= 14;
+  const last = n % 10;
+  return !teen && last >= 2 && last <= 4 ? few : many;
+}
+
+/** "1 brak" / "3 braki" / "5 braków". */
+export function gapCountLabel(n: number): string {
+  return `${n} ${plural(n, ["brak", "braki", "braków"])}`;
+}
 
 const LEVEL_ORDER: DetectionLevel[] = ["P0", "P1", "P2", "P3"];
 
@@ -166,10 +194,11 @@ export function describeDroppedClasses(
   const { droppedClasses, taskKind } = verdict;
   if (droppedClasses.length === 0) return null;
 
-  const noun = droppedClasses.length === 1 ? "check" : "checks";
+  const n = droppedClasses.length;
+  const noun = plural(n, ["sprawdzenie", "sprawdzenia", "sprawdzeń"]);
   const named = droppedClasses.map((cls) => GAP_CLASS_LABEL[cls]).join(", ");
   return (
-    `${droppedClasses.length} ${noun} skipped because this ticket was ` +
-    `classified as ${TASK_KIND_LABEL[taskKind]}: ${named}.`
+    `Pominięto ${n} ${noun}, bo zadanie zostało sklasyfikowane jako ` +
+    `${TASK_KIND_LABEL[taskKind]}: ${named}.`
   );
 }

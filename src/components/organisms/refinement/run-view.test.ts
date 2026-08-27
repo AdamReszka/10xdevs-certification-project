@@ -5,6 +5,7 @@ import {
   TASK_KIND_LABEL,
   countVerdicts,
   describeDroppedClasses,
+  gapCountLabel,
   groupGapsByLevel,
   orderVerdicts,
   type RunVerdictView,
@@ -129,7 +130,7 @@ describe("describeDroppedClasses", () => {
       }),
     );
 
-    expect(sentence).toContain("2 checks skipped");
+    expect(sentence).toContain("Pominięto 2 sprawdzenia");
     expect(sentence).toContain(TASK_KIND_LABEL.BUG);
     expect(sentence).toContain(GAP_CLASS_LABEL.ENDPOINTS_UNSPECIFIED);
     expect(sentence).toContain(GAP_CLASS_LABEL.API_CONTRACT_MISSING);
@@ -138,7 +139,7 @@ describe("describeDroppedClasses", () => {
   it("says 'check' when exactly one was discarded", () => {
     expect(
       describeDroppedClasses(view({ droppedClasses: ["MOCKUP_MISSING"] })),
-    ).toContain("1 check skipped");
+    ).toContain("Pominięto 1 sprawdzenie");
   });
 });
 
@@ -155,5 +156,29 @@ describe("the label tables cover the closed vocabulary", () => {
     for (const kind of TASK_KINDS) {
       expect(TASK_KIND_LABEL[kind], kind).toBeTruthy();
     }
+  });
+});
+
+describe("plural", () => {
+  it("uses the singular for one", () => {
+    expect(gapCountLabel(1)).toBe("1 brak");
+  });
+
+  it("uses the few-form for 2-4", () => {
+    expect(gapCountLabel(3)).toBe("3 braki");
+  });
+
+  it("uses the many-form for 5 and up", () => {
+    expect(gapCountLabel(7)).toBe("7 braków");
+  });
+
+  it("treats the teens as many, not few — the case a bare modulo gets wrong", () => {
+    expect(gapCountLabel(12)).toBe("12 braków");
+    expect(gapCountLabel(13)).toBe("13 braków");
+    expect(gapCountLabel(14)).toBe("14 braków");
+  });
+
+  it("comes back to the few-form at 22", () => {
+    expect(gapCountLabel(22)).toBe("22 braki");
   });
 });

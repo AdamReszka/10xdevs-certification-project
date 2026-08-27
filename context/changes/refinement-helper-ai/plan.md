@@ -99,6 +99,17 @@ tests for the store, and the manual checklist.
   a manually-run script, not a CI gate.
 - **No changes to the sync cycle.** The backlog is read on demand; `run-sync.ts`
   is untouched.
+- **No translation of the rest of the app.** `/refinement` is Polish end to end —
+  labels, verdicts, gap vocabulary and the model's own sentences — because it is
+  the only surface whose subject is ticket PROSE: the finding quotes a Polish
+  ticket back and the closing question is carried to a Polish-speaking author.
+  Every other surface (Dashboard, Settings, setup, the recap email) stays
+  English. This is a deliberate island and the owner named it as such: the right
+  end state is the whole interface translated, deferred rather than dropped
+  because widening S-13 into an i18n slice would push the deadline. Whoever
+  picks that up should start here — the vocabulary tables in
+  `components/organisms/refinement/run-view.ts` are already the shape a message
+  catalogue wants.
 
 ## Implementation Approach
 
@@ -1030,10 +1041,10 @@ references it; the grep in Phase 5 proves that.
 
 #### Manual
 
-- [ ] 6.4 `/refinement` lists the real project backlog
-- [ ] 6.5 A run produces one row per ticket with task kind and verdict
-- [ ] 6.6 Expanded gaps name something from that specific ticket
+- [x] 6.4 `/refinement` lists the real project backlog
+- [x] 6.5 A run produces one row per ticket with task kind and verdict
+- [x] 6.6 Expanded gaps name something from that specific ticket
 - [ ] 6.7 Missing `ANTHROPIC_API_KEY` degrades with a banner and saves nothing
-- [ ] 6.8 The Refinement nav link navigates
+- [x] 6.8 The Refinement nav link navigates
 - [ ] 6.11 A typed key outside the backlog analyses; an unknown key is reported, not dropped
 - [ ] 6.12 A pasted story analyses with no attachment- or mockup-absence gap invented

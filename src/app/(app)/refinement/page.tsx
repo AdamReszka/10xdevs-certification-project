@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { MAX_TICKETS_PER_RUN } from "@/lib/refinement/analyze";
 import { loadBacklog } from "@/lib/refinement/backlog";
+import { plural } from "@/components/organisms/refinement/run-view";
 import { listRuns } from "@/lib/refinement/store";
 
 /**
@@ -45,9 +46,9 @@ export default async function RefinementPage() {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Refinement</h1>
         <p className="text-muted-foreground">
-          Pick tickets and each one comes back with a readiness verdict — DOR met,
-          the specific gaps that block it, or that it should not enter the sprint
-          at all. Every gap names something from that ticket&apos;s own content.
+          Wybierz zadania, a każde wróci z werdyktem gotowości — DOR spełniony,
+          konkretne braki, które je blokują, albo że w ogóle nie powinno wejść do
+          sprintu. Każdy brak nazywa coś z treści tego właśnie zadania.
         </p>
       </div>
 
@@ -58,10 +59,10 @@ export default async function RefinementPage() {
       />
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium">Recent runs</h2>
+        <h2 className="text-sm font-medium">Ostatnie przebiegi</h2>
         {runs.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No refinement has been run on this account yet.
+            Na tym koncie nie uruchomiono jeszcze żadnego refinementu.
           </p>
         ) : (
           <ul className="divide-y rounded-md border">
@@ -72,7 +73,8 @@ export default async function RefinementPage() {
                   className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 text-sm hover:bg-muted/50"
                 >
                   <span className="font-medium">
-                    {run.ticketCount} {run.ticketCount === 1 ? "ticket" : "tickets"}
+                    {run.ticketCount}{" "}
+                    {plural(run.ticketCount, ["zadanie", "zadania", "zadań"])}
                   </span>
                   <span className="text-muted-foreground">{run.model}</span>
                   <span className="ml-auto font-mono text-xs text-muted-foreground">

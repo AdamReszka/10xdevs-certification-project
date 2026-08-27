@@ -1,7 +1,9 @@
 import VerdictRow from "@/components/organisms/refinement/verdict-row";
 import {
   countVerdicts,
+  gapCountLabel,
   orderVerdicts,
+  plural,
   type RunVerdictView,
 } from "@/components/organisms/refinement/run-view";
 
@@ -33,19 +35,20 @@ export default function RunPanel({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
         <span>
           <span className="font-medium text-foreground">{counts.total}</span>{" "}
-          {counts.total === 1 ? "ticket" : "tickets"}
+          {plural(counts.total, ["zadanie", "zadania", "zadań"])}
         </span>
         <span>
-          <span className="font-medium text-foreground">{counts.dorMet}</span> DOR met
+          <span className="font-medium text-foreground">{counts.dorMet}</span>{" "}
+          {plural(counts.dorMet, ["spełnia DOR", "spełniają DOR", "spełnia DOR"])}
         </span>
         <span>
-          <span className="font-medium text-foreground">{counts.withGaps}</span> with
-          gaps ({counts.gapTotal} in total)
+          <span className="font-medium text-foreground">{counts.withGaps}</span> z
+          brakami ({gapCountLabel(counts.gapTotal)} łącznie)
         </span>
         {counts.notViable > 0 ? (
           <span>
-            <span className="font-medium text-foreground">{counts.notViable}</span> not
-            viable
+            <span className="font-medium text-foreground">{counts.notViable}</span> nie
+            do sprintu
           </span>
         ) : null}
         <span className="ml-auto font-mono text-xs">
@@ -64,7 +67,7 @@ export default function RunPanel({
 }
 
 const SOURCE_LABEL: Record<string, string> = {
-  BACKLOG: "from the backlog",
-  KEYS: "by ticket key",
-  PASTED_TEXT: "pasted text",
+  BACKLOG: "z backlogu",
+  KEYS: "po kluczu",
+  PASTED_TEXT: "wklejony tekst",
 };

@@ -14,6 +14,7 @@ import {
   TASK_KIND_LABEL,
   VERDICT_LABEL,
   describeDroppedClasses,
+  gapCountLabel,
   groupGapsByLevel,
   type RunVerdictView,
 } from "@/components/organisms/refinement/run-view";
@@ -59,7 +60,7 @@ export default function VerdictRow({ verdict }: { verdict: RunVerdictView }) {
             rel="noopener noreferrer"
             className="ml-auto inline-flex items-center gap-1 text-sm underline-offset-4 hover:underline"
           >
-            Open in Jira
+            Otwórz w Jirze
             <ExternalLink className="size-3" aria-hidden />
           </a>
         ) : null}
@@ -76,8 +77,8 @@ export default function VerdictRow({ verdict }: { verdict: RunVerdictView }) {
       {verdict.gaps.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           {verdict.verdict === "NOT_VIABLE"
-            ? "Nothing is missing — the work as described should not enter the sprint."
-            : "Nothing blocks this ticket."}
+            ? "Niczego nie brakuje — praca w opisanej formie nie powinna wejść do sprintu."
+            : "Nic nie blokuje tego zadania."}
         </p>
       ) : (
         <Collapsible open={open} onOpenChange={setOpen}>
@@ -86,8 +87,7 @@ export default function VerdictRow({ verdict }: { verdict: RunVerdictView }) {
               className={cn("size-4 transition-transform", open ? "" : "-rotate-90")}
               aria-hidden
             />
-            {open ? "Hide" : "Show"} {verdict.gaps.length}{" "}
-            {verdict.gaps.length === 1 ? "gap" : "gaps"}
+            {open ? "Ukryj" : "Pokaż"} {gapCountLabel(verdict.gaps.length)}
           </CollapsibleTrigger>
 
           <CollapsibleContent className="flex flex-col gap-4 pt-3">
@@ -111,7 +111,7 @@ export default function VerdictRow({ verdict }: { verdict: RunVerdictView }) {
                       <span className="text-sm">{gap.groundingClause}</span>
                       {gap.question ? (
                         <span className="text-sm text-muted-foreground">
-                          Ask the author: {gap.question}
+                          Do autora: {gap.question}
                         </span>
                       ) : null}
                     </li>
