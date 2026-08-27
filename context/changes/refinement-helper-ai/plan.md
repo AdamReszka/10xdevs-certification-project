@@ -909,12 +909,15 @@ exactly the kind of prompt that thinks. The three numbers that follow from that:
   Phase 6 builds a surface on it. The earlier assumption — 40 tickets inside the
   default 5-minute cache TTL — required ≤7.5s per ticket, which nothing in this
   plan had measured. **Measured 2026-08-27 at `effort: "high"`, against the
-  sharpened prompt that ships**: median 8.6s, mean 11.2s, p95 20.7s, ten-ticket
-  run 112.0s. The cap is **4**, and it is a
+  prompt that ships**: median 11.9s, mean 14.2s, p95 25.9s, ten-ticket run
+  142.3s. The cap is **3**, and it is a
   MEAN-based number rather than the p95 one the eval prints — recorded here as
   a decision, not an oversight. `p95 × n ≤ 60s` gives 2, but at n=10 that "p95"
   is the single worst ticket, so it prices every run as if every ticket were
-  the worst; 4 costs ~45s expected and ~83s if all four land on the tail. Two
+  the worst; 3 costs ~43s expected and ~78s if all three land on the tail. It was 4
+  until asking the model to answer in Polish pushed the mean to 14.2s, at which
+  point 4 cost ~57s expected and stopped clearing the budget — the cap follows
+  the measurement rather than surviving it. Two
   tickets per run is not a refinement session, and a tool nobody opens has a
   recall of zero. The tail overrun is accepted knowingly; if it bites, the fix
   is not a bigger number but moving the run off the request path — the separate

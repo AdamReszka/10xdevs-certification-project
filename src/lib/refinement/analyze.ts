@@ -42,21 +42,30 @@ export class RefinementAnalysisError extends Error {
  * request holding a request-scoped Hyperdrive pool, so whatever it cannot
  * finish in that window is not a slow feature but a hung page.
  *
- * MEASURED, not guessed (criterion 4.8). `npm run eval:refinement` over the
- * ten-ticket corpus on 2026-08-27, at `effort: "high"` and against the
- * SHARPENED prompt that ships today (the pre-sharpening run measured 7.3s /
- * 9.9s / 22.0s — re-measured because a latency figure describing a prompt that
- * is no longer sent is not a measurement): median 8.6s, mean 11.2s, p95 20.7s,
- * whole run 112.0s.
+ * MEASURED, not guessed (criterion 4.8), and RE-measured on every change that
+ * touches what is sent. `npm run eval:refinement` over the ten-ticket corpus,
+ * 2026-08-27, `effort: "high"`, against the prompt that ships: median 11.9s,
+ * mean 14.2s, p95 25.9s, whole run 142.3s.
  *
- * FOUR IS A MEAN-BASED CAP, AND THAT IS A DELIBERATE DEPARTURE from the
+ * The figure has moved twice, and the history is kept because it is the whole
+ * argument for re-measuring rather than trusting a number: 7.3 / 9.9 / 22.0s
+ * before the prompt was sharpened, 8.6 / 11.2 / 20.7s after, and the numbers
+ * above once the model was asked to answer in Polish. A latency figure that
+ * describes a prompt no longer sent is not a measurement.
+ *
+ * THREE IS A MEAN-BASED CAP, AND THAT IS A DELIBERATE DEPARTURE from the
  * p95 rule the eval prints. Stated plainly so nobody later reads it as an
  * oversight:
  *  - The strict reading — `p95 × n ≤ 60s` — gives TWO tickets. At n=10 samples
  *    that "p95" is effectively the single worst ticket, so it prices
- *    every run as if every ticket were the worst one (20683ms here).
- *  - Four tickets cost ~45s at the mean and ~83s if all four land on the tail.
- *    The tail case overruns the budget; the expected case clears it with room.
+ *    every run as if every ticket were the worst one (25899ms here).
+ *  - Three tickets cost ~43s at the mean and ~78s if all three land on the
+ *    tail. The tail case overruns the budget; the expected case clears it with
+ *    room, which is the whole point of choosing the mean.
+ *  - It was FOUR until the Polish-output change pushed the mean to 14.2s, at
+ *    which point four cost ~57s expected — no longer clearing the budget, so
+ *    the number that the stated reasoning produces is three. The cap follows
+ *    the measurement; it is not a preference that survives its own evidence.
  *  - Two tickets per run is not a refinement session, and a tool nobody opens
  *    has a recall of zero regardless of what the corpus says.
  *
@@ -68,7 +77,7 @@ export class RefinementAnalysisError extends Error {
  * Exported so the surface can reject an oversized selection before spending
  * anything.
  */
-export const MAX_TICKETS_PER_RUN = 4;
+export const MAX_TICKETS_PER_RUN = 3;
 
 /** What the model is asked to return. Kept beside {@link ANALYSIS_SCHEMA} so the
  * two can never drift apart. */
@@ -214,6 +223,61 @@ function merge(deterministic: Gap[], judged: Gap[]): Gap[] {
   return [...deterministic, ...judged.filter((gap) => !seen.has(gap.gapClass))];
 }
 
+/**
+ * Pairs that cannot both be true of one ticket.
+ *
+ * The key is the presence-level finding ("there is no user story"); the values
+ * are quality-level findings that PRESUPPOSE the thing exists ("the user story
+ * names the wrong actor"). Reporting both says the carrier is simultaneously
+ * absent and inadequate, which is not a strict verdict — it is a self-
+ * contradiction the lead has to resolve for us.
+ *
+ * Observed on the real ticket FM-7: the P0 detectors did not recognise its
+ * label-form user story (`JAKO:` / `Potrzebuję:`) or its `KA:` heading, while
+ * the model read both correctly, so the row claimed "no user story" and "wrong
+ * actor in the user story" at once. The probes were widened, but a probe can
+ * only ever recognise the shapes someone thought of — this guard is what stops
+ * the NEXT unrecognised shape reproducing the same incoherence.
+ *
+ * The quality finding wins, deliberately. The P0 detector is a regex over
+ * shapes we enumerated; the model read the prose. On the one question of
+ * whether the carrier is THERE, the reader that can handle an unforeseen
+ * layout is the better witness — and the failure it prevents is the worse of
+ * the two, since a spurious "it is missing" is the over-flagging that
+ * `dor-notes.md` §5 says kills the tool.
+ */
+const PRESENCE_CONTRADICTED_BY: Partial<Record<GapClass, GapClass[]>> = {
+  USER_STORY_MISSING: ["USER_STORY_UNCLEAR", "USER_STORY_WRONG_ACTOR"],
+  ACCEPTANCE_CRITERIA_MISSING: ["ACCEPTANCE_CRITERIA_UNVERIFIABLE"],
+  // NOT `TITLE_TOO_VAGUE`. The title and the description are different
+  // carriers, so a vague title does not presuppose a description — and the
+  // canonical `dor-notes.md` #1 ticket ("deweloper po samym tytule się
+  // zorientuje") is precisely one that has BOTH. Listing it here suppressed
+  // DESCRIPTION_MISSING on exactly that ticket, which the corpus caught.
+  DESCRIPTION_MISSING: [
+    "USER_STORY_UNCLEAR",
+    "USER_STORY_WRONG_ACTOR",
+    "ACCEPTANCE_CRITERIA_UNVERIFIABLE",
+  ],
+};
+
+/**
+ * Drop a presence gap the rest of the list contradicts.
+ *
+ * Runs AFTER the merge and BEFORE the gate, so the verdict the lead reads is
+ * internally consistent whatever the two halves disagreed about. Nothing is
+ * dropped when the contradiction is absent, so a genuinely empty carrier still
+ * reports as missing.
+ */
+function dropContradictedPresence(gaps: Gap[]): Gap[] {
+  const present = new Set(gaps.map((gap) => gap.gapClass));
+  return gaps.filter((gap) => {
+    const contradictions = PRESENCE_CONTRADICTED_BY[gap.gapClass];
+    if (!contradictions) return true;
+    return !contradictions.some((cls) => present.has(cls));
+  });
+}
+
 /** Apply {@link GAP_CLASS_OBLIGATIONS} and keep what it threw away. */
 function gate(
   taskKind: TaskKind,
@@ -247,7 +311,7 @@ export async function analyzeTicket(
   const deterministic = ALL_P0_DETECTORS.flatMap((detect) => detect(ticket));
   const { kept, droppedClasses } = gate(
     analysis.taskKind,
-    merge(deterministic, analysis.gaps),
+    dropContradictedPresence(merge(deterministic, analysis.gaps)),
   );
 
   // NOT_VIABLE outranks the gap count: "this should not enter the sprint" is a

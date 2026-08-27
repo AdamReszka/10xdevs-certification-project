@@ -252,3 +252,118 @@ describe("analyzeTickets", () => {
     );
   });
 });
+
+/**
+ * The FM-7 case, kept as a regression: a real ticket whose user story and
+ * acceptance criteria the P0 probes did not recognise, while the model read
+ * both and judged their QUALITY. Without the guard the row said "there is no
+ * user story" and "the user story names the wrong actor" at the same time.
+ *
+ * The probes were widened for FM-7's exact shapes, so these fixtures use a
+ * shape nobody has taught them — which is the point: the guard exists for the
+ * NEXT unforeseen layout, not for the one already fixed.
+ */
+describe("analyzeTicket — a presence gap the rest of the list contradicts", () => {
+  const UNRECOGNISED_STORY = makeTicket({
+    description:
+      "Rola => pracownik compliance\nCel => wysyłka zgłoszeń\nWarunki => formularz jest walidowany",
+  });
+
+  it("drops USER_STORY_MISSING when the model judged that same story's actor wrong", async () => {
+    const verdict = await analyzeTicket(
+      UNRECOGNISED_STORY,
+      stub(
+        modelSays({
+          taskKind: "NEW_VIEW_OR_COMPONENT",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "USER_STORY_WRONG_ACTOR",
+              groundingClause:
+                "Zadanie dotyczy formularza zgłoszeń, ale aktorem jest zamawiający, nie osoba wypełniająca.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const classes = verdict.gaps.map((gap) => gap.gapClass);
+    expect(classes).toContain("USER_STORY_WRONG_ACTOR");
+    expect(classes).not.toContain("USER_STORY_MISSING");
+  });
+
+  it("drops ACCEPTANCE_CRITERIA_MISSING when the model called a stated criterion unverifiable", async () => {
+    const verdict = await analyzeTicket(
+      UNRECOGNISED_STORY,
+      stub(
+        modelSays({
+          taskKind: "NEW_VIEW_OR_COMPONENT",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "ACCEPTANCE_CRITERIA_UNVERIFIABLE",
+              groundingClause:
+                "Zadanie podaje „formularz jest walidowany”, ale nie mówi jakie reguły obowiązują.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const classes = verdict.gaps.map((gap) => gap.gapClass);
+    expect(classes).toContain("ACCEPTANCE_CRITERIA_UNVERIFIABLE");
+    expect(classes).not.toContain("ACCEPTANCE_CRITERIA_MISSING");
+  });
+
+  it("keeps the presence gap when nothing contradicts it", async () => {
+    const verdict = await analyzeTicket(
+      UNRECOGNISED_STORY,
+      stub(
+        modelSays({
+          taskKind: "NEW_VIEW_OR_COMPONENT",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "MOCKUP_MISSING",
+              groundingClause: "Zadanie dotyczy nowego formularza, ale nie ma makiety.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    expect(verdict.gaps.map((gap) => gap.gapClass)).toContain(
+      "USER_STORY_MISSING",
+    );
+  });
+});
+
+/**
+ * The corpus caught this and the unit suite had not: a vague title and an empty
+ * description are different carriers, so the first must never suppress the
+ * second. `dor-notes.md` #1 is a ticket that has both at once.
+ */
+describe("analyzeTicket — carriers the guard must keep apart", () => {
+  it("keeps DESCRIPTION_MISSING alongside TITLE_TOO_VAGUE", async () => {
+    const verdict = await analyzeTicket(
+      makeTicket({ summary: "Feedy produktowe", description: "" }),
+      stub(
+        modelSays({
+          taskKind: "SPIKE",
+          verdict: "GAPS",
+          gaps: [
+            {
+              gapClass: "TITLE_TOO_VAGUE",
+              groundingClause:
+                "Zadanie nosi tytuł „Feedy produktowe”, ale nie mówi, co ma powstać.",
+            },
+          ],
+        }),
+      ),
+    );
+
+    const classes = verdict.gaps.map((gap) => gap.gapClass);
+    expect(classes).toContain("DESCRIPTION_MISSING");
+    expect(classes).toContain("TITLE_TOO_VAGUE");
+  });
+});

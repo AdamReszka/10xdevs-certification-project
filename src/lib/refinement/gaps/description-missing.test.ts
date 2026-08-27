@@ -9,7 +9,7 @@ describe("detectDescriptionMissing", () => {
     expect(out).toHaveLength(1);
     expect(out[0].gapClass).toBe("DESCRIPTION_MISSING");
     expect(out[0].groundingClause).toContain("Aktualizacja regulaminu karty");
-    expect(out[0].groundingClause).toMatch(/^This ticket is about "/);
+    expect(out[0].groundingClause).toMatch(/^Zadanie dotyczy „/);
   });
 
   it("fires on a whitespace-only description", () => {

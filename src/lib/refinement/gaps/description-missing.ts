@@ -23,9 +23,9 @@ export const detectDescriptionMissing: GapDetector = (ticket) => {
       gapClass: "DESCRIPTION_MISSING",
       groundingClause: ground(
         ticket,
-        "it carries no description at all — only the title.",
+        "nie ma żadnego opisu — jest tylko tytuł.",
       ),
-      question: "Can the author write down what is to be done, and why?",
+      question: "Czy autor może opisać, co ma zostać zrobione i po co?",
     },
   ];
 };

@@ -32,10 +32,10 @@ export const detectUserStoryMissing: GapDetector = (ticket) => {
       gapClass: "USER_STORY_MISSING",
       groundingClause: ground(
         ticket,
-        "nothing in it states whose need this serves — there is no user story.",
+        "nic w nim nie mówi, czyją potrzebę zaspokaja — nie ma historyjki użytkownika.",
       ),
       question:
-        "Who is the recipient of this change, and what do they need it for?",
+        "Kto jest odbiorcą tej zmiany i do czego jest mu ona potrzebna?",
     },
   ];
 };

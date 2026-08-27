@@ -87,19 +87,19 @@ describe("hasAcceptanceCriteriaSection", () => {
 
 describe("ground", () => {
   it("names the ticket's own summary, so even a P0 gap reads as grounded", () => {
-    const clause = ground(makeTicket(), "it carries no description at all.");
+    const clause = ground(makeTicket(), "nie ma żadnego opisu.");
     expect(clause).toBe(
-      'This ticket is about "Aktualizacja regulaminu karty", but it carries no description at all.',
+      'Zadanie dotyczy „Aktualizacja regulaminu karty”, ale nie ma żadnego opisu.',
     );
   });
 
   it("falls back to the key when there is no summary to ground in", () => {
     const clause = ground(
       makeTicket({ summary: null }),
-      "it carries no description at all.",
+      "nie ma żadnego opisu.",
     );
     expect(clause).toBe(
-      "Ticket FM-12 has no summary to go on, and it carries no description at all.",
+      "Zadanie FM-12 nie ma tytułu, na którym można się oprzeć, a nie ma żadnego opisu.",
     );
   });
 });
@@ -114,5 +114,48 @@ describe("attachmentStateKnown", () => {
   // FILE_ATTACHMENT_MISSING on every single paste.
   it("is false for a pasted ticket", () => {
     expect(attachmentStateKnown(makeTicket({ origin: "PASTE" }))).toBe(false);
+  });
+});
+
+/**
+ * The label form, found on the real ticket FM-7. The single-line frames could
+ * not see it, so a ticket that plainly has a user story was reported as having
+ * none — while the model simultaneously judged that story's actor wrong.
+ */
+describe("hasUserStoryFrame — the label form", () => {
+  it("accepts a role and a need written as their own labelled lines", () => {
+    expect(
+      hasUserStoryFrame(
+        "JAKO: pracownik działu compliance\nPotrzebuję: formularza do przesyłania zgłoszeń",
+      ),
+    ).toBe(true);
+  });
+
+  it("accepts the English label form too", () => {
+    expect(hasUserStoryFrame("As a: auditor\nI need: an export")).toBe(true);
+  });
+
+  it("rejects a need with no actor — that is not a user story", () => {
+    expect(hasUserStoryFrame("Potrzebuję: formularza do zgłoszeń")).toBe(false);
+  });
+
+  it("rejects an actor with no need", () => {
+    expect(hasUserStoryFrame("JAKO: pracownik compliance\nOpis: cokolwiek")).toBe(false);
+  });
+
+  it("rejects an unfilled template — a bare label with no value", () => {
+    expect(hasUserStoryFrame("JAKO:\nPotrzebuję:")).toBe(false);
+  });
+});
+
+describe("hasAcceptanceCriteriaSection — the KA abbreviation", () => {
+  it("accepts 'KA:' as a section heading, like the DoD and AC abbreviations beside it", () => {
+    expect(hasAcceptanceCriteriaSection("Opis czegoś\nKA:\n- formularz jest walidowany")).toBe(
+      true,
+    );
+  });
+
+  it("still refuses the abbreviation buried in prose", () => {
+    expect(hasAcceptanceCriteriaSection("ustal ka z product ownerem")).toBe(false);
   });
 });

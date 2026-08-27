@@ -30,9 +30,9 @@ export const detectAcceptanceCriteriaMissing: GapDetector = (ticket) => {
       gapClass: "ACCEPTANCE_CRITERIA_MISSING",
       groundingClause: ground(
         ticket,
-        "it names no acceptance criteria — nothing states what has to be true for this to count as done.",
+        "nie ma kryteriów akceptacji — nic nie mówi, co musi być prawdą, żeby uznać je za zrobione.",
       ),
-      question: "On what basis will we agree this ticket is finished?",
+      question: "Na jakiej podstawie uznamy to zadanie za skończone?",
     },
   ];
 };
