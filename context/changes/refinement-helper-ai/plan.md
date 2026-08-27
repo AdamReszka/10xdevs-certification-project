@@ -1001,11 +1001,11 @@ references it; the grep in Phase 5 proves that.
 
 #### Automated
 
-- [x] 6.1 `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:integration` pass
-- [x] 6.2 `run-view.ts` unit tests for ordering, grouping, counting and the dropped-class summary
-- [x] 6.3 No `href: "#"` remains in `main-nav.tsx`
-- [x] 6.9 A test asserts a selection above `MAX_TICKETS_PER_RUN` is rejected before the model is called
-- [x] 6.10 `.env.example` and the `wrangler.jsonc` secrets comment both name `ANTHROPIC_API_KEY`
+- [x] 6.1 `npm run lint`, `npx tsc --noEmit`, `npm test`, `npm run test:integration` pass — 1a8219d
+- [x] 6.2 `run-view.ts` unit tests for ordering, grouping, counting and the dropped-class summary — 1a8219d
+- [x] 6.3 No `href: "#"` remains in `main-nav.tsx` — 1a8219d
+- [x] 6.9 A test asserts a selection above `MAX_TICKETS_PER_RUN` is rejected before the model is called — 1a8219d
+- [x] 6.10 `.env.example` and the `wrangler.jsonc` secrets comment both name `ANTHROPIC_API_KEY` — 1a8219d
 
 #### Manual
 
