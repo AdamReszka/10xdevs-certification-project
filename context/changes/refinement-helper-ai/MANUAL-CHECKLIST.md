@@ -84,7 +84,7 @@ Oba wiersze zamyka jedno uruchomienie: `npm run eval:refinement`
 tabelę i podsumowanie — wiersze 4.5, 4.7 i 4.9 są w niej asercjami albo
 licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oceny.
 
-- [ ] **4.6 — kompletny ticket nie generuje żadnego braku** *(faza 4)*
+- [x] **4.6 — kompletny ticket nie generuje żadnego braku** *(faza 4)* ✅ 2026-08-27
 
   **Gdzie:** terminal, `npm run eval:refinement` z ustawionym `ANTHROPIC_API_KEY`.
 
@@ -100,7 +100,7 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
   eval automatycznie; tylko brak fałszywych alarmów wymaga ludzkiego spojrzenia
   na to, *co* zostało zgłoszone.
 
-- [ ] **4.8 — `MAX_TICKETS_PER_RUN` ustawiony z pomiaru, nie z przeczucia** *(faza 4)*
+- [x] **4.8 — `MAX_TICKETS_PER_RUN` ustawiony z pomiaru, nie z przeczucia** *(faza 4)* ✅ 2026-08-27
 
   **Gdzie:** terminal, ten sam wynik `npm run eval:refinement`, blok
   `MAX_TICKETS_PER_RUN candidates at p95 …` na końcu.
@@ -113,6 +113,16 @@ licznikami, więc czerwony test sam je pokaże. Poniżej to, co wymaga Twojej oc
   **Co musi być prawdą:** wybrana liczba pochodzi z wypisanego `p95`, a nie
   z obecnej prowizorycznej ósemki. Jeśli `p95 × wybrany limit` przekracza
   5 minut, na bloku systemowym ląduje `ttl: "1h"` w tym samym przebiegu.
+
+  **Jak to się skończyło (2026-08-27, `effort: "high"`):** mediana 7,3 s,
+  średnia 9,9 s, p95 22,0 s, cały 10-ticketowy przebieg 98,7 s. Ustawiono
+  **4** — czyli **wbrew** regule „mniejsza z dwóch" powyżej, która dawała 2.
+  Przy n=10 to „p95" jest po prostu najgorszym pojedynczym ticketem, więc
+  wycenia każdy przebieg tak, jakby każdy ticket był najgorszy; 4 to ~40 s
+  oczekiwane i ~88 s w ogonie. Dwa tickety na przebieg to nie jest sesja
+  refinementu. Przekroczenie w ogonie jest ryzykiem przyjętym świadomie i
+  zapisanym przy stałej w `analyze.ts` oraz w `plan.md`; lekarstwem nie jest
+  większa liczba, tylko wyprowadzenie przebiegu poza ścieżkę requestu.
 
   **Dlaczego to ma znaczenie:** cały przebieg dzieje się wewnątrz jednego
   requestu Workers, trzymając pulę Hyperdrive. Czego nie zdąży, to nie jest

@@ -996,7 +996,7 @@ references it; the grep in Phase 5 proves that.
 #### Manual
 
 - [ ] 4.5 `npm run eval:refinement`: every incomplete fixture yields ≥2 expected classes
-- [ ] 4.6 No complete fixture yields any gap
+- [x] 4.6 No complete fixture yields any gap
 - [x] 4.7 `cache_read_input_tokens` non-zero from the second ticket of a run
 - [x] 4.8 `MAX_TICKETS_PER_RUN` set from measured p95 latency and written into the plan
 - [x] 4.9 Zero `AnthropicTruncatedError` across the corpus at `max_tokens: 16000`
