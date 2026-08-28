@@ -1,10 +1,10 @@
 ---
 change_id: refinement-helper-ai
 title: Refinement Helper — a per-ticket DOR readiness verdict grounded in the ticket's own content
-status: implemented
+status: archived
 created: 2026-08-26
-updated: 2026-08-27
-archived_at: null
+updated: 2026-08-28
+archived_at: 2026-08-28T19:39:04Z
 ---
 
 ## Notes
