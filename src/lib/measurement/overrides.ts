@@ -5,7 +5,6 @@ import { and, eq } from "drizzle-orm";
 import { jiraProject, sprint, sprintMeasurement } from "@/db/schema";
 import type { getDb } from "@/lib/db";
 import { type SprintMeasurement, toMd } from "@/lib/measurement/reader";
-import { getActiveSprintRow } from "@/lib/sprint";
 
 /**
  * The lead's two manual entries on a sprint measurement (S-23 Phase 5,
@@ -214,23 +213,4 @@ export async function getSprintMeasurement(
     capacityAdjustedMd: toMd(row.capacityAdjustedMd),
     capacityOverrideMd: toMd(row.capacityOverrideMd),
   };
-}
-
-/**
- * The ACTIVE sprint's measurement record — the read the dashboard needs, and the
- * one the server actions resolve their target sprint through.
- *
- * Routed through `getActiveSprintRow` rather than a `state = 'ACTIVE'` join, so
- * "which sprint are we looking at" is answered in exactly one place: that
- * resolver also handles the between-sprints fallback (most recently started),
- * and a join here would silently disagree with the dashboard the moment a team
- * is between sprints.
- */
-export async function getActiveSprintMeasurement(
-  db: Db,
-  ownerId: string,
-): Promise<SprintMeasurement | null> {
-  const active = await getActiveSprintRow(db, ownerId);
-  if (active === null) return null;
-  return getSprintMeasurement(db, ownerId, active.jiraSprintId);
 }

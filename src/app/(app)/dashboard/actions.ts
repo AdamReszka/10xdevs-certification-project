@@ -9,7 +9,6 @@ import {
   setCapacityOverride as setCapacityOverrideService,
   setDeliveredCorrection as setDeliveredCorrectionService,
 } from "@/lib/measurement/overrides";
-import { getActiveSprintRow } from "@/lib/sprint";
 import {
   capacityOverrideSaveSchema,
   deliveredCorrectionSaveSchema,
@@ -24,11 +23,13 @@ import {
  * the request-context-free service core with `ownerId = session.user.id`. No
  * business logic here.
  *
- * THE SPRINT IS RESOLVED SERVER-SIDE, never taken from the payload. The surface
- * only ever edits the sprint it is displaying, which is the active one, so there
- * is no reason to let a client name a sprint — and every reason not to. (The
- * store still refuses a foreign id on its own; this is the belt to that
- * braces.)
+ * THE SPRINT COMES FROM THE PAYLOAD, and it is the one the surface was DISPLAYING
+ * (impl-review F2). Re-resolving "the active sprint" here would read a different
+ * moment than the render did: a rollover in between files the lead's number
+ * against a sprint they never looked at, and `router.refresh()` repaints over the
+ * substitution silently. Accepting the id is not a trust decision — the store's
+ * owner-scoped lookup refuses any id outside the caller's own set and raises
+ * `UnknownSprintError`, which `toFailure` turns into "reload the page".
  *
  * NO RE-DETECTION, unlike the absence actions. An override changes a planning
  * figure and a stored measurement; it changes no anomaly input — none of the
@@ -39,7 +40,7 @@ import {
 /** Shared token-free failure shape; the client reads `message` regardless. */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_input" | "no_active_sprint" | "integration_unavailable";
+  error: "invalid_input" | "integration_unavailable";
   message: string;
 };
 
@@ -66,13 +67,10 @@ export async function setCapacityOverrideAction(
   const ownerId = session.user.id;
 
   try {
-    const sprint = await getActiveSprintRow(db, ownerId);
-    if (sprint === null) return noActiveSprint();
-
     const { id } = await setCapacityOverrideService({
       db,
       ownerId,
-      jiraSprintId: sprint.jiraSprintId,
+      jiraSprintId: parsed.data.jiraSprintId,
       md: parsed.data.md,
     });
     return { ok: true, id };
@@ -102,13 +100,10 @@ export async function setDeliveredCorrectionAction(
   const ownerId = session.user.id;
 
   try {
-    const sprint = await getActiveSprintRow(db, ownerId);
-    if (sprint === null) return noActiveSprint();
-
     const { id } = await setDeliveredCorrectionService({
       db,
       ownerId,
-      jiraSprintId: sprint.jiraSprintId,
+      jiraSprintId: parsed.data.jiraSprintId,
       sp: parsed.data.sp,
     });
     return { ok: true, id };
@@ -119,19 +114,6 @@ export async function setDeliveredCorrectionAction(
 
 function invalidInput(message: string): ActionFailure {
   return { ok: false, error: "invalid_input", message };
-}
-
-/**
- * Its own error rather than `invalid_input`: nothing the lead typed is wrong,
- * there is simply no sprint to file the number against, and "check your input"
- * would send them looking for a mistake that isn't there.
- */
-function noActiveSprint(): ActionFailure {
-  return {
-    ok: false,
-    error: "no_active_sprint",
-    message: "There is no active sprint to adjust yet. Finish Jira setup first.",
-  };
 }
 
 /**

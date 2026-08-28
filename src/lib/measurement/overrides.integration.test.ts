@@ -18,7 +18,6 @@ import {
 import { encryptToken } from "@/lib/crypto";
 import {
   UnknownSprintError,
-  getActiveSprintMeasurement,
   getSprintMeasurement,
   setCapacityOverride,
   setDeliveredCorrection,
@@ -184,6 +183,36 @@ describe("setCapacityOverride", () => {
     expect(row.finalizedAt).toBeNull();
   });
 
+  it("leaves a row it created for the sweep to complete", async () => {
+    const s = await seed();
+    await addDeliveredTicket(s, 8);
+
+    // The lead is AHEAD of the sweep — this is the ordering in which the two
+    // writers' INSERT paths actually contend, and the one claim in
+    // `writeLeadColumn`'s doc comment that nothing else asserts (impl-review F6).
+    await setCapacityOverride({
+      db,
+      ownerId: s.ownerId,
+      jiraSprintId: JIRA_SPRINT_ID,
+      md: 12,
+    });
+    await sweepSprintMeasurements({ db, ownerId: s.ownerId, now: AFTER });
+
+    const rows = await rowsOf(s.ownerId);
+    expect(rows).toHaveLength(1);
+    const [row] = rows;
+    // The sweep filled what the override left NULL — it was free to, because
+    // nothing on the create path stamped `finalized_at`, and it went on to
+    // finalize the record it had not itself created.
+    expect(row.capacityAdjustedMd).toBe("20.00");
+    expect(row.capacityFullMd).toBe("20.00");
+    expect(row.workingDays).toBe(10);
+    expect(row.deliveredSp).toBe(8);
+    expect(row.finalizedAt).not.toBeNull();
+    // And it did not reach into the lead's column on the way past.
+    expect(row.capacityOverrideMd).toBe("12.00");
+  });
+
   it("leaves the computed capacity untouched, and clearing restores the computed value", async () => {
     const s = await seed();
     await sweepSprintMeasurements({ db, ownerId: s.ownerId, now: START });
@@ -302,10 +331,10 @@ describe("setCapacityOverride", () => {
   });
 });
 
-describe("getActiveSprintMeasurement", () => {
+describe("getSprintMeasurement", () => {
   it("returns null when no record exists yet", async () => {
     const s = await seed();
-    expect(await getActiveSprintMeasurement(db, s.ownerId)).toBeNull();
+    expect(await getSprintMeasurement(db, s.ownerId, JIRA_SPRINT_ID)).toBeNull();
   });
 
   it("converts the driver's numeric strings to numbers", async () => {
@@ -318,7 +347,7 @@ describe("getActiveSprintMeasurement", () => {
       md: 12.5,
     });
 
-    const record = await getActiveSprintMeasurement(db, s.ownerId);
+    const record = await getSprintMeasurement(db, s.ownerId, JIRA_SPRINT_ID);
     expect(record).not.toBeNull();
     // `'12.50' === 12.5` is false — this is the assertion, not a formality.
     expect(record?.capacityOverrideMd).toBe(12.5);

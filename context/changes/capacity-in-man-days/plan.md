@@ -894,7 +894,7 @@ are owner-scoped in the `WHERE`.
 override invisible: the Availability tab's number comes from `getSprintCapacity`
 (`dashboard/page.tsx:69`) and the Reliability panel's props from the `sprint`
 scalars — neither has ever touched `sprint_measurement`. Add
-`getActiveSprintMeasurement(db, ownerId): Promise<SprintMeasurement | null>`
+`getSprintMeasurement(db, ownerId, jiraSprintId): Promise<SprintMeasurement | null>`
 beside the two writers (reusing `reader.ts`'s numeric conversion) and **join it
 to the existing `Promise.all`** in `dashboard/page.tsx` — one request-scoped
 `getDb` handle, no second fan-out (`lessons.md` #3). It is the same read Phase 6
@@ -933,7 +933,7 @@ express "cleared".
 - Integration test: setting an override does not change `capacity_adjusted_md`, and clearing it restores the displayed value to the computed one: `npm run test:integration`
 - Integration test: a sweep after an override leaves the override untouched
 - Integration test: an override written for another owner's sprint id is rejected
-- Integration test: `getActiveSprintMeasurement` returns the override as a `number`, not the `pg` driver's `numeric` string, and returns `null` when no record exists yet
+- Integration test: `getSprintMeasurement` returns the override as a `number`, not the `pg` driver's `numeric` string, and returns `null` when no record exists yet
 - Unit tests for the validation schemas: `npm test`
 - Type checking and linting pass: `npm run typecheck`, `npm run lint`
 
@@ -943,6 +943,39 @@ express "cleared".
 - Clearing the override returns the headline to the computed number
 
 **Implementation Note**: Pause for manual confirmation before proceeding.
+
+### Carried out of the Phase 5 impl-review (2026-08-28)
+
+Full report: `reviews/impl-review-phase-5.md`. Three fixes landed in this phase's
+own files after the phase was committed; two of them change contracts later
+phases depend on.
+
+1. **The payload names the sprint (F2).** `capacityOverrideSaveSchema` and
+   `deliveredCorrectionSaveSchema` now carry `jiraSprintId`, and the actions no
+   longer call `getActiveSprintRow`. Re-resolving "the active sprint" at save
+   time read a different moment than the render did, so a rollover while the tab
+   sat open filed the lead's number against a sprint they never looked at. The
+   store's owner-scoped lookup is what enforces isolation, and its
+   `UnknownSprintError` — whose "reload the page" message previously had no
+   reachable producer — is now the stale-page path. **Phase 7 §4 depends on
+   this**: the switcher supplies the id and the actions need no further change.
+2. **An empty field is never a save (F1).** `input[type=number]` blanks anything
+   it cannot parse, so "empty means clear it" turned a typo — a comma decimal
+   separator, a stray letter — into a silent delete reported as a success.
+   Clearing is now performed only by "Reset to computed".
+3. **The delivered-SP field is gated on `finalizedAt !== null` (F3).** Half of
+   the F3 fix; the other half is Phase 7 §4.
+
+Two shapes above were also corrected in place rather than left to disagree with
+the code: this section originally specified `getActiveSprintMeasurement`, but the
+implementation correctly used the lower-level `getSprintMeasurement` (the active
+sprint is already resolved at `page.tsx:45`, so the higher-level helper would
+re-query for an answer already held). The dead helper is gone and criterion 5.9
+now names the function that ships (F5).
+
+Not fixed here, and deliberately: the `mdToColumn` / `round1` duplications (F8)
+and the two differing "delivered SP" definitions rendered on two tabs (F9) — see
+the report for the recorded decisions.
 
 ---
 
@@ -971,6 +1004,20 @@ history yet", which no sync fixes.
 **Contract**: new props `capacityAdjustedMd`, `capacityFullMd`, `workingDays`,
 `capacityOverridden`. Rendered as a second line —
 `Reliability 100% · Capacity 60 of 120 MD` — never folded into the percentage.
+
+**Which "delivered" this panel shows must be decided here, not inherited
+(impl-review F9).** After Phase 5 the dashboard renders TWO delivered figures
+under two different definitions: Availability shows
+`sprint_measurement.delivered_sp` — the SP of tickets whose FIRST entry into Done
+fell inside the window — while this panel still takes `sprint.completedSp`
+(`page.tsx:143`), the live sync scalar. They are not the same number: a ticket
+that entered Done and later reopened counts in one and not the other, so the two
+tabs can disagree on screen with nothing explaining why. This phase decides one of
+two things and says which: either `completedSp` also comes from the measurement
+record — making the panel consistent with Availability and with the velocity
+FR-024 averages — or the two figures stay distinct and are LABELLED so the
+difference reads as a definition rather than as a bug. Silently shipping both is
+the one option ruled out.
 
 The ratio moves out of the `.tsx` into a pure `reliability-kpi-view.ts` sibling
 (plan review F4): there is **no component-test harness** in this repo — both
@@ -1045,6 +1092,7 @@ argument comes from the `getSprintCapacity` result **already** in
 
 - Unit tests for `estimateNextSprintVelocity`: the FR-024 worked example (200 MD full, 180 MD adjusted on the active sprint, 100 SP average → 90 SP); empty history returns `null`; **one** finalized record also returns `null` and two returns a number (the F8 boundary); a zero-capacity record is skipped, not divided by; a corrected delivered value is preferred over the computed one: `npm test`
 - Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields (capacity is not in the divisor), and the empty state still triggers only on a NULL scalar: `npm test`
+- The delivered-SP source decision (§1, impl-review F9) is recorded in this plan and reflected in the panel — either one source or two labelled ones: `npm run typecheck`
 - Type checking and linting pass: `npm run typecheck`, `npm run lint`
 
 #### Manual Verification:
@@ -1131,18 +1179,55 @@ the tabs render an explicit notice naming the reason — retention, or a
 Jira-project switch — not a generic empty state. This is row 2 of §1's table, so
 the two sections share one condition rather than each guessing at it.
 
+#### 4. The delivered-SP correction, on the SELECTED sprint
+
+**File**: `src/components/organisms/dashboard/capacity-adjustments.tsx`,
+`src/app/(app)/dashboard/sprint-detail/page.tsx`
+
+**Carried in from the Phase 5 impl-review (F3).** This section is why Phase 7 is
+no longer purely read-only, and the reason is not a preference: **FR-023's
+correction had no reachable surface for the sprint it is written about.** Phase 5
+put the form on the Availability tab, whose sprint is always the active one, so
+the moment the next sprint went ACTIVE the previous sprint's
+`delivered_sp_corrected` became unreachable from every screen — while
+`overrides.ts` drops the finalization guard on the explicit grounds that "a
+closed sprint is the only kind whose figure is worth fixing". Phase 5 closed the
+second half of that gap already, by gating the delivered-SP field on
+`finalizedAt !== null`; this section closes the first.
+
+**Contract**: `CapacityAdjustments` is rendered on Sprint Detail for the
+**selected** sprint, receiving that sprint's `jiraSprintId` — which is exactly
+the payload field the Phase 5 impl-review's F2 fix already added to
+`capacityOverrideSaveSchema` / `deliveredCorrectionSaveSchema`, so the actions
+need no change. The delivered field appears only when the selected sprint's
+record is finalized; the capacity override stays available regardless, because
+capacity is a plan for the whole window rather than a figure the sweep is still
+recomputing. Row 2 of §1's table (a measurement with no `sprint` row) still gets
+the form — the writers key off `jira_sprint_id` on `sprint_measurement`, but
+`writeLeadColumn` resolves the owner's `sprint` row first, so a sprint whose row
+cascade-deleted on a project switch CANNOT be corrected. Say so in that case
+rather than rendering a form that will fail.
+
+**Scheduling consequence, stated plainly**: Phase 7 was described above as
+"deliberately cuttable". With this section it is no longer wholly so — cutting
+Phase 7 now also cuts FR-023's correction path for closed sprints. If the
+deadline forces the cut, §4 is the part to keep and §§1–3 the part to drop.
+
 ### Success Criteria:
 
 #### Automated Verification:
 
 - Unit test for `sprint-selection.ts`, one case per row of §1's table (absent param → active; unknown id → active, not a crash; measurement without a `sprint` row → that sprint plus the notice, NOT the active sprint): `npm test`
 - Integration test: the switcher's list is scoped to the owner and to the current `jira_project_id`: `npm run test:integration`
+- Integration test: a delivered-SP correction written against the SELECTED closed sprint lands on that sprint's record and not on the active one: `npm run test:integration`
+- Unit test: the delivered field is withheld for a sprint whose record is not finalized, and for a measurement with no `sprint` row: `npm test`
 - Type checking and linting pass: `npm run typecheck`, `npm run lint`
 
 #### Manual Verification:
 
 - Switching the monitored Jira project away and back, then selecting a sprint recorded before the switch: its capacity, velocity and reliability still render, and the aging/matrix/burndown tabs show the notice naming the project switch — **not** the active sprint's data (this is the live path; the retention path has no purge to trigger it yet, so it is covered by an integration test instead)
 - The URL is shareable — reloading `?sprint=<id>` lands on the same sprint
+- Selecting a closed sprint offers the delivered-SP correction; entering one leaves the computed measurement visible beside it, and the active sprint's figures are unchanged
 
 **Implementation Note**: Final phase. After manual confirmation, the slice is
 complete.
@@ -1295,13 +1380,13 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [x] 5.1 Integration test: override leaves the computed capacity untouched; clearing restores it
-- [x] 5.2 Integration test: a sweep after an override leaves the override untouched
-- [x] 5.3 Integration test: cross-owner override is rejected
-- [x] 5.4 Unit tests for the validation schemas
-- [x] 5.5 Type checking passes
-- [x] 5.6 Linting passes
-- [x] 5.9 Integration test: `getActiveSprintMeasurement` converts numerics and returns `null` with no record
+- [x] 5.1 Integration test: override leaves the computed capacity untouched; clearing restores it — 162eb16
+- [x] 5.2 Integration test: a sweep after an override leaves the override untouched — 162eb16
+- [x] 5.3 Integration test: cross-owner override is rejected — 162eb16
+- [x] 5.4 Unit tests for the validation schemas — 162eb16
+- [x] 5.5 Type checking passes — 162eb16
+- [x] 5.6 Linting passes — 162eb16
+- [x] 5.9 Integration test: `getSprintMeasurement` converts numerics and returns `null` with no record — 162eb16 (repointed off the dead `getActiveSprintMeasurement`, impl-review F5)
 
 #### Manual
 
@@ -1314,6 +1399,7 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 - [ ] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed)
 - [ ] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields
+- [ ] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9)
 - [ ] 6.3 Type checking passes
 - [ ] 6.4 Linting passes
 
@@ -1330,8 +1416,11 @@ handle; nothing new opens a pool (`lessons.md` #3).
 - [ ] 7.2 Integration test: switcher list scoped to owner and current Jira project
 - [ ] 7.3 Type checking passes
 - [ ] 7.4 Linting passes
+- [ ] 7.7 Integration test: a correction on the SELECTED closed sprint lands there, not on the active one (§4, impl-review F3)
+- [ ] 7.8 Unit test: the delivered field is withheld when the record is not finalized, and when there is no `sprint` row (§4)
 
 #### Manual
 
 - [ ] 7.5 A pre-project-switch sprint shows its figures; detail tabs show the notice, not the active sprint's data
 - [ ] 7.6 `?sprint=<id>` is shareable and survives a reload
+- [ ] 7.9 A closed sprint offers the delivered-SP correction, and the computed measurement stays visible beside it

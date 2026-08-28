@@ -50,6 +50,13 @@ export type SprintAdjustments = {
   capacityOverrideMd: number | null;
   deliveredSp: number | null;
   deliveredSpCorrected: number | null;
+  /**
+   * Whether the sweep has frozen this sprint's measurement. Gates the
+   * delivered-SP correction (impl-review F3): a figure that is still moving is
+   * not one worth correcting, and a correction entered mid-sprint would outlive
+   * the sweep into FR-024's average with nothing recording that it was premature.
+   */
+  isFinalized: boolean;
 };
 
 /**
@@ -72,6 +79,7 @@ export default function Availability({
   sprintEnd,
   timeZone,
   capacity,
+  jiraSprintId,
   adjustments,
 }: {
   members: AvailabilityMember[];
@@ -80,6 +88,12 @@ export default function Availability({
   sprintEnd: string | null;
   timeZone: string | null;
   capacity: SprintCapacity | null;
+  /**
+   * The displayed sprint's Jira id, or `null` when there is none to adjust. The
+   * manual-entry form is withheld without it: an entry has to name the sprint it
+   * belongs to rather than let the server guess at save time (impl-review F2).
+   */
+  jiraSprintId: string | null;
   /**
    * The lead's manual entries on this sprint's measurement record (S-23 Phase 5).
    * `null` when the sweep has not written a record yet — an ordinary state, not
@@ -139,7 +153,11 @@ export default function Availability({
           </p>
         ) : (
           <>
-            <CapacitySummary capacity={capacity} adjustments={adjustments} />
+            <CapacitySummary
+              capacity={capacity}
+              jiraSprintId={jiraSprintId}
+              adjustments={adjustments}
+            />
             <AvailabilitySection title="This sprint" grid={windows.current} />
             <AvailabilitySection title="Next window" grid={windows.next} />
           </>
@@ -169,9 +187,11 @@ export default function Availability({
  */
 function CapacitySummary({
   capacity,
+  jiraSprintId,
   adjustments,
 }: {
   capacity: SprintCapacity | null;
+  jiraSprintId: string | null;
   adjustments: SprintAdjustments | null;
 }) {
   if (!capacity) return null;
@@ -232,12 +252,16 @@ function CapacitySummary({
         ) : null}
       </div>
 
-      <CapacityAdjustments
-        computedMd={headline.computedMd}
-        overrideMd={adjustments?.capacityOverrideMd ?? null}
-        computedSp={delivered.computedSp}
-        correctedSp={adjustments?.deliveredSpCorrected ?? null}
-      />
+      {jiraSprintId === null ? null : (
+        <CapacityAdjustments
+          jiraSprintId={jiraSprintId}
+          computedMd={headline.computedMd}
+          overrideMd={adjustments?.capacityOverrideMd ?? null}
+          computedSp={delivered.computedSp}
+          correctedSp={adjustments?.deliveredSpCorrected ?? null}
+          canCorrectDelivered={adjustments?.isFinalized ?? false}
+        />
+      )}
     </div>
   );
 }

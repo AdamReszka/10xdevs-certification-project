@@ -38,17 +38,32 @@ import { Label } from "@/components/ui/label";
  * anywhere in `src/`, and the page is `force-dynamic`.
  */
 export default function CapacityAdjustments({
+  jiraSprintId,
   computedMd,
   overrideMd,
   computedSp,
   correctedSp,
+  canCorrectDelivered,
 }: {
+  /**
+   * The sprint on screen. Carried into the payload rather than left to the action
+   * to re-resolve, so a rollover while the tab sat open cannot move the entry to
+   * a sprint the lead never looked at (impl-review F2).
+   */
+  jiraSprintId: string;
   /** What the model computed for this sprint — the input's placeholder. */
   computedMd: number;
   overrideMd: number | null;
   /** The measured delivered SP, or `null` when the sweep has recorded none yet. */
   computedSp: number | null;
   correctedSp: number | null;
+  /**
+   * Only a CLOSED sprint's delivered figure is worth correcting (FR-023,
+   * impl-review F3). While the sprint runs, the sweep is still recomputing the
+   * measurement every cycle, so a correction entered now would be a guess that
+   * the disjoint writers then preserve — straight into FR-024's average.
+   */
+  canCorrectDelivered: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4 rounded-md border border-dashed p-4">
@@ -65,34 +80,53 @@ export default function CapacityAdjustments({
         <AdjustmentField
           id="capacity-override"
           label="Capacity override (MD)"
-          help="Leave empty to use the computed capacity."
+          help="Empty means the computed capacity is used."
           placeholder={formatNumber(computedMd)}
           current={overrideMd}
-          step="0.5"
+          // Two decimals, matching `capacityOverrideMdSchema` (impl-review F4).
+          // The form has no `noValidate`, so native constraint validation runs
+          // BEFORE `onSubmit`: a coarser step made 12.25 MD — what 0.75 FTE over
+          // 11 working days computes to — a `stepMismatch` the browser refused
+          // outright, for a value the server schema explicitly accepts.
+          step="0.01"
           parse={(raw) => {
             const value = Number(raw);
             return Number.isFinite(value) ? value : null;
           }}
-          save={(value) => setCapacityOverrideAction({ md: value })}
+          save={(value) => setCapacityOverrideAction({ jiraSprintId, md: value })}
           savedMessage="Capacity override saved."
           clearedMessage="Capacity override cleared."
         />
 
-        <AdjustmentField
-          id="delivered-correction"
-          label="Delivered story points"
-          help="Leave empty to use the measured figure."
-          placeholder={computedSp === null ? "Not measured yet" : String(computedSp)}
-          current={correctedSp}
-          step="1"
-          parse={(raw) => {
-            const value = Number(raw);
-            return Number.isInteger(value) ? value : null;
-          }}
-          save={(value) => setDeliveredCorrectionAction({ sp: value })}
-          savedMessage="Delivered story points corrected."
-          clearedMessage="Correction cleared."
-        />
+        {canCorrectDelivered ? (
+          <AdjustmentField
+            id="delivered-correction"
+            label="Delivered story points"
+            help="Empty means the measured figure is used."
+            placeholder={
+              computedSp === null ? "Not measured yet" : String(computedSp)
+            }
+            current={correctedSp}
+            step="1"
+            parse={(raw) => {
+              const value = Number(raw);
+              return Number.isInteger(value) ? value : null;
+            }}
+            save={(value) =>
+              setDeliveredCorrectionAction({ jiraSprintId, sp: value })
+            }
+            savedMessage="Delivered story points corrected."
+            clearedMessage="Correction cleared."
+          />
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">Delivered story points</p>
+            <p className="text-xs text-muted-foreground">
+              Correctable once this sprint closes and its measurement is recorded
+              — while it is still running, the figure is recomputed every sync.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -101,11 +135,12 @@ export default function CapacityAdjustments({
 /**
  * One number input plus its save / reset pair.
  *
- * AN EMPTY FIELD MEANS `null`, NOT ZERO — and that distinction is the whole
- * mechanism, because `null` is the only way back to the computed value. `0` is
- * a legitimate capacity (a sprint the whole team is off), so the two cannot be
- * collapsed. `parse` returning `null` for an unparseable entry is a separate
- * case, caught before the round trip.
+ * CLEARING IS ITS OWN ACTION, performed only by "Reset to computed". `null` is
+ * still the only way back to the computed value, and `0` is still a legitimate
+ * capacity (a sprint the whole team is off), so those two cannot be collapsed —
+ * but an empty INPUT is not evidence the lead meant either one. The browser
+ * blanks the field for any entry it cannot parse, so submitting empty as `null`
+ * would make a mistyped character indistinguishable from a deliberate clear.
  */
 function AdjustmentField({
   id,
@@ -153,14 +188,19 @@ function AdjustmentField({
     event.preventDefault();
 
     const trimmed = value.trim();
+    // AN EMPTY FIELD IS NEVER A SAVE (impl-review F1). `input[type=number]`
+    // sanitizes anything it cannot parse to `""` — a comma decimal separator, a
+    // stray letter — so "empty means clear it" would turn a typo into a silent
+    // delete reported as a success. Clearing has its own control, and that
+    // control only exists when there is something to clear.
     if (trimmed === "") {
-      await submit(null, clearedMessage);
+      setError(emptyFieldMessage(current));
       return;
     }
 
     const parsed = parse(trimmed);
     if (parsed === null) {
-      setError("Enter a number, or leave the field empty to use the computed value.");
+      setError(emptyFieldMessage(current));
       return;
     }
     await submit(parsed, savedMessage);
@@ -213,6 +253,16 @@ function AdjustmentField({
       </div>
     </form>
   );
+}
+
+/**
+ * What to say when the field is blank on Save. Names the control that actually
+ * clears, rather than telling the lead to do the thing that no longer works.
+ */
+function emptyFieldMessage(current: number | null): string {
+  return current === null
+    ? "Enter a number. An empty field already uses the computed value."
+    : "Enter a number, or use \u201CReset to computed\u201D to clear it.";
 }
 
 /** `120` not `120.0`, `7.5` kept — the placeholder must read like the headline. */

@@ -76,9 +76,30 @@ export const deliveredSpCorrectedSchema = z
   .max(MAX_DELIVERED_SP, `That is more than ${MAX_DELIVERED_SP} story points.`)
   .nullable();
 
-/** The two wire payloads. One field each — the surface writes one at a time. */
-export const capacityOverrideSaveSchema = z.object({ md: capacityOverrideMdSchema });
-export const deliveredCorrectionSaveSchema = z.object({ sp: deliveredSpCorrectedSchema });
+/**
+ * The sprint an entry belongs to — the one the SURFACE was showing, carried in
+ * the payload rather than re-resolved server-side (impl-review F2).
+ *
+ * Re-resolving "the active sprint" at save time reads a different moment than the
+ * render did: a rollover in between — the 15-minute cron closes 41 and starts 42 —
+ * files the lead's number against a sprint they never looked at, and
+ * `router.refresh()` repaints over the substitution without a word. Naming the
+ * sprint is not a trust decision: `writeLeadColumn`'s owner-scoped lookup refuses
+ * any id outside the caller's own set, which is where isolation actually lives.
+ */
+const jiraSprintIdSchema = z
+  .string()
+  .min(1, "That sprint is out of date. Reload the page and try again.");
+
+/** The two wire payloads. One figure each — the surface writes one at a time. */
+export const capacityOverrideSaveSchema = z.object({
+  jiraSprintId: jiraSprintIdSchema,
+  md: capacityOverrideMdSchema,
+});
+export const deliveredCorrectionSaveSchema = z.object({
+  jiraSprintId: jiraSprintIdSchema,
+  sp: deliveredSpCorrectedSchema,
+});
 
 export type CapacityOverrideSaveValues = z.infer<typeof capacityOverrideSaveSchema>;
 export type DeliveredCorrectionSaveValues = z.infer<typeof deliveredCorrectionSaveSchema>;

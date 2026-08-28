@@ -162,6 +162,7 @@ export default async function DashboardPage() {
             sprintEnd={availability?.sprintEnd.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
+            jiraSprintId={sprint?.jiraSprintId ?? null}
             // A null record is ordinary, not an error: the sweep has simply not
             // run since this sprint appeared. The override form creates one.
             adjustments={
@@ -170,6 +171,7 @@ export default async function DashboardPage() {
                     capacityOverrideMd: measurement.capacityOverrideMd,
                     deliveredSp: measurement.deliveredSp,
                     deliveredSpCorrected: measurement.deliveredSpCorrected,
+                    isFinalized: measurement.finalizedAt !== null,
                   }
                 : null
             }
