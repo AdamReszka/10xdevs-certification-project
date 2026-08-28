@@ -1444,11 +1444,11 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed)
-- [x] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields
-- [x] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9)
-- [x] 6.3 Type checking passes
-- [x] 6.4 Linting passes
+- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed) — f166dc8
+- [x] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields — f166dc8
+- [x] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9) — f166dc8
+- [x] 6.3 Type checking passes — f166dc8
+- [x] 6.4 Linting passes — f166dc8
 
 #### Manual
 
