@@ -1139,12 +1139,12 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly against local Supabase
-- [x] 1.2 No `spCapacity` / `sp_capacity` references outside `src/db/migrations/`
-- [x] 1.3 Unit tests pass, including `fte.ts` string→number boundary
-- [x] 1.4 Integration test: unchanged roster save performs zero updates
-- [x] 1.5 Type checking passes
-- [x] 1.6 Linting passes
+- [x] 1.1 Migration applies cleanly against local Supabase — f3207db
+- [x] 1.2 No `spCapacity` / `sp_capacity` references outside `src/db/migrations/` — f3207db
+- [x] 1.3 Unit tests pass, including `fte.ts` string→number boundary — f3207db
+- [x] 1.4 Integration test: unchanged roster save performs zero updates — f3207db
+- [x] 1.5 Type checking passes — f3207db
+- [x] 1.6 Linting passes — f3207db
 
 #### Manual
 
