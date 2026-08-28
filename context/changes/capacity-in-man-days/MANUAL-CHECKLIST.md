@@ -115,9 +115,68 @@
 
 ---
 
-## Uwaga do fazy 3 (jeszcze nie teraz)
+## Faza 3 — uczciwe sumy sprintu
 
-**Wiersz 1.8 z `manual-test-backlog.md`** (wpisanie estymat SP w projekcie FM,
-który dziś ma same `story_points = NULL`) **blokuje weryfikację manualną fazy 3**
-— bez estymat relacja capacity↔velocity nie ma czego mierzyć na żywych danych.
-Fazy 1 i 2 są od tego niezależne.
+⚠️ **Wiersz 1.8 z `manual-test-backlog.md`** (wpisanie estymat SP w projekcie FM,
+który dziś ma same `story_points = NULL`) **blokuje wiersz 3.8** — bez estymat
+relacja capacity↔velocity nie ma czego mierzyć na żywych danych. Wiersze 3.9
+i 3.10 są od tego niezależne i można je zrobić od razu. Fazy 1 i 2 są od 1.8
+niezależne w całości.
+
+### 3.8 Realny sync zapisuje sumy zgodne z Jirą
+
+- **Gdzie:** Jira projektu FM + `/settings/connections` (konto
+  `demo@sprintflow.test`) + baza lokalna.
+- **Co zrobić:** wpisz estymaty SP kilku ticketom aktywnego sprintu — **w jednym
+  polu** (patrz pułapka w `manual-test-backlog.md` wiersz 1.8: site może mieć
+  i „Story Points", i „Story point estimate"). Kliknij **„Sync now"**. Potem:
+  `select key, story_points, added_after_sprint_start, current_category from
+  jira_ticket where owner_id = '<owner FM>' order by key;` a następnie
+  `select committed_sp, completed_sp, committed_frozen_at from sprint where
+  owner_id = '<owner FM>';`
+- **Co ma być prawdą:** `story_points` **nie są NULL-ami** (jeśli są — trafiłeś
+  w złe pole, nie w błąd kodu). `committed_sp` = suma SP ticketów, które
+  **nie** mają `added_after_sprint_start = true`. `completed_sp` = suma SP tylko
+  tych ticketów, które **weszły do Done w trakcie tego sprintu** — ticket
+  przeniesiony z poprzedniego sprintu i już wtedy zamknięty **nie** liczy się
+  tutaj, choć w Jirze widnieje jako Done. `committed_frozen_at` ma znacznik
+  czasu, nie NULL.
+- **Dlaczego to ważne:** to jedyny dowód, że nowa definicja velocity działa na
+  żywych danych. Stara reguła (`suma SP tam, gdzie current_category = 'DONE'`)
+  była migawką „co jest w Done TERAZ" i była nadpisywana co cykl — także po
+  zamknięciu sprintu. Faza 4 zamrozi tę liczbę na zawsze; jeśli jest zła teraz,
+  będzie zła w każdym rekordzie pomiaru.
+
+### 3.9 Ticket dorzucony w trakcie sprintu nie podnosi zobowiązania
+
+- **Gdzie:** Jira projektu FM + `/dashboard` → zakładka **Sprint Pulse**
+  i panel **Reliability**.
+- **Co zrobić:** zapisz obecną wartość „Committed" na panelu Reliability.
+  W Jirze **przeciągnij do aktywnego sprintu** ticket z backlogu, który ma
+  estymatę. Kliknij „Sync now". Odśwież dashboard.
+- **Co ma być prawdą:** linia **zakresu na burndownie rośnie** (nowy ticket
+  wszedł do sprintu), ale liczba **„Committed" na Reliability się NIE zmienia**.
+  W bazie `committed_frozen_at` ma **tę samą** wartość co przed dorzuceniem.
+- **Dlaczego to ważne:** zobowiązanie, które rośnie razem z dorzucanym zakresem,
+  nie jest zobowiązaniem — sprawia, że reliability zawsze wygląda dobrze,
+  z konstrukcji. Dodatkowo test sprawdza nowy dzielnik: „dodany po starcie"
+  liczy się teraz z **changelogu pola Sprint**, a nie z daty utworzenia ticketa,
+  więc stary ticket z backlogu wciągnięty dziś jest poprawnie wykluczony
+  z zobowiązania (wcześniej liczył się jako zobowiązany).
+
+### 3.10 Estymata 0.5 nie zawiesza już synchronizacji
+
+- **Gdzie:** Jira projektu FM + `/settings/connections` + `/dashboard`.
+- **Co zrobić:** ustaw dowolnemu ticketowi aktywnego sprintu estymatę **0.5**.
+  Kliknij „Sync now". Poczekaj na wynik, wróć na dashboard.
+- **Co ma być prawdą:** status integracji Jira zostaje **OK** (nie ERROR),
+  dashboard dalej się aktualizuje, a ten ticket ma w bazie `story_points = 1`
+  (`select key, story_points from jira_ticket where key = '<klucz>';`).
+- **Dlaczego to ważne:** kolumna `story_points` jest typu `integer`, a zapis
+  dzieje się **wewnątrz transakcji** synchronizacji. Jedna wartość ułamkowa
+  wywracała **całą** transakcję Jiry (`invalid input syntax for type integer`)
+  i stemplowała `sync_state` jako ERROR — co 15 minut, w nieskończoność, bez
+  ścieżki samonaprawy i bez śladu, po czym lead mógłby się domyślić przyczyny.
+  Zaokrąglenie jest strażnikiem wejścia, nie zmianą modelu: progi z FR-009 są
+  ciągiem Fibonacciego (1/2, 3, 5, 8/13, 21), więc pół story pointa nie jest
+  wielkością, którą ten produkt zna.

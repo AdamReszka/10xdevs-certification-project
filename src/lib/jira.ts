@@ -729,10 +729,21 @@ export type JiraStatusChange = {
   toStatusName: string | null;
 };
 
-/** An active-sprint issue as consumed by the sync store. Raw status id/name and
- * `createdAt` are returned so the store can map categories (via statusMapping) and
- * derive `addedAfterSprintStart` (created vs sprint start) — kept out of the pure
- * client. */
+/** One `Sprint`-field transition parsed from an issue's changelog. Jira writes
+ * `from`/`to` as COMMA-SEPARATED SPRINT IDS (`"41, 42"` — an issue can sit in
+ * several); the sibling `fromString`/`toString` carry the display names and are
+ * deliberately not collected, because ids are what the store matches a sprint
+ * against and names are renameable. */
+export type JiraSprintFieldChange = {
+  changedAt: Date | null;
+  from: string | null;
+  to: string | null;
+};
+
+/** An active-sprint issue as consumed by the sync store. Raw status id/name,
+ * `createdAt` and the `Sprint`-field changelog are returned so the store can map
+ * categories (via statusMapping) and derive `addedAfterSprintStart` — kept out of
+ * the pure client. */
 export type JiraSprintIssue = {
   issueId: string;
   jiraKey: string;
@@ -743,6 +754,10 @@ export type JiraSprintIssue = {
   assigneeJiraAccountId: string | null;
   createdAt: Date | null;
   statusHistory: JiraStatusChange[];
+  /** Every `Sprint`-field change on the issue, oldest changelog page first.
+   *  Already fetched today (`expand=changelog`) and, until S-23, thrown away by
+   *  `parseStatusHistory`'s `field !== "status"` filter. */
+  sprintFieldChanges: JiraSprintFieldChange[];
 };
 
 export type SearchSprintIssuesParams = {
@@ -750,6 +765,9 @@ export type SearchSprintIssuesParams = {
   sprintId: number;
   /** Resolved `customfield_*` id for story points, or null when unresolved. */
   storyPointFieldId: string | null;
+  /** Resolved `customfield_*` id for the Jira Software `Sprint` field, or null
+   *  when unresolved (the parser then falls back to the English display name). */
+  sprintFieldId?: string | null;
   /** Delta cursor: only pull issues updated at/after this instant (FR-012). Null
    * on the first sync pulls the whole active sprint. */
   updatedSince?: Date | null;
@@ -773,16 +791,21 @@ function toJqlDateTime(d: Date): string {
   return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
 
-/** Extract the status-change entries from one issue's expanded changelog. */
-function parseStatusHistory(changelog: unknown): JiraStatusChange[] {
+/** The `histories` array off an expanded changelog, or `[]` when absent. Shared
+ * by both parsers below AND by the caller's "did this issue even have a
+ * changelog?" check, so the three cannot disagree about what "empty" means. */
+function changelogHistories(changelog: unknown): unknown[] {
   const histories =
     changelog && typeof changelog === "object" && "histories" in changelog
       ? (changelog as { histories?: unknown }).histories
       : undefined;
-  if (!Array.isArray(histories)) return [];
+  return Array.isArray(histories) ? histories : [];
+}
 
+/** Extract the status-change entries from one issue's expanded changelog. */
+function parseStatusHistory(changelog: unknown): JiraStatusChange[] {
   const changes: JiraStatusChange[] = [];
-  for (const history of histories) {
+  for (const history of changelogHistories(changelog)) {
     if (!history || typeof history !== "object") continue;
     const h = history as { id?: unknown; created?: unknown; items?: unknown };
     if (typeof h.id !== "string" && typeof h.id !== "number") continue;
@@ -810,15 +833,59 @@ function parseStatusHistory(changelog: unknown): JiraStatusChange[] {
   return changes;
 }
 
+/**
+ * Extract the `Sprint`-field changes from one issue's expanded changelog.
+ *
+ * Matched on the RESOLVED FIELD ID, not the display name: a changelog item
+ * carries both `field` (the site's *display* label — localised and renameable)
+ * and `fieldId` (`customfield_*`, stable). Matching only `field === "Sprint"`
+ * silently returns nothing on a non-English or renamed site, and the store's
+ * `createdAt` fallback then writes the wrong "added after sprint start" verdict
+ * — which the committed-SP freeze makes PERMANENT. The display name stays as the
+ * fallback for the one case it is the only thing available: the id could not be
+ * resolved at all.
+ */
+function parseSprintFieldChanges(
+  changelog: unknown,
+  sprintFieldId: string | null,
+): JiraSprintFieldChange[] {
+  const changes: JiraSprintFieldChange[] = [];
+  for (const history of changelogHistories(changelog)) {
+    if (!history || typeof history !== "object") continue;
+    const h = history as { created?: unknown; items?: unknown };
+    if (!Array.isArray(h.items)) continue;
+    for (const item of h.items) {
+      if (!item || typeof item !== "object") continue;
+      const it = item as { field?: unknown; fieldId?: unknown; from?: unknown; to?: unknown };
+      const matches =
+        sprintFieldId !== null ? it.fieldId === sprintFieldId : it.field === "Sprint";
+      if (!matches) continue;
+      changes.push({
+        changedAt: parseJiraDate(h.created),
+        from: it.from != null ? String(it.from) : null,
+        to: it.to != null ? String(it.to) : null,
+      });
+    }
+  }
+  return changes;
+}
+
 /** Read the story-point value off an issue's `fields` under the resolved custom
- * field id. Jira returns it as a number (or null when unset). */
+ * field id. Jira returns it as a number (or null when unset) — and Jira happily
+ * accepts a FRACTIONAL estimate, which `jira_ticket.story_points` (an `integer`)
+ * does not: a single `0.5` raises `invalid input syntax for type integer` inside
+ * the sync transaction, rolling the whole Jira pull back and stamping
+ * `sync_state` ERROR every 15 minutes with no self-heal path. Rounding here is an
+ * INPUT GUARD, not a model change: FR-009's thresholds are Fibonacci (1/2, 3, 5,
+ * 8/13, 21), so half a story point is not a quantity this product knows. */
 function extractStoryPoints(
   fields: Record<string, unknown>,
   storyPointFieldId: string | null,
 ): number | null {
   if (storyPointFieldId === null) return null;
   const raw = fields[storyPointFieldId];
-  return typeof raw === "number" ? raw : null;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  return Math.max(0, Math.round(raw));
 }
 
 /**
@@ -834,6 +901,7 @@ export async function searchSprintIssues(
   opts?: JiraClientOpts,
 ): Promise<JiraSprintIssue[]> {
   const { projectKey, sprintId, storyPointFieldId, updatedSince } = params;
+  const sprintFieldId = params.sprintFieldId ?? null;
 
   // JQL: this sprint's issues in the monitored project, optionally only those
   // touched since the last sync. String literals are quoted; project key is
@@ -848,6 +916,11 @@ export async function searchSprintIssues(
   if (storyPointFieldId !== null) fields.push(storyPointFieldId);
 
   const issues: JiraSprintIssue[] = [];
+  /** Issues that HAD a changelog but yielded no `Sprint` change — the population
+   *  the store then resolves through its `createdAt` fallback. Counted so that
+   *  path is visible in the operator log instead of silent (lessons.md: an empty
+   *  result from a narrowing predicate reads as success). */
+  let noSprintChangeWithChangelog = 0;
   let nextPageToken: string | null = null;
   let pageCount = 0;
 
@@ -906,6 +979,13 @@ export async function searchSprintIssues(
       const f = issue.fields ?? {};
       const status = f.status as { id?: unknown; name?: unknown } | undefined;
       const assignee = f.assignee as { accountId?: unknown } | undefined;
+      const sprintFieldChanges = parseSprintFieldChanges(issue.changelog, sprintFieldId);
+      if (
+        sprintFieldChanges.length === 0 &&
+        changelogHistories(issue.changelog).length > 0
+      ) {
+        noSprintChangeWithChangelog += 1;
+      }
       issues.push({
         issueId: String(issue.id),
         jiraKey: issue.key,
@@ -918,6 +998,7 @@ export async function searchSprintIssues(
           typeof assignee?.accountId === "string" ? assignee.accountId : null,
         createdAt: parseJiraDate(f.created),
         statusHistory: parseStatusHistory(issue.changelog),
+        sprintFieldChanges,
       });
     }
 
@@ -928,22 +1009,34 @@ export async function searchSprintIssues(
     if (nextPageToken === null) break;
   }
 
+  // ONE line per sync, counts only — never a field name or any issue content.
+  if (noSprintChangeWithChangelog > 0) {
+    console.info(
+      `[jira] sprint-field id ${sprintFieldId === null ? "UNRESOLVED" : "resolved"}; ` +
+        `${noSprintChangeWithChangelog} of ${issues.length} issue(s) with a changelog ` +
+        `carried no Sprint change — falling back to createdAt for those`,
+    );
+  }
+
   return issues;
 }
 
-/**
- * Resolve the site-specific `customfield_*` id for Story Points via
- * `GET /rest/api/3/field`. The id varies per Jira site, so it is discovered, not
- * hard-coded. Matches a custom field whose Greenhopper schema or name identifies
- * it as story points (covers both classic "Story Points" and next-gen "Story
- * point estimate"). Returns null when none is found — the sync then leaves
- * `storyPoints` NULL rather than failing.
- */
-export async function resolveStoryPointFieldId(
+/** One entry of `GET /rest/api/3/field`, narrowed to what the matchers read. */
+type JiraFieldDefinition = {
+  id?: unknown;
+  name?: unknown;
+  custom?: unknown;
+  schema?: { custom?: unknown };
+};
+
+/** `GET /rest/api/3/field` — the ONE call that lists every field on the site.
+ * Both id resolvers below read it, so a sync that needs both pays one
+ * subrequest, not two. */
+async function fetchFieldDefinitions(
   baseUrl: string,
   creds: JiraCreds,
   opts?: JiraClientOpts,
-): Promise<string | null> {
+): Promise<JiraFieldDefinition[]> {
   const res = await jiraGet(`${baseUrl}${API_VERSION_PATH}/field`, creds, opts);
   if (res.status === 401) {
     throw new JiraAuthError();
@@ -954,21 +1047,22 @@ export async function resolveStoryPointFieldId(
     );
   }
 
-  let fields: Array<{
-    id?: unknown;
-    name?: unknown;
-    custom?: unknown;
-    schema?: { custom?: unknown };
-  }>;
+  let fields: JiraFieldDefinition[];
   try {
-    fields = (await res.json()) as typeof fields;
+    fields = (await res.json()) as JiraFieldDefinition[];
   } catch {
     throw new JiraUnavailableError(
       "Jira returned an unreadable field list. Please try again.",
     );
   }
+  return fields ?? [];
+}
 
-  for (const field of fields ?? []) {
+/** Matches a custom field whose Greenhopper schema or name identifies it as
+ * story points (covers both classic "Story Points" and next-gen "Story point
+ * estimate"). */
+function pickStoryPointField(fields: readonly JiraFieldDefinition[]): string | null {
+  for (const field of fields) {
     if (typeof field.id !== "string" || field.custom !== true) continue;
     const schemaCustom =
       typeof field.schema?.custom === "string"
@@ -980,6 +1074,65 @@ export async function resolveStoryPointFieldId(
     }
   }
   return null;
+}
+
+/** Matches the Jira Software sprint field by its Greenhopper schema
+ * (`com.pyxis.greenhopper.jira:gh-sprint`). Schema ONLY, never the display name:
+ * the whole point of resolving the id is to stop depending on a label that a
+ * non-English or renamed site spells differently. */
+function pickSprintField(fields: readonly JiraFieldDefinition[]): string | null {
+  for (const field of fields) {
+    if (typeof field.id !== "string" || field.custom !== true) continue;
+    const schemaCustom =
+      typeof field.schema?.custom === "string"
+        ? field.schema.custom.toLowerCase()
+        : "";
+    if (schemaCustom.includes("greenhopper") && schemaCustom.includes("sprint")) {
+      return field.id;
+    }
+  }
+  return null;
+}
+
+export type JiraFieldIds = {
+  storyPointFieldId: string | null;
+  sprintFieldId: string | null;
+};
+
+/**
+ * Resolve the site-specific `customfield_*` ids the sync depends on, in ONE
+ * `GET /rest/api/3/field`. Both ids vary per Jira site, so they are discovered,
+ * not hard-coded. Either may come back null — the sync then leaves `storyPoints`
+ * NULL / falls back to the `Sprint` display name rather than failing.
+ */
+export async function resolveFieldIds(
+  baseUrl: string,
+  creds: JiraCreds,
+  opts?: JiraClientOpts,
+): Promise<JiraFieldIds> {
+  const fields = await fetchFieldDefinitions(baseUrl, creds, opts);
+  return {
+    storyPointFieldId: pickStoryPointField(fields),
+    sprintFieldId: pickSprintField(fields),
+  };
+}
+
+/** {@link resolveFieldIds}, narrowed to the story-point id. */
+export async function resolveStoryPointFieldId(
+  baseUrl: string,
+  creds: JiraCreds,
+  opts?: JiraClientOpts,
+): Promise<string | null> {
+  return pickStoryPointField(await fetchFieldDefinitions(baseUrl, creds, opts));
+}
+
+/** {@link resolveFieldIds}, narrowed to the Jira Software `Sprint` field id. */
+export async function resolveSprintFieldId(
+  baseUrl: string,
+  creds: JiraCreds,
+  opts?: JiraClientOpts,
+): Promise<string | null> {
+  return pickSprintField(await fetchFieldDefinitions(baseUrl, creds, opts));
 }
 
 /* ------------------------------------------------------------------------- *

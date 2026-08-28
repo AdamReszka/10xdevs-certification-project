@@ -1173,20 +1173,20 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 3.1 Unit tests: `0.5` → `1`, non-finite → `null`
-- [ ] 3.2 Unit tests for `computeDeliveredSp` (reopen, late close, carried-in, unestimated)
-- [ ] 3.3 Integration test: committed SP frozen; `committed_frozen_at` stable
-- [ ] 3.4 Integration test: `added_after_sprint_start` from the `Sprint` changelog, both branches + fallback
-- [ ] 3.5 Integration test: `completed_sp` unchanged by a post-`endDate` cycle
-- [ ] 3.6 Type checking passes
-- [ ] 3.7 Linting passes
-- [ ] 3.11 Unit test: the changelog item matches by `fieldId` on a non-English display name
+- [x] 3.1 Unit tests: `0.5` → `1`, non-finite → `null`
+- [x] 3.2 Unit tests for `computeDeliveredSp` (reopen, late close, carried-in, unestimated)
+- [x] 3.3 Integration test: committed SP frozen; `committed_frozen_at` stable
+- [x] 3.4 Integration test: `added_after_sprint_start` from the `Sprint` changelog, both branches + fallback
+- [x] 3.5 Integration test: `completed_sp` unchanged by a post-`endDate` cycle
+- [x] 3.6 Type checking passes
+- [x] 3.7 Linting passes
+- [x] 3.11 Unit test: the changelog item matches by `fieldId` on a non-English display name
 
 #### Manual
 
 - [ ] 3.8 Real sync writes `committed_sp` / `completed_sp` matching Jira (needs backlog row 1.8)
-- [ ] 3.9 Adding a mid-sprint ticket does not raise the committed figure
-- [ ] 3.10 A 0.5 estimate in Jira no longer wedges the sync
+- [x] 3.9 Adding a mid-sprint ticket does not raise the committed figure
+- [x] 3.10 A 0.5 estimate in Jira no longer wedges the sync
 
 ### Phase 4: The per-sprint measurement record
 

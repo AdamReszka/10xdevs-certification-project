@@ -373,6 +373,18 @@ export const sprint = pgTable(
     // Load-bearing for S-12 retention purge (keyed to sprint boundaries).
     endDate: timestamp("end_date"),
     committedSp: integer("committed_sp"),
+    /**
+     * When `committed_sp` was FIRST written (S-23, FR-023). NULL means the
+     * freeze has not happened yet — no sync cycle has seen this sprint.
+     *
+     * Load-bearing twice over. It is the guard that keeps the commitment frozen
+     * (a commitment that grows with the scope added to it is not a commitment,
+     * and makes reliability look good by construction), and it is the record of
+     * WHEN the freeze happened — so a late freeze, caused by a stalled cron or
+     * an expired token, is visible in the data rather than silently baked into
+     * every measurement record derived from it.
+     */
+    committedFrozenAt: timestamp("committed_frozen_at"),
     completedSp: integer("completed_sp"),
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
