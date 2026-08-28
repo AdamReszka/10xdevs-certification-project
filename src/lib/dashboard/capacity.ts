@@ -1,6 +1,6 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 
-import { absence, teamMember } from "@/db/schema";
+import { absence, teamMember, type SelectSprint } from "@/db/schema";
 import {
   countTeamDaysOffInclusive,
   countWorkingDaysInclusive,
@@ -206,7 +206,26 @@ export async function getSprintCapacity(
   ownerId: string,
 ): Promise<CapacityReadResult | null> {
   const sprint = await getActiveSprintRow(db, ownerId);
-  if (!sprint?.startDate || !sprint.endDate) return null;
+  if (sprint === null) return null;
+  return getSprintCapacityFor(db, ownerId, sprint);
+}
+
+/**
+ * The same load for an ARBITRARY sprint row.
+ *
+ * Split out for S-23 Phase 4: {@link getSprintCapacity} was pinned to
+ * `getActiveSprintRow`, so no function in the system could answer "what was the
+ * capacity of the sprint that just closed?" — and the measurement sweep exists
+ * precisely to ask that, sometimes days late. Returns null for a sprint without
+ * both dates: a window that cannot be bounded has no working-day count, and an
+ * unbounded guess is worse than no measurement (FR-023).
+ */
+export async function getSprintCapacityFor(
+  db: Db,
+  ownerId: string,
+  sprint: SelectSprint,
+): Promise<CapacityReadResult | null> {
+  if (!sprint.startDate || !sprint.endDate) return null;
 
   const sprintStart = sprint.startDate;
   const sprintEnd = sprint.endDate;

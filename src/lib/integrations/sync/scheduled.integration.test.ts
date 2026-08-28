@@ -193,6 +193,33 @@ describe("runScheduledSync — daily recap", () => {
     errorSpy.mockRestore();
   });
 
+  it("STILL sweeps the measurement record for an owner whose sync threw", async () => {
+    // S-23 Phase 4. A sprint that closed while the Jira token was expired must
+    // be recorded once the token is fixed — the sweep's whole reason for
+    // existing is that a rollover missed is a sprint lost forever, and the sync
+    // is exactly what is broken at the moment that matters most.
+    const owner = await seedUser(true);
+
+    const throwingSync = vi.fn(async () => {
+      throw new Error("Jira rejected the token (invalid or expired).");
+    }) as unknown as typeof import("@/lib/integrations/sync/run-sync").syncOwner;
+    const swept: string[] = [];
+    const sweep = vi.fn(async ({ ownerId }: { ownerId: string }) => {
+      swept.push(ownerId);
+      return { upserted: 0, finalized: 0 };
+    }) as unknown as typeof import("@/lib/measurement/sweep").sweepSprintMeasurements;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      syncOwner: throwingSync,
+      sweepSprintMeasurements: sweep,
+    });
+
+    expect(swept).toContain(owner);
+    errorSpy.mockRestore();
+  });
+
   it("counts only SENT results, not SKIPPED ones", async () => {
     await seedUser(true);
 

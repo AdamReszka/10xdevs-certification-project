@@ -180,3 +180,66 @@ niezależne w całości.
   Zaokrąglenie jest strażnikiem wejścia, nie zmianą modelu: progi z FR-009 są
   ciągiem Fibonacciego (1/2, 3, 5, 8/13, 21), więc pół story pointa nie jest
   wielkością, którą ten produkt zna.
+
+---
+
+## Faza 4 — rekord pomiaru sprintu
+
+⚠️ Wiersz **4.8 jest zależny od czasu** — wymaga realnego przewinięcia sprintu
+w Jirze projektu FM. Nie czekaj na niego: 4.9 robisz od razu, a 4.8 odhaczysz
+przy najbliższym rollowerze. Sweep jest z założenia odporny na opóźnienie —
+zapisze zamknięty sprint nawet kilka cykli po fakcie.
+
+### 4.8 Po realnym rollowerze rekord zgadza się z ostatnim dniem sprintu
+
+- **Gdzie:** `/dashboard` (konto `demo@sprintflow.test`) w OSTATNIM dniu
+  aktywnego sprintu, potem baza lokalna po przewinięciu sprintu w Jirze.
+- **Co zrobić:** ostatniego dnia sprintu zapisz sobie z zakładki **Availability**
+  liczbę MD i liczbę dni roboczych, a z panelu **Reliability** — „Committed"
+  i „Delivered". Poczekaj aż sprint się zamknie i ruszy następny (albo zamknij go
+  ręcznie w Jirze), kliknij **„Sync now"**, a potem:
+  `select jira_sprint_id, sprint_name, working_days, capacity_full_md,
+  capacity_adjusted_md, committed_sp, delivered_sp, committed_frozen_at,
+  finalized_at from sprint_measurement where owner_id = '<owner FM>' order by
+  start_date;`
+- **Co ma być prawdą:** dla zamkniętego sprintu istnieje **dokładnie jeden**
+  wiersz. `working_days` i `capacity_adjusted_md` **równają się** temu, co
+  zapisałeś z dashboardu; `delivered_sp` równa się „Delivered";
+  `committed_sp` równa się „Committed". `finalized_at` **ma znacznik czasu**.
+  Kliknij „Sync now" jeszcze raz i sprawdź ten sam SELECT — **żadna liczba nie
+  drgnęła**. Jeśli `committed_frozen_at` jest NULL, to `finalized_at` też MUSI
+  być NULL — to poprawny wynik, nie błąd (patrz „dlaczego").
+- **Dlaczego to ważne:** to jedyny dowód, że zamrożenie łapie **ten sam** stan,
+  który lead widział na ekranie. Do tej pory nic w systemie nie zapisywało, czym
+  był sprint: capacity liczyło się na żywo z rosteru bez wymiaru czasu i znikało,
+  a `completed_sp` było migawką „co jest w Done TERAZ", nadpisywaną co 15 minut —
+  także po zamknięciu sprintu. Jeśli rekord rozjeżdża się z ekranem, rozjedzie
+  się **na zawsze**: fazy 5–7 średnią liczą wyłącznie z tych wierszy i nie ma
+  ścieżki przeliczenia wstecz. Osobno: brak `committed_frozen_at` blokuje
+  finalizację celowo — sprint, którego zobowiązanie nigdy nie zostało zamrożone,
+  to uczciwy „brak danych" (FR-023), a nie rekord z wiarygodnie wyglądającą
+  liczbą w środku.
+
+### 4.9 Zmiana projektu Jira i powrót nie kasuje historii
+
+- **Gdzie:** `/settings/connections` → sekcja projektu Jira, konto
+  `demo@sprintflow.test`. Potrzebny **drugi** projekt na tym samym site.
+- **Co zrobić:** najpierw policz wiersze:
+  `select count(*) from sprint_measurement where owner_id = '<owner FM>';`
+  Przełącz monitorowany projekt na inny (potwierdź destrukcyjny dialog).
+  Sprawdź: `select count(*) from sprint;` **oraz** ten sam count na
+  `sprint_measurement`. Przełącz projekt z powrotem na FM, kliknij „Sync now",
+  wejdź na `/dashboard`.
+- **Co ma być prawdą:** po przełączeniu wiersze w `sprint` dla starego projektu
+  **znikają** (kaskada), a liczba wierszy w `sprint_measurement`
+  **nie zmienia się ani o jeden**. Po powrocie na FM te same rekordy dalej tam
+  są, z tym samym `jira_project_id` (to **jirowe** id projektu, np. `10000`, nie
+  wewnętrzny UUID).
+- **Dlaczego to ważne:** to jest cały powód, dla którego rekord mieszka we
+  **własnej tabeli**, a `jira_project_id` jest zwykłym tekstem **bez klucza
+  obcego** — FK przywróciłby dokładnie tę kaskadę, którą rekord ma przeżyć.
+  Druga połowa testu jest subtelniejsza: ścieżka ustawień **aktualizuje wiersz
+  `jira_project` w miejscu**, więc jego wewnętrzne id jest stabilne przy zmianie
+  projektu, choć zespół, który opisuje, już nie. Gdyby rekord był kluczowany po
+  tym id, po przełączeniu system uśredniłby dwa różne zespoły w jedną liczbę,
+  która nie opisuje nikogo — a to gorzej niż uczciwe „brak danych".

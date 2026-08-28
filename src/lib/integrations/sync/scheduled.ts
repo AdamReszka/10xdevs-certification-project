@@ -4,6 +4,7 @@ import { githubCredential, jiraProject } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner } from "@/lib/integrations/sync/run-sync";
+import { sweepSprintMeasurements } from "@/lib/measurement/sweep";
 import { sendDailyRecap } from "@/lib/recap/send";
 
 /**
@@ -72,6 +73,7 @@ export async function runScheduledSync(
     getDbWithPool?: typeof getDbWithPool;
     syncOwner?: typeof syncOwner;
     detectAnomalies?: typeof detectAnomalies;
+    sweepSprintMeasurements?: typeof sweepSprintMeasurements;
     sendDailyRecap?: typeof sendDailyRecap;
     now?: Date;
   },
@@ -79,6 +81,7 @@ export async function runScheduledSync(
   const { db, pool } = (deps?.getDbWithPool ?? getDbWithPool)(env);
   const runOwner = deps?.syncOwner ?? syncOwner;
   const runDetect = deps?.detectAnomalies ?? detectAnomalies;
+  const runSweep = deps?.sweepSprintMeasurements ?? sweepSprintMeasurements;
   const runRecap = deps?.sendDailyRecap ?? sendDailyRecap;
   const now = deps?.now ?? new Date();
 
@@ -103,6 +106,21 @@ export async function runScheduledSync(
         console.error(
           `[sync] scheduled sync failed for owner ${ownerId}:`,
           err instanceof Error ? err.message : err,
+        );
+      }
+
+      // S-23: ANOTHER sibling `try`, for the same structural reason and one of
+      // its own. The measurement sweep must run whether or not the Jira pull
+      // succeeded — a sprint that closed while the token was expired still has
+      // to be recorded once the token is fixed, and "the sync is broken" is
+      // precisely the moment a rollover is most likely to be missed. Best-effort
+      // and DB-only: a sweep failure is not a sync failure.
+      try {
+        await runSweep({ db, ownerId, now });
+      } catch (err) {
+        console.error(
+          `[measurement] sweep failed for owner ${ownerId}:`,
+          err instanceof Error ? err.message : String(err),
         );
       }
 

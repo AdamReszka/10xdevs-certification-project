@@ -1238,14 +1238,14 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 4.1 Integration test: sweep writes one record; re-running changes nothing
-- [ ] 4.2 Integration test: a sweep three cycles late still records the closed sprint
-- [ ] 4.3 Integration test: project deletion cascades `sprint` rows, leaves measurements intact
-- [ ] 4.4 Integration test: finalized record's computed columns do not move
-- [ ] 4.5 Unit tests for `shouldFinalize` / `shouldRecompute`
-- [ ] 4.6 Type checking passes
-- [ ] 4.7 Linting passes
-- [ ] 4.10 Integration test: a re-stamped carried-over ticket still counts in the closed sprint's `delivered_sp`
+- [x] 4.1 Integration test: sweep writes one record; re-running changes nothing
+- [x] 4.2 Integration test: a sweep three cycles late still records the closed sprint
+- [x] 4.3 Integration test: project deletion cascades `sprint` rows, leaves measurements intact
+- [x] 4.4 Integration test: finalized record's computed columns do not move
+- [x] 4.5 Unit tests for `shouldFinalize` / `shouldRecompute`
+- [x] 4.6 Type checking passes
+- [x] 4.7 Linting passes
+- [x] 4.10 Integration test: a re-stamped carried-over ticket still counts in the closed sprint's `delivered_sp`
 
 #### Manual
 

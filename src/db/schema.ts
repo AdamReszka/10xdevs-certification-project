@@ -400,6 +400,105 @@ export const sprint = pgTable(
 );
 
 /**
+ * What a sprint WAS (S-23, FR-022/FR-023) — the durable per-sprint measurement.
+ *
+ * ITS OWN TABLE, not columns on `sprint`, for two reasons that both destroy the
+ * record otherwise. `sprint` rows cascade away when the owner switches monitored
+ * Jira project (`connection-service.ts`, `jira-store.ts`), and they fall under
+ * the PRD's "current + 2 sprints" retention bound. An average that resets every
+ * three sprints is not an average, so the record has to outlive both — the PRD
+ * amends the retention non-goal for exactly these few dozen bytes per sprint.
+ *
+ * `jiraProjectId` is the JIRA-SIDE project id (`jira_project.jira_project_id`,
+ * e.g. `"10000"`), stored as PLAIN TEXT WITH NO FOREIGN KEY. Both halves are
+ * load-bearing:
+ *  - an FK would reintroduce the very cascade the record must survive;
+ *  - the internal `jira_project.id` would be the WRONG identity, because the
+ *    settings path UPDATES that row in place when the owner switches project
+ *    (`connection-service.ts`), so its id is stable across a switch while the
+ *    team it describes is not. Keying on the Jira-side id is what lets a
+ *    switch-away-and-back find its own history again and keeps two projects'
+ *    measurements from being averaged into one meaningless figure.
+ *
+ * The lead's `*_override` / `*_corrected` columns sit BESIDE the computed ones
+ * rather than replacing them (FR-022, FR-023): a correction has to stay visible
+ * as a correction. The sweep never writes them.
+ */
+export const sprintMeasurement = pgTable(
+  "sprint_measurement",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Jira-side project id — see the header. Deliberately NOT a foreign key. */
+    jiraProjectId: text("jira_project_id").notNull(),
+    jiraSprintId: text("jira_sprint_id").notNull(),
+    sprintName: text("sprint_name"),
+    startDate: timestamp("start_date"),
+    endDate: timestamp("end_date"),
+    /**
+     * The sprint's working-day count, already net of team-wide days off — the
+     * multiplier the capacity was built from, so the lead can check the number
+     * rather than trust it (FR-022).
+     */
+    workingDays: integer("working_days"),
+    /**
+     * Capacity in MAN-DAYS. `full` is the sprint's nominal total
+     * (Σ fte × working days); `adjusted` is that total after recorded absences.
+     * Both already reflect team-wide days off, because the working-day count
+     * they share is net of them — FR-022 reduces capacity by absences and days
+     * off alike. FR-024 normalises past velocity against `full`.
+     */
+    capacityFullMd: numeric("capacity_full_md", { precision: 8, scale: 2 }),
+    capacityAdjustedMd: numeric("capacity_adjusted_md", { precision: 8, scale: 2 }),
+    /** The lead's per-sprint escape hatch (FR-022). NULL = not overridden. */
+    capacityOverrideMd: numeric("capacity_override_md", { precision: 8, scale: 2 }),
+    /**
+     * COPIED from `sprint.committed_sp`, never recomputed. `jira_ticket` is
+     * unique on `(owner_id, jira_key)` and the sync overwrites `sprint_id` on
+     * conflict, so a carried-over ticket has been re-stamped into the NEXT
+     * sprint and a `where sprint_id = N` sum would silently lose it.
+     */
+    committedSp: integer("committed_sp"),
+    /**
+     * RECOMPUTED from `jira_status_history` — the SP of tickets whose FIRST
+     * entry into Done fell inside this sprint's window (FR-023). Not copied off
+     * `sprint.completed_sp`: the sync writes that scalar only for the sprint
+     * Jira currently reports as active, so after a rollover it is frozen at
+     * whatever the last cycle before the flip happened to see.
+     */
+    deliveredSp: integer("delivered_sp"),
+    /** The lead's correction, kept alongside the measurement (FR-023). */
+    deliveredSpCorrected: integer("delivered_sp_corrected"),
+    /** Copied from `sprint.committed_frozen_at`, so a late freeze stays visible. */
+    committedFrozenAt: timestamp("committed_frozen_at"),
+    state: sprintState("state"),
+    /**
+     * When the record became history. NULL = still tracking a live (or not-yet
+     * measurable) sprint; once stamped, no later sweep may move the computed
+     * columns, which is what makes the series durable rather than a rolling
+     * snapshot.
+     */
+    finalizedAt: timestamp("finalized_at"),
+    measuredAt: timestamp("measured_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // The ON CONFLICT key the sweep's idempotence rests on. Both columns NOT
+    // NULL per `context/foundation/lessons.md` #1 — a nullable column in a
+    // UNIQUE dedup key never collides, so the constraint silently fails to dedup.
+    unique("sprint_measurement_owner_sprint_uq").on(table.ownerId, table.jiraSprintId),
+    index("sprint_measurement_series_idx").on(
+      table.ownerId,
+      table.jiraProjectId,
+      table.startDate,
+    ),
+  ],
+);
+
+/**
  * Append-only log of terminal sync outcomes (S-10 Phase 7).
  *
  * `sync_state` holds exactly ONE row per (owner, integration), overwritten every
@@ -1148,6 +1247,8 @@ export type SelectTeamMember = typeof teamMember.$inferSelect;
 export type InsertTeamMember = typeof teamMember.$inferInsert;
 export type SelectSprint = typeof sprint.$inferSelect;
 export type InsertSprint = typeof sprint.$inferInsert;
+export type SelectSprintMeasurement = typeof sprintMeasurement.$inferSelect;
+export type InsertSprintMeasurement = typeof sprintMeasurement.$inferInsert;
 export type SelectSyncState = typeof syncState.$inferSelect;
 
 export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;
