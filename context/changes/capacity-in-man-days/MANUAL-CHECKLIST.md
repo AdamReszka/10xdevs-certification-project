@@ -372,3 +372,86 @@ zapisze zamknięty sprint nawet kilka cykli po fakcie.
 > mogły pokazywać dwie różne liczby bez żadnego wyjaśnienia na ekranie. Jeżeli
 > zobaczysz rozjazd między „Delivered so far" na Availability a słupkiem
 > „Delivered" na Reliability — **to jest błąd**, nie różnica definicji.
+
+---
+
+## Faza 7 — przełącznik sprintów na Sprint Detail
+
+> Wiersz **7.9 przejął test korekty SP** przeniesiony z 5.8 (patrz notka tam):
+> korekta pokazuje się jako korekta dopiero na sprincie **zamkniętym**, którego
+> dashboard „Today" nie pokazuje.
+
+### 7.5 Sprint sprzed zmiany projektu pokazuje swoje liczby, a zakładki nazywają brak
+
+- **Gdzie:** `/settings/connections` → projekt Jira, potem
+  `/dashboard/sprint-detail`. Konto `demo@sprintflow.test`. Potrzebny
+  **przynajmniej jeden zamknięty sprint z rekordem pomiaru** (`select
+  jira_sprint_id, sprint_name, finalized_at from sprint_measurement where
+  owner_id = '<owner FM>';` — musi być choć jeden wiersz z `finalized_at`).
+- **Co zrobić:** zapisz z tego SELECT-a `jira_sprint_id` i nazwę zamkniętego
+  sprintu. Przełącz monitorowany projekt Jira na inny (potwierdź destrukcyjny
+  dialog), potem **z powrotem na FM**, kliknij „Sync now". Wejdź na
+  `/dashboard/sprint-detail`, rozwiń listę **Sprint** w nagłówku i wybierz ten
+  zamknięty sprint.
+- **Co ma być prawdą:** nagłówek pokazuje **nazwę wybranego sprintu** i
+  plakietkę „Sprint closed". Panel **Reliability** pokazuje jego „Committed" i
+  „Delivered" oraz linię capacity („Capacity X of Y MD, over N working days") —
+  liczby z rekordu, nie z aktywnego sprintu. Wszystkie **trzy zakładki**
+  (Workflow health / Team activity / By technology) pokazują ten sam komunikat
+  „This sprint's detail data is no longer stored", a **nie** wykresy i tabele
+  aktywnego sprintu. W miejscu formularza korekt stoi tekst „Not available for
+  this sprint…".
+- **Dlaczego to ważne:** to jest jedyny na żywo osiągalny dowód, że strona
+  rozstrzyga wybór **trójdrożnie**, a nie dwudrożnie. Wiersze `sprint` starego
+  projektu kasuje kaskada (`connection-service.ts:405-411`), a rekord pomiaru
+  przeżywa ją celowo — jeśli strona cofnęłaby się wtedy do aktywnego sprintu,
+  pokazałaby **liczby bieżącego sprintu pod nazwą starego**, bez żadnego śladu
+  na ekranie. Druga połowa (wygaszanie danych po „bieżący + 2 sprinty") nie da
+  się dziś wywołać ręcznie — czystki jeszcze nie ma w kodzie — i dlatego jest
+  pokryta testem integracyjnym, nie tym wierszem.
+
+### 7.6 Adres z `?sprint=` da się wysłać i przeżywa przeładowanie
+
+- **Gdzie:** `/dashboard/sprint-detail`, konto `demo@sprintflow.test`.
+- **Co zrobić:** wybierz z listy **Sprint** dowolny sprint inny niż aktywny.
+  Skopiuj adres z paska przeglądarki. Przeładuj stronę (F5). Otwórz ten sam
+  adres w **nowej karcie**. Na koniec zmień w adresie `?sprint=` na liczbę
+  z sufitu (np. `?sprint=99999`) i wejdź.
+- **Co ma być prawdą:** adres zawiera `?sprint=<jirowe id sprintu>`. Po
+  przeładowaniu i w nowej karcie strona pokazuje **ten sam** sprint (nagłówek,
+  plakietka, liczby), a lista ma go zaznaczonego. Przy zmyślonym id strona
+  **nie wywala się** — pokazuje **sprint aktywny**, normalnie, bez błędu.
+- **Dlaczego to ważne:** stan w URL-u to cała różnica między „mogę pokazać
+  koledze konkretny sprint" a przełącznikiem, który resetuje się przy każdym
+  odświeżeniu. Zmyślone id jest tu ważniejsze niż wygląda: id z adresu jest
+  rozstrzygane **wyłącznie** przeciwko serii zapisanej dla tego konta i tego
+  projektu, więc id z cudzego konta nie ma prawa niczego wyświetlić — a błąd
+  zamiast wyjścia awaryjnego zamieniłby przestarzały link w zepsutą stronę.
+
+### 7.9 Zamknięty sprint przyjmuje korektę SP, a pomiar zostaje obok
+
+- **Gdzie:** `/dashboard/sprint-detail?sprint=<id zamkniętego sprintu>`, konto
+  `demo@sprintflow.test`. Sprint musi mieć `finalized_at` **niepuste**
+  (SELECT jak w 7.5) **oraz** wciąż istniejący wiersz w `sprint` (czyli:
+  **przed** ewentualnym przełączeniem projektu z 7.5 albo na sprincie
+  zamkniętym już po powrocie).
+- **Co zrobić:** zapisz „Delivered" z panelu Reliability. W sekcji **Adjust this
+  sprint by hand** w polu **Delivered story points** wpisz liczbę o kilka
+  większą (np. pomiar 21 → wpisz `26`) i kliknij **Save**. Przeładuj stronę.
+  Potem wejdź na `/dashboard` → zakładka **Reliability** i spójrz na **aktywny**
+  sprint.
+- **Co ma być prawdą:** na sprincie zamkniętym pole **jest** (na trwającym go nie
+  było — patrz 5.8). Po zapisie panel Reliability pokazuje **26**, plakietkę
+  **„Corrected"** i **„(measured 21 SP)"** obok — obie liczby naraz. Po
+  przeładowaniu nadal tak jest. Na `/dashboard` **aktywny** sprint pokazuje
+  swoje własne, **niezmienione** „Delivered" — korekta nie przeniosła się na
+  niego.
+- **Dlaczego to ważne:** do fazy 6 korekta z FR-023 nie miała **żadnej
+  osiągalnej powierzchni dla sprintu, o którym mówi**. Formularz stał na
+  zakładce Availability, której sprintem jest zawsze aktywny, więc w chwili
+  rolloweru `delivered_sp_corrected` poprzedniego sprintu przestawało być
+  dostępne z jakiegokolwiek ekranu — przy jednoczesnym `overrides.ts`, które
+  celowo zdejmuje strażnika finalizacji, bo „sprint zamknięty to jedyny, którego
+  liczbę warto poprawiać". Ostatni krok (sprawdzenie aktywnego sprintu) jest
+  najważniejszy: korekta trafia do średniej z FR-024, więc gdyby lądowała na złym
+  sprincie, skrzywiłaby estymatę w sposób, którego już nikt nie odtworzy.

@@ -15,14 +15,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 /**
- * The lead's two manual entries on the active sprint (S-23 Phase 5,
- * FR-022/FR-023): a capacity override in man-days, and a correction to the
- * delivered story points.
+ * The lead's two manual entries on ONE sprint (S-23 Phase 5, FR-022/FR-023): a
+ * capacity override in man-days, and a correction to the delivered story points.
  *
- * ON THE AVAILABILITY TAB, beneath the capacity headline it replaces. The
- * override belongs where the number it overrides is shown — putting it in
- * `/settings` would ask the lead to hold two screens in their head to check
- * their own entry.
+ * BENEATH THE CAPACITY HEADLINE IT REPLACES, on whichever surface shows that
+ * sprint. The override belongs where the number it overrides is shown — putting
+ * it in `/settings` would ask the lead to hold two screens in their head to
+ * check their own entry.
+ *
+ * TWO SURFACES, ONE COMPONENT (S-23 Phase 7). The Availability tab renders it
+ * for the ACTIVE sprint; Sprint Detail renders it for the SELECTED one. The
+ * second is not a convenience: FR-023's correction is written about a closed
+ * sprint, and while this lived only on Availability, the moment the next sprint
+ * went active the previous sprint's `delivered_sp_corrected` became unreachable
+ * from every screen in the product.
  *
  * IT IS A MARKED EXCEPTION, not a preference (FR-022). An overridden figure
  * feeds FR-024's normalisation, so a careless entry skews every later average;
@@ -51,8 +57,12 @@ export default function CapacityAdjustments({
    * a sprint the lead never looked at (impl-review F2).
    */
   jiraSprintId: string;
-  /** What the model computed for this sprint — the input's placeholder. */
-  computedMd: number;
+  /**
+   * What the model computed for this sprint — the input's placeholder. `null`
+   * when nothing was measured: a sprint the sweep never managed to record still
+   * accepts an override, and a placeholder of `0` would read as a measurement.
+   */
+  computedMd: number | null;
   overrideMd: number | null;
   /** The measured delivered SP, or `null` when the sweep has recorded none yet. */
   computedSp: number | null;
@@ -81,7 +91,7 @@ export default function CapacityAdjustments({
           id="capacity-override"
           label="Capacity override (MD)"
           help="Empty means the computed capacity is used."
-          placeholder={formatNumber(computedMd)}
+          placeholder={computedMd === null ? "Not measured" : formatNumber(computedMd)}
           current={overrideMd}
           // Two decimals, matching `capacityOverrideMdSchema` (impl-review F4).
           // The form has no `noValidate`, so native constraint validation runs

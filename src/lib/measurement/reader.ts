@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 
 import { jiraProject, sprintMeasurement } from "@/db/schema";
 import type { getDb } from "@/lib/db";
@@ -59,11 +59,55 @@ export function toMd(raw: string | null): number | null {
 /** How many closed sprints a series read pulls unless the caller says otherwise. */
 const DEFAULT_LIMIT = 12;
 
+/**
+ * How far back the Sprint Detail switcher can reach (impl-review phase-7 F10).
+ *
+ * Deliberately larger than {@link DEFAULT_LIMIT}, because the two bounds answer
+ * different questions: twelve sprints is a sensible window to AVERAGE over
+ * (FR-024), but it is not a sensible limit on what a lead may LOOK at, and a
+ * sprint past the ceiling is not merely absent from the list — a `?sprint=`
+ * naming it falls into the unknown-id branch and silently renders the active
+ * sprint instead. Sixty is roughly two and a half years of two-week sprints, so
+ * the ceiling stops being reachable in the MVP's lifetime while the query stays
+ * bounded.
+ */
+const SWITCHER_LIMIT = 60;
+
 export async function listSprintMeasurements(
   db: Db,
   ownerId: string,
   jiraProjectId: string,
   limit: number = DEFAULT_LIMIT,
+): Promise<SprintMeasurement[]> {
+  return selectMeasurements(db, ownerId, jiraProjectId, limit, true);
+}
+
+/**
+ * The same series with the FINALIZED filter lifted — the Sprint Detail switcher's
+ * list (S-23 Phase 7).
+ *
+ * Separate from {@link listSprintMeasurements} rather than a flag on it, because
+ * the two answer different questions and only one of them may ever feed FR-024:
+ * an open record tracks a sprint still in flight, which is not history and must
+ * not enter an average. It IS, however, a sprint the lead can look at — the
+ * active one's own record is open by definition — so the switcher reads the
+ * unfiltered set.
+ */
+export async function listRecordedSprints(
+  db: Db,
+  ownerId: string,
+  jiraProjectId: string,
+  limit: number = DEFAULT_LIMIT,
+): Promise<SprintMeasurement[]> {
+  return selectMeasurements(db, ownerId, jiraProjectId, limit, false);
+}
+
+async function selectMeasurements(
+  db: Db,
+  ownerId: string,
+  jiraProjectId: string,
+  limit: number,
+  finalizedOnly: boolean,
 ): Promise<SprintMeasurement[]> {
   const rows = await db
     .select()
@@ -72,10 +116,20 @@ export async function listSprintMeasurements(
       and(
         eq(sprintMeasurement.ownerId, ownerId),
         eq(sprintMeasurement.jiraProjectId, jiraProjectId),
-        isNotNull(sprintMeasurement.finalizedAt),
+        ...(finalizedOnly ? [isNotNull(sprintMeasurement.finalizedAt)] : []),
       ),
     )
-    .orderBy(desc(sprintMeasurement.startDate))
+    // NULLS LAST, explicitly (impl-review phase-7 F6). Postgres orders a DESC
+    // sort NULLS FIRST, which cost nothing while every caller filtered on
+    // `finalized_at IS NOT NULL` — the switcher's read lifts that filter, and
+    // `writeLeadColumn` inserts a record carrying only the identity columns when
+    // a lead overrides ahead of the sweep. Left alone, that start-date-less row
+    // would sort above the newest sprint. `measured_at` breaks the tie among
+    // rows that genuinely share a start date.
+    .orderBy(
+      sql`${sprintMeasurement.startDate} desc nulls last`,
+      desc(sprintMeasurement.measuredAt),
+    )
     .limit(limit);
 
   return rows.map((row) => ({
@@ -105,12 +159,39 @@ export async function listSprintMeasurementsForOwner(
   ownerId: string,
   limit: number = DEFAULT_LIMIT,
 ): Promise<SprintMeasurement[]> {
+  const jiraProjectId = await currentJiraProjectId(db, ownerId);
+  if (jiraProjectId === null) return [];
+
+  return listSprintMeasurements(db, ownerId, jiraProjectId, limit);
+}
+
+/**
+ * {@link listRecordedSprints} for the owner's currently monitored project — what
+ * the Sprint Detail switcher lists.
+ *
+ * Same project filter as the finalized series, and for the same reason: the
+ * record outlives a project switch on purpose, so one owner's table can hold two
+ * different teams' sprints. Offering the lead a sprint from a team they no
+ * longer monitor would be offering them a page they cannot read.
+ */
+export async function listRecordedSprintsForOwner(
+  db: Db,
+  ownerId: string,
+  limit: number = SWITCHER_LIMIT,
+): Promise<SprintMeasurement[]> {
+  const jiraProjectId = await currentJiraProjectId(db, ownerId);
+  if (jiraProjectId === null) return [];
+
+  return listRecordedSprints(db, ownerId, jiraProjectId, limit);
+}
+
+/** One monitored project per account (PRD non-goal), hence `limit(1)`. */
+async function currentJiraProjectId(db: Db, ownerId: string): Promise<string | null> {
   const [project] = await db
     .select({ jiraProjectId: jiraProject.jiraProjectId })
     .from(jiraProject)
     .where(eq(jiraProject.ownerId, ownerId))
     .limit(1);
-  if (!project) return [];
 
-  return listSprintMeasurements(db, ownerId, project.jiraProjectId, limit);
+  return project?.jiraProjectId ?? null;
 }

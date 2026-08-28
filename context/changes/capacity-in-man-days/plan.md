@@ -1521,12 +1521,12 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 7.1 Unit test for `sprint-selection.ts`, one per row of §1's table (absent / unknown / measurement-without-sprint-row)
-- [ ] 7.2 Integration test: switcher list scoped to owner and current Jira project
-- [ ] 7.3 Type checking passes
-- [ ] 7.4 Linting passes
-- [ ] 7.7 Integration test: a correction on the SELECTED closed sprint lands there, not on the active one (§4, impl-review F3)
-- [ ] 7.8 Unit test: the delivered field is withheld when the record is not finalized, and when there is no `sprint` row (§4)
+- [x] 7.1 Unit test for `sprint-selection.ts`, one per row of §1's table (absent / unknown / measurement-without-sprint-row)
+- [x] 7.2 Integration test: switcher list scoped to owner and current Jira project
+- [x] 7.3 Type checking passes
+- [x] 7.4 Linting passes
+- [x] 7.7 Integration test: a correction on the SELECTED closed sprint lands there, not on the active one (§4, impl-review F3)
+- [x] 7.8 Unit test: the delivered field is withheld when the record is not finalized, and when there is no `sprint` row (§4)
 
 #### Manual
 

@@ -16,10 +16,22 @@ export default function SprintDetailTabs({
   aging,
   matrix,
   burndown,
+  notice,
 }: {
   aging: ReactNode;
   matrix: ReactNode;
   burndown: ReactNode;
+  /**
+   * Replaces all three panels when the selected sprint has a measurement record
+   * but no raw data left (S-23 Phase 7).
+   *
+   * It takes over every panel rather than sitting above them, because the three
+   * reducers would otherwise render their ordinary "nothing here" empty states —
+   * and an empty aging report is indistinguishable from a sprint in which
+   * nothing aged. The tab chrome stays so the reader can see WHICH three things
+   * are missing.
+   */
+  notice?: ReactNode;
 }) {
   return (
     <Tabs defaultValue="aging" className="w-full">
@@ -28,9 +40,9 @@ export default function SprintDetailTabs({
         <TabsTrigger value="matrix">Team activity</TabsTrigger>
         <TabsTrigger value="burndown">By technology</TabsTrigger>
       </TabsList>
-      <TabsContent value="aging">{aging}</TabsContent>
-      <TabsContent value="matrix">{matrix}</TabsContent>
-      <TabsContent value="burndown">{burndown}</TabsContent>
+      <TabsContent value="aging">{notice ?? aging}</TabsContent>
+      <TabsContent value="matrix">{notice ?? matrix}</TabsContent>
+      <TabsContent value="burndown">{notice ?? burndown}</TabsContent>
     </Tabs>
   );
 }

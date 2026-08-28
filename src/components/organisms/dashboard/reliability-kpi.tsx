@@ -32,9 +32,21 @@ import {
  * delivering 100, and a half-staffed team committing 50 and delivering 50, both
  * render as 100% — capacity is what separates them. It sits BESIDE the ratio and
  * never inside it (FR-016).
+ *
+ * S-23 PHASE 7 PUT IT ON A CLOSED SPRINT, which the copy had to catch up with
+ * (impl-review phase-7 F7): "delivered so far" and "this panel fills in after the
+ * next sync" are both statements about a sprint still in flight, and the second
+ * is a promise no sync will keep once the sprint is over. `isClosed` is only
+ * about wording — no number on this panel changes with it.
  */
 
-export default function ReliabilityKpi(props: Parameters<typeof toReliabilityView>[0]) {
+export default function ReliabilityKpi({
+  isClosed = false,
+  ...props
+}: Parameters<typeof toReliabilityView>[0] & {
+  /** The sprint on screen is over, so nothing further will arrive for it. */
+  isClosed?: boolean;
+}) {
   const view = toReliabilityView(props);
 
   if (view.bars === null) {
@@ -49,7 +61,10 @@ export default function ReliabilityKpi(props: Parameters<typeof toReliabilityVie
             {view.emptyReason === "no-sprint"
               ? // No sync fixes this one, so it must not promise that one will.
                 "No active sprint yet — connect Jira and finish setup to see this sprint's committed and delivered points."
-              : "SprintFlow hasn't recorded this sprint's committed and delivered points yet. They are written on each Jira sync — this panel fills in after the next one."}
+              : isClosed
+                ? // Same rule: the sprint is over, so no sync will fill this in.
+                  "SprintFlow never recorded this sprint's committed and delivered points, and no sync will fill them in now that the sprint has closed."
+                : "SprintFlow hasn't recorded this sprint's committed and delivered points yet. They are written on each Jira sync — this panel fills in after the next one."}
           </p>
         </CardContent>
       </Card>
@@ -68,8 +83,10 @@ export default function ReliabilityKpi(props: Parameters<typeof toReliabilityVie
         <CardTitle>Reliability</CardTitle>
         <CardDescription>
           {view.ratio === null
-            ? "Committed vs delivered story points for the current sprint."
-            : `${deliveredSp} of ${committedSp} committed story points delivered so far (${view.ratio}%).`}
+            ? isClosed
+              ? "Committed vs delivered story points for this sprint."
+              : "Committed vs delivered story points for the current sprint."
+            : `${deliveredSp} of ${committedSp} committed story points delivered${isClosed ? "" : " so far"} (${view.ratio}%).`}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
