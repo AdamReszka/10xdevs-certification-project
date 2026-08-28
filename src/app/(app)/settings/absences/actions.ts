@@ -14,10 +14,21 @@ import {
   updateAbsence as updateAbsenceService,
 } from "@/lib/absence-store";
 import { UnknownMemberError } from "@/lib/integrations/roster-store";
+import {
+  UnknownTeamDayOffError,
+  createTeamDayOff as createTeamDayOffService,
+  deleteTeamDayOff as deleteTeamDayOffService,
+} from "@/lib/team-day-off-store";
 import { absenceIdSchema, absenceSaveSchema } from "@/lib/validations/absence";
+import {
+  teamDayOffIdSchema,
+  teamDayOffSaveSchema,
+} from "@/lib/validations/team-day-off";
 
 /**
- * S-08 absence mutations — deliberately thin, mirroring `setup/team/actions.ts`.
+ * Mutations for the `/settings/absences` page: S-08 absences (FR-010) and S-23
+ * team-wide days off (FR-007) — deliberately thin, mirroring
+ * `setup/team/actions.ts`.
  * Each action does `requireSession()` + `getCloudflareContext().env` +
  * `getDb(env)` inside the body, then delegates to the request-context-free
  * service core with `ownerId = session.user.id`. No business logic here.
@@ -129,6 +140,68 @@ export async function deleteAbsenceAction(
   }
 }
 
+/**
+ * Record a team-wide day off (S-23, FR-007).
+ *
+ * Re-detects for the same reason the absence actions do (D1), and with a
+ * sharper motive: a holiday changes `TICKET_STATUS_AGING`'s working-day budget
+ * immediately, so a ticket that was flagged over the holiday should stop being
+ * flagged the moment the holiday is recorded. Waiting fifteen minutes for the
+ * cron would make the surface look broken.
+ */
+export async function createTeamDayOffAction(
+  input: unknown,
+): Promise<AbsenceMutationResult> {
+  const session = await requireSession();
+
+  const parsed = teamDayOffSaveSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidInput(
+      parsed.error.issues[0]?.message ?? "Pick a date and try again.",
+    );
+  }
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+  const ownerId = session.user.id;
+
+  try {
+    const { id } = await createTeamDayOffService({
+      db,
+      ownerId,
+      input: { day: parsed.data.day, label: parsed.data.label ?? null },
+    });
+    await redetect(db, ownerId);
+    // `created: false` (the date was already recorded) is deliberately NOT an
+    // error: the owner asked for that day to be off, and it is.
+    return { ok: true, id };
+  } catch (err) {
+    return toFailure(err, "[settings/absences] createTeamDayOff");
+  }
+}
+
+/** Remove a team-wide day off. Puts the working day — and its ageing — back. */
+export async function deleteTeamDayOffAction(
+  teamDayOffId: unknown,
+): Promise<AbsenceMutationResult> {
+  const session = await requireSession();
+
+  const parsed = teamDayOffIdSchema.safeParse(teamDayOffId);
+  if (!parsed.success) return invalidInput("Pick a day off and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+  const ownerId = session.user.id;
+
+  try {
+    await deleteTeamDayOffService({ db, ownerId, teamDayOffId: parsed.data });
+    await redetect(db, ownerId);
+    return { ok: true, id: parsed.data };
+  } catch (err) {
+    return toFailure(err, "[settings/absences] deleteTeamDayOff");
+  }
+}
+
 /** The wire shape minus `id` — everything the store persists. */
 function toInput(data: { id?: string } & AbsenceInput): AbsenceInput {
   return {
@@ -165,7 +238,11 @@ function invalidInput(message: string): ActionFailure {
 function toFailure(err: unknown, tag: string): ActionFailure {
   // A stale grid, or a crafted payload naming another account's row. Refused
   // rather than treated as new (PRD cross-account isolation).
-  if (err instanceof UnknownAbsenceError || err instanceof UnknownMemberError) {
+  if (
+    err instanceof UnknownAbsenceError ||
+    err instanceof UnknownMemberError ||
+    err instanceof UnknownTeamDayOffError
+  ) {
     return invalidInput("That list is out of date. Reload the page and try again.");
   }
   if (err instanceof OverlappingAbsenceError) {

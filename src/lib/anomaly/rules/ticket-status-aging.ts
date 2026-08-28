@@ -61,11 +61,15 @@ export const detectTicketStatusAging: Detector = (snapshot, effective, now) => {
       const budget = inProgressBudget(ticket.storyPoints, t.inProgressHoursBySp);
       if (budget == null) continue;
       if (budget === "8_WORKING_DAYS") {
+        // A ticket does not age on a day the whole team is off (S-23, FR-007) —
+        // the 8-working-day budget is a budget of days somebody could have moved
+        // it, and a public holiday is not one of those.
         const elapsed = countWorkingDays(
           since,
           now,
           snapshot.sprint.workingDays,
           snapshot.timeZone,
+          snapshot.nonWorkingDays,
         );
         triggered = elapsed >= 8;
         magnitude = clamp01(elapsed / 16);

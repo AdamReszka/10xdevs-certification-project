@@ -31,6 +31,7 @@ const SPRINT_END = new Date("2026-08-14T23:59:59.999Z"); // Fri, 10 working days
 function compute(
   members: { id: string; fte: number; isActive?: boolean }[],
   absences: { teamMemberId: string; startDate: Date; endDate: Date }[] = [],
+  nonWorkingDays: ReadonlySet<string> = new Set(),
 ) {
   return computeSprintCapacity({
     members: members.map((m) => ({ isActive: true, ...m })),
@@ -39,6 +40,7 @@ function compute(
     sprintEnd: SPRINT_END,
     workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
     timeZone: "UTC",
+    nonWorkingDays,
   });
 }
 
@@ -145,6 +147,7 @@ describe("computeSprintCapacity", () => {
       sprintEnd: new Date("2026-08-16T23:59:59.999Z"),
       workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
       timeZone: "UTC",
+      nonWorkingDays: new Set(),
     });
 
     expect(result.sprintWorkingDays).toBe(0);
@@ -181,10 +184,97 @@ describe("computeSprintCapacity", () => {
       sprintEnd: new Date("2026-08-07T23:59:59.999Z"), // Fri of week one
       workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
       timeZone: "UTC",
+      nonWorkingDays: new Set(),
     });
 
     expect(oneWeek.sprintWorkingDays).toBe(5);
     expect(oneWeek.adjustedMd).toBe(5);
     expect(compute([{ id: "m-1", fte: 1 }]).adjustedMd).toBe(10);
+  });
+});
+
+/**
+ * S-23 Phase 2 — team-wide days off (FR-007/FR-022).
+ *
+ * The sprint is unchanged: Mon 2026-08-03 → Fri 2026-08-14, 10 working days. Wed
+ * 2026-08-05 is the holiday used throughout, so every expectation below is one
+ * working day lighter than its sibling above and can be checked by hand.
+ *
+ * The DOUBLE-SUBTRACTION case is the one that pays for this suite. A holiday
+ * falling inside somebody's vacation must cost the team exactly one man-day for
+ * that person, not two: once because the sprint never had the day, and again
+ * because they were away for it. That is only true if the same set reaches BOTH
+ * `countWorkingDaysInclusive` calls in the reducer — which is why half-wiring
+ * the seam is the failure this test exists to catch.
+ */
+const HOLIDAY_WED = new Set(["2026-08-05"]);
+
+describe("computeSprintCapacity with team-wide days off", () => {
+  it("costs one man-day per full-time member", () => {
+    const result = compute(
+      [
+        { id: "m-1", fte: 1 },
+        { id: "m-2", fte: 1 },
+      ],
+      [],
+      HOLIDAY_WED,
+    );
+
+    expect(result.sprintWorkingDays).toBe(9);
+    expect(result.teamDaysOff).toBe(1);
+    // 2 people × 9 days, not 2 × 10.
+    expect(result.adjustedMd).toBe(18);
+    expect(result.nominalMd).toBe(18);
+  });
+
+  it("costs a half-timer half a man-day", () => {
+    const result = compute([{ id: "m-1", fte: 0.5 }], [], HOLIDAY_WED);
+
+    expect(result.adjustedMd).toBe(4.5);
+  });
+
+  it("is not subtracted twice when it falls inside an absence", () => {
+    // Mon 03 → Fri 07 inclusive: 5 calendar working days, 4 once the Wednesday
+    // holiday is removed. The sprint is 9 working days, so the member is left
+    // with 5.
+    const result = compute(
+      [{ id: "m-1", fte: 1 }],
+      [
+        {
+          teamMemberId: "m-1",
+          startDate: new Date("2026-08-03T00:00:00.000Z"),
+          endDate: new Date("2026-08-07T23:59:59.999Z"),
+        },
+      ],
+      HOLIDAY_WED,
+    );
+
+    expect(result.sprintWorkingDays).toBe(9);
+    // 9 − 4 = 5. The holiday-blind reading would be 9 − 5 = 4, charging the team
+    // for a day it had already lost.
+    expect(result.adjustedMd).toBe(5);
+    expect(result.nominalMd).toBe(9);
+  });
+
+  it("ignores a day off that falls on a non-working weekday", () => {
+    // Sat 2026-08-08 was never a working day, so removing it changes nothing —
+    // and must not show up as a reduction on screen either.
+    const result = compute([{ id: "m-1", fte: 1 }], [], new Set(["2026-08-08"]));
+
+    expect(result.sprintWorkingDays).toBe(10);
+    expect(result.teamDaysOff).toBe(0);
+    expect(result.adjustedMd).toBe(10);
+  });
+
+  it("ignores a day off outside the sprint window", () => {
+    const result = compute([{ id: "m-1", fte: 1 }], [], new Set(["2026-07-29"]));
+
+    expect(result.sprintWorkingDays).toBe(10);
+    expect(result.teamDaysOff).toBe(0);
+    expect(result.adjustedMd).toBe(10);
+  });
+
+  it("reports zero days off when the calendar is empty", () => {
+    expect(compute([{ id: "m-1", fte: 1 }]).teamDaysOff).toBe(0);
   });
 });

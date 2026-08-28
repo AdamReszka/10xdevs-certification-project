@@ -1,3 +1,5 @@
+import type { DayKey } from "@/lib/dashboard/day-bucket";
+
 import type {
   SelectAbsence,
   SelectGithubCommit,
@@ -51,6 +53,18 @@ export type SprintSnapshot = {
    * two answers. Null degrades to UTC through `safeZone`.
    */
   timeZone: string | null;
+  /**
+   * Days the WHOLE team is off — public holidays, company days off (S-23,
+   * FR-007).
+   *
+   * Arrives through the snapshot for exactly the reason `timeZone` does: rules
+   * are pure, so every day-boundary decision they make has to be handed to them.
+   * A ticket does not age on a public holiday, and a day nobody was working is
+   * not a working day lost to one person's absence — so a rule that could not
+   * see this calendar would disagree with the capacity number computed from the
+   * same dates. Empty set when the owner has recorded none.
+   */
+  nonWorkingDays: ReadonlySet<DayKey>;
 };
 
 /** One detected anomaly, pre-persistence. Carries the five FR-014 attributes plus

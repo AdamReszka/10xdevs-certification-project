@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   CATEGORY_LABEL,
   clamp01,
+  countTeamDaysOffInclusive,
   countWorkingDays,
   countWorkingDaysInclusive,
   daysBetween,
@@ -92,8 +93,8 @@ describe("countWorkingDays", () => {
   });
 
   it("excludes a day listed in nonWorkingDays", () => {
-    // The seam a future public-holidays / company-days-off slice fills. S-08
-    // always passes it empty, so this is the only exercise it gets.
+    // The seam S-08 declared and S-23 filled: `team-day-off-store.ts` now
+    // supplies this set at all five production call sites.
     const from = new Date("2026-08-17T09:00:00.000Z"); // Mon
     const to = new Date("2026-08-21T09:00:00.000Z"); // Fri
 
@@ -152,6 +153,80 @@ describe("indexBy", () => {
     const map = indexBy([a, b], (m) => m.githubUsername);
     expect(map.get("aa")?.id).toBe("a");
     expect(map.size).toBe(1);
+  });
+});
+
+/**
+ * S-23 Phase 2 — how many WORKING days the team-wide calendar removed.
+ *
+ * The distinction that earns this its own function: a holiday landing on a
+ * Saturday costs nothing, so counting set members inside the range would put a
+ * "− 1 team day off" on screen next to a working-day total that never moved.
+ *
+ * Week of Mon 2026-08-17 throughout: Mon 17 … Fri 21, Sat 22, Sun 23.
+ */
+describe("countTeamDaysOffInclusive", () => {
+  const MON = new Date("2026-08-17T09:00:00.000Z");
+  const FRI = new Date("2026-08-21T09:00:00.000Z");
+  const SUN = new Date("2026-08-23T09:00:00.000Z");
+
+  it("counts a day off that falls on a working day", () => {
+    expect(
+      countTeamDaysOffInclusive(MON, FRI, null, "UTC", new Set(["2026-08-19"])),
+    ).toBe(1);
+  });
+
+  it("counts several", () => {
+    expect(
+      countTeamDaysOffInclusive(
+        MON,
+        FRI,
+        null,
+        "UTC",
+        new Set(["2026-08-18", "2026-08-19"]),
+      ),
+    ).toBe(2);
+  });
+
+  it("ignores one that lands on a non-working weekday", () => {
+    expect(
+      countTeamDaysOffInclusive(MON, SUN, null, "UTC", new Set(["2026-08-22"])),
+    ).toBe(0);
+  });
+
+  it("follows the team's own working week rather than assuming Mon–Fri", () => {
+    // Sat 22 is a working day for a Sat–Wed team, so the same date now counts.
+    expect(
+      countTeamDaysOffInclusive(
+        MON,
+        SUN,
+        ["SAT", "SUN", "MON", "TUE", "WED"],
+        "UTC",
+        new Set(["2026-08-22"]),
+      ),
+    ).toBe(1);
+  });
+
+  it("ignores one outside the range", () => {
+    expect(
+      countTeamDaysOffInclusive(MON, FRI, null, "UTC", new Set(["2026-08-24"])),
+    ).toBe(0);
+  });
+
+  it("is zero for an empty calendar", () => {
+    expect(countTeamDaysOffInclusive(MON, FRI, null, "UTC", new Set())).toBe(0);
+  });
+
+  it("is zero for an inverted range", () => {
+    expect(
+      countTeamDaysOffInclusive(FRI, MON, null, "UTC", new Set(["2026-08-19"])),
+    ).toBe(0);
+  });
+
+  it("counts a single-day closed range, matching its inclusive sibling", () => {
+    expect(
+      countTeamDaysOffInclusive(MON, MON, null, "UTC", new Set(["2026-08-17"])),
+    ).toBe(1);
   });
 });
 

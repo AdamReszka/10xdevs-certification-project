@@ -1,11 +1,16 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 
 import { absence, teamMember } from "@/db/schema";
-import { countWorkingDaysInclusive } from "@/lib/anomaly/rules/helpers";
+import {
+  countTeamDaysOffInclusive,
+  countWorkingDaysInclusive,
+} from "@/lib/anomaly/rules/helpers";
+import type { DayKey } from "@/lib/dashboard/day-bucket";
 import type { getDb } from "@/lib/db";
 import { toFte } from "@/lib/fte";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
+import { getNonWorkingDays } from "@/lib/team-day-off-store";
 
 /**
  * Sprint capacity in MAN-DAYS (S-23, FR-010/FR-022) — the third downstream
@@ -53,7 +58,7 @@ export type SprintCapacity = {
   /** The same total with absences ignored, so the reduction is legible. */
   nominalMd: number;
   /**
-   * The sprint's own working-day total.
+   * The sprint's own working-day total, ALREADY NET of team-wide days off.
    *
    * No longer a divisor — it is now a MULTIPLIER, and FR-022 puts it on screen
    * beside the capacity so the lead can see what the number was computed from.
@@ -61,6 +66,17 @@ export type SprintCapacity = {
    * a wrong divisor was invisible for as long as it was.
    */
   sprintWorkingDays: number;
+  /**
+   * How many working days the team-wide day-off calendar removed from this
+   * sprint (S-23, FR-007). Zero when the sprint spans no holiday, or when the
+   * holidays it spans all fall on non-working weekdays.
+   *
+   * Reported separately from {@link sprintWorkingDays} rather than folded into
+   * it, because the two answer different questions: the total is what the
+   * capacity was multiplied by, and this is WHY that total is lower than the
+   * calendar suggests. Without it, a holiday looks like an arithmetic error.
+   */
+  teamDaysOff: number;
 };
 
 /**
@@ -92,6 +108,7 @@ export function computeSprintCapacity({
   sprintEnd,
   workingDays,
   timeZone,
+  nonWorkingDays,
 }: {
   members: CapacityMember[];
   absences: CapacityAbsence[];
@@ -99,12 +116,26 @@ export function computeSprintCapacity({
   sprintEnd: Date;
   workingDays: readonly string[] | null | undefined;
   timeZone: string | null;
+  /**
+   * Days the WHOLE team is off (S-23, FR-007). REQUIRED, not optional: an
+   * omission here would silently keep the old, holiday-blind number, and the
+   * caller would have no way to tell. Pass an empty set to mean "none".
+   */
+  nonWorkingDays: ReadonlySet<DayKey>;
 }): SprintCapacity {
   const sprintWorkingDays = countWorkingDaysInclusive(
     sprintStart,
     sprintEnd,
     workingDays,
     timeZone,
+    nonWorkingDays,
+  );
+  const teamDaysOff = countTeamDaysOffInclusive(
+    sprintStart,
+    sprintEnd,
+    workingDays,
+    timeZone,
+    nonWorkingDays,
   );
 
   const byMember = new Map<string, CapacityAbsence[]>();
@@ -134,14 +165,23 @@ export function computeSprintCapacity({
       // this sprint.
       const from = a.startDate > sprintStart ? a.startDate : sprintStart;
       const to = a.endDate < sprintEnd ? a.endDate : sprintEnd;
-      absentWorkingDays += countWorkingDaysInclusive(from, to, workingDays, timeZone);
+      // The same `nonWorkingDays` the sprint total used. Passing it here is what
+      // stops a public holiday INSIDE someone's vacation from being subtracted
+      // twice — once as a day the sprint never had, once as a day they were away.
+      absentWorkingDays += countWorkingDaysInclusive(
+        from,
+        to,
+        workingDays,
+        timeZone,
+        nonWorkingDays,
+      );
     }
 
     const available = Math.max(0, sprintWorkingDays - absentWorkingDays);
     adjustedMd += member.fte * available;
   }
 
-  return { adjustedMd, nominalMd, sprintWorkingDays };
+  return { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff };
 }
 
 export type CapacityReadResult = {
@@ -173,7 +213,7 @@ export async function getSprintCapacity(
   // Far edge of the "next window" the tab also draws.
   const lookahead = new Date(sprintEnd.getTime() + (sprintEnd.getTime() - sprintStart.getTime()));
 
-  const [rows, absences, timeZone] = await Promise.all([
+  const [rows, absences, timeZone, nonWorkingDays] = await Promise.all([
     db
       .select({
         id: teamMember.id,
@@ -199,6 +239,9 @@ export async function getSprintCapacity(
         ),
       ),
     getJiraTimeZone(db, ownerId),
+    // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
+    // inside the reducer for the same reason the zone is: the reducer is pure.
+    getNonWorkingDays({ db, ownerId }),
   ]);
 
   // The driver hands `numeric` back as a string. Converting once, HERE, is what
@@ -216,6 +259,7 @@ export async function getSprintCapacity(
       sprintEnd,
       workingDays: sprint.workingDays,
       timeZone,
+      nonWorkingDays,
     }),
     sprintStart,
     sprintEnd,

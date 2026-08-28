@@ -4,6 +4,7 @@ import {
   pgEnum,
   text,
   timestamp,
+  date,
   boolean,
   integer,
   numeric,
@@ -506,6 +507,51 @@ export const absence = pgTable(
   ],
 );
 
+/**
+ * A day the WHOLE team is off — a public holiday, a company day off (S-23,
+ * FR-007/FR-022).
+ *
+ * NOT AN ABSENCE, and deliberately not a row on `absence`: that table's
+ * `team_member_id` is NOT NULL, so "everybody" would have to be expressed as one
+ * row per person, re-entered every time the roster changes. A public holiday is
+ * not a fact about a person.
+ *
+ * NOT A COLUMN ON `sprint`, either. FR-007 originally scoped these "for a given
+ * sprint"; the amendment of 2026-08-28 makes them dates on the ACCOUNT, because
+ * a holiday is a property of the calendar: entered once, it applies to every
+ * sprint that spans it, and re-entering the same national holiday each sprint is
+ * exactly the duplicated state FR-007's own auto-pull argument rejects. It is
+ * also the row shape S-17 will later GENERATE from a country, so that slice
+ * appends rows rather than reshaping the model.
+ *
+ * `date` rather than `timestamp`: the `pg` driver hands a `date` column back as
+ * `'YYYY-MM-DD'`, byte-identical to the `DayKey` the working-day counter
+ * consumes — so no zone conversion sits between the stored value and the
+ * calendar it is compared against. (An absence needs instants because it is
+ * entered against a person's working window; a holiday is a bare calendar fact.)
+ */
+export const teamDayOff = pgTable(
+  "team_day_off",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** `YYYY-MM-DD` in the team's calendar. */
+    day: date("day").notNull(),
+    /** "Assumption of Mary", "company offsite" — free text, optional. */
+    label: text("label"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // The dedup key the store's idempotent insert relies on. Both columns are
+    // NOT NULL, per `context/foundation/lessons.md` — a nullable column in a
+    // UNIQUE dedup key never collides, so the constraint would silently fail.
+    unique("team_day_off_owner_day_uq").on(table.ownerId, table.day),
+    index("team_day_off_ownerId_idx").on(table.ownerId),
+  ],
+);
+
 // ============================================================================
 // F-02 product tables (Phase 3: HIGH-CHURN synced data + engine tables)
 //
@@ -938,6 +984,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   jiraProject: one(jiraProject),
   monitoredRepos: many(monitoredRepo),
   teamMembers: many(teamMember),
+  teamDaysOff: many(teamDayOff),
   sprints: many(sprint),
   syncStates: many(syncState),
   anomalies: many(anomaly),
@@ -1066,6 +1113,13 @@ export const absenceRelations = relations(absence, ({ one }) => ({
   }),
 }));
 
+export const teamDayOffRelations = relations(teamDayOff, ({ one }) => ({
+  owner: one(user, {
+    fields: [teamDayOff.ownerId],
+    references: [user.id],
+  }),
+}));
+
 // --- Inferred types (Phase 2 tables) ---
 
 export type SelectGithubCredential = typeof githubCredential.$inferSelect;
@@ -1088,6 +1142,8 @@ export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;
 export type InsertSyncState = typeof syncState.$inferInsert;
 export type SelectAbsence = typeof absence.$inferSelect;
 export type InsertAbsence = typeof absence.$inferInsert;
+export type SelectTeamDayOff = typeof teamDayOff.$inferSelect;
+export type InsertTeamDayOff = typeof teamDayOff.$inferInsert;
 
 // --- F-02 product relations (Phase 3) ---
 

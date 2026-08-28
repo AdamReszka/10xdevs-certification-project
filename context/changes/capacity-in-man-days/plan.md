@@ -1156,12 +1156,12 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 2.1 Unit tests: holiday costs one MD per full-time member; not double-subtracted inside an absence
-- [ ] 2.2 Unit tests: aging does not advance across a team day off; sprint-at-risk working days drop
-- [ ] 2.3 Integration test: `getNonWorkingDays` owner-scoped; duplicate insert is a no-op
-- [ ] 2.4 Every production `countWorkingDays*` call site passes `nonWorkingDays`
-- [ ] 2.5 Type checking passes
-- [ ] 2.6 Linting passes
+- [x] 2.1 Unit tests: holiday costs one MD per full-time member; not double-subtracted inside an absence
+- [x] 2.2 Unit tests: aging does not advance across a team day off; sprint-at-risk working days drop
+- [x] 2.3 Integration test: `getNonWorkingDays` owner-scoped; duplicate insert is a no-op
+- [x] 2.4 Every production `countWorkingDays*` call site passes `nonWorkingDays`
+- [x] 2.5 Type checking passes
+- [x] 2.6 Linting passes
 
 #### Manual
 

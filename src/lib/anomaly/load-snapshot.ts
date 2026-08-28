@@ -11,6 +11,7 @@ import {
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
+import { getNonWorkingDays } from "@/lib/team-day-off-store";
 import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types";
 
 /**
@@ -52,8 +53,16 @@ export async function loadSprintSnapshot(
   const absencesUntil =
     chosen.endDate != null && chosen.endDate > now ? chosen.endDate : now;
 
-  const [tickets, prs, reviews, commits, teamMembers, timeZone, absences] =
-    await Promise.all([
+  const [
+    tickets,
+    prs,
+    reviews,
+    commits,
+    teamMembers,
+    timeZone,
+    absences,
+    nonWorkingDays,
+  ] = await Promise.all([
     db
       .select()
       .from(jiraTicket)
@@ -88,6 +97,11 @@ export async function loadSprintSnapshot(
           gte(absence.endDate, commitsSince),
         ),
       ),
+    // S-23 (FR-007): the team-wide day-off calendar. Read WHOLE, not windowed —
+    // `TICKET_STATUS_AGING` measures back to a ticket's last movement, which can
+    // predate `commitsSince`, and a set narrowed to the sprint would quietly
+    // stop excluding holidays outside it.
+    getNonWorkingDays({ db, ownerId }),
   ]);
 
   const reviewsByPr = new Map<string, typeof reviews>();
@@ -109,5 +123,6 @@ export async function loadSprintSnapshot(
     teamMembers,
     absences,
     timeZone,
+    nonWorkingDays,
   };
 }

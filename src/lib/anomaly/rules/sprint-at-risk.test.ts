@@ -387,3 +387,76 @@ describe("detectSprintAtRisk — unplanned absence (FR-010)", () => {
     expect(out[0].description).toContain("working day");
   });
 });
+
+/**
+ * S-23 Phase 2 — team-wide days off shrink what is left of the sprint
+ * (FR-007/FR-022).
+ *
+ * Same fixture clock: NOW is Mon 2026-08-10T12:00Z, sprint ends Sat 2026-08-15,
+ * week Mon–Fri, UTC — so the remaining working days are Mon 10 … Fri 14 = 5.
+ * Making Wed 12 a company day off leaves 4, and the default unplanned absence
+ * (Mon 10 → Fri 14) loses 4 of them rather than 5.
+ *
+ * BOTH counters have to see the calendar or the ratio lies. If only the
+ * denominator had been wired, a full-sprint absence would read as 5/4 — clamped
+ * to 1 and therefore invisible — and if only the numerator had, it would read
+ * 4/5 and quietly understate a person being away for the whole of what is left.
+ */
+describe("detectSprintAtRisk — team-wide days off", () => {
+  function absenceOnly(out: ReturnType<typeof detectSprintAtRisk>) {
+    return out.filter(
+      (a) => (a.context as { condition: string }).condition === "absence",
+    );
+  }
+
+  const daysOff = new Set(["2026-08-12"]);
+
+  it("drops the remaining working days by one", () => {
+    const out = absenceOnly(
+      detectSprintAtRisk(
+        makeSnapshot({
+          teamMembers: [member],
+          absences: [makeAbsence({ isPlanned: false })],
+          nonWorkingDays: daysOff,
+        }),
+        effective,
+        NOW,
+      ),
+    );
+
+    expect(out[0].context).toMatchObject({
+      workingDaysLeft: 4,
+      workingDaysLost: 4,
+    });
+    // Still the whole of what is left — the day off cost the team, not this
+    // person specifically.
+    expect(out[0].magnitude).toBe(1);
+  });
+
+  it("does not charge a person for being away on a day nobody was working", () => {
+    // Wed 12 only. It is a company day off, so no working day is lost at all.
+    const out = absenceOnly(
+      detectSprintAtRisk(
+        makeSnapshot({
+          teamMembers: [member],
+          absences: [
+            makeAbsence({
+              isPlanned: false,
+              startDate: new Date("2026-08-12T00:00:00.000Z"),
+              endDate: new Date("2026-08-12T23:59:59.999Z"),
+            }),
+          ],
+          nonWorkingDays: daysOff,
+        }),
+        effective,
+        NOW,
+      ),
+    );
+
+    // Still emitted — the lead needs to know somebody is unexpectedly away —
+    // but at magnitude 0, exactly as a weekend-only absence is.
+    expect(out).toHaveLength(1);
+    expect(out[0].context).toMatchObject({ workingDaysLost: 0, workingDaysLeft: 4 });
+    expect(out[0].magnitude).toBe(0);
+  });
+});

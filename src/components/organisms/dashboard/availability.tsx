@@ -129,6 +129,12 @@ export default function Availability({
  * been computed since S-08 and rendered nowhere, so a wrong working-day count —
  * the thing the whole figure scales with — was unfalsifiable by the lead.
  *
+ * TEAM DAYS OFF ARE NAMED SEPARATELY (S-23, FR-007) rather than folded silently
+ * into that count. `sprintWorkingDays` already has them subtracted, so without
+ * the second line a recorded public holiday would present as a working-day total
+ * that disagrees with the calendar — which reads as an arithmetic error rather
+ * than as the holiday the lead entered ten seconds earlier.
+ *
  * There is no "nobody answered yet" empty state any more. `fte` is NOT NULL, so
  * every active member contributes something; a member the migration guessed at
  * is surfaced by the `/settings/team` banner instead, where it can actually be
@@ -137,7 +143,7 @@ export default function Availability({
 function CapacitySummary({ capacity }: { capacity: SprintCapacity | null }) {
   if (!capacity) return null;
 
-  const { adjustedMd, nominalMd, sprintWorkingDays } = capacity;
+  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff } = capacity;
 
   return (
     <div className="flex flex-col gap-1 rounded-md border p-4">
@@ -153,6 +159,12 @@ function CapacitySummary({ capacity }: { capacity: SprintCapacity | null }) {
         Capacity for this sprint, over {sprintWorkingDays}{" "}
         {sprintWorkingDays === 1 ? "working day" : "working days"}.
       </p>
+      {teamDaysOff > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          − {teamDaysOff} team {teamDaysOff === 1 ? "day" : "days"} off already
+          subtracted (public holidays, company days off).
+        </p>
+      ) : null}
     </div>
   );
 }

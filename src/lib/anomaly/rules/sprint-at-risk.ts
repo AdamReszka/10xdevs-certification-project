@@ -122,11 +122,16 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
   // sprint was unplanned *there*, and by D2's definition is planned here — it
   // must stop raising risk at the rollover rather than forever.
   if (endDate) {
+    // The team-wide day-off calendar is passed here and below (S-23, FR-007): a
+    // sprint ending across a public holiday has one fewer working day left, and
+    // an absence spanning that holiday costs one fewer. Omitting it at either
+    // site would put a ratio between two counters that disagree.
     const workingDaysLeft = countWorkingDaysInclusive(
       now,
       endDate,
       snapshot.sprint.workingDays,
       snapshot.timeZone,
+      snapshot.nonWorkingDays,
     );
 
     for (const absence of snapshot.absences) {
@@ -154,6 +159,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
         lostTo,
         snapshot.sprint.workingDays,
         snapshot.timeZone,
+        snapshot.nonWorkingDays,
       );
 
       // Zero denominator ⇒ an absence on what is left costs the whole of what is

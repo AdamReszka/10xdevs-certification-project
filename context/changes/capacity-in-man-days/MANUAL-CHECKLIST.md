@@ -55,6 +55,66 @@
 
 ---
 
+## Faza 2 — dni wolne całego zespołu
+
+### 2.7 Dzień wolny obniża capacity i liczbę dni roboczych
+
+- **Gdzie:** `/settings/absences` → sekcja **Team days off**, potem
+  `/dashboard` → zakładka **Availability**. Konto `demo@sprintflow.test`.
+- **Co zrobić:** najpierw na dashboardzie **zapisz** obecną liczbę MD i liczbę
+  dni roboczych („over N working days"). Wróć na `/settings/absences`, kliknij
+  **„Add a day off"**, wybierz w kalendarzu dowolny **dzień roboczy (pon–pt)
+  leżący WEWNĄTRZ aktywnego sprintu**, wpisz etykietę, zapisz. Wróć na
+  `/dashboard` → **Availability**.
+- **Co ma być prawdą:** liczba dni roboczych spadła **dokładnie o 1**, pod nią
+  pojawiła się linia „− 1 team day off already subtracted", a liczba MD spadła
+  o **sumę etatów** (zespół sześciu pełnych etatów → −6 MD; jeśli ktoś ma 0.5,
+  to −5.5). Jeśli wybierzesz sobotę/niedzielę, przy wierszu w tabeli pojawi się
+  plakietka **„Not a working day anyway"** i **żadna z liczb się nie zmieni** —
+  to też jest poprawny wynik, nie błąd.
+- **Dlaczego to ważne:** to jedyny dowód, że kalendarz dni wolnych faktycznie
+  wchodzi do **mnożnika** capacity, a nie tylko zapisuje się do bazy. Do fazy 1
+  liczba dni roboczych była wyłącznie dzielnikiem i się skracała — teraz skaluje
+  wszystko, co zbuduje faza 4 (rekord pomiaru sprintu). Jeśli MD nie drgnie,
+  zamrożone rekordy będą fałszywe na zawsze.
+
+### 2.8 Ten sam dzień wolny zatrzymuje zegar starzenia ticketa
+
+- **Gdzie:** Jira projektu monitorowanego + `/dashboard` → **Anomaly Inbox**.
+- **Co zrobić:** znajdź (albo ustaw) ticket z estymatą **21 SP** w statusie
+  **In Progress**, który stoi bez ruchu od **ośmiu dni roboczych** — czyli
+  właśnie zaczyna być flagowany jako `TICKET_STATUS_AGING`. Potwierdź, że jest
+  w inboxie. Teraz dodaj **dzień wolny w środku tego okna** (jeden z tych ośmiu
+  dni roboczych) i przeładuj dashboard.
+- **Co ma być prawdą:** anomalia `TICKET_STATUS_AGING` dla tego ticketa
+  **znika** z inboxu bez czekania na cykl crona — zapis dnia wolnego sam
+  odpala ponowną detekcję.
+- **Dlaczego to ważne:** ⚠️ **Uwaga na zakres — działa to TYLKO dla kubełka
+  21 SP.** To jedyny budżet w FR-009 wyrażony w **dniach roboczych**
+  (`8_WORKING_DAYS`); pozostałe (1/2 SP = 24h, 3 SP = 48h, 5 SP = 72h,
+  8/13 SP = 5 dni jako godziny) liczą **czas zegarowy**, a święto nie zatrzymuje
+  zegara. Ticket 3-SP **nadal się zestarzeje** przez święto i to jest zgodne
+  z planem (`plan.md` faza 2 §3 wskazuje jedno miejsce:
+  `ticket-status-aging.ts:64`). Gdybyś testował na 3 SP, zobaczysz „brak
+  reakcji" i uznasz to za błąd — a to nie jest błąd.
+
+### 2.9 Usunięcie dnia wolnego przywraca obie liczby
+
+- **Gdzie:** `/settings/absences` → **Team days off** → kosz przy wierszu.
+- **Co zrobić:** usuń dzień dodany w 2.7. Potwierdź w dialogu. Wróć na
+  `/dashboard` → **Availability**.
+- **Co ma być prawdą:** dialog **nazywa konkretną datę i etykietę**, którą
+  kasuje (nie „this item"). Po usunięciu liczba dni roboczych i liczba MD
+  wracają **dokładnie** do wartości zapisanych na początku 2.7, a linia
+  „− N team days off" znika.
+- **Dlaczego to ważne:** kalendarz dni wolnych jest **wspólnym wejściem**
+  capacity i dwóch reguł anomalii. Gdyby usunięcie nie cofało wszystkiego,
+  oznaczałoby to, że któryś z pięciu punktów szwu trzyma własną kopię stanu —
+  a dwa liczniki, które się nie zgadzają, to awaria, którą
+  `context/foundation/lessons.md` już raz zapisało.
+
+---
+
 ## Uwaga do fazy 3 (jeszcze nie teraz)
 
 **Wiersz 1.8 z `manual-test-backlog.md`** (wpisanie estymat SP w projekcie FM,

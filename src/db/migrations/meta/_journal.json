@@ -92,6 +92,13 @@
       "when": 1787871696669,
       "tag": "0012_premium_genesis",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787930368826,
+      "tag": "0013_fresh_ultimates",
+      "breakpoints": true
     }
   ]
 }
