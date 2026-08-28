@@ -1,6 +1,6 @@
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 
-import { sprintMeasurement } from "@/db/schema";
+import { jiraProject, sprintMeasurement } from "@/db/schema";
 import type { getDb } from "@/lib/db";
 
 /**
@@ -84,4 +84,33 @@ export async function listSprintMeasurements(
     capacityAdjustedMd: toMd(row.capacityAdjustedMd),
     capacityOverrideMd: toMd(row.capacityOverrideMd),
   }));
+}
+
+/**
+ * The same series for the owner's CURRENTLY monitored Jira project.
+ *
+ * A convenience over {@link listSprintMeasurements} for callers that hold an
+ * owner but not the Jira-side project id — the dashboard holds the `sprint` row,
+ * whose `jira_project_id` is the INTERNAL row id, while the record is filed
+ * under the Jira-side one (the settings path updates the project row in place on
+ * a switch, so the internal id survives a change of team and the Jira-side one
+ * does not). One monitored project per account (PRD non-goal), hence `limit(1)`.
+ *
+ * No project ⇒ an empty series, which is the same honest "no data" an owner with
+ * no closed sprints gets. Two sequential queries on ONE handle, not a second
+ * fan-out (`lessons.md` #3).
+ */
+export async function listSprintMeasurementsForOwner(
+  db: Db,
+  ownerId: string,
+  limit: number = DEFAULT_LIMIT,
+): Promise<SprintMeasurement[]> {
+  const [project] = await db
+    .select({ jiraProjectId: jiraProject.jiraProjectId })
+    .from(jiraProject)
+    .where(eq(jiraProject.ownerId, ownerId))
+    .limit(1);
+  if (!project) return [];
+
+  return listSprintMeasurements(db, ownerId, project.jiraProjectId, limit);
 }

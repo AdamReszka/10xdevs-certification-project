@@ -1102,6 +1102,53 @@ argument comes from the `getSprintCapacity` result **already** in
 
 **Implementation Note**: Pause for manual confirmation before proceeding.
 
+### Decision taken in Phase 6 — the delivered-SP source (impl-review F9, criterion 6.7)
+
+**ONE SOURCE: the measurement record, with `sprint.completed_sp` as the
+fallback.** `toReliabilityView` resolves the delivered term through the same
+`toDeliveredView` reducer the Availability tab uses, so the two tabs cannot
+render different numbers; the live sync scalar is consulted only when there is
+no record — before the sweep's first run, and for a sprint without dates, where
+an empty panel would hide a figure the sync already holds.
+
+One correction to the review's premise, found in the code while deciding. F9
+argued the two figures used **different definitions** ("a ticket that entered
+Done and later reopened counts in one and not the other"). That was true when
+the review was written against Phase 4, but Phase 3 §5 had already closed it:
+`run-sync.ts:874` computes `completed_sp` through the very same
+`computeDeliveredSp` primitive the sweep uses, so both sides are first-entry-
+into-Done and the definitions no longer differ at all. What *did* still differ
+is narrower and is exactly what FR-023 exists to expose:
+
+- **the lead's correction** — `delivered_sp_corrected` lives only on the record,
+  so Reliability would have kept showing the measured figure while Availability
+  showed the corrected one, with no signal on either;
+- **the freeze** — the record stops moving at `finalized_at` while the scalar
+  does not.
+
+Since FR-024 averages the record, the panel that presents reliability now shows
+the number that feeds the average, and it labels a correction rather than
+absorbing it: the capacity line carries an `Overridden` badge and a corrected
+delivered figure carries a `Corrected` badge with the measured value beside it.
+Labelling two figures (the review's Fix B) was rejected on the finding above —
+labelling a difference that no longer exists in the definition would document a
+distinction the code does not make.
+
+Two smaller decisions taken in the same pass:
+
+1. **The empty state now names its own cause.** The old copy promised "this
+   panel fills in after the next sync" for every null, including the owner with
+   no active sprint at all, whom no sync can help. `emptyReason` splits the two.
+2. **The active sprint is excluded from the history**, even when it carries a
+   finalized record. Jira can leave a sprint `ACTIVE` past its end date
+   (`shouldFinalize` freezes on either signal), and averaging a window still in
+   flight would fold a part-delivered figure into the history it is compared
+   against.
+
+Not done here, and deliberately: `mdToColumn` / `round1` (F8) stay duplicated —
+`round1` is now reused by three view modules, but `mdToColumn` belongs to the
+write path and sharing it would couple the sweep to a rendering helper.
+
 ---
 
 ## Phase 7: Sprint switcher on Sprint Detail
@@ -1397,11 +1444,11 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed)
-- [ ] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields
-- [ ] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9)
-- [ ] 6.3 Type checking passes
-- [ ] 6.4 Linting passes
+- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed)
+- [x] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields
+- [x] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9)
+- [x] 6.3 Type checking passes
+- [x] 6.4 Linting passes
 
 #### Manual
 

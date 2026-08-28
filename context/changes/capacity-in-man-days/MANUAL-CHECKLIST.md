@@ -315,3 +315,60 @@ zapisze zamknięty sprint nawet kilka cykli po fakcie.
 > **„Corrected"** i „(measured N SP)" obok — wymaga sprintu **zamkniętego**,
 > którego dashboard „Today" nie pokazuje. Test wykonuje się na przełączniku
 > sprintów w Sprint Detail, razem z resztą Fazy 7.
+
+---
+
+## Faza 6 — relacja i estymata
+
+### 6.5 Przy mniej niż dwóch zamkniętych sprintach panel nazywa brak, nie liczbę
+
+- **Gdzie:** `/dashboard` → zakładka **Reliability**, karta **Estimated
+  velocity** (pod wykresem), konto `demo@sprintflow.test`.
+- **Co zrobić:** sprawdź najpierw, ile masz zamkniętych rekordów:
+  `select jira_sprint_id, finalized_at from sprint_measurement where owner_id =
+  '<owner FM>' order by start_date;`. Wejdź na zakładkę i przeczytaj kartę.
+- **Co ma być prawdą:** przy **0 lub 1** wierszu z `finalized_at` karta pokazuje
+  **zdanie**, nie liczbę: „SprintFlow has N closed sprint(s) recorded and needs 2
+  before it will estimate. One sprint is a last result, not an average." — gdzie
+  **N zgadza się** z SELECT-em (aktywny sprint się nie liczy, nawet jeśli ma
+  `finalized_at`). **Nigdzie nie ma znaku „≈" ani liczby SP.** Jeśli masz już
+  dwa zamknięte sprinty, sprawdź drugą stronę: pojawia się „≈ X SP", a pod
+  spodem średnia, liczba sprintów i procent — **wszystkie trzy naraz**.
+- **Dlaczego to ważne:** FR-024 pozwala na tę arytmetykę wyłącznie dlatego, że
+  nie jest prognozą — a przestaje nią nie być dokładnie w dwóch momentach:
+  gdy liczba pojawia się bez danych, z których powstała, i gdy pojawia się po
+  jednym sprincie. Jedna miara to nie średnia, tylko ostatni wynik przebrany za
+  trend — to jest ten gadżet, który właściciel odrzucił przy framingu. Jeśli
+  zobaczysz liczbę przy jednym sprincie, `MIN_SAMPLE_SIZE` nie działa i każda
+  późniejsza średnia będzie budowana na tej samej pomyłce.
+
+### 6.6 Reliability pokazuje linię capacity, a procent się nie zmienił
+
+- **Gdzie:** `/dashboard` → zakładka **Reliability**, konto
+  `demo@sprintflow.test`.
+- **Co zrobić:** **zanim** cokolwiek zmienisz, zapisz obecny procent z opisu
+  karty („X of Y committed story points delivered so far (Z%)"). Teraz wejdź na
+  zakładkę **Availability**, ustaw **Capacity override (MD)** na dowolną inną
+  liczbę (np. `50`) i zapisz. Wróć na **Reliability**.
+- **Co ma być prawdą:** pod opisem karty stoi linia **„Capacity 50 of &lt;pełne&gt; MD,
+  over N working days."** z plakietką **„Overridden"**, a liczba **N zgadza się**
+  z tą samą liczbą dni roboczych, którą pokazuje zakładka Availability. Procent
+  **Z% jest identyczny** jak przed override'em, słupki „Committed"/„Delivered"
+  też się nie ruszyły. Wyczyść override („Reset to computed") — plakietka znika,
+  linia capacity zostaje z liczbą policzoną, procent nadal ten sam.
+- **Dlaczego to ważne:** FR-016 jest wprost: capacity **stoi obok** wskaźnika,
+  a nie **w** nim. Pełny zespół, który zobowiązał się na 100 SP i dowiózł 100,
+  i zespół w połowie składu, który zobowiązał się na 50 i dowiózł 50, renderują
+  się identycznie jako 100% — capacity jest jedyną rzeczą, która je odróżnia.
+  Ale gdyby weszła do ilorazu, wskaźnik przestałby mierzyć zobowiązanie i zaczął
+  mierzyć obsadę, a override leada (liczba wpisana ręcznie!) zacząłby ruszać
+  KPI. Override jest tu najostrzejszym testem, bo zmienia capacity nie ruszając
+  ani jednego story pointa.
+
+> ⚠️ **Zmiana źródła liczby „Delivered" (decyzja F9, faza 6).** Słupek
+> „Delivered" bierze teraz wartość z **rekordu pomiaru**, a nie ze skalara
+> synchronizacji — a więc, na sprincie **zamkniętym**, także Twoją korektę,
+> z plakietką „Corrected" i „(measured N SP)" obok. Do fazy 5 dwie zakładki
+> mogły pokazywać dwie różne liczby bez żadnego wyjaśnienia na ekranie. Jeżeli
+> zobaczysz rozjazd między „Delivered so far" na Availability a słupkiem
+> „Delivered" na Reliability — **to jest błąd**, nie różnica definicji.
