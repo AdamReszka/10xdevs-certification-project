@@ -54,7 +54,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
 | S-22 | onboarding-routing        | a newly signed-up user lands in the setup wizard instead of an empty dashboard                 | S-01, S-04         | PRD Access Control ("lands in the setup wizard") | proposed |
-| S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the history yields an estimated velocity for the next sprint | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | proposed |
+| S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | proposed |
 
 ## Streams
 
@@ -515,12 +515,12 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); archived 2026-08-26 |
 | S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |
 | S-17       | working-days-calendar     | Public holidays derived automatically from the team's country          | no                     | ⚠️ **The "no unshipped FR depends on it" note was retired 2026-08-27.** S-23 makes the working-day count *be* the capacity, so a holiday now moves a headline number. S-23 covers the need by letting the lead record team-wide days off per sprint (FR-007); what remains here is deriving those dates from a country the account still does not store. Now downstream of S-23, not parallel to it |
-| S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP; revisit after S-23, which makes the next window's capacity computable. The forward "aim for N SP next sprint" target stays out of MVP — PRD §Non-Goals, no-forecasting guardrail |
+| S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP. ⚠️ **Scoped against S-23 on 2026-08-28 (plan review F1):** S-23 ships FR-024's estimate over the **active** sprint's capacity ratio, which needs no future sprint. What remains here is projecting an UNSTARTED window — its own working-day config and absence coverage, neither of which Jira exposes before the sprint exists. S-23 does not close S-18 |
 | S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
 | S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
 | S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04 done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers |
-| S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record                  | yes                    | Prereqs S-08, S-16 done. **Framed 2026-08-27** — `context/changes/capacity-in-man-days/frame.md`. Not a unit swap: the substance is freezing a per-sprint record at rollover, which `reconcileActiveSprint` already detects (`switched`) and ignores. PRD amended in the same pass: FR-022, FR-023, plus the retention and forecasting non-goals |
+| S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | yes              | Prereqs S-08, S-16 done. **Framed 2026-08-27, planned + reviewed 2026-08-28** — `frame.md`, `plan.md`, `reviews/plan-review.md`. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook `reconcileActiveSprint` already offers (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across the two passes: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals |
 
 ## Open Roadmap Questions
 
@@ -749,12 +749,35 @@ Foundations below assume these are present and do NOT re-scaffold them.
   the migration must NULL them, throwing any team that filled the field into the
   "no capacity set for anyone" empty state. Needs a decision and copy at plan
   time, not a silent migration.
+- **Scope widened at planning (owner, 2026-08-27), deliberately.** *"Informacja
+  z reliability z jednego sprintu jest nieużyteczna, bo nie da się jej z niczym
+  porównać."* A team that always takes on less than it can delivers 100% every
+  sprint — which is a signal that it is under-committing, not that it is
+  exemplary. Only a series shows where a team normally sits and when it fell out
+  of that. So two surfaces join the slice: a place to enter per-sprint
+  information (team days off, the FR-022 capacity override, the FR-023 delivered
+  correction), and a place to look at closed sprints and compare them. The
+  history screen is not an add-on to this change — it is what makes reliability
+  anything other than a gadget.
 - **Two small defects to fix in passing**, both load-bearing for a ratio measured
-  to a few percent: `story_points` is an `integer` column (`schema.ts:600`), so
-  half-points are lost; and `added_after_sprint_start` keys off the ticket's
-  *creation* date (`run-sync.ts:748-749`), so an old backlog item pulled in
-  mid-sprint is counted as committed — which misstates reliability's denominator
-  today, before any of this lands.
+  to a few percent: `added_after_sprint_start` keys off the ticket's *creation*
+  date (`run-sync.ts:748-749`), so an old backlog item pulled in mid-sprint is
+  counted as committed — which misstates reliability's denominator today, before
+  any of this lands; and `extractStoryPoints` (`jira.ts:815-822`) passes any
+  JSON number straight into the `integer` `story_points` column.
+- **⚠️ Correction (2026-08-28) — "half-points are lost" was wrong about the
+  consequence.** Measured against local Postgres with the real `pg` driver:
+  `insert 0.5` raises `invalid input syntax for type integer`, it does not
+  round. That insert sits inside `db.transaction` (`run-sync.ts:735`), so the
+  **whole Jira transaction rolls back** and `sync_state` is stamped `ERROR` —
+  every 15 minutes, forever, with no self-heal path and a cause the lead cannot
+  guess from the dashboard. It is an **availability** defect on input SprintFlow
+  does not control, not a precision one. The column stays `integer`: FR-009's
+  thresholds are Fibonacci (1/2, 3, 5, 8/13, 21), so 0.5 SP does not exist in
+  this product's domain and a `numeric` migration would model a quantity the
+  product does not know. A rounding guard at the parser closes it. Dormant today
+  only because the FM project has every `story_points` NULL (manual-test backlog
+  row 1.8).
 
 ---
 

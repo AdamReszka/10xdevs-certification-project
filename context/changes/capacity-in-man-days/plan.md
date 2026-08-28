@@ -271,7 +271,17 @@ unparseable value, never NaN); `fteToColumn(value: number): string`;
 fraction. There is no "not answered" state any more, so no `nullish()`.
 
 **Contract**: `spCapacity: z.number().int().min(0).max(1000).nullish()` at line 42
-becomes an `fte` field constrained to `FTE_CHOICES`, defaulting to 1.
+becomes an `fte` field constrained to `FTE_CHOICES`.
+
+**Amended during implementation (impl review F3): the field is REQUIRED, not
+`.default(1)`.** A zod default makes the schema's input type diverge from its
+output, and `zodResolver` then refuses to reconcile it with the editor's form
+type. The stricter shape is also the better one: the only consumers are
+`saveRosterAction` and `mergeMembersAction`, both fed by the editor, which always
+sets the field — so a payload that omits `fte` is a stale client, and refusing it
+with "reload the page" beats silently promoting somebody to full time. Carry the
+human message on the type as well as the refinement (impl review F1):
+`saveRosterAction` hands `issues[0].message` straight to a toast.
 
 #### 4. Roster read/write path
 
@@ -304,12 +314,18 @@ rewritten: the fraction now multiplies the sprint's working days.
 
 #### 6. Migration banner
 
-**File**: `src/components/organisms/setup/roster-editor.tsx` +
-`src/app/(app)/settings/team/page.tsx`
+**File**: `src/components/organisms/setup/roster-editor.tsx`
 
 **Intent**: The migration silently makes every part-timer full-time, which
 inflates capacity with no signal. The banner names the count and disappears once
 every member has been confirmed.
+
+**Amended during implementation (impl review F4): `settings/team/page.tsx` needs
+no change.** The banner lives entirely in the shared organism, which both mounts
+already render, so the page passes nothing new. The side effect is that it also
+appears on `/setup/team` — harmless, because a fresh owner has no members and the
+count is zero, and an existing owner revisiting the wizard has the same problem
+the banner is for.
 
 **Contract**: rendered when `members.some(m => m.fteConfirmedAt === null)`;
 copy names the count and says the previous story-point capacity could not be
@@ -354,7 +370,7 @@ demo shows a capacity that is not a round multiple of the headcount.
 #### Automated Verification:
 
 - Migration applies cleanly against local Supabase: `npm run db:migrate`
-- `grep -rn "spCapacity\|sp_capacity" src/ scripts/ --include="*.ts" --include="*.tsx" --include="*.mjs"` returns nothing outside `src/db/migrations/`
+- `grep -rn "spCapacity\|sp_capacity" src/ scripts/ --include="*.ts" --include="*.tsx" --include="*.mjs"` returns no CODE references outside `src/db/migrations/`. Comments that explain why the column is gone are expected and must not be deleted to satisfy the grep — they are what stops someone reintroducing it (impl review F4)
 - Unit tests pass, including new `src/lib/fte.test.ts` covering the string→number boundary: `npm test`
 - A `roster-store` integration test asserts that saving an unchanged roster performs zero updates (the `numeric`-as-string trap): `npm run test:integration`
 - Type checking passes: `npm run typecheck`
@@ -1123,12 +1139,12 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 1.1 Migration applies cleanly against local Supabase
-- [ ] 1.2 No `spCapacity` / `sp_capacity` references outside `src/db/migrations/`
-- [ ] 1.3 Unit tests pass, including `fte.ts` string→number boundary
-- [ ] 1.4 Integration test: unchanged roster save performs zero updates
-- [ ] 1.5 Type checking passes
-- [ ] 1.6 Linting passes
+- [x] 1.1 Migration applies cleanly against local Supabase
+- [x] 1.2 No `spCapacity` / `sp_capacity` references outside `src/db/migrations/`
+- [x] 1.3 Unit tests pass, including `fte.ts` string→number boundary
+- [x] 1.4 Integration test: unchanged roster save performs zero updates
+- [x] 1.5 Type checking passes
+- [x] 1.6 Linting passes
 
 #### Manual
 

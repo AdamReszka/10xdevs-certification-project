@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { FTE_CHOICES } from "@/lib/fte";
+
 /**
  * Shared zod schemas for the S-04 team-roster + cadence step. Centralized like
  * `validations/jira.ts` so the client form and the server-side re-validation
@@ -39,7 +41,27 @@ export const rosterMemberSchema = z.object({
   githubUsername: z.string().max(100).nullish(),
   jiraAccountId: z.string().max(128).nullish(),
   role: z.string().max(100).nullish(),
-  spCapacity: z.number().int().min(0).max(1000).nullish(),
+  /**
+   * Availability as a fraction of full time (FR-006). NOT `.nullish()`, unlike
+   * every other profile field: the column is NOT NULL, so there is no "not
+   * answered" state to express. Constrained to the four offered values so a
+   * crafted payload cannot store a fraction the editor could never produce and
+   * the capacity reducer would silently believe.
+   *
+   * Required rather than `.default(1)`: a default makes the schema's INPUT type
+   * diverge from its output, which `zodResolver` then refuses to reconcile with
+   * the editor's form type. Every producer sets the field, and a payload that
+   * omits it is a stale client — better refused with "reload the page" than
+   * silently promoted to full time.
+   */
+  fte: z
+    // The message is on the TYPE as well as the refinement: `saveRosterAction`
+    // hands `issues[0].message` straight to a toast, so a missing field would
+    // otherwise surface zod's own "expected number, received undefined".
+    .number({ message: "Pick an availability from the list." })
+    .refine((v) => (FTE_CHOICES as readonly number[]).includes(v), {
+      message: "Pick an availability from the list.",
+    }),
   technologyTrack: technologyTrackSchema.nullish(),
   // Round-trips through the editor so an unrelated field edit cannot resurrect a
   // deactivated member (S-15). Omitted ⇒ the stored value is kept.

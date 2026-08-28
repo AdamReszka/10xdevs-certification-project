@@ -231,11 +231,11 @@ describe("team actions — happy path", () => {
           githubUsername: "octocat",
           jiraAccountId: "acc-1",
           role: "Tech Lead",
-          spCapacity: 8,
+          fte: 0.5,
           technologyTrack: "BACKEND",
         },
-        { name: "devtwo", githubUsername: "devtwo" },
-        { name: "Sam Lee", jiraAccountId: "acc-2" },
+        { name: "devtwo", githubUsername: "devtwo", fte: 1 },
+        { name: "Sam Lee", jiraAccountId: "acc-2", fte: 1 },
       ],
     });
     expect(saved.ok).toBe(true);
@@ -246,7 +246,13 @@ describe("team actions — happy path", () => {
     const mapped = rows.find((r) => r.githubUsername === "octocat");
     expect(mapped?.source).toBe("BOTH");
     expect(mapped?.role).toBe("Tech Lead");
-    expect(mapped?.spCapacity).toBe(8);
+    // `numeric` comes back from the driver as a STRING — asserting the raw column
+    // is the point: it is what every read site must convert, and what
+    // `isUnchanged` would otherwise compare against a number forever.
+    expect(mapped?.fte).toBe("0.50");
+    // An inserted row's availability came from the owner, so it is confirmed by
+    // construction and never shows the migration banner.
+    expect(mapped?.fteConfirmedAt).not.toBeNull();
     expect(mapped?.technologyTrack).toBe("BACKEND");
 
     // A re-import against the saved roster proposes nothing and still writes nothing.

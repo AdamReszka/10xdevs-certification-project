@@ -256,21 +256,26 @@ await client.query(
 );
 
 // --- Roster (technology_track enum is UPPERCASE) ----------------------------
+// `fte` is the availability fraction (FR-006/FR-022), NOT a story-point figure.
+// Deliberately mixed rather than five full-timers: capacity is `Σ fte × working
+// days`, so an all-1.00 team renders a round multiple of the headcount and the
+// demo never shows that part-time is modelled at all. Dana at 0.5 and Erik at
+// 0.75 make the number 4.25 × working days, which reads as computed.
 const members = [
-  { name: "Alice Kim",  gh: "alice-kim", role: "Frontend", track: "FRONTEND" },
-  { name: "Bob Rivera", gh: "bob-r",     role: "Backend",  track: "BACKEND" },
-  { name: "Chen Wu",    gh: "chenwu",    role: "Backend",  track: "BACKEND" },
-  { name: "Dana Osei",  gh: "dana-o",    role: "QA",       track: "QA" },
-  { name: "Erik Lund",  gh: "eriklund",  role: "Mobile",   track: "MOBILE" },
+  { name: "Alice Kim",  gh: "alice-kim", role: "Frontend", track: "FRONTEND", fte: "1.00" },
+  { name: "Bob Rivera", gh: "bob-r",     role: "Backend",  track: "BACKEND",  fte: "1.00" },
+  { name: "Chen Wu",    gh: "chenwu",    role: "Backend",  track: "BACKEND",  fte: "1.00" },
+  { name: "Dana Osei",  gh: "dana-o",    role: "QA",       track: "QA",       fte: "0.50" },
+  { name: "Erik Lund",  gh: "eriklund",  role: "Mobile",   track: "MOBILE",   fte: "0.75" },
 ];
 const id = {};
 for (const m of members) {
   const mid = randomUUID();
   id[m.gh] = mid;
   await client.query(
-    `insert into team_member (id, owner_id, name, github_username, jira_account_id, role, sp_capacity, technology_track, source, is_active)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,'BOTH',true)`,
-    [mid, ownerId, m.name, m.gh, `acc-${m.gh}`, m.role, 10, m.track],
+    `insert into team_member (id, owner_id, name, github_username, jira_account_id, role, fte, fte_confirmed_at, technology_track, source, is_active)
+     values ($1,$2,$3,$4,$5,$6,$7,now(),$8,'BOTH',true)`,
+    [mid, ownerId, m.name, m.gh, `acc-${m.gh}`, m.role, m.fte, m.track],
   );
 }
 

@@ -1,7 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { OctagonXIcon, PlusIcon, RefreshCwIcon, Trash2Icon, UsersIcon } from "lucide-react";
+import {
+  OctagonXIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+  TriangleAlertIcon,
+  UsersIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -12,6 +19,7 @@ import {
   type ClientPreviewMember,
   deleteMemberAction,
   getMemberHistoryAction,
+  confirmAvailabilityAction,
   importRosterAction,
   mergeMembersAction,
   saveRosterAction,
@@ -45,6 +53,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FTE_CHOICES, fteLabel } from "@/lib/fte";
 import { rosterSaveSchema, type RosterSaveValues } from "@/lib/validations/roster";
 
 import { decideMerge } from "./roster-merge";
@@ -96,7 +105,7 @@ function toFormMember(m: ClientMember | ClientPreviewMember) {
     githubUsername: m.githubUsername ?? "",
     jiraAccountId: m.jiraAccountId ?? "",
     role: m.role ?? "",
-    spCapacity: m.spCapacity,
+    fte: m.fte,
     technologyTrack: m.technologyTrack,
     // Carried so a save round-trips it instead of falling back to the stored
     // value — the Status column that reads/writes it lands in Phase 4.
@@ -131,6 +140,18 @@ export default function RosterEditor({
   initialMembers: ClientMember[];
 }) {
   const [formError, setFormError] = useState<string | null>(null);
+  /**
+   * How many members still carry the 0012 migration's default availability.
+   *
+   * Seeded from props once, then driven to 0 by the confirm action rather than
+   * re-derived: `router.refresh()` re-renders the server component WITHOUT
+   * remounting this one, so a value read from `initialMembers` on every render
+   * would keep the banner up until a full reload.
+   */
+  const [unconfirmed, setUnconfirmed] = useState(
+    () => initialMembers.filter((m) => m.fteConfirmedAt === null).length,
+  );
+  const [isConfirming, setIsConfirming] = useState(false);
   const [degradedReason, setDegradedReason] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -177,6 +198,29 @@ export default function RosterEditor({
   // Watch identity keys so the origin label re-renders as the user edits/maps.
   // `useWatch` (not `form.watch`) keeps React Compiler able to memoize the row.
   const watched = useWatch({ control: form.control, name: "members" });
+
+  /**
+   * Stamp every unconfirmed availability without changing a value.
+   *
+   * `router.refresh()` afterwards so the server component re-reads the stamps —
+   * otherwise a later navigation back to this page would resurrect the banner
+   * from stale server output even though the rows are confirmed.
+   */
+  async function confirmAvailability() {
+    setIsConfirming(true);
+    try {
+      const result = await confirmAvailabilityAction();
+      if (!result.ok) {
+        toast.error(result.message);
+        return;
+      }
+      setUnconfirmed(0);
+      router.refresh();
+      toast.success("Availability confirmed.");
+    } finally {
+      setIsConfirming(false);
+    }
+  }
 
   async function runImport() {
     setFormError(null);
@@ -489,8 +533,8 @@ export default function RosterEditor({
             <CardTitle>Team roster</CardTitle>
             <CardDescription>
               Imported from your monitored repos and Jira project. Edit names,
-              roles, capacity and technology track — and map a GitHub person to
-              their Jira account by selecting both rows and choosing Merge.
+              roles, availability and technology track — and map a GitHub person
+              to their Jira account by selecting both rows and choosing Merge.
             </CardDescription>
           </div>
           <Button
@@ -508,6 +552,36 @@ export default function RosterEditor({
       </CardHeader>
 
       <CardContent className="flex flex-col gap-4">
+        {unconfirmed > 0 ? (
+          <Alert>
+            <TriangleAlertIcon />
+            <AlertTitle>
+              Check {unconfirmed} {unconfirmed === 1 ? "person's" : "people's"}{" "}
+              availability
+            </AlertTitle>
+            <AlertDescription className="flex flex-col items-start gap-3">
+              <span>
+                SprintFlow used to store a story-point capacity per person. That
+                number could not be converted into an availability fraction — an{" "}
+                <strong>8</strong> is indistinguishable as 8 story points and as 8
+                full-time equivalents — so {unconfirmed === 1 ? "this" : "these"}{" "}
+                {unconfirmed === 1 ? "member was" : "members were"} set to{" "}
+                <strong>full time</strong>. If anyone works part time, their
+                capacity is currently overstated.
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={confirmAvailability}
+                disabled={isConfirming}
+              >
+                {isConfirming ? "Confirming…" : "Confirm availability"}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         {degradedReason ? (
           <Alert>
             <OctagonXIcon />
@@ -532,10 +606,11 @@ export default function RosterEditor({
 
         {fields.length === 0 && !isImporting ? null : (
           <p className="text-sm text-muted-foreground">
-            <strong>Capacity</strong> is this person&apos;s realistic story points for a
-            FULL sprint — part-time included, so a half-time developer&apos;s number is
-            already halved. SprintFlow scales it down further for recorded absences;
-            it never multiplies it by anything.
+            <strong>Availability</strong> is how much of a full-time week this
+            person works. SprintFlow multiplies it by the sprint&apos;s working
+            days to get capacity in man-days, then subtracts recorded absences and
+            team days off — so a half-time developer in a 20-day sprint
+            contributes 10 MD, not 20.
           </p>
         )}
 
@@ -556,7 +631,7 @@ export default function RosterEditor({
                   <TableHead>GitHub</TableHead>
                   <TableHead>Jira account ID</TableHead>
                   <TableHead>Role</TableHead>
-                  <TableHead className="w-20">Capacity</TableHead>
+                  <TableHead className="w-36">Availability</TableHead>
                   <TableHead className="w-32">Track</TableHead>
                   <TableHead className="w-24">Origin</TableHead>
                   <TableHead className="w-28">Status</TableHead>
@@ -607,15 +682,30 @@ export default function RosterEditor({
                       />
                     </TableCell>
                     <TableCell>
-                      <Input
-                        aria-label="Story-point capacity"
-                        type="number"
-                        min={0}
-                        placeholder="—"
-                        {...form.register(`members.${index}.spCapacity`, {
-                          setValueAs: (v) =>
-                            v === "" || v == null ? null : Number(v),
-                        })}
+                      <Controller
+                        control={form.control}
+                        name={`members.${index}.fte`}
+                        render={({ field: f }) => (
+                          // A select, not a number input: `0.5` was unenterable
+                          // through the old free-number field at four layers at
+                          // once, and the question here ("does this person work
+                          // full time") has four answers, not a continuum.
+                          <Select
+                            value={String(f.value ?? 1)}
+                            onValueChange={(v) => f.onChange(Number(v))}
+                          >
+                            <SelectTrigger aria-label="Availability">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {FTE_CHOICES.map((v) => (
+                                <SelectItem key={v} value={String(v)}>
+                                  {fteLabel(v)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
                       />
                     </TableCell>
                     <TableCell>
@@ -733,7 +823,7 @@ export default function RosterEditor({
                 githubUsername: "",
                 jiraAccountId: "",
                 role: "",
-                spCapacity: null,
+                fte: 1,
                 technologyTrack: null,
                 isActive: true,
               })

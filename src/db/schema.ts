@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   integer,
+  numeric,
   bigint,
   jsonb,
   index,
@@ -315,7 +316,33 @@ export const teamMember = pgTable(
     githubUsername: text("github_username"),
     jiraAccountId: text("jira_account_id"),
     role: text("role"),
-    spCapacity: integer("sp_capacity"),
+    /**
+     * Availability as a fraction of full time (FR-006) — 1.00 / 0.75 / 0.50 /
+     * 0.25, entered by a select. It replaced `sp_capacity`, a hand-entered
+     * story-point figure that nothing ever populated: the roster holds stable
+     * FACTS about people, and a per-sprint story-point total is neither stable
+     * nor a fact about a person. Capacity in man-days is derived from this
+     * (`lib/dashboard/capacity.ts`); the lead's per-sprint override lives on
+     * `sprint_measurement`, not here.
+     *
+     * NOT NULL with a default, so there is no "not answered" state to surface
+     * downstream — but the default is also a LIE for any part-timer the 0012
+     * migration silently promoted to full time, which is what
+     * `fteConfirmedAt` exists to make visible.
+     *
+     * `numeric` comes back from `pg` as a STRING. Read it through
+     * `lib/fte.ts:toFte`, write it through `fteToColumn`, never bare.
+     */
+    fte: numeric("fte", { precision: 3, scale: 2 }).notNull().default("1.00"),
+    /**
+     * When the owner last confirmed this member's `fte`, or NULL when the value
+     * is still whatever the 0012 migration defaulted it to. Drives the
+     * `/settings/team` banner: the migration could not convert `sp_capacity`
+     * (an `8` is indistinguishable as 8 SP and as 8 FTE), so every member became
+     * full-time and the team's capacity silently inflated. A stamp per row is
+     * what lets the banner name the count and then disappear for good.
+     */
+    fteConfirmedAt: timestamp("fte_confirmed_at"),
     technologyTrack: technologyTrack("technology_track"),
     source: memberSource("source").notNull(),
     isActive: boolean("is_active").default(true).notNull(),

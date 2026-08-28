@@ -123,43 +123,36 @@ export default function Availability({
 }
 
 /**
- * The capacity number, and the reason it may be understated.
+ * The capacity number in MAN-DAYS, and the working-day count it came from.
  *
- * A null `sp_capacity` is NEVER shown as 0 SP: it means the owner has not
- * answered yet, and a silent zero would hand the lead a number they cannot tell
- * is wrong.
+ * The divisor is on screen (FR-022) because it was not: `sprintWorkingDays` has
+ * been computed since S-08 and rendered nowhere, so a wrong working-day count —
+ * the thing the whole figure scales with — was unfalsifiable by the lead.
+ *
+ * There is no "nobody answered yet" empty state any more. `fte` is NOT NULL, so
+ * every active member contributes something; a member the migration guessed at
+ * is surfaced by the `/settings/team` banner instead, where it can actually be
+ * fixed.
  */
 function CapacitySummary({ capacity }: { capacity: SprintCapacity | null }) {
   if (!capacity) return null;
 
-  const { adjustedSp, nominalSp, membersWithoutCapacity } = capacity;
-  const noneSet = nominalSp === 0 && membersWithoutCapacity > 0;
+  const { adjustedMd, nominalMd, sprintWorkingDays } = capacity;
 
   return (
     <div className="flex flex-col gap-1 rounded-md border p-4">
-      {noneSet ? (
-        <p className="text-sm text-muted-foreground">
-          No story-point capacity set for anyone on the team yet — add it on the
-          Team tab and this becomes a number.
-        </p>
-      ) : (
-        <>
-          <p className="text-2xl font-semibold tabular-nums">
-            {round1(adjustedSp)} SP
-            {adjustedSp < nominalSp ? (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                of {round1(nominalSp)} SP, after absences
-              </span>
-            ) : null}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Capacity for this sprint.
-            {membersWithoutCapacity > 0
-              ? ` ${membersWithoutCapacity} member${membersWithoutCapacity === 1 ? "" : "s"} without capacity set ${membersWithoutCapacity === 1 ? "is" : "are"} not counted.`
-              : null}
-          </p>
-        </>
-      )}
+      <p className="text-2xl font-semibold tabular-nums">
+        {round1(adjustedMd)} MD
+        {adjustedMd < nominalMd ? (
+          <span className="ml-2 text-sm font-normal text-muted-foreground">
+            of {round1(nominalMd)} MD, after absences
+          </span>
+        ) : null}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        Capacity for this sprint, over {sprintWorkingDays}{" "}
+        {sprintWorkingDays === 1 ? "working day" : "working days"}.
+      </p>
     </div>
   );
 }

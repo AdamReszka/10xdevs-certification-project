@@ -28,7 +28,10 @@ export type MergeCandidate = {
   githubUsername?: string | null;
   jiraAccountId?: string | null;
   role?: string | null;
-  spCapacity?: number | null;
+  /** Availability fraction (FR-006). Required, unlike every profile field here:
+   *  the column is NOT NULL, so there is nothing to fall through to and the kept
+   *  row simply wins. */
+  fte: number;
   technologyTrack?: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
   isActive?: boolean;
 };
@@ -84,7 +87,10 @@ export function decideMerge(keep: MergeCandidate, drop: MergeCandidate): MergeDe
     githubUsername: keep.githubUsername || drop.githubUsername || "",
     jiraAccountId: keep.jiraAccountId || drop.jiraAccountId || "",
     role: keep.role || drop.role || "",
-    spCapacity: keep.spCapacity ?? drop.spCapacity ?? null,
+    // No `?? drop.fte ?? null` chain here, unlike the profile fields above: a
+    // NOT NULL column has no absent state to fall through, so "prefer whichever
+    // side answered" is not a question that can arise. The kept row wins.
+    fte: keep.fte,
     technologyTrack: keep.technologyTrack ?? drop.technologyTrack ?? null,
     isActive: keep.isActive ?? drop.isActive,
   };
