@@ -1,6 +1,24 @@
 # Follow-ups from implementation review
 
-## Phase 6 prerequisite — tie-break for overlapping sprint windows (from Phase 4 impl-review F3)
+## ✅ CLOSED 2026-08-28 — tie-break for overlapping sprint windows (from Phase 4 impl-review F3)
+
+**Answered in `plan.md`**, Phase 6 → "The overlapping-sprint tie-break,
+answered". Question 1 measured against local Postgres: zero overlapping windows,
+one `ACTIVE` row per owner on both accounts. Questions 2–3 deliberately left
+unanswered — choosing a tie-break for a condition that does not occur would bake
+in the cheaper rule for a case nobody has seen.
+
+The re-check query lives with the decision in `plan.md`. Run it on the next real
+Jira board this product meets; `src/lib/sprint.ts:29-31` is explicit that
+`importCadence` *can* produce a second `ACTIVE` row, so the answer is about the
+boards monitored today, not about what the code guarantees.
+
+Original text kept below for the record.
+
+---
+
+<details>
+<summary>Phase 6 prerequisite — tie-break for overlapping sprint windows (original)</summary>
 
 **Where it bites**: `src/lib/measurement/sweep.ts`, the delivered-SP
 recomputation. Delivered SP is deliberately not narrowed by
@@ -29,3 +47,5 @@ the lead is shown.
 
 **Not blocking Phase 5.** Phase 5 writes overrides and corrections; it does not
 average anything.
+
+</details>

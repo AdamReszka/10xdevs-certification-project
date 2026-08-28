@@ -65,7 +65,7 @@ export type VelocityEstimate = {
  * "no data" rule applies here first: the caller says how much history it has,
  * never a substituted default conversion.
  */
-export function estimateNextSprintVelocity(
+export function estimateActiveSprintVelocity(
   records: readonly VelocityRecord[],
   /**
    * The ACTIVE sprint's capacity pair. `adjustedMd` is the figure the lead plans
@@ -74,6 +74,31 @@ export function estimateNextSprintVelocity(
    */
   current: { adjustedMd: number; fullMd: number },
 ): VelocityEstimate | null {
+  const normalised = normalisedVelocities(records);
+
+  if (normalised.length < MIN_SAMPLE_SIZE) return null;
+  if (!Number.isFinite(current.fullMd) || current.fullMd <= 0) return null;
+
+  const ratio = current.adjustedMd / current.fullMd;
+  if (!Number.isFinite(ratio)) return null;
+
+  const averageNormalisedSp =
+    normalised.reduce((sum, sp) => sum + sp, 0) / normalised.length;
+
+  return {
+    estimateSp: averageNormalisedSp * ratio,
+    averageNormalisedSp,
+    sampleSize: normalised.length,
+    ratio,
+  };
+}
+
+/**
+ * The records that survive, normalised up to full capacity. The ONE place the
+ * filters live, so the count the panel reports and the count the average divides
+ * by cannot drift apart (impl-review phase-6 F2).
+ */
+function normalisedVelocities(records: readonly VelocityRecord[]): number[] {
   const normalised: number[] = [];
 
   for (const record of records) {
@@ -91,19 +116,68 @@ export function estimateNextSprintVelocity(
     normalised.push(delivered / share);
   }
 
-  if (normalised.length < MIN_SAMPLE_SIZE) return null;
-  if (!Number.isFinite(current.fullMd) || current.fullMd <= 0) return null;
+  return normalised;
+}
 
-  const ratio = current.adjustedMd / current.fullMd;
-  if (!Number.isFinite(ratio)) return null;
+/** Why there is no estimate. `null` when there IS one. */
+export type VelocityEstimateReason =
+  /** Not enough closed sprints yet. One is a last result, not an average. */
+  | "too-few-sprints"
+  /** Records exist, but too few carry the figures the average needs. */
+  | "none-measurable"
+  /** History enough, but the active sprint has no capacity to scale it by. */
+  | "no-capacity";
 
-  const averageNormalisedSp =
-    normalised.reduce((sum, sp) => sum + sp, 0) / normalised.length;
+export type VelocityEstimateView = {
+  estimate: VelocityEstimate | null;
+  /** Set exactly when {@link estimate} is `null`. */
+  reason: VelocityEstimateReason | null;
+  /** Closed records handed in — what the lead would count on a board. */
+  closedSprints: number;
+  /** How many of them carry usable capacity AND delivered figures. */
+  usableSprints: number;
+};
+
+/**
+ * The whole panel's state, reason included — the reducer says WHY, the component
+ * renders it (impl-review phase-6 F2).
+ *
+ * The surface used to re-derive the reason from three loose props, and could
+ * therefore contradict itself: "SprintFlow has 3 closed sprints recorded and
+ * needs 2" was reachable whenever three records existed but none carried a
+ * non-zero capacity, because "has capacity" was read off the ACTIVE sprint alone
+ * and knew nothing about the filters {@link estimateActiveSprintVelocity} applies.
+ * Only the reducer can distinguish the three empty states, so only the reducer
+ * names them.
+ *
+ * `current` is `null` when there is no active sprint at all — no capacity to
+ * take a ratio against, which is the same answer as a zero one.
+ */
+export function toVelocityEstimateView(
+  records: readonly VelocityRecord[],
+  current: { adjustedMd: number; fullMd: number } | null,
+): VelocityEstimateView {
+  const closedSprints = records.length;
+  const usableSprints = normalisedVelocities(records).length;
+
+  // Sample size first: with too little history the capacity question has not
+  // arisen yet, and telling the lead about a missing ratio would name the
+  // second-order problem while the first-order one is unsolved.
+  if (usableSprints < MIN_SAMPLE_SIZE) {
+    return {
+      estimate: null,
+      reason: closedSprints >= MIN_SAMPLE_SIZE ? "none-measurable" : "too-few-sprints",
+      closedSprints,
+      usableSprints,
+    };
+  }
+
+  const estimate = current === null ? null : estimateActiveSprintVelocity(records, current);
 
   return {
-    estimateSp: averageNormalisedSp * ratio,
-    averageNormalisedSp,
-    sampleSize: normalised.length,
-    ratio,
+    estimate,
+    reason: estimate === null ? "no-capacity" : null,
+    closedSprints,
+    usableSprints,
   };
 }

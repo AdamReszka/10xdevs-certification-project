@@ -18,7 +18,7 @@ import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
 import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
-import { estimateNextSprintVelocity } from "@/lib/measurement/estimate";
+import { toVelocityEstimateView } from "@/lib/measurement/estimate";
 import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -114,10 +114,10 @@ export default async function DashboardPage() {
   // flight would fold a part-delivered figure into the history it is compared
   // against.
   const closedSprints = history.filter((r) => r.jiraSprintId !== sprint?.jiraSprintId);
-  const estimate =
-    currentCapacity === null
-      ? null
-      : estimateNextSprintVelocity(closedSprints, currentCapacity);
+  // The reducer resolves the estimate AND why there isn't one — the panel used
+  // to re-derive that from loose props and could contradict itself on screen
+  // (impl-review phase-6 F2).
+  const estimateView = toVelocityEstimateView(closedSprints, currentCapacity);
 
   // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
   // deactivated member still resolves its name; the filter dropdown (below) uses
@@ -192,9 +192,7 @@ export default async function DashboardPage() {
               capacity={availability?.capacity ?? null}
             />
             <VelocityEstimatePanel
-              estimate={estimate}
-              closedSprints={closedSprints.length}
-              hasCapacity={currentCapacity !== null}
+              view={estimateView}
               sprintName={sprint?.name ?? null}
             />
           </div>

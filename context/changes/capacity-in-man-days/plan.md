@@ -1051,12 +1051,39 @@ recorded at `roadmap.md:744` — `average(normalised velocity) × capacity_curre
 amended in Phase 1 §1.
 
 **Contract**:
-`estimateNextSprintVelocity(records, current: { adjustedMd: number; fullMd: number })
+`estimateActiveSprintVelocity(records, current: { adjustedMd: number; fullMd: number })
 → { estimateSp: number; averageNormalisedSp: number; sampleSize: number; ratio: number } | null`.
+(Named `estimateNextSprintVelocity` when this phase shipped; renamed at
+impl-review phase-6 F4, because the F1 decision below is precisely that the ratio
+is NOT a next sprint's, and the call site should not read as the claim four
+comments in the file were written to deny.)
 Normalised velocity of a record is `delivered ÷ (adjusted ÷ full)`, using the
 corrected delivered figure when one exists and the override when one exists.
 Records with `adjustedMd === 0` are skipped (an unmeasurable sprint, not a zero
 one).
+
+**The reducer also says WHY there is no estimate (impl-review phase-6 F2).**
+`toVelocityEstimateView(records, current | null) → { estimate, reason, closedSprints,
+usableSprints }`, where `reason` is `too-few-sprints | none-measurable |
+no-capacity`. The surface originally re-derived that from three loose props and
+could therefore contradict itself — "SprintFlow has 3 closed sprints recorded and
+needs 2" was reachable whenever three records existed but none carried a non-zero
+capacity, because the prop standing for "has capacity" was read off the ACTIVE
+sprint and knew nothing about the filters the average applies to the records.
+Only the reducer can tell the three empty states apart, so only the reducer names
+them, and each empty state is asserted in `estimate.test.ts`.
+
+**The average is a rolling window of at most 12 sprints (impl-review phase-6
+F3).** `listSprintMeasurements`' `DEFAULT_LIMIT` is 12 and Phase 6 is the series'
+first consumer, so this is where the cap starts meaning something. It is a
+deliberate choice, not an accident of the reader's default: FR-023 retains the
+record for the team's whole lifetime so that an average can *exist*, but a
+lifetime average would keep weighting sprints run by a team that no longer exists
+— the roster has no time dimension, so a two-year-old velocity describes people
+who may all have left. Twelve is roughly two quarters of fortnightly sprints:
+long enough not to swing on one bad sprint, short enough to describe the current
+team. Nothing is hidden by it — the panel renders `sampleSize`, so the lead can
+always see how many sprints the average actually covers.
 
 **Minimum sample size is two (plan review F8).** Returns `null` whenever fewer
 than `MIN_SAMPLE_SIZE = 2` finalized records survive the filters — FR-023's
@@ -1090,7 +1117,7 @@ argument comes from the `getSprintCapacity` result **already** in
 
 #### Automated Verification:
 
-- Unit tests for `estimateNextSprintVelocity`: the FR-024 worked example (200 MD full, 180 MD adjusted on the active sprint, 100 SP average → 90 SP); empty history returns `null`; **one** finalized record also returns `null` and two returns a number (the F8 boundary); a zero-capacity record is skipped, not divided by; a corrected delivered value is preferred over the computed one: `npm test`
+- Unit tests for `estimateActiveSprintVelocity`: the FR-024 worked example (200 MD full, 180 MD adjusted on the active sprint, 100 SP average → 90 SP); empty history returns `null`; **one** finalized record also returns `null` and two returns a number (the F8 boundary); a zero-capacity record is skipped, not divided by; a corrected delivered value is preferred over the computed one: `npm test`
 - Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields (capacity is not in the divisor), and the empty state still triggers only on a NULL scalar: `npm test`
 - The delivered-SP source decision (§1, impl-review F9) is recorded in this plan and reflected in the panel — either one source or two labelled ones: `npm run typecheck`
 - Type checking and linting pass: `npm run typecheck`, `npm run lint`
@@ -1148,6 +1175,41 @@ Two smaller decisions taken in the same pass:
 Not done here, and deliberately: `mdToColumn` / `round1` (F8) stay duplicated —
 `round1` is now reused by three view modules, but `mdToColumn` belongs to the
 write path and sharing it would couple the sweep to a rendering helper.
+
+### The overlapping-sprint tie-break, answered (Phase 4 impl-review F3, phase-6 review F1)
+
+The follow-up filed against Phase 4 gated this phase: FR-024 averages the
+records, so two overlapping sprint windows each counting the same first-DONE
+instants would inflate the estimate the lead is shown, not just one record. The
+gate was crossed unanswered in `f166dc8` and is answered here.
+
+**Question 1 — is the overlap state reachable in practice? Not today, on either
+account.** Measured 2026-08-28 against local Postgres:
+
+```sql
+select a.owner_id, a.jira_sprint_id, b.jira_sprint_id
+from sprint a join sprint b
+  on a.owner_id = b.owner_id and a.id < b.id
+ and a.start_date <= b.end_date and b.start_date <= a.end_date;
+-- 0 rows
+
+select owner_id, count(*) from sprint where state = 'ACTIVE' group by owner_id;
+-- one ACTIVE row per owner, both accounts
+```
+
+**Questions 2 and 3 are therefore not answered, and deliberately.** Picking a
+tie-break now would mean choosing between "nearest `startDate`" and "the sprint
+the ticket was stamped to at its first DONE" — and the second needs the stamp's
+own history, which the schema does not keep. Choosing under a condition that
+does not occur would bake in the cheaper rule for a case nobody has seen.
+
+**What holds the answer honest.** This is evidence about the boards SprintFlow
+monitors today, not a proof `importCadence` cannot produce a second ACTIVE row —
+`src/lib/sprint.ts:29-31` says plainly that it can. The query above is the
+re-check, and it belongs on the next real Jira board this product meets. Should
+it ever return a row, the tie-break lands in `sweep.ts` and must **not** narrow
+by `jira_ticket.sprint_id`: that is what lets a re-stamped carried-over ticket
+count in the sprint that finished it, and integration test 4.10 asserts it.
 
 ---
 
@@ -1444,7 +1506,7 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed) — f166dc8
+- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed) — f166dc8 (symbol renamed to `estimateActiveSprintVelocity`, impl-review phase-6 F4)
 - [x] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields — f166dc8
 - [x] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9) — f166dc8
 - [x] 6.3 Type checking passes — f166dc8
