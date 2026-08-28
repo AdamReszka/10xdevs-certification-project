@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 import {
   jiraProject,
@@ -201,10 +201,23 @@ export async function sweepSprintMeasurements({
       .onConflictDoUpdate({
         target: [sprintMeasurement.ownerId, sprintMeasurement.jiraSprintId],
         set: measured,
+        // The finalization guard, enforced by POSTGRES rather than by the map
+        // read above (impl-review F1). `shouldRecompute` is a cheap early-out
+        // that saves four capacity queries; it is not a lock. Two sweeps can
+        // overlap — the 15-minute cron and a user's "Sync now" — and one that
+        // started before the sprint ended would otherwise write its
+        // `finalizedAt: null` over a row the other just froze. This repo has
+        // already settled the same argument once in writing
+        // (`team-day-off-store.ts`): an insert that has to ask "is it already
+        // there?" first races, and a constraint the database evaluates cannot.
+        setWhere: isNull(sprintMeasurement.finalizedAt),
       });
 
     upserted += 1;
     if (finalizeNow) finalized += 1;
+    // Both counters are best-effort telemetry, not a guarantee: `setWhere` can
+    // refuse a write this loop decided to make. Over-reporting by one in a race
+    // is the honest cost of not adding a round trip to count it exactly.
   }
 
   return { upserted, finalized };

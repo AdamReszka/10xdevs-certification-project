@@ -690,6 +690,31 @@ values rather than replacing them (FR-022, FR-023).
 both columns are NOT NULL (`lessons.md` #1). Index
 `(ownerId, jiraProjectId, startDate)` for the series read.
 
+**Which project id (impl-review F4).** `jiraProjectId` stores the **Jira-side**
+id (`jira_project.jira_project_id`, e.g. `"10000"`), NOT the internal
+`jira_project.id`. The plan said only "plain text with no foreign key" and left
+the choice open; it is not free. `connection-service.ts:394-404` UPDATES the
+project row **in place** on a switch, so the internal id is stable across a
+switch while the team it names is not — keying on it would file two different
+teams' sprints under one identity and average them into a figure describing
+nobody. The Jira-side id also makes switch-away-and-back find its own history
+again, which is what manual row 4.9 checks.
+
+**What `capacityFullMd` means, and the question deferred to Phase 6
+(impl-review F2).** It is the reducer's `nominalMd` — `Σ fte × sprintWorkingDays`
+— and `sprintWorkingDays` is **already net of team-wide days off**. So a public
+holiday reduces BOTH capacity columns, and only absences separate them. That is
+FR-022's reading ("reduced by recorded absences and by team-wide days off
+alike"); FR-023's wording ("its full capacity, its capacity after absences and
+team-wide days off") reads as if `full` should precede both. The consequence is
+not local: **FR-024 normalises past velocity against `capacityFullMd`**, so under
+this mapping a holiday-shortened sprint is never normalised back up and enters
+the average as though the team had had the whole calendar. Deliberately left as
+shipped — the reducer already returns `teamDaysOff`, so the other reading is a
+one-line derivation whenever it is wanted — and **settled in Phase 6**, where the
+normalisation is actually written and the choice becomes observable. Records
+frozen before then carry this reading and cannot be recomputed.
+
 #### 2. Capacity for an arbitrary sprint
 
 **File**: `src/lib/dashboard/capacity.ts`
@@ -744,6 +769,20 @@ than the arithmetic:
   by `jira_ticket.sprint_id` — that is what makes it survive the re-stamp. Under
   one monitored Jira project a ticket whose first DONE falls in this sprint's
   window belongs to this sprint, so the window alone is a sufficient predicate.
+
+  **The assumption that predicate rests on, stated (impl-review F3): sprint
+  windows do not overlap.** They can. `src/lib/sprint.ts` documents — in a
+  comment added at S-16 impl-review — that an owner can hold more than one
+  ACTIVE sprint row, because `importCadence` conflicts on `jiraSprintId` and
+  therefore INSERTS rather than updates; and Jira Software permits parallel
+  sprints on one board. Two overlapping measurement records would each count the
+  same first-DONE instants, and FR-024 averages over those records, so the
+  inflation compounds into the estimate rather than staying local. Narrowing by
+  `sprint_id` is NOT the fix — it would undo exactly the re-stamp survival this
+  bullet exists for. The tie-break (nearest start? the sprint the ticket was
+  stamped to at its first-DONE instant?) is a **Phase 6 prerequisite**, recorded
+  in `follow-ups/review-fixes.md`; until it is chosen, the series is correct only
+  for teams running one sprint at a time.
 
 Copying `sprint.completed_sp` instead would reintroduce the loss the sweep exists
 to prevent: `run-sync.ts:817-831` writes the two scalars only for `chosenSprint`,
@@ -1238,14 +1277,14 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [x] 4.1 Integration test: sweep writes one record; re-running changes nothing
-- [x] 4.2 Integration test: a sweep three cycles late still records the closed sprint
-- [x] 4.3 Integration test: project deletion cascades `sprint` rows, leaves measurements intact
-- [x] 4.4 Integration test: finalized record's computed columns do not move
-- [x] 4.5 Unit tests for `shouldFinalize` / `shouldRecompute`
-- [x] 4.6 Type checking passes
-- [x] 4.7 Linting passes
-- [x] 4.10 Integration test: a re-stamped carried-over ticket still counts in the closed sprint's `delivered_sp`
+- [x] 4.1 Integration test: sweep writes one record; re-running changes nothing — c3f882c
+- [x] 4.2 Integration test: a sweep three cycles late still records the closed sprint — c3f882c
+- [x] 4.3 Integration test: project deletion cascades `sprint` rows, leaves measurements intact — c3f882c
+- [x] 4.4 Integration test: finalized record's computed columns do not move — c3f882c
+- [x] 4.5 Unit tests for `shouldFinalize` / `shouldRecompute` — c3f882c
+- [x] 4.6 Type checking passes — c3f882c
+- [x] 4.7 Linting passes — c3f882c
+- [x] 4.10 Integration test: a re-stamped carried-over ticket still counts in the closed sprint's `delivered_sp` — c3f882c
 
 #### Manual
 
