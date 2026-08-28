@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-26
+updated: 2026-08-28
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -706,8 +706,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** capacity-in-man-days
 - **PRD refs:** FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024
 - **Prerequisites:** S-08 (absences), S-16 (rollover detection)
-- **Status:** proposed — framed 2026-08-27,
-  `context/changes/capacity-in-man-days/frame.md`
+- **Status:** done
 
 - **Why this exists.** The owner's framing was "capacity is in the wrong unit".
   Five parallel investigations plus one unbiased pressure test found the unit is
@@ -815,3 +814,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-11: system sends a daily-recap email at the user-configured time (default 15:00 local) containing the day's detected anomalies, an activity summary, sprint progress, and a one-line suggested action per anomaly; each sent email is stored for S-12's recap history view.** — Archived 2026-08-26 → `context/archive/2026-08-26-daily-recap-email/`. Lesson: test the no-configuration path through the real resolver — fully-injected tests bypass the code that runs first in production.
 - **S-10: user can open Dashboard "Sprint Detail" and see: (1) a workflow aging report — tickets sorted by time-since-last-movement with cumulative time-in-each-status shown inline; (2) Team Activity Matrix — Developer × Day with commit, line, PR, and review counts; (3) per-technology sub-burndowns (SP burndown filtered by frontend / backend / mobile / QA track).** — Archived 2026-08-26 → `context/archive/2026-08-21-dashboard-sprint-detail/`. Lesson: null is not zero — an unmeasured value rendered as 0 reads as a real measurement.
 - **S-15: the owner can review, edit, merge and remove team members after first run, from a **Settings tab** — without re-entering the setup wizard. Re-import reconciles against the existing roster instead of only appending.** — Archived 2026-08-26 → `context/archive/2026-08-23-team-management-surface/`. Lesson: delete-then-insert is only safe for tables with no hand-entered children. NOTE: no impl-review on disk; PR #49 was reviewed on GitHub.
+- **S-23: the lead sees the team's capacity in man-days next to the sprint's delivered story points, and the relation between them — so 100% reliability at full strength stops looking identical to 100% at half strength. Each closed sprint leaves a durable measurement record, and past sprints are normalised to full capacity before they are averaged.** — Archived 2026-08-28 → `context/archive/2026-08-27-capacity-in-man-days/`. Lesson: —.
