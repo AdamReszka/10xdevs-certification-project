@@ -664,7 +664,11 @@ sprint was, written by an idempotent sweep that runs in every sync cycle.
 
 #### 1. Schema
 
-**File**: `src/db/schema.ts`, `src/db/migrations/0015_*.sql`
+**File**: `src/db/schema.ts`, `src/db/migrations/0016_*.sql`
+
+> **Renumbered at impl-review (2026-08-28).** This was `0015_*.sql`. `0015` is
+> now taken by `0015_reset_jira_delta_cursor.sql`, the data-only migration that
+> closes impl-review F1 — see the note at the end of this phase.
 
 **Intent**: A durable record that survives what `sprint` does not: the "current
 + 2 sprints" retention bound and the cascade delete a Jira-project switch fires.
@@ -724,7 +728,10 @@ than the arithmetic:
 - `capacityFullMd` / `capacityAdjustedMd` / `workingDays` —
   `getSprintCapacityFor(db, ownerId, sprintRow)` (§2 above).
 - `committedSp` — **copied** from `sprint.committed_sp`, which Phase 3 §4 froze
-  at the first cycle that saw the sprint. It must NOT be recomputed:
+  at the first FULL-pull cycle that saw the sprint. **A row whose
+  `committed_frozen_at` is still NULL has not been frozen and its `committed_sp`
+  is still moving** — see the impl-review note at the end of this phase before
+  writing `finalizedAt`. It must NOT be recomputed:
   `jira_ticket` is unique on `(owner_id, jira_key)` and `run-sync` overwrites
   `sprint_id` on conflict (`schema.ts:614`, `run-sync.ts:768`), so a carried-over
   ticket has been re-stamped into the *next* sprint and a
@@ -792,6 +799,28 @@ only for the history series; the active sprint's row is read separately.
 **Implementation Note**: Pause for manual confirmation before proceeding. This
 is the last phase of the write path — after it, history accumulates whether or
 not phases 5–7 ship.
+
+### Carried in from the Phase 2/3 impl-review (2026-08-28)
+
+Read `reviews/impl-review-phase-2-3.md` F1 before starting this phase. Two of
+its consequences land directly here:
+
+1. **Migration numbering.** `0015` is taken — `0015_reset_jira_delta_cursor.sql`,
+   data-only, no schema change. The `sprint_measurement` table is `0016`.
+2. **An unfrozen sprint is not measurable, and the sweep must say so.** The
+   commitment freeze now waits for a FULL Jira pull, because `committed_sp` sums
+   the whole ticket table while `added_after_sprint_start` is rewritten only for
+   the issues a cycle actually pulled; freezing on a delta cycle would bake a
+   mixture of two rules in permanently. The consequence for this phase: a
+   `sprint` row can legitimately sit with `committed_frozen_at IS NULL` for a
+   while — normally until the next sprint switch forces a full pull. Stamping
+   `finalizedAt` on such a row would freeze a commitment that was still moving,
+   and `deliveredSp` would then be normalised against a denominator nobody ever
+   committed to. **`shouldFinalize` must therefore require
+   `committed_frozen_at IS NOT NULL` in addition to CLOSED / past-`endDate`**,
+   and a sprint that closed without ever being frozen is FR-023's honest "no
+   data" case rather than a record with a plausible-looking number in it. Cover
+   it in criterion 4.5's `shouldFinalize` unit tests.
 
 ---
 
