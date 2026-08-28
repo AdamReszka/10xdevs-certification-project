@@ -16,6 +16,7 @@ import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
 import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
+import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
 import { listRoster } from "@/lib/roster";
@@ -55,19 +56,34 @@ export default async function DashboardPage() {
   // ONE Promise.all on the SAME `db` handle — no second pool, no second fan-out
   // (lessons.md #3). The two S-10 reads and S-08's availability read join the
   // original three.
-  const [rows, syncStateRaw, roster, burndown, yesterdayGrid, availability] =
-    await Promise.all([
-      sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
-      getSyncState(db, ownerId),
-      listRoster(db, ownerId),
-      sprint
-        ? getBurndownSeries(db, ownerId, sprint.id, now)
-        : Promise.resolve(EMPTY_BURNDOWN),
-      // The zone is already resolved above — pass it rather than re-reading it.
-      getActivityRollup(db, ownerId, yesterdayRange, timeZone),
-      // S-08: who is away, plus the capacity number absences reduce.
-      getSprintCapacity(db, ownerId),
-    ]);
+  const [
+    rows,
+    syncStateRaw,
+    roster,
+    burndown,
+    yesterdayGrid,
+    availability,
+    measurement,
+  ] = await Promise.all([
+    sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
+    getSyncState(db, ownerId),
+    listRoster(db, ownerId),
+    sprint
+      ? getBurndownSeries(db, ownerId, sprint.id, now)
+      : Promise.resolve(EMPTY_BURNDOWN),
+    // The zone is already resolved above — pass it rather than re-reading it.
+    getActivityRollup(db, ownerId, yesterdayRange, timeZone),
+    // S-08: who is away, plus the capacity number absences reduce.
+    getSprintCapacity(db, ownerId),
+    // S-23 Phase 5: the lead's own override / correction for this sprint. Joined
+    // to the SAME fan-out on the SAME handle (lessons.md #3); `getSprintMeasurement`
+    // rather than `getActiveSprintMeasurement` because the active sprint is
+    // already resolved above and re-resolving it would be a second query for an
+    // answer we hold.
+    sprint
+      ? getSprintMeasurement(db, ownerId, sprint.jiraSprintId)
+      : Promise.resolve(null),
+  ]);
 
   // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
   // deactivated member still resolves its name; the filter dropdown (below) uses
@@ -146,6 +162,17 @@ export default async function DashboardPage() {
             sprintEnd={availability?.sprintEnd.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
+            // A null record is ordinary, not an error: the sweep has simply not
+            // run since this sprint appeared. The override form creates one.
+            adjustments={
+              measurement
+                ? {
+                    capacityOverrideMd: measurement.capacityOverrideMd,
+                    deliveredSp: measurement.deliveredSp,
+                    deliveredSpCorrected: measurement.deliveredSpCorrected,
+                  }
+                : null
+            }
           />
         }
       />

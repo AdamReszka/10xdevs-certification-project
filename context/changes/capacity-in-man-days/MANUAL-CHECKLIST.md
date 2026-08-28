@@ -243,3 +243,50 @@ zapisze zamknięty sprint nawet kilka cykli po fakcie.
   projektu, choć zespół, który opisuje, już nie. Gdyby rekord był kluczowany po
   tym id, po przełączeniu system uśredniłby dwa różne zespoły w jedną liczbę,
   która nie opisuje nikogo — a to gorzej niż uczciwe „brak danych".
+
+---
+
+## Faza 5 — ręczna korekta leada
+
+### 5.7 Override pokazuje plakietkę i wartość policzoną pod spodem
+
+- **Gdzie:** `/dashboard` → zakładka **Availability**, konto
+  `demo@sprintflow.test` (musi mieć aktywny sprint z datami).
+- **Co zrobić:** zapisz sobie liczbę MD z nagłówka (to wartość **policzona**).
+  Zjedź do sekcji **„Adjust this sprint by hand"**, w polu **Capacity override
+  (MD)** wpisz liczbę wyraźnie inną od policzonej (np. `90`), kliknij **Save**.
+  Przeładuj stronę (F5). Wejdź na `/dashboard` → inna zakładka → wróć na
+  **Availability**.
+- **Co ma być prawdą:** nagłówek pokazuje **90 MD** z plakietką **„Overridden"**
+  obok, a pod spodem linia „Computed from the roster: **<policzona>** MD".
+  Zniknął dopisek „of N MD, after absences" (override zastępuje CAŁĄ liczbę, nie
+  tylko jej część po absencjach). Po przeładowaniu **obie** liczby są nadal na
+  ekranie, a w polu input stoi `90`. Pojawił się przycisk **„Reset to
+  computed"**.
+- **Dlaczego to ważne:** FR-022 czyni override **oznaczonym wyjątkiem** — ta
+  liczba wchodzi do normalizacji w FR-024, więc jeśli wyglądałaby jak pomiar,
+  nieuważny wpis skrzywiłby każdą późniejszą średnią i nikt by nie wiedział
+  dlaczego. Przeładowanie jest właściwym sprawdzianem, bo kolumna to
+  `numeric(8,2)` — sterownik oddaje ją jako **string** `'90.00'`, a nie liczbę.
+  Test sprawdza też, że rekord pomiaru **powstał** (sweep mógł jeszcze nie
+  przebiec — zapis musi go założyć, nie zgubić).
+
+### 5.8 Wyczyszczenie override wraca do liczby policzonej
+
+- **Gdzie:** to samo miejsce, zaraz po 5.7.
+- **Co zrobić:** kliknij **„Reset to computed"**. Przeładuj stronę. Następnie
+  wpisz w **Delivered story points** liczbę inną od zmierzonej i zapisz;
+  przeładuj; potem wyczyść ją (puste pole → **Save**, albo „Reset to computed").
+- **Co ma być prawdą:** po resecie nagłówek wraca **dokładnie** do liczby
+  policzonej z 5.7, plakietka „Overridden" znika, linia „Computed from the
+  roster" znika, przycisk „Reset to computed" znika. Przy korekcie SP linia
+  „Delivered so far" pokazuje **twoją** liczbę + plakietkę **„Corrected"** oraz
+  „(measured N SP)" z liczbą zmierzoną — obie naraz. Po wyczyszczeniu zostaje
+  sama liczba zmierzona, bez plakietki.
+- **Dlaczego to ważne:** puste pole musi dojechać do bazy jako **NULL**, nie
+  jako `0` — `0` to legalne capacity (cały zespół na urlopie), więc gdyby te dwa
+  stany się skleiły, nie byłoby **żadnej** drogi powrotu do wartości policzonej,
+  a sprint zostałby na zawsze oznaczony jako ręcznie poprawiony. Druga połowa
+  (SP) sprawdza sedno FR-023: korekta ma być widoczna **jako korekta**, obok
+  pomiaru, a nie zamiast niego — inaczej za trzy sprinty nikt nie odróżni tego,
+  co zmierzone, od tego, co wpisane.

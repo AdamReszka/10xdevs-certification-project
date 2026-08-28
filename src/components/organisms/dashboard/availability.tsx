@@ -4,12 +4,19 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { formatDayHeader } from "@/components/organisms/dashboard/activity-matrix-view";
+import CapacityAdjustments from "@/components/organisms/dashboard/capacity-adjustments";
+import {
+  round1,
+  toCapacityHeadline,
+  toDeliveredView,
+} from "@/components/organisms/dashboard/capacity-adjustments-view";
 import {
   type AvailabilityGrid,
   type AvailabilityMember,
   buildAvailabilityGrid,
   nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,6 +40,19 @@ export type SerializedAbsence = {
 };
 
 /**
+ * The sprint-measurement fields this tab reads (S-23 Phase 5, FR-022/FR-023).
+ *
+ * A hand-picked slice of `SprintMeasurement` rather than the record itself: the
+ * full row carries `Date`s, which the house convention does not send across the
+ * client boundary, and three of its columns are the sweep's business alone.
+ */
+export type SprintAdjustments = {
+  capacityOverrideMd: number | null;
+  deliveredSp: number | null;
+  deliveredSpCorrected: number | null;
+};
+
+/**
  * Availability — the fifth tab on Dashboard "Today" (S-08, FR-010/FR-016).
  *
  * A tab rather than an always-on card, because FR-016 is explicit that the
@@ -52,6 +72,7 @@ export default function Availability({
   sprintEnd,
   timeZone,
   capacity,
+  adjustments,
 }: {
   members: AvailabilityMember[];
   absences: SerializedAbsence[];
@@ -59,6 +80,12 @@ export default function Availability({
   sprintEnd: string | null;
   timeZone: string | null;
   capacity: SprintCapacity | null;
+  /**
+   * The lead's manual entries on this sprint's measurement record (S-23 Phase 5).
+   * `null` when the sweep has not written a record yet — an ordinary state, not
+   * an error, and one the override form itself can resolve by creating one.
+   */
+  adjustments: SprintAdjustments | null;
 }) {
   const windows = useMemo(() => {
     if (!sprintStart || !sprintEnd) return null;
@@ -112,7 +139,7 @@ export default function Availability({
           </p>
         ) : (
           <>
-            <CapacitySummary capacity={capacity} />
+            <CapacitySummary capacity={capacity} adjustments={adjustments} />
             <AvailabilitySection title="This sprint" grid={windows.current} />
             <AvailabilitySection title="Next window" grid={windows.next} />
           </>
@@ -140,31 +167,77 @@ export default function Availability({
  * is surfaced by the `/settings/team` banner instead, where it can actually be
  * fixed.
  */
-function CapacitySummary({ capacity }: { capacity: SprintCapacity | null }) {
+function CapacitySummary({
+  capacity,
+  adjustments,
+}: {
+  capacity: SprintCapacity | null;
+  adjustments: SprintAdjustments | null;
+}) {
   if (!capacity) return null;
 
   const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff } = capacity;
+  const headline = toCapacityHeadline({
+    adjustedMd,
+    nominalMd,
+    overrideMd: adjustments?.capacityOverrideMd ?? null,
+  });
+  const delivered = toDeliveredView({
+    deliveredSp: adjustments?.deliveredSp ?? null,
+    correctedSp: adjustments?.deliveredSpCorrected ?? null,
+  });
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border p-4">
-      <p className="text-2xl font-semibold tabular-nums">
-        {round1(adjustedMd)} MD
-        {adjustedMd < nominalMd ? (
-          <span className="ml-2 text-sm font-normal text-muted-foreground">
-            of {round1(nominalMd)} MD, after absences
-          </span>
-        ) : null}
-      </p>
-      <p className="text-sm text-muted-foreground">
-        Capacity for this sprint, over {sprintWorkingDays}{" "}
-        {sprintWorkingDays === 1 ? "working day" : "working days"}.
-      </p>
-      {teamDaysOff > 0 ? (
-        <p className="text-sm text-muted-foreground">
-          − {teamDaysOff} team {teamDaysOff === 1 ? "day" : "days"} off already
-          subtracted (public holidays, company days off).
+    <div className="flex flex-col gap-4 rounded-md border p-4">
+      <div className="flex flex-col gap-1">
+        <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums">
+          {round1(headline.md)} MD
+          {headline.beforeAbsencesMd !== null ? (
+            <span className="text-sm font-normal text-muted-foreground">
+              of {round1(headline.beforeAbsencesMd)} MD, after absences
+            </span>
+          ) : null}
+          {/* FR-022 makes an override a MARKED exception: the figure feeds
+              FR-024's normalisation, so it must never be mistaken for something
+              the system measured. */}
+          {headline.isOverridden ? <Badge variant="outline">Overridden</Badge> : null}
         </p>
-      ) : null}
+        <p className="text-sm text-muted-foreground">
+          Capacity for this sprint, over {sprintWorkingDays}{" "}
+          {sprintWorkingDays === 1 ? "working day" : "working days"}.
+        </p>
+        {headline.isOverridden ? (
+          <p className="text-sm text-muted-foreground">
+            Computed from the roster: {round1(headline.computedMd)} MD.
+          </p>
+        ) : null}
+        {teamDaysOff > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            − {teamDaysOff} team {teamDaysOff === 1 ? "day" : "days"} off already
+            subtracted (public holidays, company days off).
+          </p>
+        ) : null}
+        {delivered.sp !== null ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Delivered so far: {delivered.sp} SP
+              {delivered.isCorrected && delivered.computedSp !== null
+                ? ` (measured ${delivered.computedSp} SP)`
+                : ""}
+            </span>
+            {delivered.isCorrected ? (
+              <Badge variant="outline">Corrected</Badge>
+            ) : null}
+          </p>
+        ) : null}
+      </div>
+
+      <CapacityAdjustments
+        computedMd={headline.computedMd}
+        overrideMd={adjustments?.capacityOverrideMd ?? null}
+        computedSp={delivered.computedSp}
+        correctedSp={adjustments?.deliveredSpCorrected ?? null}
+      />
     </div>
   );
 }
@@ -246,9 +319,4 @@ function AvailabilitySection({
       )}
     </div>
   );
-}
-
-/** One decimal, and no trailing `.0` — capacity is a planning number, not a measurement. */
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
 }

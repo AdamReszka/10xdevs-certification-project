@@ -1295,13 +1295,13 @@ handle; nothing new opens a pool (`lessons.md` #3).
 
 #### Automated
 
-- [ ] 5.1 Integration test: override leaves the computed capacity untouched; clearing restores it
-- [ ] 5.2 Integration test: a sweep after an override leaves the override untouched
-- [ ] 5.3 Integration test: cross-owner override is rejected
-- [ ] 5.4 Unit tests for the validation schemas
-- [ ] 5.5 Type checking passes
-- [ ] 5.6 Linting passes
-- [ ] 5.9 Integration test: `getActiveSprintMeasurement` converts numerics and returns `null` with no record
+- [x] 5.1 Integration test: override leaves the computed capacity untouched; clearing restores it
+- [x] 5.2 Integration test: a sweep after an override leaves the override untouched
+- [x] 5.3 Integration test: cross-owner override is rejected
+- [x] 5.4 Unit tests for the validation schemas
+- [x] 5.5 Type checking passes
+- [x] 5.6 Linting passes
+- [x] 5.9 Integration test: `getActiveSprintMeasurement` converts numerics and returns `null` with no record
 
 #### Manual
 
