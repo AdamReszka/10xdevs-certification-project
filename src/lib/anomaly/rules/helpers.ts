@@ -77,12 +77,18 @@ const WEEKDAY_BY_INDEX: WeekdayCode[] = [
  *
  * `nonWorkingDays` is the team-wide day-off calendar (S-23, FR-007): the day keys
  * on which the WHOLE team is off. Declared as an empty seam in S-08 and filled in
- * by `team-day-off-store.ts`. Every production caller passes it — a public
- * holiday that is not a working day for capacity but still an ageing day for
- * `TICKET_STATUS_AGING` would be two counters disagreeing, which is the failure
- * `context/foundation/lessons.md` already records once. Deriving these dates
- * automatically from a country is still S-17; this parameter is what that slice
- * will populate.
+ * by `team-day-off-store.ts`. A public holiday that is not a working day for
+ * capacity but still an ageing day for `TICKET_STATUS_AGING` would be two
+ * counters disagreeing, which is the failure `context/foundation/lessons.md`
+ * already records once. Deriving these dates automatically from a country is
+ * still S-17; this parameter is what that slice will populate.
+ *
+ * REQUIRED, not optional (impl-review F6). It was optional, every caller passed
+ * it, and the guarantee therefore rested on a grep rather than on the compiler —
+ * while `computeSprintCapacity` had already made the identical input required
+ * for the identical reason. An omission reads as "no holidays" and is silent,
+ * which is exactly the half-wiring this seam was landed in one phase to prevent.
+ * Pass an empty set to mean "none".
  *
  * Falls back to Mon–Fri when `workingDays` is empty/absent. Day enumeration is
  * capped by `enumerateDayKeys` so a corrupt date cannot spin.
@@ -92,7 +98,7 @@ export function countWorkingDays(
   to: Date,
   workingDays: readonly string[] | null | undefined,
   timeZone: string | null | undefined,
-  nonWorkingDays?: ReadonlySet<DayKey>,
+  nonWorkingDays: ReadonlySet<DayKey>,
 ): number {
   if (to <= from) return 0;
   // Drop the first day: it is the day of `from`, which a half-open range excludes.
@@ -105,7 +111,7 @@ export function countWorkingDaysInclusive(
   to: Date,
   workingDays: readonly string[] | null | undefined,
   timeZone: string | null | undefined,
-  nonWorkingDays?: ReadonlySet<DayKey>,
+  nonWorkingDays: ReadonlySet<DayKey>,
 ): number {
   if (to < from) return 0;
   return countDays(from, to, workingDays, timeZone, nonWorkingDays, 0);

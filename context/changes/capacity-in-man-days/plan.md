@@ -476,6 +476,23 @@ capacity number.
 **Contract**: under the MD figure, "N working days" and, when any fall in the
 sprint, "− M team days off".
 
+#### Delivered beyond the contract (recorded at impl-review, F9)
+
+Two additions this phase shipped that §1–§5 do not name. Both serve §5's intent
+and are kept; they are written down here so a later review reads them as scope,
+not as drift.
+
+- `countWorkingDaysInclusive`'s sibling **`countTeamDaysOffInclusive`**
+  (`helpers.ts`). §5 needs the reduction to display it, and re-deriving it at the
+  view would mean a second walk over the calendar — one that could omit the set
+  and produce the very disagreement between counters this phase exists to
+  prevent. It counts only holidays landing on working weekdays, so a Saturday
+  holiday never renders as "− 1" beside a working-day total that did not move.
+- **`costsNothing`** and its "Not a working day anyway" badge
+  (`team-days-off-view.ts`, `team-days-off-editor.tsx`). A holiday entered on a
+  weekend correctly changes no number; without the badge that correct outcome
+  reads as a broken save.
+
 ### Success Criteria:
 
 #### Automated Verification:
@@ -1185,8 +1202,8 @@ handle; nothing new opens a pool (`lessons.md` #3).
 #### Manual
 
 - [ ] 3.8 Real sync writes `committed_sp` / `completed_sp` matching Jira (needs backlog row 1.8)
-- [x] 3.9 Adding a mid-sprint ticket does not raise the committed figure — b710e5d
-- [x] 3.10 A 0.5 estimate in Jira no longer wedges the sync — b710e5d
+- [ ] 3.9 Adding a mid-sprint ticket does not raise the committed figure
+- [ ] 3.10 A 0.5 estimate in Jira no longer wedges the sync
 
 ### Phase 4: The per-sprint measurement record
 

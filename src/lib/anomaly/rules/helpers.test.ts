@@ -40,6 +40,10 @@ describe("round", () => {
   });
 });
 
+/** No team-wide days off. Named so the argument reads as a choice, not an
+ *  omission — the seam is required everywhere (impl-review F6). */
+const NO_DAYS_OFF: ReadonlySet<string> = new Set();
+
 describe("countWorkingDays", () => {
   // Every assertion now names its zone (S-08). The counter used to bucket in
   // SERVER-LOCAL time while every dashboard day axis bucketed in the team's Jira
@@ -50,26 +54,26 @@ describe("countWorkingDays", () => {
     // 08-04..08-10: Tue,Wed,Thu,Fri, (Sat,Sun skipped), Mon = 5 working days.
     const from = new Date("2026-08-03T12:00:00.000Z"); // Mon
     const to = new Date("2026-08-10T12:00:00.000Z"); // Mon
-    expect(countWorkingDays(from, to, ["MON", "TUE", "WED", "THU", "FRI"], "UTC")).toBe(5);
+    expect(countWorkingDays(from, to, ["MON", "TUE", "WED", "THU", "FRI"], "UTC", NO_DAYS_OFF)).toBe(5);
   });
 
   it("returns 0 when `to` is not after `from`", () => {
     const d = new Date("2026-08-10T12:00:00.000Z");
-    expect(countWorkingDays(d, d, ["MON"], "UTC")).toBe(0);
+    expect(countWorkingDays(d, d, ["MON"], "UTC", NO_DAYS_OFF)).toBe(0);
   });
 
   it("falls back to Mon–Fri when workingDays is empty or null", () => {
     const from = new Date("2026-08-03T12:00:00.000Z");
     const to = new Date("2026-08-10T12:00:00.000Z");
-    expect(countWorkingDays(from, to, [], "UTC")).toBe(5);
-    expect(countWorkingDays(from, to, null, "UTC")).toBe(5);
+    expect(countWorkingDays(from, to, [], "UTC", NO_DAYS_OFF)).toBe(5);
+    expect(countWorkingDays(from, to, null, "UTC", NO_DAYS_OFF)).toBe(5);
   });
 
   it("honors a custom working-day set", () => {
     const from = new Date("2026-08-03T12:00:00.000Z"); // Mon
     const to = new Date("2026-08-10T12:00:00.000Z"); // Mon
     // Only Saturdays: 08-08 → 1.
-    expect(countWorkingDays(from, to, ["SAT"], "UTC")).toBe(1);
+    expect(countWorkingDays(from, to, ["SAT"], "UTC", NO_DAYS_OFF)).toBe(1);
   });
 
   it("buckets in the team's zone, not the server's", () => {
@@ -80,16 +84,16 @@ describe("countWorkingDays", () => {
     const from = new Date("2026-08-15T23:00:00.000Z");
     const to = new Date("2026-08-17T00:00:00.000Z");
 
-    expect(countWorkingDays(from, to, null, "UTC")).toBe(1);
-    expect(countWorkingDays(from, to, null, "America/Los_Angeles")).toBe(0);
+    expect(countWorkingDays(from, to, null, "UTC", NO_DAYS_OFF)).toBe(1);
+    expect(countWorkingDays(from, to, null, "America/Los_Angeles", NO_DAYS_OFF)).toBe(0);
   });
 
   it("degrades an unknown or absent zone to UTC rather than throwing", () => {
     const from = new Date("2026-08-15T23:00:00.000Z");
     const to = new Date("2026-08-17T00:00:00.000Z");
 
-    expect(countWorkingDays(from, to, null, "Not/AZone")).toBe(1);
-    expect(countWorkingDays(from, to, null, null)).toBe(1);
+    expect(countWorkingDays(from, to, null, "Not/AZone", NO_DAYS_OFF)).toBe(1);
+    expect(countWorkingDays(from, to, null, null, NO_DAYS_OFF)).toBe(1);
   });
 
   it("excludes a day listed in nonWorkingDays", () => {
@@ -98,11 +102,11 @@ describe("countWorkingDays", () => {
     const from = new Date("2026-08-17T09:00:00.000Z"); // Mon
     const to = new Date("2026-08-21T09:00:00.000Z"); // Fri
 
-    expect(countWorkingDays(from, to, null, "UTC")).toBe(4);
+    expect(countWorkingDays(from, to, null, "UTC", NO_DAYS_OFF)).toBe(4);
     expect(countWorkingDays(from, to, null, "UTC", new Set(["2026-08-18"]))).toBe(3);
     // …and on the closed-range sibling, which is what capacity and the absence
     // magnitude actually call.
-    expect(countWorkingDaysInclusive(from, to, null, "UTC")).toBe(5);
+    expect(countWorkingDaysInclusive(from, to, null, "UTC", NO_DAYS_OFF)).toBe(5);
     expect(
       countWorkingDaysInclusive(from, to, null, "UTC", new Set(["2026-08-18"])),
     ).toBe(4);
@@ -123,26 +127,26 @@ describe("countWorkingDays boundaries", () => {
   const friday = new Date("2026-08-21T09:00:00.000Z");
 
   it("counts 4 with an exclusive start (what TICKET_STATUS_AGING needs)", () => {
-    expect(countWorkingDays(monday, friday, null, "UTC")).toBe(4);
+    expect(countWorkingDays(monday, friday, null, "UTC", NO_DAYS_OFF)).toBe(4);
   });
 
   it("counts 5 inclusively (what a Mon–Fri absence costs)", () => {
-    expect(countWorkingDaysInclusive(monday, friday, null, "UTC")).toBe(5);
+    expect(countWorkingDaysInclusive(monday, friday, null, "UTC", NO_DAYS_OFF)).toBe(5);
   });
 
   it("counts a single working day inclusively, and none exclusively", () => {
-    expect(countWorkingDaysInclusive(monday, monday, null, "UTC")).toBe(1);
-    expect(countWorkingDays(monday, monday, null, "UTC")).toBe(0);
+    expect(countWorkingDaysInclusive(monday, monday, null, "UTC", NO_DAYS_OFF)).toBe(1);
+    expect(countWorkingDays(monday, monday, null, "UTC", NO_DAYS_OFF)).toBe(0);
   });
 
   it("counts 0 inclusively for a weekend-only window", () => {
     const sat = new Date("2026-08-22T09:00:00.000Z");
     const sun = new Date("2026-08-23T09:00:00.000Z");
-    expect(countWorkingDaysInclusive(sat, sun, null, "UTC")).toBe(0);
+    expect(countWorkingDaysInclusive(sat, sun, null, "UTC", NO_DAYS_OFF)).toBe(0);
   });
 
   it("returns 0 inclusively when `to` precedes `from`", () => {
-    expect(countWorkingDaysInclusive(friday, monday, null, "UTC")).toBe(0);
+    expect(countWorkingDaysInclusive(friday, monday, null, "UTC", NO_DAYS_OFF)).toBe(0);
   });
 });
 
