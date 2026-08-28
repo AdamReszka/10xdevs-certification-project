@@ -12,7 +12,7 @@ import {
   listProjects,
   listProjectStatuses,
   normalizeWorkspaceUrl,
-  resolveStoryPointFieldId,
+  resolveFieldIds,
   MAX_REFINEMENT_TICKETS_PER_CALL,
   fetchRefinementTickets,
   searchSprintIssues,
@@ -701,6 +701,7 @@ describe("searchSprintIssues", () => {
         currentStatusName: "In Progress",
         assigneeJiraAccountId: "acc-1",
         createdAt: new Date("2026-08-02T09:00:00.000+0000"),
+        sprintFieldChanges: [],
         statusHistory: [
           {
             changelogId: "9001",
@@ -831,9 +832,175 @@ describe("searchSprintIssues", () => {
     expect(err).toBeInstanceOf(JiraUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
   });
+
+  /**
+   * S-23 phase 3 §1 — the story-point guard. `jira_ticket.story_points` is an
+   * `integer` and the write happens INSIDE the sync transaction, so an
+   * unrounded `0.5` rolls the whole Jira pull back and stamps `sync_state`
+   * ERROR every 15 minutes with no self-heal path.
+   */
+  describe("story-point guard", () => {
+    async function storyPointsFor(raw: unknown): Promise<number | null> {
+      const { fetchImpl } = seqFetch([
+        jsonResponse({
+          issues: [
+            {
+              id: "1",
+              key: "SF-1",
+              fields: { status: { id: "1", name: "To Do" }, [SP_FIELD]: raw },
+            },
+          ],
+          nextPageToken: null,
+        }),
+      ]);
+      const issues = await searchSprintIssues(
+        BASE,
+        CREDS,
+        { projectKey: "SF", sprintId: 42, storyPointFieldId: SP_FIELD },
+        { fetchImpl },
+      );
+      return issues[0].storyPoints;
+    }
+
+    it("rounds a fractional estimate to the nearest integer", async () => {
+      expect(await storyPointsFor(0.5)).toBe(1);
+      expect(await storyPointsFor(2.4)).toBe(2);
+      expect(await storyPointsFor(3)).toBe(3);
+    });
+
+    it("clamps a negative estimate to zero rather than writing it through", async () => {
+      expect(await storyPointsFor(-2)).toBe(0);
+    });
+
+    it("maps a non-finite estimate to null, never to NaN", async () => {
+      expect(await storyPointsFor(Number.NaN)).toBeNull();
+      expect(await storyPointsFor(Number.POSITIVE_INFINITY)).toBeNull();
+      expect(await storyPointsFor("5")).toBeNull();
+    });
+
+    it("maps an estimate past the int4 column's range to null, not to a number", async () => {
+      // Finite, so the non-finite guard lets it through; `Math.round` keeps it
+      // whole. Written unguarded it reaches an `integer` column INSIDE the sync
+      // transaction and raises `value out of range for type integer`, rolling
+      // the whole Jira pull back — the same wedge `0.5` used to cause.
+      expect(await storyPointsFor(1e10)).toBeNull();
+      expect(await storyPointsFor(2_147_483_648)).toBeNull();
+      // The domain itself is untouched: FR-009's largest bucket still passes.
+      expect(await storyPointsFor(21)).toBe(21);
+    });
+  });
+
+  /**
+   * S-23 phase 3 §2 (plan review F5) — the `Sprint` changelog is matched on the
+   * RESOLVED FIELD ID, because `field` is the site's display label: localised
+   * and renameable. A miss here is silent, and the `createdAt` fallback it
+   * triggers writes a wrong committed figure that the freeze makes permanent.
+   */
+  describe("Sprint-field changelog", () => {
+    const SPRINT_FIELD = "customfield_10020";
+
+    function issueWithSprintChange(item: Record<string, unknown>) {
+      return {
+        id: "1",
+        key: "SF-1",
+        fields: { status: { id: "1", name: "To Do" } },
+        changelog: {
+          histories: [
+            { id: "h1", created: "2026-08-20T10:00:00.000+0000", items: [item] },
+          ],
+        },
+      };
+    }
+
+    async function changesFor(
+      item: Record<string, unknown>,
+      sprintFieldId: string | null,
+    ) {
+      const { fetchImpl } = seqFetch([
+        jsonResponse({ issues: [issueWithSprintChange(item)], nextPageToken: null }),
+      ]);
+      const issues = await searchSprintIssues(
+        BASE,
+        CREDS,
+        { projectKey: "SF", sprintId: 42, storyPointFieldId: null, sprintFieldId },
+        { fetchImpl },
+      );
+      return issues[0].sprintFieldChanges;
+    }
+
+    it("matches by fieldId even when the display name is not the English 'Sprint'", async () => {
+      const changes = await changesFor(
+        { field: "Sprintti", fieldId: SPRINT_FIELD, from: "41", to: "41, 42" },
+        SPRINT_FIELD,
+      );
+
+      expect(changes).toEqual([
+        {
+          changedAt: new Date("2026-08-20T10:00:00.000+0000"),
+          from: "41",
+          to: "41, 42",
+        },
+      ]);
+    });
+
+    it("falls back to the display name when the field id could not be resolved", async () => {
+      const changes = await changesFor({ field: "Sprint", from: null, to: "42" }, null);
+
+      expect(changes).toEqual([
+        { changedAt: new Date("2026-08-20T10:00:00.000+0000"), from: null, to: "42" },
+      ]);
+    });
+
+    it("ignores a same-named item from a different field once the id is known", async () => {
+      const changes = await changesFor(
+        { field: "Sprint", fieldId: "customfield_99999", from: null, to: "42" },
+        SPRINT_FIELD,
+      );
+
+      expect(changes).toEqual([]);
+    });
+
+    it("leaves status parsing untouched — the two parsers read the same changelog", async () => {
+      const { fetchImpl } = seqFetch([
+        jsonResponse({
+          issues: [
+            {
+              id: "1",
+              key: "SF-1",
+              fields: { status: { id: "3", name: "In Progress" } },
+              changelog: {
+                histories: [
+                  {
+                    id: "h1",
+                    created: "2026-08-20T10:00:00.000+0000",
+                    items: [
+                      { field: "status", from: "1", fromString: "To Do", to: "3", toString: "In Progress" },
+                      { field: "Sprint", fieldId: SPRINT_FIELD, from: null, to: "42" },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+          nextPageToken: null,
+        }),
+      ]);
+
+      const issues = await searchSprintIssues(
+        BASE,
+        CREDS,
+        { projectKey: "SF", sprintId: 42, storyPointFieldId: null, sprintFieldId: SPRINT_FIELD },
+        { fetchImpl },
+      );
+
+      expect(issues[0].statusHistory).toHaveLength(1);
+      expect(issues[0].statusHistory[0].toStatusId).toBe("3");
+      expect(issues[0].sprintFieldChanges).toHaveLength(1);
+    });
+  });
 });
 
-describe("resolveStoryPointFieldId", () => {
+describe("resolveFieldIds — the story-point id", () => {
   it("picks the custom field by greenhopper schema", async () => {
     const fetchImpl = onceFetch(
       jsonResponse([
@@ -847,7 +1014,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBe("customfield_10016");
   });
@@ -859,7 +1026,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBe("customfield_20000");
   });
@@ -873,7 +1040,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBeNull();
   });
@@ -882,16 +1049,65 @@ describe("resolveStoryPointFieldId", () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "Unauthorized" }, { status: 401 }));
 
     await expect(
-      resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }),
+      resolveFieldIds(BASE, CREDS, { fetchImpl }),
     ).rejects.toBeInstanceOf(JiraAuthError);
   });
 
   it("throws JiraUnavailableError on 5xx and never leaks the token", async () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
 
-    const err = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }).catch((e) => e);
+    const err = await resolveFieldIds(BASE, CREDS, { fetchImpl }).catch((e) => e);
     expect(err).toBeInstanceOf(JiraUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
+  });
+});
+
+describe("resolveFieldIds — the Sprint field id", () => {
+  const FIELD_LIST = [
+    { id: "summary", name: "Summary", custom: false, schema: { system: "summary" } },
+    {
+      id: "customfield_10016",
+      name: "Story Points",
+      custom: true,
+      schema: { custom: "com.pyxis.greenhopper.jira:jsw-story-points" },
+    },
+    {
+      // Display name deliberately NOT the English "Sprint" — the schema is what
+      // identifies it, which is the whole point of resolving an id.
+      id: "customfield_10020",
+      name: "Sprintti",
+      custom: true,
+      schema: { custom: "com.pyxis.greenhopper.jira:gh-sprint" },
+    },
+  ];
+
+  it("picks the Jira Software sprint field by its greenhopper schema", async () => {
+    const fetchImpl = onceFetch(jsonResponse(FIELD_LIST));
+
+    expect((await resolveFieldIds(BASE, CREDS, { fetchImpl })).sprintFieldId).toBe(
+      "customfield_10020",
+    );
+  });
+
+  it("returns null when the site exposes no sprint field", async () => {
+    const fetchImpl = onceFetch(
+      jsonResponse([{ id: "customfield_1", name: "Sprint", custom: true, schema: {} }]),
+    );
+
+    expect((await resolveFieldIds(BASE, CREDS, { fetchImpl })).sprintFieldId).toBeNull();
+  });
+
+  it("resolves BOTH ids from a single field listing", async () => {
+    const { fetchImpl, calls } = seqFetch([jsonResponse(FIELD_LIST)]);
+
+    const ids = await resolveFieldIds(BASE, CREDS, { fetchImpl });
+
+    expect(ids).toEqual({
+      storyPointFieldId: "customfield_10016",
+      sprintFieldId: "customfield_10020",
+    });
+    // One subrequest, not two — the sync pays for this list once per cycle.
+    expect(calls).toHaveLength(1);
   });
 });
 

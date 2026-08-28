@@ -75,9 +75,20 @@ const WEEKDAY_BY_INDEX: WeekdayCode[] = [
  * implementation, and a zone the caller cannot forget to pass. An unrecognized or
  * absent zone degrades to UTC via `safeZone`, never throws.
  *
- * `nonWorkingDays` is a seam, empty in S-08: the public-holiday / company-day-off
- * calendar is its own roadmap slice, and needs a country signal the app does not
- * store yet.
+ * `nonWorkingDays` is the team-wide day-off calendar (S-23, FR-007): the day keys
+ * on which the WHOLE team is off. Declared as an empty seam in S-08 and filled in
+ * by `team-day-off-store.ts`. A public holiday that is not a working day for
+ * capacity but still an ageing day for `TICKET_STATUS_AGING` would be two
+ * counters disagreeing, which is the failure `context/foundation/lessons.md`
+ * already records once. Deriving these dates automatically from a country is
+ * still S-17; this parameter is what that slice will populate.
+ *
+ * REQUIRED, not optional (impl-review F6). It was optional, every caller passed
+ * it, and the guarantee therefore rested on a grep rather than on the compiler —
+ * while `computeSprintCapacity` had already made the identical input required
+ * for the identical reason. An omission reads as "no holidays" and is silent,
+ * which is exactly the half-wiring this seam was landed in one phase to prevent.
+ * Pass an empty set to mean "none".
  *
  * Falls back to Mon–Fri when `workingDays` is empty/absent. Day enumeration is
  * capped by `enumerateDayKeys` so a corrupt date cannot spin.
@@ -87,7 +98,7 @@ export function countWorkingDays(
   to: Date,
   workingDays: readonly string[] | null | undefined,
   timeZone: string | null | undefined,
-  nonWorkingDays?: ReadonlySet<DayKey>,
+  nonWorkingDays: ReadonlySet<DayKey>,
 ): number {
   if (to <= from) return 0;
   // Drop the first day: it is the day of `from`, which a half-open range excludes.
@@ -100,10 +111,52 @@ export function countWorkingDaysInclusive(
   to: Date,
   workingDays: readonly string[] | null | undefined,
   timeZone: string | null | undefined,
-  nonWorkingDays?: ReadonlySet<DayKey>,
+  nonWorkingDays: ReadonlySet<DayKey>,
 ): number {
   if (to < from) return 0;
   return countDays(from, to, workingDays, timeZone, nonWorkingDays, 0);
+}
+
+/**
+ * How many of a closed range's WORKING days `nonWorkingDays` removes (S-23).
+ *
+ * Not the size of the set, and not the number of its days inside the range: a
+ * holiday landing on a Saturday costs the team nothing, and counting it would
+ * put a "− 1 team day off" on screen next to a working-day total that never
+ * moved. This counts only the days that would otherwise have been worked, which
+ * is exactly the reduction `countWorkingDaysInclusive` applied.
+ *
+ * Exists so the availability panel can SHOW the reduction (FR-022) without
+ * re-deriving the calendar, and without a second call that omits the set — an
+ * omission that would read as the half-wiring this seam exists to prevent.
+ */
+export function countTeamDaysOffInclusive(
+  from: Date,
+  to: Date,
+  workingDays: readonly string[] | null | undefined,
+  timeZone: string | null | undefined,
+  nonWorkingDays: ReadonlySet<DayKey>,
+): number {
+  if (to < from || nonWorkingDays.size === 0) return 0;
+
+  const set = workingDaySet(workingDays);
+  let count = 0;
+  for (const dayKey of enumerateDayKeys(from, to, timeZone)) {
+    if (!nonWorkingDays.has(dayKey)) continue;
+    if (set.has(weekdayOf(dayKey))) count += 1;
+  }
+  return count;
+}
+
+/** The team's working weekdays, defaulting to Mon–Fri when Jira told us nothing. */
+function workingDaySet(
+  workingDays: readonly string[] | null | undefined,
+): Set<string> {
+  return new Set<string>(
+    workingDays && workingDays.length > 0
+      ? workingDays
+      : ["MON", "TUE", "WED", "THU", "FRI"],
+  );
 }
 
 /** Shared iteration. `skipFirst` is what separates the two boundary semantics. */
@@ -115,11 +168,7 @@ function countDays(
   nonWorkingDays: ReadonlySet<DayKey> | undefined,
   skipFirst: 0 | 1,
 ): number {
-  const set = new Set<string>(
-    workingDays && workingDays.length > 0
-      ? workingDays
-      : ["MON", "TUE", "WED", "THU", "FRI"],
-  );
+  const set = workingDaySet(workingDays);
 
   let count = 0;
   for (const dayKey of enumerateDayKeys(from, to, timeZone).slice(skipFirst)) {

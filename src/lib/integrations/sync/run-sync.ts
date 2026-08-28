@@ -34,10 +34,12 @@ import {
   JiraAuthError,
   JiraUnavailableError,
   type JiraClientOpts,
-  resolveStoryPointFieldId,
+  type JiraSprintFieldChange,
+  resolveFieldIds,
   searchSprintIssues,
   validateCredentials,
 } from "@/lib/jira";
+import { computeDeliveredSp, firstDoneAtByTicket } from "@/lib/dashboard/first-done";
 import { TokenCryptoError } from "@/lib/crypto";
 import {
   MissingCredentialError,
@@ -632,7 +634,14 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 
   try {
     // --- All Jira reads complete BEFORE the txn (F1) ----------------------
-    const storyPointFieldId = await resolveStoryPointFieldId(baseUrl, jiraCreds, args.jiraOpts);
+    // ONE `GET /rest/api/3/field` resolves BOTH site-specific ids: story points,
+    // and the Jira Software `Sprint` field whose changelog answers "was this
+    // ticket added after the sprint started?" (see `resolveAddedAfterSprintStart`).
+    const { storyPointFieldId, sprintFieldId } = await resolveFieldIds(
+      baseUrl,
+      jiraCreds,
+      args.jiraOpts,
+    );
     // +1 subrequest per cycle: the owner's IANA zone, re-read every cycle so it
     // self-heals when they change their Jira profile. Its JiraAuthError /
     // JiraUnavailableError throws land in the surrounding catch like any other
@@ -719,6 +728,7 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
         projectKey: project.projectKey,
         sprintId: Number(chosenSprint.jiraSprintId),
         storyPointFieldId,
+        sprintFieldId,
         updatedSince,
       },
       args.jiraOpts,
@@ -731,6 +741,11 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
     const categoryOf = new Map(mappings.map((m) => [m.statusId, m.category]));
     const sprintStart = chosenSprint.startDate;
 
+    /** Issues that carried Sprint changes of which NONE named this sprint — the
+     *  population that fell through to the `createdAt` fallback while holding
+     *  the very evidence that should have answered the question (F3). */
+    let sprintChangesNamingNoSprint = 0;
+
     // --- Pure DB writes inside one short transaction ----------------------
     await db.transaction(async (tx) => {
       // NOTE: `jiraProject.timeZone` is written ABOVE, right after
@@ -742,8 +757,16 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
           if (h.changedAt && (!acc || h.changedAt > acc)) return h.changedAt;
           return acc;
         }, null);
-        const addedAfterSprintStart =
-          issue.createdAt && sprintStart ? issue.createdAt > sprintStart : null;
+        const added = resolveAddedAfterSprintStart({
+          sprintFieldChanges: issue.sprintFieldChanges,
+          createdAt: issue.createdAt,
+          jiraSprintId: chosenSprint.jiraSprintId,
+          sprintStart,
+        });
+        const addedAfterSprintStart = added.addedAfterSprintStart;
+        if (issue.sprintFieldChanges.length > 0 && !added.matchedSprintTransition) {
+          sprintChangesNamingNoSprint += 1;
+        }
 
         const [ticketRow] = await tx
           .insert(jiraTicket)
@@ -805,29 +828,95 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
         }
       }
 
-      // Sprint commitment scalars (S-10). Aggregated from the **table**, never
-      // from `issues`: searchSprintIssues is an incremental delta pull, so
-      // `issues` holds only what changed this cycle. SUM over an empty set is
-      // NULL — coalesce to 0 so "no estimated tickets" reads as 0, not unknown.
-      //
-      // `committedSp` is recomputed every cycle, so it tracks mid-sprint estimate
-      // edits rather than freezing at sprint start. Accepted tradeoff: freezing
-      // would need a first-sync-wins guard plus a story for a first sync that
-      // lands mid-sprint. A NULL `addedAfterSprintStart` counts as committed —
-      // it means "couldn't tell" (rows predating cadence import).
+      // Sprint commitment scalars (S-10, reshaped by S-23). Aggregated from the
+      // **table**, never from `issues`: searchSprintIssues is an incremental
+      // delta pull, so `issues` holds only what changed this cycle. SUM over an
+      // empty set is NULL — coalesce to 0 so "no estimated tickets" reads as 0,
+      // not unknown. A NULL `addedAfterSprintStart` counts as committed — it
+      // means "couldn't tell" (rows predating cadence import).
       const [totals] = await tx
         .select({
           committedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.addedAfterSprintStart} is not true), 0)`,
-          completedSp: sql<number>`coalesce(sum(${jiraTicket.storyPoints}) filter (where ${jiraTicket.currentCategory} = 'DONE'), 0)`,
         })
         .from(jiraTicket)
         .where(and(eq(jiraTicket.ownerId, ownerId), eq(jiraTicket.sprintId, chosenSprint.id)));
 
+      // Delivered SP is NO LONGER "what sits in Done right now" (S-10's rule).
+      // That scalar was rewritten by every cycle — the ones that run after the
+      // sprint closed included — so a sprint's velocity stopped being
+      // recoverable the day after it ended. FR-023 defines it as the SP of
+      // tickets whose FIRST entry into Done fell inside the sprint window; a
+      // first-DONE instant never moves, which is what makes a post-close cycle
+      // idempotent. Both reads are scoped to the owner AND this sprint, so a
+      // carried-over ticket re-stamped forward brings its history with it and is
+      // excluded by the window rather than double-counted.
+      const sprintTickets = await tx
+        .select({ ticketId: jiraTicket.id, storyPoints: jiraTicket.storyPoints })
+        .from(jiraTicket)
+        .where(and(eq(jiraTicket.ownerId, ownerId), eq(jiraTicket.sprintId, chosenSprint.id)));
+
+      const doneTransitions = await tx
+        .select({
+          ticketId: jiraStatusHistory.ticketId,
+          toCategory: jiraStatusHistory.toCategory,
+          changedAt: jiraStatusHistory.changedAt,
+        })
+        .from(jiraStatusHistory)
+        .innerJoin(jiraTicket, eq(jiraStatusHistory.ticketId, jiraTicket.id))
+        .where(
+          and(
+            eq(jiraTicket.ownerId, ownerId),
+            eq(jiraTicket.sprintId, chosenSprint.id),
+            eq(jiraStatusHistory.toCategory, "DONE"),
+          ),
+        );
+
+      const deliveredSp = computeDeliveredSp({
+        tickets: sprintTickets,
+        firstDoneAt: firstDoneAtByTicket(doneTransitions),
+        sprintStart: chosenSprint.startDate,
+        sprintEnd: chosenSprint.endDate,
+        now,
+      });
+
+      // Freeze the commitment at the FIRST cycle that sees this sprint IN FULL,
+      // and stamp WHEN. A commitment that grows with the scope added to it is not
+      // a commitment — it makes reliability look good by construction. Both
+      // halves in ONE statement via `case when`, the idiom `reconcile-sprint.ts`
+      // already uses for cadence: the SET expressions read the OLD row, so the
+      // guard and the stamp cannot disagree. Per-ticket `storyPoints` keeps
+      // refreshing every cycle — estimates change during refinement and the live
+      // burndown should follow.
+      //
+      // WHY THE STAMP WAITS FOR A FULL PULL (impl-review F1). `committedSp` is a
+      // SUM over the WHOLE `jira_ticket` table for this sprint, but
+      // `addedAfterSprintStart` — the predicate that SUM filters on — is only
+      // rewritten for the issues this cycle actually pulled. On a delta cycle the
+      // untouched rows still carry whatever rule wrote them last, so freezing
+      // there would bake a mixture of two rules in permanently: the `case when`
+      // guarantees no later cycle can ever correct it, and FR-023's measurement
+      // record then inherits the wrong denominator for the life of the team. A
+      // full pull is the only cycle that has classified every ticket under one
+      // rule. Delaying the freeze is the same trade the sweep already makes —
+      // late is recoverable, wrong is not — and `committed_frozen_at` is what
+      // makes the delay visible rather than silent.
+      const didFullPull = updatedSince === null;
       await tx
         .update(sprint)
         .set({
-          committedSp: Number(totals?.committedSp ?? 0),
-          completedSp: Number(totals?.completedSp ?? 0),
+          committedSp: sql`case when ${sprint.committedFrozenAt} is null then ${Number(totals?.committedSp ?? 0)} else ${sprint.committedSp} end`,
+          completedSp: deliveredSp,
+          // Left untouched on a delta cycle: not stamping is what keeps the row
+          // unfrozen, and an unfrozen row keeps recomputing above.
+          ...(didFullPull
+            ? {
+                // `sql.param(value, column)` runs the COLUMN's own encoder. A
+                // bare `${now}` lets `pg` serialise the Date with the machine's
+                // local UTC offset into a `timestamp without time zone`,
+                // silently shifting the stamp by the developer's timezone.
+                committedFrozenAt: sql`coalesce(${sprint.committedFrozenAt}, ${sql.param(now, sprint.committedFrozenAt)})`,
+              }
+            : {}),
         })
         .where(and(eq(sprint.ownerId, ownerId), eq(sprint.id, chosenSprint.id)));
     });
@@ -837,6 +926,7 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
       now,
       jiraHistoryCursor: now.toISOString(),
       jiraCursorSprintId: chosenSprint.id,
+      outcome: jiraCycleOutcome(sprintFieldId, sprintChangesNamingNoSprint),
     });
     return { status: "OK" };
   } catch (err) {
@@ -848,6 +938,93 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
     });
     return classified;
   }
+}
+
+/**
+ * The Jira cycle's durable diagnostic, or `null` when there is nothing to say
+ * (impl-review F3/F5).
+ *
+ * `sync_attempt.outcome` rather than a `console` line: on Workers a log is
+ * ephemeral, and `lessons.md` asks specifically that the OPERATOR log
+ * distinguish "the predicate found nothing" from "the predicate is wrong".
+ * Only the two conditions worth acting on are reported — a cycle where the
+ * sprint field could not be resolved at all, and one where issues carried
+ * Sprint changes that named no known sprint. A ticket that simply never moved
+ * sprints is the normal case and says nothing, which is why it is absent here.
+ * Counts and fixed tokens only: no field names, no issue keys, no credentials.
+ */
+function jiraCycleOutcome(
+  sprintFieldId: string | null,
+  sprintChangesNamingNoSprint: number,
+): string | null {
+  const notes: string[] = [];
+  if (sprintFieldId === null) notes.push("sprint_field_unresolved");
+  if (sprintChangesNamingNoSprint > 0) {
+    notes.push(`sprint_changes_naming_no_sprint=${sprintChangesNamingNoSprint}`);
+  }
+  return notes.length > 0 ? notes.join(";") : null;
+}
+
+/** Jira writes the `Sprint` field's changelog `from`/`to` as a COMMA-SEPARATED
+ * list of sprint ids (`"41, 42"`) — an issue can sit in several at once. */
+function namesSprint(value: string | null, jiraSprintId: string): boolean {
+  if (value === null) return false;
+  return value.split(",").some((part) => part.trim() === jiraSprintId);
+}
+
+/**
+ * FR-023's commitment denominator: a ticket was "added after sprint start" when
+ * the `Sprint`-field transition that put it into THIS sprint happened after the
+ * sprint started.
+ *
+ * The rule this replaces was `createdAt > sprintStart`, which calls an old
+ * backlog item dragged in mid-sprint "committed" and so flatters reliability by
+ * construction. Since the committed figure is now FROZEN at first sighting, that
+ * wrong verdict would be baked in permanently — which is what makes fixing it a
+ * precondition of the freeze rather than a nicety.
+ *
+ * Fallback when no `Sprint` transition names this sprint: the ticket was either
+ * in the sprint from the start or created directly into it, and `createdAt`
+ * resolves BOTH readings correctly.
+ */
+function resolveAddedAfterSprintStart({
+  sprintFieldChanges,
+  createdAt,
+  jiraSprintId,
+  sprintStart,
+}: {
+  sprintFieldChanges: readonly JiraSprintFieldChange[];
+  createdAt: Date | null;
+  jiraSprintId: string;
+  sprintStart: Date | null;
+}): { addedAfterSprintStart: boolean | null; matchedSprintTransition: boolean } {
+  if (sprintStart === null) {
+    return { addedAfterSprintStart: null, matchedSprintTransition: false };
+  }
+
+  // LATEST such transition, not the first: a ticket moved out of this sprint and
+  // back in belongs to it as of the move that stuck.
+  let addedAt: Date | null = null;
+  for (const change of sprintFieldChanges) {
+    if (change.changedAt === null) continue;
+    if (!namesSprint(change.to, jiraSprintId)) continue;
+    if (addedAt === null || change.changedAt > addedAt) addedAt = change.changedAt;
+  }
+  if (addedAt !== null) {
+    return { addedAfterSprintStart: addedAt > sprintStart, matchedSprintTransition: true };
+  }
+
+  // `matchedSprintTransition: false` is REPORTED, not swallowed (impl-review
+  // F3). `namesSprint` narrows on `jiraSprintId` — stored state that Jira owns,
+  // and the exact value class `lessons.md` records: when it is stale, EVERY
+  // issue silently takes this fallback and the commitment is systematically
+  // wrong, which the freeze then makes permanent. The caller counts the issues
+  // that HAD Sprint changes yet matched none, so "nobody moved sprints" and "the
+  // id I matched against is wrong" stop reading identically.
+  return {
+    addedAfterSprintStart: createdAt ? createdAt > sprintStart : null,
+    matchedSprintTransition: false,
+  };
 }
 
 /**

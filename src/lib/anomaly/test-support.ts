@@ -54,7 +54,8 @@ export function makeMember(over: Partial<SelectTeamMember> = {}): SelectTeamMemb
     githubUsername: "alexdev",
     jiraAccountId: "jira-alex",
     role: "Engineer",
-    spCapacity: 8,
+    fte: "1.00",
+    fteConfirmedAt: NOW,
     technologyTrack: "BACKEND",
     source: "BOTH",
     isActive: true,
@@ -178,6 +179,10 @@ export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot
     // UTC by default so every rule expectation reads as a plain calendar fact,
     // independent of the machine the suite runs on.
     timeZone: "UTC",
+    // EMPTY by default (S-23): the overwhelming majority of rule expectations are
+    // about thresholds, not holidays, and a default calendar would make every one
+    // of them depend on a date nobody chose. Tests that care pass their own.
+    nonWorkingDays: new Set<string>(),
     ...over,
   };
 }

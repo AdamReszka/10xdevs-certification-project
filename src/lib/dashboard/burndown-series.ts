@@ -11,6 +11,7 @@
  */
 
 import { dayKeyInTimeZone, enumerateDayKeys, type DayKey } from "@/lib/dashboard/day-bucket";
+import { firstDoneAtByTicket, type FirstDoneTransition } from "@/lib/dashboard/first-done";
 import type { CategoryKey, StatusCategory } from "@/lib/dashboard/time-in-status";
 import { CATEGORY_KEYS } from "@/lib/dashboard/time-in-status";
 
@@ -65,12 +66,10 @@ export type BurndownTicket = {
   track: TrackKey | null;
 };
 
-/** A DONE-relevant transition. `toCategory` null means an unmapped status. */
-export type BurndownTransition = {
-  ticketId: string;
-  toCategory: StatusCategory | null;
-  changedAt: Date | null;
-};
+/** A DONE-relevant transition. `toCategory` null means an unmapped status.
+ *  Structurally the shared {@link FirstDoneTransition}: the burndown and the
+ *  sprint's stored `completed_sp` read the same primitive so they cannot drift. */
+export type BurndownTransition = FirstDoneTransition;
 
 function emptyByCategory(): Record<CategoryKey, number> {
   return Object.fromEntries(CATEGORY_KEYS.map((k) => [k, 0])) as Record<CategoryKey, number>;
@@ -136,21 +135,13 @@ export function buildBurndownSeries({
   }
 
   // --- Burn day: the FIRST transition into DONE, per ticket -----------------
-  // A ticket re-opened and re-closed must burn once, on its first completion.
-  // Null `changedAt` drops (unorderable); null `toCategory` is not DONE, so a
-  // ticket completed through an unmapped status never burns — deliberate
-  // under-reporting made visible via `byCategory.UNKNOWN`.
+  // The "first DONE" rule itself lives in `first-done.ts`, shared with the
+  // sprint's stored `completed_sp` (FR-023). All this adds is the day bucket and
+  // the sprint-membership filter the reducer needs.
   const burnDayByTicket = new Map<string, DayKey>();
-  const burnAtByTicket = new Map<string, number>();
-  for (const tr of transitions) {
-    if (tr.changedAt === null || tr.toCategory !== "DONE") continue;
-    if (!spByTicket.has(tr.ticketId)) continue; // not a ticket in this sprint
-    const at = tr.changedAt.getTime();
-    const seen = burnAtByTicket.get(tr.ticketId);
-    if (seen === undefined || at < seen) {
-      burnAtByTicket.set(tr.ticketId, at);
-      burnDayByTicket.set(tr.ticketId, dayKeyInTimeZone(tr.changedAt, timeZone));
-    }
+  for (const [ticketId, at] of firstDoneAtByTicket(transitions)) {
+    if (!spByTicket.has(ticketId)) continue; // not a ticket in this sprint
+    burnDayByTicket.set(ticketId, dayKeyInTimeZone(at, timeZone));
   }
 
   // SP burned on each day of the axis. A ticket completed BEFORE the axis starts

@@ -14,6 +14,7 @@ import {
   MemberHasHistoryError,
   type PreviewMember,
   UnknownMemberError,
+  confirmAllFte as confirmAllFteService,
   deleteMember as deleteMemberService,
   getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
@@ -53,7 +54,12 @@ export type ClientMember = {
   githubUsername: string | null;
   jiraAccountId: string | null;
   role: string | null;
-  spCapacity: number | null;
+  /** Availability as a fraction of full time (FR-006), already a number. */
+  fte: number;
+  /** NULL ⇒ the row still carries the 0012 migration's default; drives the
+   *  `/settings/team` banner. Sent as an ISO string — `Date` does not survive
+   *  the server→client boundary. */
+  fteConfirmedAt: string | null;
   technologyTrack: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
   source: "GITHUB" | "JIRA" | "MANUAL" | "BOTH";
   /** Round-trips through the editor so a save cannot resurrect a deactivated
@@ -68,8 +74,16 @@ export type ActionFailure = {
   message: string;
 };
 
-/** A preview row: a stored member, or a proposal the save would insert. */
-export type ClientPreviewMember = Omit<ClientMember, "id"> & {
+/**
+ * A preview row: a stored member, or a proposal the save would insert.
+ *
+ * `fteConfirmedAt` is OMITTED, not nulled: the preview projection does not read
+ * the stamp, so reporting one here would be a fabricated value that is wrong for
+ * every stored row. Leaving it out of the type is what stops a future caller
+ * from seeding the `/settings/team` banner off preview rows and concluding that
+ * the whole team is unconfirmed.
+ */
+export type ClientPreviewMember = Omit<ClientMember, "id" | "fteConfirmedAt"> & {
   /** Absent ⇒ a proposal with no DB row yet. */
   id?: string;
   proposed?: true;
@@ -111,6 +125,8 @@ export type DeleteMemberResult = { ok: true } | ActionFailure;
 
 export type MergeMembersResult = { ok: true; id: string } | ActionFailure;
 
+export type ConfirmAvailabilityResult = { ok: true; confirmed: number } | ActionFailure;
+
 export type MemberHistoryResult = ({ ok: true } & MemberHistory) | ActionFailure;
 
 /**
@@ -137,7 +153,7 @@ function toClientPreviewMember(m: PreviewMember): ClientPreviewMember {
     githubUsername: m.githubUsername ?? null,
     jiraAccountId: m.jiraAccountId ?? null,
     role: m.role ?? null,
-    spCapacity: m.spCapacity ?? null,
+    fte: m.fte ?? 1,
     technologyTrack: m.technologyTrack ?? null,
     source: m.source,
     isActive: m.isActive ?? true,
@@ -374,6 +390,27 @@ export async function mergeMembersAction(input: unknown): Promise<MergeMembersRe
     return { ok: true, id: result.id };
   } catch (err) {
     return toFailure(err, "[setup/team] mergeMembers");
+  }
+}
+
+/**
+ * Confirm every still-unconfirmed availability fraction, changing no values.
+ *
+ * The `/settings/team` banner's action. Deliberately NOT folded into
+ * `saveRosterAction`: confirming is "I looked and these are right", which the
+ * owner may do without editing anything, and a save that silently confirmed
+ * every row would clear the banner for members nobody checked.
+ */
+export async function confirmAvailabilityAction(): Promise<ConfirmAvailabilityResult> {
+  const session = await requireSession();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const { confirmed } = await confirmAllFteService({ db, ownerId: session.user.id });
+    return { ok: true, confirmed };
+  } catch (err) {
+    return toFailure(err, "[setup/team] confirmAvailability");
   }
 }
 

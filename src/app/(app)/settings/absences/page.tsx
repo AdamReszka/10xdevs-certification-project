@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import AbsenceEditor from "@/components/organisms/settings/absence-editor";
+import TeamDaysOffEditor from "@/components/organisms/settings/team-days-off-editor";
 import { listAbsences } from "@/lib/absence-store";
 import { requireSession } from "@/lib/auth";
 import { dayKeyInTimeZone } from "@/lib/dashboard/day-bucket";
@@ -8,9 +9,11 @@ import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getDb } from "@/lib/db";
 import { listRoster } from "@/lib/roster";
 import { getActiveSprintRow } from "@/lib/sprint";
+import { listTeamDaysOff } from "@/lib/team-day-off-store";
 
 /**
- * Absence settings (S-08, FR-010) — where the owner records who is away.
+ * Absence settings — where the owner records who is not working: individual
+ * absences (S-08, FR-010) and team-wide days off (S-23, FR-007).
  *
  * Gated server component under `(app)`: inherits `requireSession()` +
  * `force-dynamic` from `(app)/layout.tsx` — do NOT re-declare either. One
@@ -34,11 +37,15 @@ export default async function AbsenceSettingsPage() {
   const db = getDb(env);
   const ownerId = session.user.id;
 
-  const [members, absences, timeZone, sprint] = await Promise.all([
+  const [members, absences, timeZone, sprint, daysOff] = await Promise.all([
     listRoster(db, ownerId),
     listAbsences({ db, ownerId }),
     getJiraTimeZone(db, ownerId),
     getActiveSprintRow(db, ownerId),
+    // S-23 (FR-007). Unwindowed for the same reason absences are: a holiday
+    // entered for next quarter that vanished from the list would read as a
+    // failed save.
+    listTeamDaysOff({ db, ownerId }),
   ]);
 
   // The D2 default for the "planned" checkbox is judged against the sprint's
@@ -78,6 +85,27 @@ export default async function AbsenceSettingsPage() {
         }))}
         timeZone={timeZone}
         sprintStartDay={sprintStartDay}
+      />
+
+      <div className="flex flex-col gap-1 pt-2">
+        <h2 className="text-lg font-medium">Team days off</h2>
+        <p className="text-sm text-muted-foreground">
+          Public holidays and company days off — days the WHOLE team is off. A day
+          recorded here costs one man-day per person, stops tickets ageing across
+          it, and applies to every sprint that spans it, so a national holiday is
+          entered once rather than re-entered each sprint.
+        </p>
+      </div>
+
+      <TeamDaysOffEditor
+        daysOff={daysOff.map((d) => ({
+          id: d.id,
+          // Already `YYYY-MM-DD`: the column is `date`, so unlike an absence
+          // there is no instant to serialize and no zone to resolve it in.
+          day: d.day,
+          label: d.label,
+        }))}
+        workingDays={sprint?.workingDays ?? null}
       />
     </div>
   );

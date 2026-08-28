@@ -1,30 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import { decideMerge, looksLikeLogin } from "./roster-merge";
+import { type MergeCandidate, decideMerge, looksLikeLogin } from "./roster-merge";
+
+/**
+ * A grid row always carries `fte` (the column is NOT NULL), so every fixture
+ * here goes through this rather than repeating the field. Cases that care about
+ * the value pass it explicitly.
+ */
+function row(over: Partial<MergeCandidate> & { name: string }): MergeCandidate {
+  return { fte: 1, ...over };
+}
 
 /**
  * The canonical pair: one human imported twice — a GitHub-only row whose name is
  * just the login, and a Jira-only row carrying the real display name.
  */
-const GITHUB_ROW = {
+const GITHUB_ROW = row({
   id: "gh-row",
   name: "octocat",
   githubUsername: "octocat",
   jiraAccountId: "",
   role: "",
-  spCapacity: null,
+  fte: 1,
   technologyTrack: null,
-} as const;
+});
 
-const JIRA_ROW = {
+const JIRA_ROW = row({
   id: "jira-row",
   name: "Mia Krystof",
   githubUsername: "",
   jiraAccountId: "acc-1",
   role: "Tech Lead",
-  spCapacity: 8,
+  fte: 0.5,
   technologyTrack: "BACKEND",
-} as const;
+});
 
 describe("looksLikeLogin", () => {
   it("recognises a name that is just the GitHub login", () => {
@@ -91,21 +100,21 @@ describe("decideMerge — the surviving name", () => {
   });
 
   it("falls back to the kept row when BOTH names are bare logins", () => {
-    const a = { id: "a", name: "octocat", githubUsername: "octocat" };
-    const b = { id: "b", name: "devtwo", githubUsername: "devtwo" };
+    const a = row({ id: "a", name: "octocat", githubUsername: "octocat" });
+    const b = row({ id: "b", name: "devtwo", githubUsername: "devtwo" });
     expect(decideMerge(a, b).merged.name).toBe("octocat");
     expect(decideMerge(b, a).merged.name).toBe("devtwo");
   });
 
   it("falls back to the kept row when NEITHER name is a login", () => {
-    const a = { id: "a", name: "Ada Lovelace", githubUsername: "adalove" };
-    const b = { id: "b", name: "Mia Krystof", jiraAccountId: "acc-1" };
+    const a = row({ id: "a", name: "Ada Lovelace", githubUsername: "adalove" });
+    const b = row({ id: "b", name: "Mia Krystof", jiraAccountId: "acc-1" });
     expect(decideMerge(a, b).merged.name).toBe("Ada Lovelace");
   });
 
   it("uses the dropped row's name only when it is actually a name", () => {
-    const keptLogin = { id: "a", name: "octocat", githubUsername: "octocat" };
-    const droppedEmpty = { id: "b", name: "", jiraAccountId: "acc-1" };
+    const keptLogin = row({ id: "a", name: "octocat", githubUsername: "octocat" });
+    const droppedEmpty = row({ id: "b", name: "", jiraAccountId: "acc-1" });
     expect(decideMerge(keptLogin, droppedEmpty).merged.name).toBe("octocat");
   });
 });
@@ -124,17 +133,23 @@ describe("decideMerge — identity keys and profile fields", () => {
   it("takes a profile field from whichever row has it", () => {
     const merged = decideMerge(GITHUB_ROW, JIRA_ROW).merged;
     expect(merged.role).toBe("Tech Lead");
-    expect(merged.spCapacity).toBe(8);
     expect(merged.technologyTrack).toBe("BACKEND");
   });
 
   it("prefers the kept row when both rows carry the field", () => {
-    const a = { id: "a", name: "Ada", role: "Lead", spCapacity: 5, technologyTrack: "FRONTEND" as const };
-    const b = { id: "b", name: "Ada dup", role: "Dev", spCapacity: 8, technologyTrack: "BACKEND" as const };
+    const a = row({ id: "a", name: "Ada", role: "Lead", technologyTrack: "FRONTEND" });
+    const b = row({ id: "b", name: "Ada dup", role: "Dev", technologyTrack: "BACKEND" });
     const merged = decideMerge(a, b).merged;
     expect(merged.role).toBe("Lead");
-    expect(merged.spCapacity).toBe(5);
     expect(merged.technologyTrack).toBe("FRONTEND");
+  });
+
+  it("takes the KEPT row's availability, never the dropped row's", () => {
+    // `fte` has no fall-through, unlike the profile fields above: a NOT NULL
+    // column has no absent state, so "whichever row answered" cannot arise and
+    // the kept row must win in BOTH directions.
+    expect(decideMerge(GITHUB_ROW, JIRA_ROW).merged.fte).toBe(1);
+    expect(decideMerge(JIRA_ROW, GITHUB_ROW).merged.fte).toBe(0.5);
   });
 
   it("keeps a deactivated kept row deactivated", () => {

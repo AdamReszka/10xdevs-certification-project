@@ -4,8 +4,10 @@ import {
   pgEnum,
   text,
   timestamp,
+  date,
   boolean,
   integer,
+  numeric,
   bigint,
   jsonb,
   index,
@@ -315,7 +317,33 @@ export const teamMember = pgTable(
     githubUsername: text("github_username"),
     jiraAccountId: text("jira_account_id"),
     role: text("role"),
-    spCapacity: integer("sp_capacity"),
+    /**
+     * Availability as a fraction of full time (FR-006) — 1.00 / 0.75 / 0.50 /
+     * 0.25, entered by a select. It replaced `sp_capacity`, a hand-entered
+     * story-point figure that nothing ever populated: the roster holds stable
+     * FACTS about people, and a per-sprint story-point total is neither stable
+     * nor a fact about a person. Capacity in man-days is derived from this
+     * (`lib/dashboard/capacity.ts`); the lead's per-sprint override lives on
+     * `sprint_measurement`, not here.
+     *
+     * NOT NULL with a default, so there is no "not answered" state to surface
+     * downstream — but the default is also a LIE for any part-timer the 0012
+     * migration silently promoted to full time, which is what
+     * `fteConfirmedAt` exists to make visible.
+     *
+     * `numeric` comes back from `pg` as a STRING. Read it through
+     * `lib/fte.ts:toFte`, write it through `fteToColumn`, never bare.
+     */
+    fte: numeric("fte", { precision: 3, scale: 2 }).notNull().default("1.00"),
+    /**
+     * When the owner last confirmed this member's `fte`, or NULL when the value
+     * is still whatever the 0012 migration defaulted it to. Drives the
+     * `/settings/team` banner: the migration could not convert `sp_capacity`
+     * (an `8` is indistinguishable as 8 SP and as 8 FTE), so every member became
+     * full-time and the team's capacity silently inflated. A stamp per row is
+     * what lets the banner name the count and then disappear for good.
+     */
+    fteConfirmedAt: timestamp("fte_confirmed_at"),
     technologyTrack: technologyTrack("technology_track"),
     source: memberSource("source").notNull(),
     isActive: boolean("is_active").default(true).notNull(),
@@ -345,6 +373,18 @@ export const sprint = pgTable(
     // Load-bearing for S-12 retention purge (keyed to sprint boundaries).
     endDate: timestamp("end_date"),
     committedSp: integer("committed_sp"),
+    /**
+     * When `committed_sp` was FIRST written (S-23, FR-023). NULL means the
+     * freeze has not happened yet — no sync cycle has seen this sprint.
+     *
+     * Load-bearing twice over. It is the guard that keeps the commitment frozen
+     * (a commitment that grows with the scope added to it is not a commitment,
+     * and makes reliability look good by construction), and it is the record of
+     * WHEN the freeze happened — so a late freeze, caused by a stalled cron or
+     * an expired token, is visible in the data rather than silently baked into
+     * every measurement record derived from it.
+     */
+    committedFrozenAt: timestamp("committed_frozen_at"),
     completedSp: integer("completed_sp"),
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
@@ -357,6 +397,105 @@ export const sprint = pgTable(
       .notNull(),
   },
   (table) => [unique("sprint_owner_sprint_uq").on(table.ownerId, table.jiraSprintId)],
+);
+
+/**
+ * What a sprint WAS (S-23, FR-022/FR-023) — the durable per-sprint measurement.
+ *
+ * ITS OWN TABLE, not columns on `sprint`, for two reasons that both destroy the
+ * record otherwise. `sprint` rows cascade away when the owner switches monitored
+ * Jira project (`connection-service.ts`, `jira-store.ts`), and they fall under
+ * the PRD's "current + 2 sprints" retention bound. An average that resets every
+ * three sprints is not an average, so the record has to outlive both — the PRD
+ * amends the retention non-goal for exactly these few dozen bytes per sprint.
+ *
+ * `jiraProjectId` is the JIRA-SIDE project id (`jira_project.jira_project_id`,
+ * e.g. `"10000"`), stored as PLAIN TEXT WITH NO FOREIGN KEY. Both halves are
+ * load-bearing:
+ *  - an FK would reintroduce the very cascade the record must survive;
+ *  - the internal `jira_project.id` would be the WRONG identity, because the
+ *    settings path UPDATES that row in place when the owner switches project
+ *    (`connection-service.ts`), so its id is stable across a switch while the
+ *    team it describes is not. Keying on the Jira-side id is what lets a
+ *    switch-away-and-back find its own history again and keeps two projects'
+ *    measurements from being averaged into one meaningless figure.
+ *
+ * The lead's `*_override` / `*_corrected` columns sit BESIDE the computed ones
+ * rather than replacing them (FR-022, FR-023): a correction has to stay visible
+ * as a correction. The sweep never writes them.
+ */
+export const sprintMeasurement = pgTable(
+  "sprint_measurement",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Jira-side project id — see the header. Deliberately NOT a foreign key. */
+    jiraProjectId: text("jira_project_id").notNull(),
+    jiraSprintId: text("jira_sprint_id").notNull(),
+    sprintName: text("sprint_name"),
+    startDate: timestamp("start_date"),
+    endDate: timestamp("end_date"),
+    /**
+     * The sprint's working-day count, already net of team-wide days off — the
+     * multiplier the capacity was built from, so the lead can check the number
+     * rather than trust it (FR-022).
+     */
+    workingDays: integer("working_days"),
+    /**
+     * Capacity in MAN-DAYS. `full` is the sprint's nominal total
+     * (Σ fte × working days); `adjusted` is that total after recorded absences.
+     * Both already reflect team-wide days off, because the working-day count
+     * they share is net of them — FR-022 reduces capacity by absences and days
+     * off alike. FR-024 normalises past velocity against `full`.
+     */
+    capacityFullMd: numeric("capacity_full_md", { precision: 8, scale: 2 }),
+    capacityAdjustedMd: numeric("capacity_adjusted_md", { precision: 8, scale: 2 }),
+    /** The lead's per-sprint escape hatch (FR-022). NULL = not overridden. */
+    capacityOverrideMd: numeric("capacity_override_md", { precision: 8, scale: 2 }),
+    /**
+     * COPIED from `sprint.committed_sp`, never recomputed. `jira_ticket` is
+     * unique on `(owner_id, jira_key)` and the sync overwrites `sprint_id` on
+     * conflict, so a carried-over ticket has been re-stamped into the NEXT
+     * sprint and a `where sprint_id = N` sum would silently lose it.
+     */
+    committedSp: integer("committed_sp"),
+    /**
+     * RECOMPUTED from `jira_status_history` — the SP of tickets whose FIRST
+     * entry into Done fell inside this sprint's window (FR-023). Not copied off
+     * `sprint.completed_sp`: the sync writes that scalar only for the sprint
+     * Jira currently reports as active, so after a rollover it is frozen at
+     * whatever the last cycle before the flip happened to see.
+     */
+    deliveredSp: integer("delivered_sp"),
+    /** The lead's correction, kept alongside the measurement (FR-023). */
+    deliveredSpCorrected: integer("delivered_sp_corrected"),
+    /** Copied from `sprint.committed_frozen_at`, so a late freeze stays visible. */
+    committedFrozenAt: timestamp("committed_frozen_at"),
+    state: sprintState("state"),
+    /**
+     * When the record became history. NULL = still tracking a live (or not-yet
+     * measurable) sprint; once stamped, no later sweep may move the computed
+     * columns, which is what makes the series durable rather than a rolling
+     * snapshot.
+     */
+    finalizedAt: timestamp("finalized_at"),
+    measuredAt: timestamp("measured_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // The ON CONFLICT key the sweep's idempotence rests on. Both columns NOT
+    // NULL per `context/foundation/lessons.md` #1 — a nullable column in a
+    // UNIQUE dedup key never collides, so the constraint silently fails to dedup.
+    unique("sprint_measurement_owner_sprint_uq").on(table.ownerId, table.jiraSprintId),
+    index("sprint_measurement_series_idx").on(
+      table.ownerId,
+      table.jiraProjectId,
+      table.startDate,
+    ),
+  ],
 );
 
 /**
@@ -476,6 +615,51 @@ export const absence = pgTable(
       table.startDate,
       table.endDate,
     ),
+  ],
+);
+
+/**
+ * A day the WHOLE team is off — a public holiday, a company day off (S-23,
+ * FR-007/FR-022).
+ *
+ * NOT AN ABSENCE, and deliberately not a row on `absence`: that table's
+ * `team_member_id` is NOT NULL, so "everybody" would have to be expressed as one
+ * row per person, re-entered every time the roster changes. A public holiday is
+ * not a fact about a person.
+ *
+ * NOT A COLUMN ON `sprint`, either. FR-007 originally scoped these "for a given
+ * sprint"; the amendment of 2026-08-28 makes them dates on the ACCOUNT, because
+ * a holiday is a property of the calendar: entered once, it applies to every
+ * sprint that spans it, and re-entering the same national holiday each sprint is
+ * exactly the duplicated state FR-007's own auto-pull argument rejects. It is
+ * also the row shape S-17 will later GENERATE from a country, so that slice
+ * appends rows rather than reshaping the model.
+ *
+ * `date` rather than `timestamp`: the `pg` driver hands a `date` column back as
+ * `'YYYY-MM-DD'`, byte-identical to the `DayKey` the working-day counter
+ * consumes — so no zone conversion sits between the stored value and the
+ * calendar it is compared against. (An absence needs instants because it is
+ * entered against a person's working window; a holiday is a bare calendar fact.)
+ */
+export const teamDayOff = pgTable(
+  "team_day_off",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** `YYYY-MM-DD` in the team's calendar. */
+    day: date("day").notNull(),
+    /** "Assumption of Mary", "company offsite" — free text, optional. */
+    label: text("label"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // The dedup key the store's idempotent insert relies on. Both columns are
+    // NOT NULL, per `context/foundation/lessons.md` — a nullable column in a
+    // UNIQUE dedup key never collides, so the constraint would silently fail.
+    unique("team_day_off_owner_day_uq").on(table.ownerId, table.day),
+    index("team_day_off_ownerId_idx").on(table.ownerId),
   ],
 );
 
@@ -911,6 +1095,7 @@ export const userRelations = relations(user, ({ one, many }) => ({
   jiraProject: one(jiraProject),
   monitoredRepos: many(monitoredRepo),
   teamMembers: many(teamMember),
+  teamDaysOff: many(teamDayOff),
   sprints: many(sprint),
   syncStates: many(syncState),
   anomalies: many(anomaly),
@@ -1039,6 +1224,13 @@ export const absenceRelations = relations(absence, ({ one }) => ({
   }),
 }));
 
+export const teamDayOffRelations = relations(teamDayOff, ({ one }) => ({
+  owner: one(user, {
+    fields: [teamDayOff.ownerId],
+    references: [user.id],
+  }),
+}));
+
 // --- Inferred types (Phase 2 tables) ---
 
 export type SelectGithubCredential = typeof githubCredential.$inferSelect;
@@ -1055,12 +1247,16 @@ export type SelectTeamMember = typeof teamMember.$inferSelect;
 export type InsertTeamMember = typeof teamMember.$inferInsert;
 export type SelectSprint = typeof sprint.$inferSelect;
 export type InsertSprint = typeof sprint.$inferInsert;
+export type SelectSprintMeasurement = typeof sprintMeasurement.$inferSelect;
+export type InsertSprintMeasurement = typeof sprintMeasurement.$inferInsert;
 export type SelectSyncState = typeof syncState.$inferSelect;
 
 export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;
 export type InsertSyncState = typeof syncState.$inferInsert;
 export type SelectAbsence = typeof absence.$inferSelect;
 export type InsertAbsence = typeof absence.$inferInsert;
+export type SelectTeamDayOff = typeof teamDayOff.$inferSelect;
+export type InsertTeamDayOff = typeof teamDayOff.$inferInsert;
 
 // --- F-02 product relations (Phase 3) ---
 

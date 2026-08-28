@@ -1,0 +1,457 @@
+# MANUAL-CHECKLIST — capacity-in-man-days (S-23)
+
+> Krótka lista: tylko to, co realnie blokuje slice. Reszta idzie do
+> `context/foundation/manual-test-backlog.md`. Numeracja zgadza się z
+> `plan.md` → `## Progress`; `plan.md` jest kanoniczny.
+
+## Faza 1 — etat zamiast SP w rosterze
+
+### 1.7 Banner migracji na `/settings/team`
+
+- **Gdzie:** `/settings/team`, konto `demo@sprintflow.test` (to ono ma prawdziwe
+  tokeny — patrz `manual-test-backlog.md`).
+- **Co zrobić:** wejdź na stronę. Policz członków zespołu. Kliknij
+  **„Confirm availability"**. Przeładuj stronę (F5). Wejdź na `/dashboard`
+  i wróć na `/settings/team`.
+- **Co ma być prawdą:** przed kliknięciem widać banner „Check N people's
+  availability", gdzie **N = liczba członków zespołu** (migracja ustawiła
+  wszystkim `1.00`). Po kliknięciu banner znika natychmiast. Po przeładowaniu
+  **nadal go nie ma**. Po powrocie z dashboardu **nadal go nie ma**.
+- **Dlaczego to ważne:** migracja po cichu zrobiła z każdego part-timera pełny
+  etat — `sp_capacity` = `8` jest nieodróżnialne jako 8 SP i 8 etatów, więc nie
+  dało się tego przenieść. Banner jest **jedynym** sygnałem, że capacity zespołu
+  jest zawyżone. Gdyby wracał po przeładowaniu, lead nauczyłby się go ignorować;
+  gdyby znikał bez kliknięcia, nikt by się nie dowiedział.
+
+### 1.8 Lista wyboru dostępności
+
+- **Gdzie:** `/settings/team`, kolumna **Availability**.
+- **Co zrobić:** rozwiń listę przy dowolnej osobie. Ustaw komuś **Half time
+  (0.5)**. Zapisz roster. Przeładuj stronę.
+- **Co ma być prawdą:** lista ma **dokładnie cztery** pozycje — Full time (1.0),
+  0.75, Half time (0.5), 0.25 — i żadnego pustego / „—". Po przeładowaniu ta
+  osoba **nadal ma 0.5**, nie 1.0 i nie puste pole.
+- **Dlaczego to ważne:** `0.5` było dotąd niewpisywalne na czterech warstwach
+  naraz (kolumna `integer`, walidacja `int()`, `type="number"` bez `step`,
+  `Number(v)`). To jest test, że wszystkie cztery faktycznie puściły — a zapis
+  przez `numeric` wraca ze sterownika jako **string** `'0.50'`, więc przeładowanie
+  jest właściwym sprawdzianem, nie samo kliknięcie.
+
+### 1.9 Capacity w man-dayach na dashboardzie
+
+- **Gdzie:** `/dashboard` → zakładka **Availability**.
+- **Co zrobić:** odczytaj liczbę MD i liczbę dni roboczych pod nią. Policz
+  ręcznie: `Σ (etat każdej aktywnej osoby) × liczba dni roboczych`. Sprint musi
+  mieć **zero zapisanych absencji** — jeśli są, usuń je na czas testu albo
+  odejmij je od wyniku ręcznie.
+- **Co ma być prawdą:** liczba na ekranie **równa się** ręcznemu rachunkowi,
+  jednostka to **MD** (nie SP), a pod spodem stoi „over N working days".
+  Zniknął komunikat „No story-point capacity set for anyone".
+- **Dlaczego to ważne:** stary reduktor liczył `SP × (dostępne ÷ wszystkie dni)`
+  — iloraz **skracał wymiar dnia**, więc liczba dni roboczych nie wpływała na
+  wynik i błędny dzielnik był niewidoczny. Teraz dni są mnożnikiem, więc ten sam
+  zespół w krótszym sprincie MUSI dać mniejsze capacity. Jeśli liczba się nie
+  zgadza, mnożnik jest zły — a on skaluje wszystko, co zbuduje faza 4.
+
+---
+
+## Faza 2 — dni wolne całego zespołu
+
+### 2.7 Dzień wolny obniża capacity i liczbę dni roboczych
+
+- **Gdzie:** `/settings/absences` → sekcja **Team days off**, potem
+  `/dashboard` → zakładka **Availability**. Konto `demo@sprintflow.test`.
+- **Co zrobić:** najpierw na dashboardzie **zapisz** obecną liczbę MD i liczbę
+  dni roboczych („over N working days"). Wróć na `/settings/absences`, kliknij
+  **„Add a day off"**, wybierz w kalendarzu dowolny **dzień roboczy (pon–pt)
+  leżący WEWNĄTRZ aktywnego sprintu**, wpisz etykietę, zapisz. Wróć na
+  `/dashboard` → **Availability**.
+- **Co ma być prawdą:** liczba dni roboczych spadła **dokładnie o 1**, pod nią
+  pojawiła się linia „− 1 team day off already subtracted", a liczba MD spadła
+  o **sumę etatów** (zespół sześciu pełnych etatów → −6 MD; jeśli ktoś ma 0.5,
+  to −5.5). Jeśli wybierzesz sobotę/niedzielę, przy wierszu w tabeli pojawi się
+  plakietka **„Not a working day anyway"** i **żadna z liczb się nie zmieni** —
+  to też jest poprawny wynik, nie błąd.
+- **Dlaczego to ważne:** to jedyny dowód, że kalendarz dni wolnych faktycznie
+  wchodzi do **mnożnika** capacity, a nie tylko zapisuje się do bazy. Do fazy 1
+  liczba dni roboczych była wyłącznie dzielnikiem i się skracała — teraz skaluje
+  wszystko, co zbuduje faza 4 (rekord pomiaru sprintu). Jeśli MD nie drgnie,
+  zamrożone rekordy będą fałszywe na zawsze.
+
+### 2.8 Ten sam dzień wolny zatrzymuje zegar starzenia ticketa
+
+- **Gdzie:** Jira projektu monitorowanego + `/dashboard` → **Anomaly Inbox**.
+- **Co zrobić:** znajdź (albo ustaw) ticket z estymatą **21 SP** w statusie
+  **In Progress**, który stoi bez ruchu od **ośmiu dni roboczych** — czyli
+  właśnie zaczyna być flagowany jako `TICKET_STATUS_AGING`. Potwierdź, że jest
+  w inboxie. Teraz dodaj **dzień wolny w środku tego okna** (jeden z tych ośmiu
+  dni roboczych) i przeładuj dashboard.
+- **Co ma być prawdą:** anomalia `TICKET_STATUS_AGING` dla tego ticketa
+  **znika** z inboxu bez czekania na cykl crona — zapis dnia wolnego sam
+  odpala ponowną detekcję.
+- **Dlaczego to ważne:** ⚠️ **Uwaga na zakres — działa to TYLKO dla kubełka
+  21 SP.** To jedyny budżet w FR-009 wyrażony w **dniach roboczych**
+  (`8_WORKING_DAYS`); pozostałe (1/2 SP = 24h, 3 SP = 48h, 5 SP = 72h,
+  8/13 SP = 5 dni jako godziny) liczą **czas zegarowy**, a święto nie zatrzymuje
+  zegara. Ticket 3-SP **nadal się zestarzeje** przez święto i to jest zgodne
+  z planem (`plan.md` faza 2 §3 wskazuje jedno miejsce:
+  `ticket-status-aging.ts:64`). Gdybyś testował na 3 SP, zobaczysz „brak
+  reakcji" i uznasz to za błąd — a to nie jest błąd.
+
+### 2.9 Usunięcie dnia wolnego przywraca obie liczby
+
+- **Gdzie:** `/settings/absences` → **Team days off** → kosz przy wierszu.
+- **Co zrobić:** usuń dzień dodany w 2.7. Potwierdź w dialogu. Wróć na
+  `/dashboard` → **Availability**.
+- **Co ma być prawdą:** dialog **nazywa konkretną datę i etykietę**, którą
+  kasuje (nie „this item"). Po usunięciu liczba dni roboczych i liczba MD
+  wracają **dokładnie** do wartości zapisanych na początku 2.7, a linia
+  „− N team days off" znika.
+- **Dlaczego to ważne:** kalendarz dni wolnych jest **wspólnym wejściem**
+  capacity i dwóch reguł anomalii. Gdyby usunięcie nie cofało wszystkiego,
+  oznaczałoby to, że któryś z pięciu punktów szwu trzyma własną kopię stanu —
+  a dwa liczniki, które się nie zgadzają, to awaria, którą
+  `context/foundation/lessons.md` już raz zapisało.
+
+---
+
+## Faza 3 — uczciwe sumy sprintu
+
+⚠️ **Wiersz 1.8 z `manual-test-backlog.md`** (wpisanie estymat SP w projekcie FM,
+który dziś ma same `story_points = NULL`) **blokuje wiersz 3.8** — bez estymat
+relacja capacity↔velocity nie ma czego mierzyć na żywych danych. Wiersze 3.9
+i 3.10 są od tego niezależne i można je zrobić od razu. Fazy 1 i 2 są od 1.8
+niezależne w całości.
+
+### 3.8 Realny sync zapisuje sumy zgodne z Jirą
+
+- **Gdzie:** Jira projektu FM + `/settings/connections` (konto
+  `demo@sprintflow.test`) + baza lokalna.
+- **Co zrobić:** wpisz estymaty SP kilku ticketom aktywnego sprintu — **w jednym
+  polu** (patrz pułapka w `manual-test-backlog.md` wiersz 1.8: site może mieć
+  i „Story Points", i „Story point estimate"). Kliknij **„Sync now"**. Potem:
+  `select key, story_points, added_after_sprint_start, current_category from
+  jira_ticket where owner_id = '<owner FM>' order by key;` a następnie
+  `select committed_sp, completed_sp, committed_frozen_at from sprint where
+  owner_id = '<owner FM>';`
+- **Co ma być prawdą:** `story_points` **nie są NULL-ami** (jeśli są — trafiłeś
+  w złe pole, nie w błąd kodu). `committed_sp` = suma SP ticketów, które
+  **nie** mają `added_after_sprint_start = true`. `completed_sp` = suma SP tylko
+  tych ticketów, które **weszły do Done w trakcie tego sprintu** — ticket
+  przeniesiony z poprzedniego sprintu i już wtedy zamknięty **nie** liczy się
+  tutaj, choć w Jirze widnieje jako Done. `committed_frozen_at` ma znacznik
+  czasu, nie NULL.
+- **Dlaczego to ważne:** to jedyny dowód, że nowa definicja velocity działa na
+  żywych danych. Stara reguła (`suma SP tam, gdzie current_category = 'DONE'`)
+  była migawką „co jest w Done TERAZ" i była nadpisywana co cykl — także po
+  zamknięciu sprintu. Faza 4 zamrozi tę liczbę na zawsze; jeśli jest zła teraz,
+  będzie zła w każdym rekordzie pomiaru.
+
+### 3.9 Ticket dorzucony w trakcie sprintu nie podnosi zobowiązania
+
+- **Gdzie:** Jira projektu FM + `/dashboard` → zakładka **Sprint Pulse**
+  i panel **Reliability**.
+- **Co zrobić:** zapisz obecną wartość „Committed" na panelu Reliability.
+  W Jirze **przeciągnij do aktywnego sprintu** ticket z backlogu, który ma
+  estymatę. Kliknij „Sync now". Odśwież dashboard.
+- **Co ma być prawdą:** linia **zakresu na burndownie rośnie** (nowy ticket
+  wszedł do sprintu), ale liczba **„Committed" na Reliability się NIE zmienia**.
+  W bazie `committed_frozen_at` ma **tę samą** wartość co przed dorzuceniem.
+- **Dlaczego to ważne:** zobowiązanie, które rośnie razem z dorzucanym zakresem,
+  nie jest zobowiązaniem — sprawia, że reliability zawsze wygląda dobrze,
+  z konstrukcji. Dodatkowo test sprawdza nowy dzielnik: „dodany po starcie"
+  liczy się teraz z **changelogu pola Sprint**, a nie z daty utworzenia ticketa,
+  więc stary ticket z backlogu wciągnięty dziś jest poprawnie wykluczony
+  z zobowiązania (wcześniej liczył się jako zobowiązany).
+
+### 3.10 Estymata 0.5 nie zawiesza już synchronizacji
+
+- **Gdzie:** Jira projektu FM + `/settings/connections` + `/dashboard`.
+- **Co zrobić:** ustaw dowolnemu ticketowi aktywnego sprintu estymatę **0.5**.
+  Kliknij „Sync now". Poczekaj na wynik, wróć na dashboard.
+- **Co ma być prawdą:** status integracji Jira zostaje **OK** (nie ERROR),
+  dashboard dalej się aktualizuje, a ten ticket ma w bazie `story_points = 1`
+  (`select key, story_points from jira_ticket where key = '<klucz>';`).
+- **Dlaczego to ważne:** kolumna `story_points` jest typu `integer`, a zapis
+  dzieje się **wewnątrz transakcji** synchronizacji. Jedna wartość ułamkowa
+  wywracała **całą** transakcję Jiry (`invalid input syntax for type integer`)
+  i stemplowała `sync_state` jako ERROR — co 15 minut, w nieskończoność, bez
+  ścieżki samonaprawy i bez śladu, po czym lead mógłby się domyślić przyczyny.
+  Zaokrąglenie jest strażnikiem wejścia, nie zmianą modelu: progi z FR-009 są
+  ciągiem Fibonacciego (1/2, 3, 5, 8/13, 21), więc pół story pointa nie jest
+  wielkością, którą ten produkt zna.
+
+---
+
+## Faza 4 — rekord pomiaru sprintu
+
+⚠️ Wiersz **4.8 jest zależny od czasu** — wymaga realnego przewinięcia sprintu
+w Jirze projektu FM. Nie czekaj na niego: 4.9 robisz od razu, a 4.8 odhaczysz
+przy najbliższym rollowerze. Sweep jest z założenia odporny na opóźnienie —
+zapisze zamknięty sprint nawet kilka cykli po fakcie.
+
+### 4.8 Po realnym rollowerze rekord zgadza się z ostatnim dniem sprintu
+
+- **Gdzie:** `/dashboard` (konto `demo@sprintflow.test`) w OSTATNIM dniu
+  aktywnego sprintu, potem baza lokalna po przewinięciu sprintu w Jirze.
+- **Co zrobić:** ostatniego dnia sprintu zapisz sobie z zakładki **Availability**
+  liczbę MD i liczbę dni roboczych, a z panelu **Reliability** — „Committed"
+  i „Delivered". Poczekaj aż sprint się zamknie i ruszy następny (albo zamknij go
+  ręcznie w Jirze), kliknij **„Sync now"**, a potem:
+  `select jira_sprint_id, sprint_name, working_days, capacity_full_md,
+  capacity_adjusted_md, committed_sp, delivered_sp, committed_frozen_at,
+  finalized_at from sprint_measurement where owner_id = '<owner FM>' order by
+  start_date;`
+- **Co ma być prawdą:** dla zamkniętego sprintu istnieje **dokładnie jeden**
+  wiersz. `working_days` i `capacity_adjusted_md` **równają się** temu, co
+  zapisałeś z dashboardu; `delivered_sp` równa się „Delivered";
+  `committed_sp` równa się „Committed". `finalized_at` **ma znacznik czasu**.
+  Kliknij „Sync now" jeszcze raz i sprawdź ten sam SELECT — **żadna liczba nie
+  drgnęła**. Jeśli `committed_frozen_at` jest NULL, to `finalized_at` też MUSI
+  być NULL — to poprawny wynik, nie błąd (patrz „dlaczego").
+- **Dlaczego to ważne:** to jedyny dowód, że zamrożenie łapie **ten sam** stan,
+  który lead widział na ekranie. Do tej pory nic w systemie nie zapisywało, czym
+  był sprint: capacity liczyło się na żywo z rosteru bez wymiaru czasu i znikało,
+  a `completed_sp` było migawką „co jest w Done TERAZ", nadpisywaną co 15 minut —
+  także po zamknięciu sprintu. Jeśli rekord rozjeżdża się z ekranem, rozjedzie
+  się **na zawsze**: fazy 5–7 średnią liczą wyłącznie z tych wierszy i nie ma
+  ścieżki przeliczenia wstecz. Osobno: brak `committed_frozen_at` blokuje
+  finalizację celowo — sprint, którego zobowiązanie nigdy nie zostało zamrożone,
+  to uczciwy „brak danych" (FR-023), a nie rekord z wiarygodnie wyglądającą
+  liczbą w środku.
+
+### 4.9 Zmiana projektu Jira i powrót nie kasuje historii
+
+- **Gdzie:** `/settings/connections` → sekcja projektu Jira, konto
+  `demo@sprintflow.test`. Potrzebny **drugi** projekt na tym samym site.
+- **Co zrobić:** najpierw policz wiersze:
+  `select count(*) from sprint_measurement where owner_id = '<owner FM>';`
+  Przełącz monitorowany projekt na inny (potwierdź destrukcyjny dialog).
+  Sprawdź: `select count(*) from sprint;` **oraz** ten sam count na
+  `sprint_measurement`. Przełącz projekt z powrotem na FM, kliknij „Sync now",
+  wejdź na `/dashboard`.
+- **Co ma być prawdą:** po przełączeniu wiersze w `sprint` dla starego projektu
+  **znikają** (kaskada), a liczba wierszy w `sprint_measurement`
+  **nie zmienia się ani o jeden**. Po powrocie na FM te same rekordy dalej tam
+  są, z tym samym `jira_project_id` (to **jirowe** id projektu, np. `10000`, nie
+  wewnętrzny UUID).
+- **Dlaczego to ważne:** to jest cały powód, dla którego rekord mieszka we
+  **własnej tabeli**, a `jira_project_id` jest zwykłym tekstem **bez klucza
+  obcego** — FK przywróciłby dokładnie tę kaskadę, którą rekord ma przeżyć.
+  Druga połowa testu jest subtelniejsza: ścieżka ustawień **aktualizuje wiersz
+  `jira_project` w miejscu**, więc jego wewnętrzne id jest stabilne przy zmianie
+  projektu, choć zespół, który opisuje, już nie. Gdyby rekord był kluczowany po
+  tym id, po przełączeniu system uśredniłby dwa różne zespoły w jedną liczbę,
+  która nie opisuje nikogo — a to gorzej niż uczciwe „brak danych".
+
+---
+
+## Faza 5 — ręczna korekta leada
+
+> Zaktualizowane 2026-08-28 po `reviews/impl-review-phase-5.md` (commit
+> `24ce844`). Trzy rzeczy zmieniły się względem pierwszej wersji tych wierszy:
+> czyszczenie override'u robi **wyłącznie** przycisk (F1), pole MD przyjmuje
+> **dwa miejsca po przecinku** (F4), a korekta delivered-SP pojawia się dopiero
+> na sprincie **zamkniętym** (F3) — więc jej test przeniósł się do wiersza 7.9.
+
+### 5.7 Override pokazuje plakietkę i wartość policzoną pod spodem
+
+- **Gdzie:** `/dashboard` → zakładka **Availability**, konto
+  `demo@sprintflow.test` (musi mieć aktywny sprint z datami).
+- **Co zrobić:** zapisz sobie liczbę MD z nagłówka (to wartość **policzona**).
+  Zjedź do sekcji **„Adjust this sprint by hand"**, w polu **Capacity override
+  (MD)** wpisz **`90.25`** — celowo z dwoma miejscami po przecinku — i kliknij
+  **Save**. Przeładuj stronę (F5). Wejdź na `/dashboard` → inna zakładka → wróć
+  na **Availability**.
+- **Co ma być prawdą:** przeglądarka **przyjmuje** `90.25` — nie pokazuje
+  dymka „Wprowadź prawidłową wartość / najbliższe prawidłowe wartości to…" i
+  nie blokuje kliknięcia **Save**. Nagłówek pokazuje **90,3 MD** z plakietką
+  **„Overridden"** obok, a pod spodem linia „Computed from the roster:
+  **<policzona>** MD". Zniknął dopisek „of N MD, after absences" (override
+  zastępuje CAŁĄ liczbę, nie tylko jej część po absencjach). Po przeładowaniu
+  **obie** liczby są nadal na ekranie, a w polu input stoi `90.25`. Pojawił się
+  przycisk **„Reset to computed"**.
+- **Dlaczego to ważne:** FR-022 czyni override **oznaczonym wyjątkiem** — ta
+  liczba wchodzi do normalizacji w FR-024, więc jeśli wyglądałaby jak pomiar,
+  nieuważny wpis skrzywiłby każdą późniejszą średnią i nikt by nie wiedział
+  dlaczego. Przeładowanie jest właściwym sprawdzianem, bo kolumna to
+  `numeric(8,2)` — sterownik oddaje ją jako **string** `'90.25'`, a nie liczbę.
+  Test sprawdza też, że rekord pomiaru **powstał** (sweep mógł jeszcze nie
+  przebiec — zapis musi go założyć, nie zgubić). Dwa miejsca po przecinku są tu
+  celowo: `step="0.5"` sprawiał, że przeglądarka odrzucała wartość, którą
+  schema serwerowa jawnie akceptuje (impl-review F4) — a `0.75 FTE × 11 dni`
+  daje dokładnie taką liczbę.
+
+### 5.8 Wyczyścić override da się tylko przyciskiem, nie pustym polem
+
+- **Gdzie:** to samo miejsce, zaraz po 5.7 (override `90.25` jest ustawiony).
+- **Co zrobić:** **najpierw** wykasuj zawartość pola **Capacity override (MD)**
+  do pustego i kliknij **Save**. Dopiero potem kliknij **„Reset to computed"**
+  i przeładuj stronę. Na koniec spójrz na sekcję **Delivered story points**
+  poniżej.
+- **Co ma być prawdą:** puste pole + **Save** **NIE** czyści override'u —
+  pojawia się czerwony komunikat „Couldn't save" z treścią *„Enter a number, or
+  use »Reset to computed« to clear it."*, a nagłówek dalej pokazuje **90,3 MD**
+  z plakietką „Overridden". Dopiero **„Reset to computed"** wraca **dokładnie**
+  do liczby policzonej z 5.7: plakietka „Overridden" znika, linia „Computed from
+  the roster" znika, przycisk „Reset to computed" znika — i po przeładowaniu
+  nadal tak jest. W sekcji **Delivered story points** na trwającym sprincie
+  **nie ma pola do wpisania** — jest sam tekst „Correctable once this sprint
+  closes and its measurement is recorded…".
+- **Dlaczego to ważne:** dwie osobne pułapki. Pierwsza: `input[type=number]`
+  czyści się sam przy każdym znaku, którego nie umie sparsować — przecinku
+  dziesiętnym z polskiej klawiatury, literówce — więc dopóki „puste = wyczyść",
+  literówka kasowała override i **meldowała sukces** (impl-review F1). Dlatego
+  próba z pustym polem musi się **nie udać**. Druga: puste musi dojechać do bazy
+  jako **NULL**, nie jako `0` — `0` to legalne capacity (cały zespół na
+  urlopie), więc gdyby te dwa stany się skleiły, nie byłoby żadnej drogi powrotu
+  do wartości policzonej. Brak pola SP na trwającym sprincie to FR-023 wzięte
+  dosłownie: sweep przelicza tę liczbę co cykl, więc korekta wpisana w połowie
+  sprintu przeżyłaby do średniej z FR-024 jako liczba, której nikt już nie
+  potrafi obronić.
+
+> **Przeniesione do Fazy 7 (wiersz 7.9).** Sprawdzenie, że korekta SP pokazuje
+> się jako korekta — „Delivered so far" z **twoją** liczbą, plakietką
+> **„Corrected"** i „(measured N SP)" obok — wymaga sprintu **zamkniętego**,
+> którego dashboard „Today" nie pokazuje. Test wykonuje się na przełączniku
+> sprintów w Sprint Detail, razem z resztą Fazy 7.
+
+---
+
+## Faza 6 — relacja i estymata
+
+### 6.5 Przy mniej niż dwóch zamkniętych sprintach panel nazywa brak, nie liczbę
+
+- **Gdzie:** `/dashboard` → zakładka **Reliability**, karta **Estimated
+  velocity** (pod wykresem), konto `demo@sprintflow.test`.
+- **Co zrobić:** sprawdź najpierw, ile masz zamkniętych rekordów:
+  `select jira_sprint_id, finalized_at from sprint_measurement where owner_id =
+  '<owner FM>' order by start_date;`. Wejdź na zakładkę i przeczytaj kartę.
+- **Co ma być prawdą:** przy **0 lub 1** wierszu z `finalized_at` karta pokazuje
+  **zdanie**, nie liczbę: „SprintFlow has N closed sprint(s) recorded and needs 2
+  before it will estimate. One sprint is a last result, not an average." — gdzie
+  **N zgadza się** z SELECT-em (aktywny sprint się nie liczy, nawet jeśli ma
+  `finalized_at`). **Nigdzie nie ma znaku „≈" ani liczby SP.** Jeśli masz już
+  dwa zamknięte sprinty, sprawdź drugą stronę: pojawia się „≈ X SP", a pod
+  spodem średnia, liczba sprintów i procent — **wszystkie trzy naraz**.
+- **Dlaczego to ważne:** FR-024 pozwala na tę arytmetykę wyłącznie dlatego, że
+  nie jest prognozą — a przestaje nią nie być dokładnie w dwóch momentach:
+  gdy liczba pojawia się bez danych, z których powstała, i gdy pojawia się po
+  jednym sprincie. Jedna miara to nie średnia, tylko ostatni wynik przebrany za
+  trend — to jest ten gadżet, który właściciel odrzucił przy framingu. Jeśli
+  zobaczysz liczbę przy jednym sprincie, `MIN_SAMPLE_SIZE` nie działa i każda
+  późniejsza średnia będzie budowana na tej samej pomyłce.
+
+### 6.6 Reliability pokazuje linię capacity, a procent się nie zmienił
+
+- **Gdzie:** `/dashboard` → zakładka **Reliability**, konto
+  `demo@sprintflow.test`.
+- **Co zrobić:** **zanim** cokolwiek zmienisz, zapisz obecny procent z opisu
+  karty („X of Y committed story points delivered so far (Z%)"). Teraz wejdź na
+  zakładkę **Availability**, ustaw **Capacity override (MD)** na dowolną inną
+  liczbę (np. `50`) i zapisz. Wróć na **Reliability**.
+- **Co ma być prawdą:** pod opisem karty stoi linia **„Capacity 50 of &lt;pełne&gt; MD,
+  over N working days."** z plakietką **„Overridden"**, a liczba **N zgadza się**
+  z tą samą liczbą dni roboczych, którą pokazuje zakładka Availability. Procent
+  **Z% jest identyczny** jak przed override'em, słupki „Committed"/„Delivered"
+  też się nie ruszyły. Wyczyść override („Reset to computed") — plakietka znika,
+  linia capacity zostaje z liczbą policzoną, procent nadal ten sam.
+- **Dlaczego to ważne:** FR-016 jest wprost: capacity **stoi obok** wskaźnika,
+  a nie **w** nim. Pełny zespół, który zobowiązał się na 100 SP i dowiózł 100,
+  i zespół w połowie składu, który zobowiązał się na 50 i dowiózł 50, renderują
+  się identycznie jako 100% — capacity jest jedyną rzeczą, która je odróżnia.
+  Ale gdyby weszła do ilorazu, wskaźnik przestałby mierzyć zobowiązanie i zaczął
+  mierzyć obsadę, a override leada (liczba wpisana ręcznie!) zacząłby ruszać
+  KPI. Override jest tu najostrzejszym testem, bo zmienia capacity nie ruszając
+  ani jednego story pointa.
+
+> ⚠️ **Zmiana źródła liczby „Delivered" (decyzja F9, faza 6).** Słupek
+> „Delivered" bierze teraz wartość z **rekordu pomiaru**, a nie ze skalara
+> synchronizacji — a więc, na sprincie **zamkniętym**, także Twoją korektę,
+> z plakietką „Corrected" i „(measured N SP)" obok. Do fazy 5 dwie zakładki
+> mogły pokazywać dwie różne liczby bez żadnego wyjaśnienia na ekranie. Jeżeli
+> zobaczysz rozjazd między „Delivered so far" na Availability a słupkiem
+> „Delivered" na Reliability — **to jest błąd**, nie różnica definicji.
+
+---
+
+## Faza 7 — przełącznik sprintów na Sprint Detail
+
+> Wiersz **7.9 przejął test korekty SP** przeniesiony z 5.8 (patrz notka tam):
+> korekta pokazuje się jako korekta dopiero na sprincie **zamkniętym**, którego
+> dashboard „Today" nie pokazuje.
+
+### 7.5 Sprint sprzed zmiany projektu pokazuje swoje liczby, a zakładki nazywają brak
+
+- **Gdzie:** `/settings/connections` → projekt Jira, potem
+  `/dashboard/sprint-detail`. Konto `demo@sprintflow.test`. Potrzebny
+  **przynajmniej jeden zamknięty sprint z rekordem pomiaru** (`select
+  jira_sprint_id, sprint_name, finalized_at from sprint_measurement where
+  owner_id = '<owner FM>';` — musi być choć jeden wiersz z `finalized_at`).
+- **Co zrobić:** zapisz z tego SELECT-a `jira_sprint_id` i nazwę zamkniętego
+  sprintu. Przełącz monitorowany projekt Jira na inny (potwierdź destrukcyjny
+  dialog), potem **z powrotem na FM**, kliknij „Sync now". Wejdź na
+  `/dashboard/sprint-detail`, rozwiń listę **Sprint** w nagłówku i wybierz ten
+  zamknięty sprint.
+- **Co ma być prawdą:** nagłówek pokazuje **nazwę wybranego sprintu** i
+  plakietkę „Sprint closed". Panel **Reliability** pokazuje jego „Committed" i
+  „Delivered" oraz linię capacity („Capacity X of Y MD, over N working days") —
+  liczby z rekordu, nie z aktywnego sprintu. Wszystkie **trzy zakładki**
+  (Workflow health / Team activity / By technology) pokazują ten sam komunikat
+  „This sprint's detail data is no longer stored", a **nie** wykresy i tabele
+  aktywnego sprintu. W miejscu formularza korekt stoi tekst „Not available for
+  this sprint…".
+- **Dlaczego to ważne:** to jest jedyny na żywo osiągalny dowód, że strona
+  rozstrzyga wybór **trójdrożnie**, a nie dwudrożnie. Wiersze `sprint` starego
+  projektu kasuje kaskada (`connection-service.ts:405-411`), a rekord pomiaru
+  przeżywa ją celowo — jeśli strona cofnęłaby się wtedy do aktywnego sprintu,
+  pokazałaby **liczby bieżącego sprintu pod nazwą starego**, bez żadnego śladu
+  na ekranie. Druga połowa (wygaszanie danych po „bieżący + 2 sprinty") nie da
+  się dziś wywołać ręcznie — czystki jeszcze nie ma w kodzie — i dlatego jest
+  pokryta testem integracyjnym, nie tym wierszem.
+
+### 7.6 Adres z `?sprint=` da się wysłać i przeżywa przeładowanie
+
+- **Gdzie:** `/dashboard/sprint-detail`, konto `demo@sprintflow.test`.
+- **Co zrobić:** wybierz z listy **Sprint** dowolny sprint inny niż aktywny.
+  Skopiuj adres z paska przeglądarki. Przeładuj stronę (F5). Otwórz ten sam
+  adres w **nowej karcie**. Na koniec zmień w adresie `?sprint=` na liczbę
+  z sufitu (np. `?sprint=99999`) i wejdź.
+- **Co ma być prawdą:** adres zawiera `?sprint=<jirowe id sprintu>`. Po
+  przeładowaniu i w nowej karcie strona pokazuje **ten sam** sprint (nagłówek,
+  plakietka, liczby), a lista ma go zaznaczonego. Przy zmyślonym id strona
+  **nie wywala się** — pokazuje **sprint aktywny**, normalnie, bez błędu.
+- **Dlaczego to ważne:** stan w URL-u to cała różnica między „mogę pokazać
+  koledze konkretny sprint" a przełącznikiem, który resetuje się przy każdym
+  odświeżeniu. Zmyślone id jest tu ważniejsze niż wygląda: id z adresu jest
+  rozstrzygane **wyłącznie** przeciwko serii zapisanej dla tego konta i tego
+  projektu, więc id z cudzego konta nie ma prawa niczego wyświetlić — a błąd
+  zamiast wyjścia awaryjnego zamieniłby przestarzały link w zepsutą stronę.
+
+### 7.9 Zamknięty sprint przyjmuje korektę SP, a pomiar zostaje obok
+
+- **Gdzie:** `/dashboard/sprint-detail?sprint=<id zamkniętego sprintu>`, konto
+  `demo@sprintflow.test`. Sprint musi mieć `finalized_at` **niepuste**
+  (SELECT jak w 7.5) **oraz** wciąż istniejący wiersz w `sprint` (czyli:
+  **przed** ewentualnym przełączeniem projektu z 7.5 albo na sprincie
+  zamkniętym już po powrocie).
+- **Co zrobić:** zapisz „Delivered" z panelu Reliability. W sekcji **Adjust this
+  sprint by hand** w polu **Delivered story points** wpisz liczbę o kilka
+  większą (np. pomiar 21 → wpisz `26`) i kliknij **Save**. Przeładuj stronę.
+  Potem wejdź na `/dashboard` → zakładka **Reliability** i spójrz na **aktywny**
+  sprint.
+- **Co ma być prawdą:** na sprincie zamkniętym pole **jest** (na trwającym go nie
+  było — patrz 5.8). Po zapisie panel Reliability pokazuje **26**, plakietkę
+  **„Corrected"** i **„(measured 21 SP)"** obok — obie liczby naraz. Po
+  przeładowaniu nadal tak jest. Na `/dashboard` **aktywny** sprint pokazuje
+  swoje własne, **niezmienione** „Delivered" — korekta nie przeniosła się na
+  niego.
+- **Dlaczego to ważne:** do fazy 6 korekta z FR-023 nie miała **żadnej
+  osiągalnej powierzchni dla sprintu, o którym mówi**. Formularz stał na
+  zakładce Availability, której sprintem jest zawsze aktywny, więc w chwili
+  rolloweru `delivered_sp_corrected` poprzedniego sprintu przestawało być
+  dostępne z jakiegokolwiek ekranu — przy jednoczesnym `overrides.ts`, które
+  celowo zdejmuje strażnika finalizacji, bo „sprint zamknięty to jedyny, którego
+  liczbę warto poprawiać". Ostatni krok (sprawdzenie aktywnego sprintu) jest
+  najważniejszy: korekta trafia do średniej z FR-024, więc gdyby lądowała na złym
+  sprincie, skrzywiłaby estymatę w sposób, którego już nikt nie odtworzy.

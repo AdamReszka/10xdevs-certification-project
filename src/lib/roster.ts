@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 
 import { teamMember } from "@/db/schema";
 import type { getDb } from "@/lib/db";
+import { toFte } from "@/lib/fte";
 
 /**
  * Owner's full team roster (S-07). Returns ALL members (each carrying an
@@ -49,7 +50,7 @@ export async function listRoster(
  * `listRoster` above is the S-07 dashboard reader, consumed by `dashboard/page.tsx`
  * and `dashboard/sprint-detail/page.tsx` and asserted by
  * `dashboard-readers.integration.test.ts`. Its projection is NARROWER than the
- * editor's: it has `isActive` but neither `spCapacity` nor `source`, both of which
+ * editor's: it has `isActive` but neither `fte` nor `source`, both of which
  * `ClientMember` requires. Widening it would push two unused columns and a shape
  * change through both dashboards and their test for no gain, so the editor gets
  * its own reader instead.
@@ -63,7 +64,11 @@ export type EditorRosterMember = {
   githubUsername: string | null;
   jiraAccountId: string | null;
   role: string | null;
-  spCapacity: number | null;
+  /** Already converted from the driver's `numeric` string — see `lib/fte.ts`. */
+  fte: number;
+  /** NULL ⇒ still carrying the 0012 migration's default; drives the banner.
+   *  ISO string, not `Date` — this projection feeds a client component. */
+  fteConfirmedAt: string | null;
   technologyTrack: "FRONTEND" | "BACKEND" | "MOBILE" | "QA" | null;
   source: "GITHUB" | "JIRA" | "MANUAL" | "BOTH";
   isActive: boolean;
@@ -73,14 +78,15 @@ export async function listRosterForEditor(
   db: Db,
   ownerId: string,
 ): Promise<EditorRosterMember[]> {
-  return db
+  const rows = await db
     .select({
       id: teamMember.id,
       name: teamMember.name,
       githubUsername: teamMember.githubUsername,
       jiraAccountId: teamMember.jiraAccountId,
       role: teamMember.role,
-      spCapacity: teamMember.spCapacity,
+      fte: teamMember.fte,
+      fteConfirmedAt: teamMember.fteConfirmedAt,
       technologyTrack: teamMember.technologyTrack,
       source: teamMember.source,
       isActive: teamMember.isActive,
@@ -88,4 +94,12 @@ export async function listRosterForEditor(
     .from(teamMember)
     .where(eq(teamMember.ownerId, ownerId))
     .orderBy(teamMember.name);
+
+  // The driver hands `numeric` back as a string; converting HERE rather than in
+  // the editor is what keeps `'0.50' === 0.5` from ever being asked downstream.
+  return rows.map((r) => ({
+    ...r,
+    fte: toFte(r.fte),
+    fteConfirmedAt: r.fteConfirmedAt?.toISOString() ?? null,
+  }));
 }

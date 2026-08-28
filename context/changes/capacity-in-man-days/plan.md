@@ -1,0 +1,1535 @@
+# Capacity in man-days, velocity in story points — Implementation Plan
+
+## Overview
+
+SprintFlow never records what a sprint *was*. Capacity is computed live from a
+roster with no time dimension and then discarded; the delivered-SP scalar is a
+snapshot of "what is in Done right now", rewritten by every sync cycle including
+the ones that run after the sprint has closed. This plan makes a sprint a **unit
+of measurement**: capacity becomes man-days computed from an availability
+fraction, delivered SP becomes "first entry into Done inside the sprint window",
+and both are frozen into a durable per-sprint record that outlives retention and
+a Jira-project switch. From that record the lead gets the relation they asked
+for (capacity beside reliability) and an estimated velocity for the next sprint.
+
+Roadmap slice **S-23**. PRD **FR-006, FR-007, FR-010, FR-016, FR-022, FR-023,
+FR-024**.
+
+## Current State Analysis
+
+Established at framing (`frame.md`, five dimension agents + one pressure test)
+and re-measured during planning (`planning-notes.md` §6). Not re-derived here.
+
+- **`team_member.sp_capacity`** (`src/db/schema.ts:318`) is a nullable `integer`
+  in story points with **21 non-test references** in `src/`. Nothing populates it
+  — the roster import does not set it and new rows default to `null`
+  (`roster-editor.tsx:736`) — so the live state is not "capacity in the wrong
+  unit", it is **no denominator at all**. Stored non-null values are
+  un-reinterpretable (`8` is indistinguishable as 8 SP and as 8 FTE), so the
+  migration destroys them by necessity.
+- **The reducer changes shape, not just unit.** `capacity.ts:124` computes
+  `spCapacity × (available ÷ sprintWorkingDays)` — a ratio that cancels the day
+  dimension. Man-days are `fte × availableDays`; the divisor disappears.
+- **`sprintWorkingDays` is computed and never rendered.** Today's working-day
+  count is unfalsifiable by the lead; in an MD model it becomes the headline.
+- **The `nonWorkingDays` seam is declared and empty** (`helpers.ts:88,103,126`)
+  with **five would-be call sites**: `capacity.ts:83,120`,
+  `sprint-at-risk.ts:125,152`, `ticket-status-aging.ts:64`. No production caller
+  passes it.
+- **Both sprint scalars are recomputed every cycle** (`run-sync.ts:817-831`),
+  after the sprint closes included. `committedSp` grows with scope creep, so
+  reliability always looks good; `completedSp` is
+  `sum(sp) filter (current_category = 'DONE')` — a snapshot of *now*.
+- **The correct DONE primitive already exists twenty lines away**:
+  `burndown-series.ts:144-153` burns SP on a ticket's *first* transition into
+  DONE and never un-burns. It was simply never persisted as velocity.
+- **`added_after_sprint_start` keys off ticket creation date**
+  (`run-sync.ts:748-749`), so an old backlog item pulled in mid-sprint counts as
+  committed — the reliability denominator is wrong today. The `Sprint`-field
+  changelog that fixes it **is already fetched and thrown away**:
+  `expand: "changelog"` is in the query (`jira.ts:863`) and `parseStatusHistory`
+  drops everything with `field !== "status"` (`jira.ts:799`).
+- **No column in any table has ever recorded a sprint's capacity.** Its inputs
+  carry no time dimension (`grep valid_from|effective|as_of|snapshot` → zero
+  hits); `is_active` flips in place, members can be deleted or merged. A carried
+  ticket is re-stamped into the new sprint (`run-sync.ts:770`,
+  unique `(owner_id, jira_key)`), so past sprints are unrecomputable.
+- **The rollover hook exists and writes nothing.** `reconcileActiveSprint`
+  returns `switched` (`reconcile-sprint.ts:288`) and records nothing about the
+  sprint it just closed.
+- **`ReliabilityKpi` takes exactly two scalars** (`reliability-kpi.tsx:31-37`)
+  with no capacity term, so it cannot tell a full team's 100% from a half
+  team's 100% — the owner's originating complaint.
+- **`numeric` comes back from `pg` as a string.** Measured: `0.50::numeric(3,2)`
+  → `'0.50'`, `typeof === "string"`, `'0.50' === 0.5` is `false`. That breaks
+  `isUnchanged`'s `===` chain (`roster-store.ts:489`) — every roster save would
+  look like a change.
+- **`story_points integer` is not a precision defect, it is an availability
+  defect.** Measured 2026-08-28 against local Postgres with the real `pg`
+  driver: inserting `0.5` raises `invalid input syntax for type integer`, inside
+  `db.transaction` (`run-sync.ts:735`), so the whole Jira transaction rolls back
+  and `sync_state` is stamped `ERROR` — every 15 minutes, forever, with no
+  self-heal path. FR-009's thresholds are Fibonacci (1/2, 3, 5, 8/13, 21):
+  0.5 SP does not exist in this product's domain, so the column is correct and
+  the parser is not.
+
+## Desired End State
+
+The lead opens the dashboard and sees, for the current sprint, a capacity in
+man-days with the working-day count it was computed from, next to a reliability
+figure that is now interpretable because the capacity stands beside it. They can
+record the team's public holidays once, as dates, and every sprint that spans
+them costs one man-day per person less. When a sprint closes, SprintFlow writes
+a small permanent record of what that sprint was — full capacity, capacity after
+absences and days off, committed SP frozen at sprint start, delivered SP counted
+from first entry into Done. After two such sprints — two, not one, because one is not an
+average — the lead gets an estimated velocity — the average of past normalised velocity scaled by the active sprint's
+capacity ratio — shown together with the numbers it came from and withheld
+entirely when there is no history. They can switch the Sprint Detail
+page to a closed sprint and compare.
+
+Verification: `npm test`, `npm run test:integration`, `npm run typecheck`,
+`npm run lint` all pass; the per-phase manual rows in
+`context/changes/capacity-in-man-days/MANUAL-CHECKLIST.md` are ticked.
+
+### Key Discoveries:
+
+- The repo already knows how to freeze a fact: `daily_recap.payload` is a
+  durable per-day snapshot, and the per-sprint cadence columns
+  (`sprint.length_days/start_day/working_days`) are a per-sprint *copy* rather
+  than a global setting. The capability is not missing — the decision that a
+  sprint is worth freezing is.
+- The house read-side pattern is a pure reducer plus an owner-scoped reader
+  beside it (`capacity.ts`, `aging.ts`). A "last N sprints" reader extends it.
+- `absence` already has a nullable `sprint_id` (`schema.ts:456`), but
+  `team_member_id` is NOT NULL — so team-wide days off cannot ride that table.
+- Drizzle's `date()` column returns `'YYYY-MM-DD'` strings from `pg`, which is
+  byte-identical to the `DayKey` type the seam consumes.
+- `detectAnomalies` has exactly two production callers
+  (`settings/absences/actions.ts:150`, `sync/actions.ts:91`) plus the cron loop
+  in `scheduled.ts` — the same three seats the measurement sweep needs.
+
+## What We're NOT Doing
+
+- **No backfill.** The series starts at the first sprint closed after Phase 4
+  ships. Historical capacity is physically unreconstructable — the roster has no
+  time dimension — and inventing one would violate FR-023's "the system never
+  substitutes a default conversion".
+- **No `numeric` migration for `story_points`.** 0.5 SP is not in this
+  product's domain (FR-009 is Fibonacci). The rounding guard closes the
+  availability hole without modelling a quantity the product does not know.
+  `roadmap.md`'s description of this defect is wrong about the consequence and
+  is corrected in Phase 1.
+- **No automatic derivation of public holidays from a country.** That stays
+  **S-17**, now downstream of this slice. Phase 2 ships the row shape S-17 will
+  populate.
+- **No "you took on too much" warning.** Recorded as a candidate fourth
+  condition for `SPRINT_AT_RISK`; its threshold needs history and a tolerance
+  margin that cannot be chosen before the history exists, and a ceiling-picked
+  threshold gets muted after the first false alarm and the rule dies.
+- **No multi-sprint trend charts.** Phase 7 is a sprint *switcher*, not a trend
+  dashboard; inter-sprint analytics stay phase-2 per `prd.md`.
+- **No per-member historical snapshots.** The measurement record freezes team
+  totals, not who was on the team.
+- **No `timestamptz` migration for sprint boundaries.** Deferred again,
+  deliberately; every day-boundary decision in this slice routes through the
+  team's zone via `day-bucket.ts`.
+
+## Implementation Approach
+
+Four write-path phases, then three read-path phases. Phases 1–4 are the spine:
+once Phase 4 lands, the history accumulates on its own whether or not 5–7 are
+built, which is what makes 7 safely cuttable under deadline pressure.
+
+The record lives in its **own table**, not in columns on `sprint`. `sprint` rows
+cascade-delete on a Jira-project switch (`connection-service.ts:405-411`,
+`jira-store.ts:255-259`) and fall under the "current + 2 sprints" retention
+bound — the cascade exists today, the purge does not yet (the only retention in
+`src/lib` is `SYNC_ATTEMPT_RETENTION`, `run-sync.ts:309`), so the decision rests
+on the cascade and merely anticipates the purge (plan review F7); the measurement record must outlive both, so it carries `jira_project_id`
+as **plain text with no foreign key** and the series filters on the current
+project (mixing two projects' measurements would average two different teams,
+which is worse than the honest "no data" FR-023 mandates).
+
+The record is written by an **idempotent sweep on every sync cycle**, not by a
+hook on `reconcileActiveSprint`'s `switched`. A stalled cron or an expired token
+at the moment of rollover would make a hook lose that sprint *forever* — exactly
+the class of silent loss the framing identified as the substance of the problem.
+A sweep ("every sprint without a current record: compute and write") delays the
+record instead of losing it. For the same reason, committed SP is frozen at the
+first cycle that sees the sprint as `ACTIVE`, **with a timestamp of when the
+freeze happened**, so a late freeze is visible rather than silent.
+
+## Critical Implementation Details
+
+**`numeric` → `number` conversion is mandatory, not cosmetic.** The `pg` driver
+returns `numeric(3,2)` as the string `'0.50'`. Every read of `team_member.fte`
+and of the measurement table's numeric columns must convert at the boundary, and
+`isUnchanged` (`roster-store.ts:489`) compares with `===` — leaving a string
+there makes every roster save look like a change and bumps `updated_at` on every
+row.
+
+**Ordering inside Phase 3.** The `Sprint`-changelog fix must land before the
+committed-SP freeze is switched on, or the first freeze captures today's wrong
+denominator permanently.
+
+**The seam must be wired at all five sites in one phase.** A public holiday is
+not a working day for capacity *and* not an aging day for
+`TICKET_STATUS_AGING`. Half-wiring it produces two counters that disagree —
+a failure `context/foundation/lessons.md` already records once.
+
+## Phase 1: Availability fraction replaces story-point capacity
+
+### Overview
+
+Retire `team_member.sp_capacity` and replace it with `fte`, a four-choice
+availability fraction. Because the removal leaves `capacity.ts` with nothing to
+compute, this phase also carries the reducer's new arithmetic
+(`fte × availableDays`) and the Availability tab's MD label — the owner's §4
+sketch put the reshape in Phase 2, but Phase 1 cannot be left compiling and
+truthful without it. Phase 2 keeps the rest of that bullet (days-off table,
+seam, working-day display).
+
+### Changes Required:
+
+#### 1. Canonical documents
+
+**File**: `context/foundation/prd.md`
+
+**Intent**: Record three amendments explicitly rather than smuggling them. FR-007
+currently says team-wide days off are recorded "for a given sprint"; the decision
+is that they are **dates on the account**, so one entry works in every sprint
+that spans it and S-17 later appends rows instead of rewriting the model. The
+scope now includes a place to view closed sprints, which the same-day roadmap
+note had parked. And FR-024's ratio is taken over the **active** sprint, not a
+future one — see Phase 6 §2 (plan review F1).
+
+**Contract**: FR-007's clause on team-wide days off; a `> Socratic (revised
+2026-08-28)` line under it carrying the reason. FR-016 gains no new text — the
+capacity-beside-reliability wording already covers Phase 6. FR-024's "the ratio
+of the next sprint's capacity to its full capacity" becomes the **active**
+sprint's, with a `> Socratic (revised 2026-08-28)` line recording why: a sprint
+that has not started has no Jira row, no working-day count and no absences, so
+"next" was never computable — `roadmap.md:744` already carries the owner's
+formula as `capacity_current ÷ capacity_full`, and projecting an unstarted
+window is roadmap **S-18**. FR-024's worked example is re-worded to the same
+sprint (200 MD full, 180 MD after one full-sprint absence, average 100 SP → 90
+SP) — the arithmetic is unchanged.
+
+**File**: `context/foundation/roadmap.md`
+
+**Intent**: Three edits. S-23's row/section absorbs the widened scope (per-sprint
+entry surface + closed-sprint viewing) with the owner's reason: reliability from
+a single sprint is a gadget, only a series makes it readable. S-17's note stays
+downstream. The `story_points integer` defect description is corrected — it is
+not "half points are lost", it is "the Jira transaction rolls back and the sync
+is stuck in `ERROR`".
+
+**Contract**: rows for S-17, S-18 and S-23 in the slice table
+(`roadmap.md:517,518,523`) and the S-23 section body. **S-18** gains one line:
+S-23 ships FR-024's estimate over the *active* sprint's capacity ratio; what
+stays in S-18 is projecting an unstarted window (its own working-day config and
+absence coverage), so S-23 does not close S-18 (plan review F1).
+
+#### 2. Schema and migration
+
+**File**: `src/db/schema.ts`
+
+**Intent**: Drop `spCapacity`; add the availability fraction and a per-member
+confirmation stamp. The stamp is what lets the Phase-1 banner know who still
+carries the migration's default rather than a fact the lead confirmed.
+
+**Contract**: on `teamMember` — remove `spCapacity`; add
+`fte: numeric("fte", { precision: 3, scale: 2 }).notNull().default("1.00")` and
+`fteConfirmedAt: timestamp("fte_confirmed_at")` (nullable).
+
+**File**: `src/db/migrations/0012_*.sql` (generated)
+
+**Intent**: `npm run db:generate`, then read the output before applying. The
+`DROP COLUMN` is the deliberate data loss; the `ADD COLUMN … NOT NULL DEFAULT
+'1.00'` backfills every existing member as full-time, which is the regression the
+banner exists to surface.
+
+**Contract**: `ALTER TABLE team_member DROP COLUMN sp_capacity;` plus the two
+`ADD COLUMN`s. `fte_confirmed_at` must be left NULL for existing rows.
+
+#### 3. The fraction as a domain value
+
+**File**: `src/lib/fte.ts` (new)
+
+**Intent**: One place that knows the four legal values and the string↔number
+boundary, so the conversion cannot be forgotten at one of the five read sites.
+
+**Contract**: `FTE_CHOICES = [1, 0.75, 0.5, 0.25] as const`;
+`toFte(raw: string | number | null | undefined): number` (defaults to 1 on an
+unparseable value, never NaN); `fteToColumn(value: number): string`;
+`isFteChoice(value: number): boolean`.
+
+**File**: `src/lib/validations/roster.ts`
+
+**Intent**: Replace the story-point field with a non-nullable enumerated
+fraction. There is no "not answered" state any more, so no `nullish()`.
+
+**Contract**: `spCapacity: z.number().int().min(0).max(1000).nullish()` at line 42
+becomes an `fte` field constrained to `FTE_CHOICES`.
+
+**Amended during implementation (impl review F3): the field is REQUIRED, not
+`.default(1)`.** A zod default makes the schema's input type diverge from its
+output, and `zodResolver` then refuses to reconcile it with the editor's form
+type. The stricter shape is also the better one: the only consumers are
+`saveRosterAction` and `mergeMembersAction`, both fed by the editor, which always
+sets the field — so a payload that omits `fte` is a stale client, and refusing it
+with "reload the page" beats silently promoting somebody to full time. Carry the
+human message on the type as well as the refinement (impl review F1):
+`saveRosterAction` hands `issues[0].message` straight to a toast.
+
+#### 4. Roster read/write path
+
+**File**: `src/lib/roster.ts` (`:66,83`), `src/lib/integrations/roster-store.ts`
+(`:128,246,318,452,475,489`), `src/components/organisms/setup/roster-merge.ts`
+(`:31,87`), `src/app/(app)/setup/team/actions.ts` (`:56,140`)
+
+**Intent**: Carry `fte: number` end to end, converting with `toFte` at every
+`select`. The merge helper's `keep.spCapacity ?? drop.spCapacity ?? null` chain
+collapses to `keep.fte` — a NOT NULL column has no absent state to fall through.
+
+**Contract**: `MemberFields.fte: number`; `isUnchanged` compares converted
+numbers (see Critical Implementation Details); `saveRoster` stamps
+`fteConfirmedAt = now` on any row whose `fte` the save touched, and on every
+insert.
+
+#### 5. Roster editor
+
+**File**: `src/components/organisms/setup/roster-editor.tsx` (`:99,535-538,610-619,736`)
+
+**Intent**: Swap the free-number input for a four-option select — `0.5` is
+currently unenterable at four layers at once, and a select removes all four. The
+helper copy at 535-538 asserts the *opposite* model ("a half-time developer's
+number is already halved… it never multiplies it by anything") and must be
+rewritten: the fraction now multiplies the sprint's working days.
+
+**Contract**: column header `Availability`; a shadcn `Select` bound through
+`Controller` with options `Full time (1.0) / 0.75 / Half time (0.5) / 0.25`,
+`aria-label="Availability"`; `append()` defaults `fte: 1`.
+
+#### 6. Migration banner
+
+**File**: `src/components/organisms/setup/roster-editor.tsx`
+
+**Intent**: The migration silently makes every part-timer full-time, which
+inflates capacity with no signal. The banner names the count and disappears once
+every member has been confirmed.
+
+**Amended during implementation (impl review F4): `settings/team/page.tsx` needs
+no change.** The banner lives entirely in the shared organism, which both mounts
+already render, so the page passes nothing new. The side effect is that it also
+appears on `/setup/team` — harmless, because a fresh owner has no members and the
+count is zero, and an existing owner revisiting the wizard has the same problem
+the banner is for.
+
+**Contract**: rendered when `members.some(m => m.fteConfirmedAt === null)`;
+copy names the count and says the previous story-point capacity could not be
+converted; a "Confirm availability" action stamps `fte_confirmed_at` for all
+listed members without changing their values.
+
+#### 7. Capacity reducer in man-days
+
+**File**: `src/lib/dashboard/capacity.ts`
+
+**Intent**: New arithmetic and new output. Each active member contributes
+`fte × availableWorkingDays`; the `available ÷ sprintWorkingDays` ratio and the
+whole `membersWithoutCapacity` path disappear (the column is NOT NULL — there is
+no "not answered" state left to surface).
+
+**Contract**: `CapacityMember.fte: number` replaces `spCapacity`;
+`SprintCapacity` becomes
+`{ adjustedMd: number; nominalMd: number; sprintWorkingDays: number }`. The
+`sprintWorkingDays === 0` guard stays (a sprint with no working days has no
+capacity, and the ceiling stays honest).
+
+**File**: `src/components/organisms/dashboard/availability.tsx` (`:126-166`)
+
+**Intent**: Render man-days. The `noneSet` empty state goes with
+`membersWithoutCapacity`.
+
+**Contract**: `CapacitySummary` renders `{adjustedMd} MD` with
+`of {nominalMd} MD, after absences` when reduced.
+
+#### 8. Fixtures
+
+**File**: `src/lib/anomaly/test-support.ts` (`:57`), `scripts/seed-dashboard.mjs` (`:271`)
+
+**Intent**: Keep the demo seed and the detector fixtures compiling and
+realistic — the seed's six-person team should carry a mix of fractions so the
+demo shows a capacity that is not a round multiple of the headcount.
+
+**Contract**: `sp_capacity` column drops out of the seed insert; `fte` is added.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Migration applies cleanly against local Supabase: `npm run db:migrate`
+- `grep -rn "spCapacity\|sp_capacity" src/ scripts/ --include="*.ts" --include="*.tsx" --include="*.mjs"` returns no CODE references outside `src/db/migrations/`. Comments that explain why the column is gone are expected and must not be deleted to satisfy the grep — they are what stops someone reintroducing it (impl review F4)
+- Unit tests pass, including new `src/lib/fte.test.ts` covering the string→number boundary: `npm test`
+- A `roster-store` integration test asserts that saving an unchanged roster performs zero updates (the `numeric`-as-string trap): `npm run test:integration`
+- Type checking passes: `npm run typecheck`
+- Linting passes: `npm run lint`
+
+#### Manual Verification:
+
+- `/settings/team` shows the banner naming how many members were defaulted to full-time; confirming it makes the banner disappear and it stays gone after a reload
+- The Availability select offers exactly four options and a saved 0.5 survives a page reload as 0.5
+- The dashboard Availability tab shows a capacity in MD that equals `Σ fte × working days` for a sprint with no absences recorded
+
+**Implementation Note**: After completing this phase and all automated
+verification passes, pause for manual confirmation before proceeding.
+
+---
+
+## Phase 2: Team days off, and the empty seam wired at all five sites
+
+### Overview
+
+Give the lead a place to record public holidays and company days off as dates on
+the account, and wire the `nonWorkingDays` seam that S-08 declared and left
+empty — everywhere it is consumed, in one phase.
+
+### Changes Required:
+
+#### 1. Schema
+
+**File**: `src/db/schema.ts`, `src/db/migrations/0013_*.sql`
+
+**Intent**: A team-wide day off is not an absence — `absence.team_member_id` is
+NOT NULL, so it cannot ride that table. It is a date on the account, so one
+entry applies to every sprint spanning it, which is exactly the row shape S-17
+will later generate from a country.
+
+**Contract**: `teamDayOff` — `id` text PK, `ownerId` text NOT NULL FK
+`user.id` ON DELETE CASCADE, `day` `date("day")` NOT NULL (the `pg` driver
+returns `'YYYY-MM-DD'`, byte-identical to `DayKey`), `label` text nullable,
+`createdAt`. `unique(ownerId, day)`; index on `ownerId`.
+
+#### 2. Store
+
+**File**: `src/lib/team-day-off-store.ts` (new)
+
+**Intent**: Owner-scoped CRUD plus the one read the seam needs. Mirrors
+`absence-store.ts` in shape.
+
+**Contract**: `listTeamDaysOff({db, ownerId})`,
+`getNonWorkingDays({db, ownerId}): Promise<ReadonlySet<DayKey>>`,
+`createTeamDayOff`, `deleteTeamDayOff`. A duplicate date is an idempotent no-op,
+not an error.
+
+#### 3. Wiring the seam — all five sites
+
+**File**: `src/lib/dashboard/capacity.ts` (`:83,120`)
+
+**Intent**: Both the sprint's own working-day total and each absence's clipped
+window must exclude team days off, or a holiday inside someone's vacation would
+be subtracted twice.
+
+**Contract**: `computeSprintCapacity` takes
+`nonWorkingDays: ReadonlySet<DayKey>`; both `countWorkingDaysInclusive` calls
+pass it; `getSprintCapacity` loads it in the existing `Promise.all`.
+
+**File**: `src/lib/anomaly/types.ts`, `src/lib/anomaly/load-snapshot.ts`,
+`src/lib/anomaly/rules/sprint-at-risk.ts` (`:125,152`),
+`src/lib/anomaly/rules/ticket-status-aging.ts` (`:64`),
+`src/lib/anomaly/test-support.ts`
+
+**Intent**: Detectors are pure over the snapshot, so the calendar has to arrive
+through it — the same argument that put `timeZone` there. A ticket does not age
+on a public holiday, and a day the whole team is off is not a working day lost
+to one person's absence.
+
+**Contract**: `SprintSnapshot.nonWorkingDays: ReadonlySet<DayKey>`; the loader
+reads it via `getNonWorkingDays`; the test-support factory defaults it to an
+empty set.
+
+#### 4. Entry surface
+
+**File**: `src/components/organisms/settings/team-days-off-editor.tsx` (new),
+`src/app/(app)/settings/absences/page.tsx`,
+`src/app/(app)/settings/absences/actions.ts`
+
+**Intent**: The absences page is already "who is not working"; team days off are
+the same question asked of everyone. Adding a section there costs no new route
+and puts the two calendars side by side. Mutations re-run detection for the same
+reason absence mutations already do (`actions.ts:24-40`): a holiday changes
+`TICKET_STATUS_AGING` budgets, and waiting 15 minutes would look broken.
+
+**Contract**: a list of dates with optional labels, add/remove; server actions
+mirroring the absence actions' thin shape (`requireSession` → `getDb` →
+service), each followed by a best-effort `detectAnomalies`.
+
+#### 5. Showing the divisor
+
+**File**: `src/components/organisms/dashboard/availability.tsx`
+
+**Intent**: `sprintWorkingDays` has been computed and never rendered since S-08,
+which is why today's wrong divisor is invisible. FR-022 requires it beside the
+capacity number.
+
+**Contract**: under the MD figure, "N working days" and, when any fall in the
+sprint, "− M team days off".
+
+#### Delivered beyond the contract (recorded at impl-review, F9)
+
+Two additions this phase shipped that §1–§5 do not name. Both serve §5's intent
+and are kept; they are written down here so a later review reads them as scope,
+not as drift.
+
+- `countWorkingDaysInclusive`'s sibling **`countTeamDaysOffInclusive`**
+  (`helpers.ts`). §5 needs the reduction to display it, and re-deriving it at the
+  view would mean a second walk over the calendar — one that could omit the set
+  and produce the very disagreement between counters this phase exists to
+  prevent. It counts only holidays landing on working weekdays, so a Saturday
+  holiday never renders as "− 1" beside a working-day total that did not move.
+- **`costsNothing`** and its "Not a working day anyway" badge
+  (`team-days-off-view.ts`, `team-days-off-editor.tsx`). A holiday entered on a
+  weekend correctly changes no number; without the badge that correct outcome
+  reads as a broken save.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Unit tests: a holiday inside the sprint reduces `adjustedMd` by exactly one MD per full-time member, and a holiday inside an absence window is not subtracted twice: `npm test`
+- Unit tests: `TICKET_STATUS_AGING` does not age a ticket across a team day off, and `SPRINT_AT_RISK`'s working-days-left drops by one: `npm test`
+- Integration test: `getNonWorkingDays` is owner-scoped and a duplicate insert is a no-op: `npm run test:integration`
+- `grep -rn "countWorkingDays" src/ --include="*.ts" | grep -v test` shows every production call site passing a `nonWorkingDays` argument
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- Adding a public holiday inside the active sprint on `/settings/absences` lowers the dashboard capacity by one MD per full-time member and the working-day count by one
+- The same holiday stops a ticket's aging clock — a ticket that was one hour from flagging does not flag over the holiday
+- Removing the day off restores both numbers
+
+**Implementation Note**: Pause for manual confirmation before proceeding.
+
+---
+
+## Phase 3: Honest sprint sums
+
+### Overview
+
+Fix the three defects in the two scalars the reliability ratio divides:
+committed SP grows with scope creep, its denominator keys off the wrong date,
+and delivered SP is a snapshot of "what is in Done right now" that keeps being
+rewritten after the sprint closes. Also close the sync-stopping hole in the
+story-point parser.
+
+### Changes Required:
+
+#### 1. Story-point guard
+
+**File**: `src/lib/jira.ts` (`:815-822`)
+
+**Intent**: `extractStoryPoints` passes any `number` straight into an `integer`
+column inside a transaction, so a single `0.5` estimate in Jira permanently
+wedges the Jira sync in `ERROR` every 15 minutes with a cause the lead cannot
+guess from the dashboard. Round at the boundary. The column is right — FR-009's
+thresholds are Fibonacci and 0.5 SP is not in this product's domain — so this is
+an input guard, not a model change.
+
+**Contract**: non-finite → `null`; otherwise `Math.round(raw)` clamped to
+non-negative.
+
+#### 2. Sprint-field changelog
+
+**File**: `src/lib/jira.ts` (`:780-810,863`)
+
+**Intent**: `added_after_sprint_start` is `issue.createdAt > sprintStart`, so an
+old backlog item pulled in mid-sprint counts as committed and the reliability
+denominator is wrong today. The changelog that answers the question properly is
+**already fetched and discarded** by the `field !== "status"` filter — this is a
+parser extension, not a new API call.
+
+**Contract**: `parseStatusHistory` keeps its status-only contract; a sibling
+collects `Sprint`-field changes into
+`JiraSprintIssue.sprintFieldChanges: { changedAt: Date | null; from: string | null; to: string | null }[]`.
+
+**Match on the resolved field id, not the display name (plan review F5).** A
+changelog item carries both `field` (the site's *display* name, localised and
+renameable) and `fieldId` (`customfield_*`, stable). Matching only on
+`field === "Sprint"` fails silently on a non-English or renamed site, and the
+`createdAt` fallback then writes today's wrong denominator — which §4 **freezes
+permanently** into the sprint row and, through it, into every measurement
+record. That interaction is what upgrades this from the accepted risk the brief
+recorded to something worth spending an API call on. The repo already solves
+this exact class: `resolveStoryPointFieldId` (`jira.ts:941`) discovers the
+site-specific id off `schema.custom` from `GET /rest/api/3/field` — the one call
+that lists every field, and the same call the story-point id already comes from.
+
+- Add `resolveSprintFieldId` beside it, matching `schema.custom` containing
+  `greenhopper` + `sprint` (the Jira Software sprint field), resolved in the
+  same place and cached the same way as `storyPointFieldId`.
+- Match a changelog item when `it.fieldId === sprintFieldId`, falling back to
+  `it.field === "Sprint"` when the id could not be resolved.
+- Neither matched and the issue has a non-empty changelog → count it, and log
+  the count once per sync, so the fallback path is visible rather than silent.
+  No field names or issue content in the log line.
+
+#### 3. Denominator from the changelog
+
+**File**: `src/lib/integrations/sync/run-sync.ts` (`:748-749`)
+
+**Intent**: A ticket is "added after sprint start" when the `Sprint` field
+transition that put it into *this* sprint happened after the sprint started.
+
+**Contract**: resolve the latest `sprintFieldChanges` entry whose `to` names this
+sprint; `addedAfterSprintStart = thatChange.changedAt > sprintStart`. **Fallback
+when no `Sprint` transition is present** (ambiguous: either it was there from the
+start, or it was created directly into the sprint): keep today's
+`createdAt > sprintStart` rule, which resolves both readings correctly.
+
+#### 4. Freeze committed SP at first sighting
+
+**File**: `src/db/schema.ts`, `src/db/migrations/0014_*.sql`,
+`src/lib/integrations/sync/run-sync.ts` (`:817-831`)
+
+**Intent**: A commitment that grows with the scope added to it is not a
+commitment — it makes reliability look good by construction. Freeze it at the
+first cycle that sees the sprint, and stamp *when*, so a late freeze (stalled
+cron, expired token) is visible rather than silent.
+
+**Contract**: `sprint.committedFrozenAt: timestamp` (nullable). The totals
+`UPDATE` writes `committedSp` and stamps `committedFrozenAt = now` **only when
+`committed_frozen_at IS NULL`**, expressed in the same statement (`case when …`,
+the idiom already used for cadence at `reconcile-sprint.ts:258-260`). Per-ticket
+`storyPoints` keeps refreshing every cycle — estimates change during refinement
+and the live figures should follow.
+
+#### 5. Delivered SP from first entry into Done
+
+**File**: `src/lib/dashboard/first-done.ts` (new),
+`src/lib/dashboard/burndown-series.ts` (`:144-153`),
+`src/lib/integrations/sync/run-sync.ts`
+
+**Intent**: The correct primitive already exists inside the burndown reducer and
+was never persisted as velocity. Extract it so the two surfaces cannot drift,
+then compute `completedSp` from it. Bounding the count to
+`[sprintStart, sprintEnd]` is also what stops the scalar from being rewritten
+after the sprint closes: a first-DONE instant never moves, so post-close cycles
+become idempotent.
+
+**Contract**: `firstDoneAtByTicket(transitions): Map<string, Date>` — earliest
+transition with `toCategory === 'DONE'` and non-null `changedAt`;
+`computeDeliveredSp({ tickets, firstDoneAt, sprintStart, sprintEnd, now })`
+sums `storyPoints ?? 0` for tickets whose first DONE falls in
+`[sprintStart, min(sprintEnd, now)]`. `burndown-series.ts` imports the first
+helper rather than keeping its own copy. `run-sync` reads the sprint's tickets
+and their DONE transitions inside the existing transaction and writes the result
+to `sprint.completedSp`.
+
+**Note on carried-over tickets**: a ticket whose first DONE predates this
+sprint's start does not count as delivered here — it was delivered in the sprint
+that closed it. FR-023's "a ticket that later reopened or carried over still
+counts" is satisfied by *first* entry never being un-set.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Unit tests: a `0.5` from Jira becomes `1`, a `NaN`/`Infinity` becomes `null`: `npm test`
+- Unit tests for `computeDeliveredSp`: reopened-and-reclosed counts once; closed-after-sprint-end does not count; carried-in already-done does not count; unestimated contributes 0, not NaN
+- Integration test: a second sync cycle does not change `committed_sp` after a ticket is added to the sprint, and `committed_frozen_at` keeps its first value: `npm run test:integration`
+- Integration test: `added_after_sprint_start` is false for a ticket created a month ago whose `Sprint` transition predates sprint start, and true when the transition follows it
+- Unit test: a changelog item is matched by `fieldId` even when its display `field` is not the English `Sprint`, and the display-name path still matches when the id is unresolved (F5)
+- Integration test: `completed_sp` is unchanged by a sync cycle that runs after `endDate` has passed
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- With SP estimates entered in the FM Jira project (manual-test row 1.8), a real sync writes `committed_sp` / `completed_sp` matching what Jira shows
+- Adding a ticket to the running sprint in Jira raises the burndown's scope line but does **not** raise the committed figure on the Reliability panel
+- Setting a Jira estimate to 0.5 no longer breaks the sync — the dashboard keeps updating and the ticket shows 1 SP
+
+**Implementation Note**: Pause for manual confirmation before proceeding.
+
+---
+
+## Phase 4: The per-sprint measurement record
+
+### Overview
+
+The spine of the slice. A separate, retention-exempt table records what each
+sprint was, written by an idempotent sweep that runs in every sync cycle.
+
+### Changes Required:
+
+#### 1. Schema
+
+**File**: `src/db/schema.ts`, `src/db/migrations/0016_*.sql`
+
+> **Renumbered at impl-review (2026-08-28).** This was `0015_*.sql`. `0015` is
+> now taken by `0015_reset_jira_delta_cursor.sql`, the data-only migration that
+> closes impl-review F1 — see the note at the end of this phase.
+
+**Intent**: A durable record that survives what `sprint` does not: the "current
++ 2 sprints" retention bound and the cascade delete a Jira-project switch fires.
+Hence a separate table, and hence `jira_project_id` stored as **plain text with
+no foreign key** — an FK would reintroduce exactly the cascade the record must
+outlive. The row also holds the lead's overrides, kept alongside the computed
+values rather than replacing them (FR-022, FR-023).
+
+**Contract**: `sprintMeasurement` —
+`id` text PK; `ownerId` text NOT NULL FK `user.id` ON DELETE CASCADE;
+`jiraProjectId` text NOT NULL (no FK); `jiraSprintId` text NOT NULL;
+`sprintName` text; `startDate`/`endDate` timestamp; `workingDays` integer;
+`capacityFullMd` / `capacityAdjustedMd` `numeric(8,2)`;
+`capacityOverrideMd` `numeric(8,2)` nullable;
+`committedSp` / `deliveredSp` integer; `deliveredSpCorrected` integer nullable;
+`committedFrozenAt` timestamp nullable; `state` `sprintState`;
+`finalizedAt` timestamp nullable; `measuredAt`, `createdAt`, `updatedAt`.
+`unique(ownerId, jiraSprintId)` — the ON CONFLICT key the sweep depends on, so
+both columns are NOT NULL (`lessons.md` #1). Index
+`(ownerId, jiraProjectId, startDate)` for the series read.
+
+**Which project id (impl-review F4).** `jiraProjectId` stores the **Jira-side**
+id (`jira_project.jira_project_id`, e.g. `"10000"`), NOT the internal
+`jira_project.id`. The plan said only "plain text with no foreign key" and left
+the choice open; it is not free. `connection-service.ts:394-404` UPDATES the
+project row **in place** on a switch, so the internal id is stable across a
+switch while the team it names is not — keying on it would file two different
+teams' sprints under one identity and average them into a figure describing
+nobody. The Jira-side id also makes switch-away-and-back find its own history
+again, which is what manual row 4.9 checks.
+
+**What `capacityFullMd` means, and the question deferred to Phase 6
+(impl-review F2).** It is the reducer's `nominalMd` — `Σ fte × sprintWorkingDays`
+— and `sprintWorkingDays` is **already net of team-wide days off**. So a public
+holiday reduces BOTH capacity columns, and only absences separate them. That is
+FR-022's reading ("reduced by recorded absences and by team-wide days off
+alike"); FR-023's wording ("its full capacity, its capacity after absences and
+team-wide days off") reads as if `full` should precede both. The consequence is
+not local: **FR-024 normalises past velocity against `capacityFullMd`**, so under
+this mapping a holiday-shortened sprint is never normalised back up and enters
+the average as though the team had had the whole calendar. Deliberately left as
+shipped — the reducer already returns `teamDaysOff`, so the other reading is a
+one-line derivation whenever it is wanted — and **settled in Phase 6**, where the
+normalisation is actually written and the choice becomes observable. Records
+frozen before then carry this reading and cannot be recomputed.
+
+#### 2. Capacity for an arbitrary sprint
+
+**File**: `src/lib/dashboard/capacity.ts`
+
+**Intent**: `getSprintCapacity` is pinned to `getActiveSprintRow` (`:151`), so no
+function in the system can answer "capacity in sprint N−3". The sweep needs to
+measure a sprint that has just closed.
+
+**Contract**: extract `getSprintCapacityFor(db, ownerId, sprintRow)`;
+`getSprintCapacity` becomes a thin wrapper resolving the active sprint first.
+No behaviour change for existing callers.
+
+#### 3. The sweep
+
+**File**: `src/lib/measurement/sweep.ts` (new)
+
+**Intent**: Write the record from a periodic sweep, never from
+`reconcileActiveSprint`'s `switched` flag. A hook means a stalled cron or an
+expired token at the moment of rollover loses that sprint permanently — the
+exact silent loss the framing named as the substance of the problem. A sweep
+delays the record instead of losing it.
+
+**Contract**:
+`sweepSprintMeasurements({ db, ownerId, now }): Promise<{ upserted: number; finalized: number }>`.
+For every `sprint` row of the owner: upsert a measurement keyed on
+`(ownerId, jiraSprintId)`. Computed columns are refreshed **only while
+`finalized_at IS NULL`**; `finalizedAt` is stamped when the sprint's `state` is
+`CLOSED` (or its `endDate` has passed), which is what freezes the record. The
+override and correction columns are **never** written by the sweep. Idempotent:
+a second run in the same cycle changes nothing.
+
+**Where each column's value comes from (plan review F2).** The sweep measures
+sprints that may already have closed, so the source of each number matters more
+than the arithmetic:
+
+- `capacityFullMd` / `capacityAdjustedMd` / `workingDays` —
+  `getSprintCapacityFor(db, ownerId, sprintRow)` (§2 above).
+- `committedSp` — **copied** from `sprint.committed_sp`, which Phase 3 §4 froze
+  at the first FULL-pull cycle that saw the sprint. **A row whose
+  `committed_frozen_at` is still NULL has not been frozen and its `committed_sp`
+  is still moving** — see the impl-review note at the end of this phase before
+  writing `finalizedAt`. It must NOT be recomputed:
+  `jira_ticket` is unique on `(owner_id, jira_key)` and `run-sync` overwrites
+  `sprint_id` on conflict (`schema.ts:614`, `run-sync.ts:768`), so a carried-over
+  ticket has been re-stamped into the *next* sprint and a
+  `where sprint_id = N` sum silently loses it. `committedFrozenAt` is copied
+  alongside, so a late freeze stays visible on the record too.
+- `deliveredSp` — **recomputed**, not copied, using Phase 3's
+  `firstDoneAtByTicket` / `computeDeliveredSp` over `jira_status_history`
+  restricted to first-DONE instants inside `[sprintStart, sprintEnd]`. The join
+  is on `jira_status_history.ticket_id`, which is stable, and is **not** filtered
+  by `jira_ticket.sprint_id` — that is what makes it survive the re-stamp. Under
+  one monitored Jira project a ticket whose first DONE falls in this sprint's
+  window belongs to this sprint, so the window alone is a sufficient predicate.
+
+  **The assumption that predicate rests on, stated (impl-review F3): sprint
+  windows do not overlap.** They can. `src/lib/sprint.ts` documents — in a
+  comment added at S-16 impl-review — that an owner can hold more than one
+  ACTIVE sprint row, because `importCadence` conflicts on `jiraSprintId` and
+  therefore INSERTS rather than updates; and Jira Software permits parallel
+  sprints on one board. Two overlapping measurement records would each count the
+  same first-DONE instants, and FR-024 averages over those records, so the
+  inflation compounds into the estimate rather than staying local. Narrowing by
+  `sprint_id` is NOT the fix — it would undo exactly the re-stamp survival this
+  bullet exists for. The tie-break (nearest start? the sprint the ticket was
+  stamped to at its first-DONE instant?) is a **Phase 6 prerequisite**, recorded
+  in `follow-ups/review-fixes.md`; until it is chosen, the series is correct only
+  for teams running one sprint at a time.
+
+Copying `sprint.completed_sp` instead would reintroduce the loss the sweep exists
+to prevent: `run-sync.ts:817-831` writes the two scalars only for `chosenSprint`,
+i.e. the sprint Jira currently reports as active, so after a rollover sprint N's
+scalar is frozen at whatever the last cycle before the flip happened to see. A
+cron stalled across the rollover would then record a stale delivered figure while
+integration test 4.2 still passes — 4.2 asserts the row *exists*, not that its
+number is right. Recomputing from the history closes that gap, and it is the
+same primitive the burndown already uses, so the two surfaces cannot drift.
+
+#### 4. Call sites
+
+**File**: `src/lib/integrations/sync/scheduled.ts`,
+`src/lib/integrations/sync/actions.ts` (`:91`)
+
+**Intent**: The sweep must run whether or not the Jira pull succeeded — a sprint
+that closed while the token was expired still has to be recorded once the token
+is fixed. So it sits beside `detectAnomalies`, after the per-owner sync, in the
+same best-effort try/catch shape.
+
+**Contract**: called per owner in the cron loop and after a manual sync;
+failures are swallowed and logged, never surfaced as a failed sync.
+
+#### 5. Reader
+
+**File**: `src/lib/measurement/reader.ts` (new)
+
+**Intent**: The series every later phase reads, filtered to the current Jira
+project so an average never mixes two teams.
+
+**Contract**:
+`listSprintMeasurements(db, ownerId, jiraProjectId, limit?): Promise<SprintMeasurement[]>`,
+newest first, numerics converted to `number` at the boundary. Finalized rows
+only for the history series; the active sprint's row is read separately.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Integration test: closing a sprint and running the sweep writes exactly one record; running the sweep again changes nothing (idempotence): `npm run test:integration`
+- Integration test: a sweep that first runs three cycles *after* the rollover still records the closed sprint (the loss the hook design would have caused)
+- Integration test: deleting the owner's `jira_project` row cascades away the `sprint` rows and leaves the measurement rows intact
+- Integration test: a finalized record's computed columns do not move on subsequent sweeps
+- Integration test: a ticket carried over into sprint N+1 (so its `jira_ticket.sprint_id` now names N+1) whose first DONE falls inside sprint N still counts in N's `delivered_sp`, and a sweep run after the rollover produces the same figure as one run before it
+- Unit tests for the sweep's pure decision (`shouldFinalize`, `shouldRecompute`): `npm test`
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- After the real sprint in the FM project rolls over, a row appears in `sprint_measurement` with a capacity and a delivered figure that match what the dashboard showed on the sprint's last day
+- Switching the monitored Jira project in settings and switching back leaves the record in place
+
+**Implementation Note**: Pause for manual confirmation before proceeding. This
+is the last phase of the write path — after it, history accumulates whether or
+not phases 5–7 ship.
+
+### Carried in from the Phase 2/3 impl-review (2026-08-28)
+
+Read `reviews/impl-review-phase-2-3.md` F1 before starting this phase. Two of
+its consequences land directly here:
+
+1. **Migration numbering.** `0015` is taken — `0015_reset_jira_delta_cursor.sql`,
+   data-only, no schema change. The `sprint_measurement` table is `0016`.
+2. **An unfrozen sprint is not measurable, and the sweep must say so.** The
+   commitment freeze now waits for a FULL Jira pull, because `committed_sp` sums
+   the whole ticket table while `added_after_sprint_start` is rewritten only for
+   the issues a cycle actually pulled; freezing on a delta cycle would bake a
+   mixture of two rules in permanently. The consequence for this phase: a
+   `sprint` row can legitimately sit with `committed_frozen_at IS NULL` for a
+   while — normally until the next sprint switch forces a full pull. Stamping
+   `finalizedAt` on such a row would freeze a commitment that was still moving,
+   and `deliveredSp` would then be normalised against a denominator nobody ever
+   committed to. **`shouldFinalize` must therefore require
+   `committed_frozen_at IS NOT NULL` in addition to CLOSED / past-`endDate`**,
+   and a sprint that closed without ever being frozen is FR-023's honest "no
+   data" case rather than a record with a plausible-looking number in it. Cover
+   it in criterion 4.5's `shouldFinalize` unit tests.
+
+---
+
+## Phase 5: The lead's override and correction
+
+### Overview
+
+Two marked manual entries: a per-sprint capacity override in MD (FR-022) and a
+correction to delivered SP (FR-023). Both sit **at the sprint**, not in the
+roster — the roster holds stable facts about people, capacity is an artefact of
+a sprint.
+
+### Changes Required:
+
+#### 1. Store
+
+**File**: `src/lib/measurement/overrides.ts` (new)
+
+**Intent**: Write the two lead-owned columns without touching the computed ones,
+so a correction stays visible *as* a correction rather than replacing the
+measurement.
+
+**Contract**: `setCapacityOverride({db, ownerId, jiraSprintId, md | null})` and
+`setDeliveredCorrection({db, ownerId, jiraSprintId, sp | null})`. If no record
+exists yet for the active sprint, the write creates one — carrying the NOT NULL
+`ownerId` / `jiraProjectId` / `jiraSprintId` and leaving the computed columns for
+the sweep's next pass, which is free to fill them because `finalized_at` is still
+NULL. Passing `null` clears the override and restores the computed value. Both
+are owner-scoped in the `WHERE`.
+
+**And the matching read (plan review F6).** The write path alone leaves the
+override invisible: the Availability tab's number comes from `getSprintCapacity`
+(`dashboard/page.tsx:69`) and the Reliability panel's props from the `sprint`
+scalars — neither has ever touched `sprint_measurement`. Add
+`getSprintMeasurement(db, ownerId, jiraSprintId): Promise<SprintMeasurement | null>`
+beside the two writers (reusing `reader.ts`'s numeric conversion) and **join it
+to the existing `Promise.all`** in `dashboard/page.tsx` — one request-scoped
+`getDb` handle, no second fan-out (`lessons.md` #3). It is the same read Phase 6
+§1 needs for `capacityOverridden`, so it is added once here rather than twice.
+
+#### 2. Surface
+
+**File**: `src/components/organisms/dashboard/capacity-adjustments.tsx` (new),
+`src/components/organisms/dashboard/availability.tsx`,
+`src/app/(app)/dashboard/page.tsx`, `src/app/(app)/dashboard/actions.ts`
+
+**Intent**: The Availability tab already answers "what is this sprint's capacity
+and who is away"; the override belongs where the number it replaces is shown.
+An overridden sprint must read as overridden — FR-022 makes it a marked
+exception because an overridden figure feeds FR-024's normalisation and a
+careless entry there skews every later average.
+
+**Contract**: an MD input with the computed value as placeholder and a "Reset to
+computed" action; when set, the headline shows the override with a badge and the
+computed figure beneath it. The delivered-SP correction follows the same shape.
+Server actions mirror the absences pattern (`requireSession` → `getDb` →
+service).
+
+#### 3. Validation
+
+**File**: `src/lib/validations/measurement.ts` (new)
+
+**Contract**: capacity override — non-negative, at most two decimals, bounded to
+a sane ceiling; delivered correction — non-negative integer. Both nullable to
+express "cleared".
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Integration test: setting an override does not change `capacity_adjusted_md`, and clearing it restores the displayed value to the computed one: `npm run test:integration`
+- Integration test: a sweep after an override leaves the override untouched
+- Integration test: an override written for another owner's sprint id is rejected
+- Integration test: `getSprintMeasurement` returns the override as a `number`, not the `pg` driver's `numeric` string, and returns `null` when no record exists yet
+- Unit tests for the validation schemas: `npm test`
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- Entering an override on the Availability tab shows the badge and the computed value underneath; reloading keeps both
+- Clearing the override returns the headline to the computed number
+
+**Implementation Note**: Pause for manual confirmation before proceeding.
+
+### Carried out of the Phase 5 impl-review (2026-08-28)
+
+Full report: `reviews/impl-review-phase-5.md`. Three fixes landed in this phase's
+own files after the phase was committed; two of them change contracts later
+phases depend on.
+
+1. **The payload names the sprint (F2).** `capacityOverrideSaveSchema` and
+   `deliveredCorrectionSaveSchema` now carry `jiraSprintId`, and the actions no
+   longer call `getActiveSprintRow`. Re-resolving "the active sprint" at save
+   time read a different moment than the render did, so a rollover while the tab
+   sat open filed the lead's number against a sprint they never looked at. The
+   store's owner-scoped lookup is what enforces isolation, and its
+   `UnknownSprintError` — whose "reload the page" message previously had no
+   reachable producer — is now the stale-page path. **Phase 7 §4 depends on
+   this**: the switcher supplies the id and the actions need no further change.
+2. **An empty field is never a save (F1).** `input[type=number]` blanks anything
+   it cannot parse, so "empty means clear it" turned a typo — a comma decimal
+   separator, a stray letter — into a silent delete reported as a success.
+   Clearing is now performed only by "Reset to computed".
+3. **The delivered-SP field is gated on `finalizedAt !== null` (F3).** Half of
+   the F3 fix; the other half is Phase 7 §4.
+
+Two shapes above were also corrected in place rather than left to disagree with
+the code: this section originally specified `getActiveSprintMeasurement`, but the
+implementation correctly used the lower-level `getSprintMeasurement` (the active
+sprint is already resolved at `page.tsx:45`, so the higher-level helper would
+re-query for an answer already held). The dead helper is gone and criterion 5.9
+now names the function that ships (F5).
+
+Not fixed here, and deliberately: the `mdToColumn` / `round1` duplications (F8)
+and the two differing "delivered SP" definitions rendered on two tabs (F9) — see
+the report for the recorded decisions.
+
+---
+
+## Phase 6: The relation, and the estimate
+
+### Overview
+
+Put capacity beside reliability so the owner's two 100% cases stop rendering
+identically, and compute FR-024's estimated velocity from the history Phase 4
+has been accumulating.
+
+### Changes Required:
+
+#### 1. Capacity beside reliability
+
+**File**: `src/components/organisms/dashboard/reliability-kpi-view.ts` (new),
+`src/components/organisms/dashboard/reliability-kpi.tsx` (`:31-37,61`),
+`src/app/(app)/dashboard/page.tsx`
+
+**Intent**: The panel takes exactly two scalars and therefore cannot tell a full
+team's 100% from a half team's 100%. Capacity is the context that makes the
+ratio interpretable — FR-016 is explicit that it does **not** enter the ratio.
+Also fix the empty-state copy: "fills in after the next sync" is wrong for "no
+history yet", which no sync fixes.
+
+**Contract**: new props `capacityAdjustedMd`, `capacityFullMd`, `workingDays`,
+`capacityOverridden`. Rendered as a second line —
+`Reliability 100% · Capacity 60 of 120 MD` — never folded into the percentage.
+
+**Which "delivered" this panel shows must be decided here, not inherited
+(impl-review F9).** After Phase 5 the dashboard renders TWO delivered figures
+under two different definitions: Availability shows
+`sprint_measurement.delivered_sp` — the SP of tickets whose FIRST entry into Done
+fell inside the window — while this panel still takes `sprint.completedSp`
+(`page.tsx:143`), the live sync scalar. They are not the same number: a ticket
+that entered Done and later reopened counts in one and not the other, so the two
+tabs can disagree on screen with nothing explaining why. This phase decides one of
+two things and says which: either `completedSp` also comes from the measurement
+record — making the panel consistent with Availability and with the velocity
+FR-024 averages — or the two figures stay distinct and are LABELLED so the
+difference reads as a definition rather than as a bug. Silently shipping both is
+the one option ruled out.
+
+The ratio moves out of the `.tsx` into a pure `reliability-kpi-view.ts` sibling
+(plan review F4): there is **no component-test harness** in this repo — both
+vitest projects run `environment: "node"` and neither jsdom nor RTL is
+installed (`CLAUDE.md`) — so a criterion asserting the ratio is unchanged is
+unrunnable while the arithmetic lives inline at `reliability-kpi.tsx:61`. The
+house pattern for exactly this already exists three files away
+(`availability-view.ts`, `activity-matrix-view.ts`, `aging-report-controls.ts`).
+`toReliabilityView({ committedSp, completedSp, capacityAdjustedMd,
+capacityFullMd, workingDays, capacityOverridden })` returns the ratio, the
+empty-state flag and the capacity line; the component renders what it returns.
+
+#### 2. The estimate
+
+**File**: `src/lib/measurement/estimate.ts` (new)
+
+**Intent**: FR-024, two divisions over measured history. Each past sprint's
+velocity is normalised up to full capacity before averaging; the average is then
+scaled by a capacity ratio.
+
+**Which sprint the ratio is taken over (plan review F1).** The ratio is the
+**currently active sprint's** `adjusted ÷ full`, not a future sprint's. SprintFlow
+cannot see a future sprint at all — the Jira issue search filters `state=active`
+and `getSprintCapacity` resolves `getActiveSprintRow` (`capacity.ts:151`), so a
+sprint that has not started has no row, no working-day count and no absences to
+subtract. That is roadmap **S-18**'s slice, explicitly parked as post-MVP
+("revisit after S-23, which makes the next window's capacity computable"), and
+this slice does not reach into it. It is also the owner's own formula as
+recorded at `roadmap.md:744` — `average(normalised velocity) × capacity_current
+÷ capacity_full`. PRD FR-024's "next sprint" wording is the outlier and is
+amended in Phase 1 §1.
+
+**Contract**:
+`estimateActiveSprintVelocity(records, current: { adjustedMd: number; fullMd: number })
+→ { estimateSp: number; averageNormalisedSp: number; sampleSize: number; ratio: number } | null`.
+(Named `estimateNextSprintVelocity` when this phase shipped; renamed at
+impl-review phase-6 F4, because the F1 decision below is precisely that the ratio
+is NOT a next sprint's, and the call site should not read as the claim four
+comments in the file were written to deny.)
+Normalised velocity of a record is `delivered ÷ (adjusted ÷ full)`, using the
+corrected delivered figure when one exists and the override when one exists.
+Records with `adjustedMd === 0` are skipped (an unmeasurable sprint, not a zero
+one).
+
+**The reducer also says WHY there is no estimate (impl-review phase-6 F2).**
+`toVelocityEstimateView(records, current | null) → { estimate, reason, closedSprints,
+usableSprints }`, where `reason` is `too-few-sprints | none-measurable |
+no-capacity`. The surface originally re-derived that from three loose props and
+could therefore contradict itself — "SprintFlow has 3 closed sprints recorded and
+needs 2" was reachable whenever three records existed but none carried a non-zero
+capacity, because the prop standing for "has capacity" was read off the ACTIVE
+sprint and knew nothing about the filters the average applies to the records.
+Only the reducer can tell the three empty states apart, so only the reducer names
+them, and each empty state is asserted in `estimate.test.ts`.
+
+**The average is a rolling window of at most 12 sprints (impl-review phase-6
+F3).** `listSprintMeasurements`' `DEFAULT_LIMIT` is 12 and Phase 6 is the series'
+first consumer, so this is where the cap starts meaning something. It is a
+deliberate choice, not an accident of the reader's default: FR-023 retains the
+record for the team's whole lifetime so that an average can *exist*, but a
+lifetime average would keep weighting sprints run by a team that no longer exists
+— the roster has no time dimension, so a two-year-old velocity describes people
+who may all have left. Twelve is roughly two quarters of fortnightly sprints:
+long enough not to swing on one bad sprint, short enough to describe the current
+team. Nothing is hidden by it — the panel renders `sampleSize`, so the lead can
+always see how many sprints the average actually covers.
+
+**Minimum sample size is two (plan review F8).** Returns `null` whenever fewer
+than `MIN_SAMPLE_SIZE = 2` finalized records survive the filters — FR-023's
+honest "no data" rule applies here first, and one sprint is not an average: a
+single record would present the last sprint's velocity as a trend, which is the
+gadget the owner's own scope note rejected (`planning-notes.md` §2). The
+constant is exported so the panel's copy names the same number the reducer
+enforces, rather than the two drifting.
+
+#### 3. Surface
+
+**File**: `src/components/organisms/dashboard/velocity-estimate.tsx` (new),
+`src/app/(app)/dashboard/page.tsx`
+
+**Intent**: FR-024 requires the estimate to appear together with the numbers it
+came from and to be presented as a suggestion. Both guards are what keep it
+arithmetic over measured history rather than a forecast.
+
+**Contract**: renders the estimate, the sample size, the average normalised
+velocity and the capacity ratio it was scaled by; the copy names the sprint the
+ratio was taken over, so "estimate" never reads as a claim about a sprint the
+system cannot see. When the estimate is `null`, states plainly how many
+closed sprints it has and how many it needs (`MIN_SAMPLE_SIZE`, i.e. two) —
+never a number. The `current`
+argument comes from the `getSprintCapacity` result **already** in
+`dashboard/page.tsx:69`'s `Promise.all` — the estimate adds only the
+`listSprintMeasurements` read to it, one `getDb` handle, no second fan-out
+(`lessons.md` #3).
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Unit tests for `estimateActiveSprintVelocity`: the FR-024 worked example (200 MD full, 180 MD adjusted on the active sprint, 100 SP average → 90 SP); empty history returns `null`; **one** finalized record also returns `null` and two returns a number (the F8 boundary); a zero-capacity record is skipped, not divided by; a corrected delivered value is preferred over the computed one: `npm test`
+- Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields (capacity is not in the divisor), and the empty state still triggers only on a NULL scalar: `npm test`
+- The delivered-SP source decision (§1, impl-review F9) is recorded in this plan and reflected in the panel — either one source or two labelled ones: `npm run typecheck`
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- With fewer than two closed sprints, the estimate panel says how many it has and that it needs two — it does not show a number
+- The Reliability panel shows the capacity line, and the percentage is identical to what it was before the props were added
+
+**Implementation Note**: Pause for manual confirmation before proceeding.
+
+### Decision taken in Phase 6 — the delivered-SP source (impl-review F9, criterion 6.7)
+
+**ONE SOURCE: the measurement record, with `sprint.completed_sp` as the
+fallback.** `toReliabilityView` resolves the delivered term through the same
+`toDeliveredView` reducer the Availability tab uses, so the two tabs cannot
+render different numbers; the live sync scalar is consulted only when there is
+no record — before the sweep's first run, and for a sprint without dates, where
+an empty panel would hide a figure the sync already holds.
+
+One correction to the review's premise, found in the code while deciding. F9
+argued the two figures used **different definitions** ("a ticket that entered
+Done and later reopened counts in one and not the other"). That was true when
+the review was written against Phase 4, but Phase 3 §5 had already closed it:
+`run-sync.ts:874` computes `completed_sp` through the very same
+`computeDeliveredSp` primitive the sweep uses, so both sides are first-entry-
+into-Done and the definitions no longer differ at all. What *did* still differ
+is narrower and is exactly what FR-023 exists to expose:
+
+- **the lead's correction** — `delivered_sp_corrected` lives only on the record,
+  so Reliability would have kept showing the measured figure while Availability
+  showed the corrected one, with no signal on either;
+- **the freeze** — the record stops moving at `finalized_at` while the scalar
+  does not.
+
+Since FR-024 averages the record, the panel that presents reliability now shows
+the number that feeds the average, and it labels a correction rather than
+absorbing it: the capacity line carries an `Overridden` badge and a corrected
+delivered figure carries a `Corrected` badge with the measured value beside it.
+Labelling two figures (the review's Fix B) was rejected on the finding above —
+labelling a difference that no longer exists in the definition would document a
+distinction the code does not make.
+
+Two smaller decisions taken in the same pass:
+
+1. **The empty state now names its own cause.** The old copy promised "this
+   panel fills in after the next sync" for every null, including the owner with
+   no active sprint at all, whom no sync can help. `emptyReason` splits the two.
+2. **The active sprint is excluded from the history**, even when it carries a
+   finalized record. Jira can leave a sprint `ACTIVE` past its end date
+   (`shouldFinalize` freezes on either signal), and averaging a window still in
+   flight would fold a part-delivered figure into the history it is compared
+   against.
+
+Not done here, and deliberately: `mdToColumn` / `round1` (F8) stay duplicated —
+`round1` is now reused by three view modules, but `mdToColumn` belongs to the
+write path and sharing it would couple the sweep to a rendering helper.
+
+### The overlapping-sprint tie-break, answered (Phase 4 impl-review F3, phase-6 review F1)
+
+The follow-up filed against Phase 4 gated this phase: FR-024 averages the
+records, so two overlapping sprint windows each counting the same first-DONE
+instants would inflate the estimate the lead is shown, not just one record. The
+gate was crossed unanswered in `f166dc8` and is answered here.
+
+**Question 1 — is the overlap state reachable in practice? Not today, on either
+account.** Measured 2026-08-28 against local Postgres:
+
+```sql
+select a.owner_id, a.jira_sprint_id, b.jira_sprint_id
+from sprint a join sprint b
+  on a.owner_id = b.owner_id and a.id < b.id
+ and a.start_date <= b.end_date and b.start_date <= a.end_date;
+-- 0 rows
+
+select owner_id, count(*) from sprint where state = 'ACTIVE' group by owner_id;
+-- one ACTIVE row per owner, both accounts
+```
+
+**Questions 2 and 3 are therefore not answered, and deliberately.** Picking a
+tie-break now would mean choosing between "nearest `startDate`" and "the sprint
+the ticket was stamped to at its first DONE" — and the second needs the stamp's
+own history, which the schema does not keep. Choosing under a condition that
+does not occur would bake in the cheaper rule for a case nobody has seen.
+
+**What holds the answer honest.** This is evidence about the boards SprintFlow
+monitors today, not a proof `importCadence` cannot produce a second ACTIVE row —
+`src/lib/sprint.ts:29-31` says plainly that it can. The query above is the
+re-check, and it belongs on the next real Jira board this product meets. Should
+it ever return a row, the tie-break lands in `sweep.ts` and must **not** narrow
+by `jira_ticket.sprint_id`: that is what lets a re-stamped carried-over ticket
+count in the sprint that finished it, and integration test 4.10 asserts it.
+
+---
+
+## Phase 7: Sprint switcher on Sprint Detail
+
+### Overview
+
+Somewhere to look at closed sprints and compare them. Deliberately last and
+deliberately cuttable: there is nothing to show before two sprints have closed,
+so its position at the end costs nothing.
+
+### Changes Required:
+
+#### 1. Unpin the page from the active sprint
+
+**File**: `src/app/(app)/dashboard/sprint-detail/sprint-selection.ts` (new),
+`src/app/(app)/dashboard/sprint-detail/page.tsx`
+
+**Intent**: The page resolves `getActiveSprintRow` and nothing else. A
+`?sprint=` parameter lets it render a closed one. The three-way decision below
+lives in a pure `sprint-selection.ts` sibling, not in the server component —
+same reason as Phase 6 §1 (plan review F4): there is no component-test harness,
+so logic that must be asserted is extracted to a `.ts` file first.
+
+**Contract**: reads `searchParams.sprint` (a `jira_sprint_id`) and resolves it
+**against `sprint_measurement` first**, then looks up the matching owner-scoped
+`sprint` row separately. Three outcomes, and they are not the same (plan review
+F3):
+
+| `?sprint=` resolves to | Render |
+| --- | --- |
+| measurement **and** `sprint` row | the sprint, all tabs |
+| measurement, **no** `sprint` row | the sprint's headline figures + §3's notice |
+| neither (absent or unknown id) | the active sprint |
+
+Falling back to the active sprint on a missing `sprint` row — the shape the
+first draft implied — is the bug this table exists to prevent: a sprint from
+before a Jira-project switch has had its `sprint` row cascade-deleted
+(`connection-service.ts:405-411`, `jira-store.ts:255-259`) while its measurement
+survives by design, so the page would silently render **the active sprint's
+numbers under a switcher entry naming the old one**, and §3's notice would be
+unreachable in exactly the case it was written for.
+
+#### 2. The switcher
+
+**File**: `src/components/organisms/dashboard/sprint-switcher.tsx` (new)
+
+**Intent**: The list comes from `sprint_measurement` filtered to the current
+Jira project, so it can name sprints whose raw data retention has already
+purged.
+
+**Contract**: a `Select` of sprints newest first, navigating to
+`?sprint=<jiraSprintId>`.
+
+#### 3. Say what is missing, out loud
+
+**File**: `src/app/(app)/dashboard/sprint-detail/page.tsx`,
+`src/components/organisms/dashboard/sprint-detail-tabs.tsx`
+
+**Intent**: The three reducers (aging, activity matrix, burndown) read raw
+synced data bounded to "current + 2 sprints", so an older sprint renders
+**correct headline numbers beside empty detail tabs**. This was chosen with the
+warning understood; the screen must state it rather than let it read as a bug.
+Right after a Jira-project switch the history is empty despite rows existing,
+for the same reason — also worth a line.
+
+**Which of the two paths is exercisable today (plan review F7).** The
+"current + 2 sprints" purge is **not implemented yet** — nothing in `src/lib`
+deletes aged product data — so the retention half of this notice cannot be
+triggered on a real account and must be covered by an integration test that
+deletes the rows directly. The Jira-project-switch half *is* live (the cascade
+at `connection-service.ts:405-411`), and it is the path the manual row uses.
+
+**Contract**: when the selected sprint has a measurement record but no raw data,
+the tabs render an explicit notice naming the reason — retention, or a
+Jira-project switch — not a generic empty state. This is row 2 of §1's table, so
+the two sections share one condition rather than each guessing at it.
+
+#### 4. The delivered-SP correction, on the SELECTED sprint
+
+**File**: `src/components/organisms/dashboard/capacity-adjustments.tsx`,
+`src/app/(app)/dashboard/sprint-detail/page.tsx`
+
+**Carried in from the Phase 5 impl-review (F3).** This section is why Phase 7 is
+no longer purely read-only, and the reason is not a preference: **FR-023's
+correction had no reachable surface for the sprint it is written about.** Phase 5
+put the form on the Availability tab, whose sprint is always the active one, so
+the moment the next sprint went ACTIVE the previous sprint's
+`delivered_sp_corrected` became unreachable from every screen — while
+`overrides.ts` drops the finalization guard on the explicit grounds that "a
+closed sprint is the only kind whose figure is worth fixing". Phase 5 closed the
+second half of that gap already, by gating the delivered-SP field on
+`finalizedAt !== null`; this section closes the first.
+
+**Contract**: `CapacityAdjustments` is rendered on Sprint Detail for the
+**selected** sprint, receiving that sprint's `jiraSprintId` — which is exactly
+the payload field the Phase 5 impl-review's F2 fix already added to
+`capacityOverrideSaveSchema` / `deliveredCorrectionSaveSchema`, so the actions
+need no change. The delivered field appears only when the selected sprint's
+record is finalized; the capacity override stays available regardless, because
+capacity is a plan for the whole window rather than a figure the sweep is still
+recomputing. Row 2 of §1's table (a measurement with no `sprint` row) still gets
+the form — the writers key off `jira_sprint_id` on `sprint_measurement`, but
+`writeLeadColumn` resolves the owner's `sprint` row first, so a sprint whose row
+cascade-deleted on a project switch CANNOT be corrected. Say so in that case
+rather than rendering a form that will fail.
+
+**Scheduling consequence, stated plainly**: Phase 7 was described above as
+"deliberately cuttable". With this section it is no longer wholly so — cutting
+Phase 7 now also cuts FR-023's correction path for closed sprints. If the
+deadline forces the cut, §4 is the part to keep and §§1–3 the part to drop.
+
+### Success Criteria:
+
+#### Automated Verification:
+
+- Unit test for `sprint-selection.ts`, one case per row of §1's table (absent param → active; unknown id → active, not a crash; measurement without a `sprint` row → that sprint plus the notice, NOT the active sprint): `npm test`
+- Integration test: the switcher's list is scoped to the owner and to the current `jira_project_id`: `npm run test:integration`
+- Integration test: a delivered-SP correction written against the SELECTED closed sprint lands on that sprint's record and not on the active one: `npm run test:integration`
+- Unit test: the delivered field is withheld for a sprint whose record is not finalized, and for a measurement with no `sprint` row: `npm test`
+- Type checking and linting pass: `npm run typecheck`, `npm run lint`
+
+#### Manual Verification:
+
+- Switching the monitored Jira project away and back, then selecting a sprint recorded before the switch: its capacity, velocity and reliability still render, and the aging/matrix/burndown tabs show the notice naming the project switch — **not** the active sprint's data (this is the live path; the retention path has no purge to trigger it yet, so it is covered by an integration test instead)
+- The URL is shareable — reloading `?sprint=<id>` lands on the same sprint
+- Selecting a closed sprint offers the delivered-SP correction; entering one leaves the computed measurement visible beside it, and the active sprint's figures are unchanged
+
+**Implementation Note**: Final phase. After manual confirmation, the slice is
+complete.
+
+---
+
+## Testing Strategy
+
+### Unit Tests:
+
+- `fte.ts` — the `numeric`-as-string boundary in both directions, unparseable input, the four legal choices
+- `capacity.ts` — `fte × availableDays` for mixed fractions; a holiday costing one MD per person; a holiday inside an absence not double-subtracted; zero working days
+- `first-done.ts` / `computeDeliveredSp` — reopen-and-reclose counts once; closed after sprint end excluded; carried-in already-done excluded; unestimated contributes 0
+- `extractStoryPoints` — rounding, non-finite, null
+- `estimate.ts` — the FR-024 worked example, empty history, the one-vs-two sample boundary (F8), zero-capacity record, corrected-over-computed precedence; the ratio is the ACTIVE sprint's (F1)
+- Aging and sprint-at-risk detectors with a non-empty `nonWorkingDays`
+- `reliability-kpi-view.ts` and `sprint-selection.ts` — the two pure siblings F4 adds, because there is no component-test harness (`CLAUDE.md`)
+
+### Integration Tests:
+
+- Roster save with no changes performs zero updates (the `numeric` `===` trap)
+- Migration `0012` leaves `fte_confirmed_at` NULL for pre-existing rows
+- `committed_sp` frozen at first sighting, unchanged by a later scope addition, `committed_frozen_at` stable
+- `added_after_sprint_start` from the `Sprint` changelog, both branches plus the fallback
+- Sweep idempotence; late sweep still records AND records the right delivered figure (F2); finalized record immutable; overrides survive a sweep
+- `sprint_measurement` survives a Jira-project switch that cascades `sprint` rows away
+- Owner-scoping on every new store function
+
+### Manual Testing Steps:
+
+Rows land in `context/changes/capacity-in-man-days/MANUAL-CHECKLIST.md`, 3–5 per
+phase, each carrying where / what to do / what must be true / why it matters, per
+`CLAUDE.md`. The prerequisite is **manual-test-backlog row 1.8** — SP estimates
+must be entered in the FM Jira project, which today has all `story_points =
+NULL`. Without it the capacity↔velocity relation has nothing to measure on live
+data, so Phase 3's manual rows cannot be judged.
+
+## Performance Considerations
+
+The sweep runs per owner per cycle and touches one row per sprint — a handful of
+rows at the PRD's 3–10-person, one-project scale. It reuses the cron loop's
+existing pooled handle (`getDbWithPool`), adding no second fan-out. The
+dashboard's new reads join the existing `Promise.all` on the one request-scoped
+handle; nothing new opens a pool (`lessons.md` #3).
+
+## Migration Notes
+
+- **`sp_capacity` values are destroyed, by necessity.** An `8` is
+  indistinguishable as 8 SP and 8 FTE. Every member becomes full-time
+  (`DEFAULT 1.00`), which silently inflates capacity for any team with
+  part-timers — the `/settings/team` banner exists solely to make that visible
+  and is not optional.
+- **No backfill of historical sprints.** The series begins at the first sprint
+  closed after Phase 4 ships. Sprint rows themselves date only from S-16
+  (2026-08-26), and the roster has no time dimension, so anything earlier is
+  unreconstructable.
+- **Rollback**: phases 1–4 each add exactly one migration; reverting a phase
+  means reverting its migration and its code together. Phase 1's is not
+  reversible in data terms — the dropped column's values are gone.
+
+## References
+
+- Frame brief: `context/changes/capacity-in-man-days/frame.md`
+- Planning decisions (binding): `context/changes/capacity-in-man-days/planning-notes.md`
+- Domain notes: `context/foundation/capacity-model-notes.md`
+- Recurring rules: `context/foundation/lessons.md` (#1 NOT NULL dedup key, #3 pool teardown, #5 delete-then-insert, #6 narrowing predicate)
+- Current capacity reducer: `src/lib/dashboard/capacity.ts:68-128,147-200`
+- The correct DONE primitive: `src/lib/dashboard/burndown-series.ts:135-153`
+- Sprint scalars write: `src/lib/integrations/sync/run-sync.ts:748-749,770-772,817-831`
+- Rollover hook: `src/lib/integrations/reconcile-sprint.ts:265-274,288`
+- The empty seam: `src/lib/anomaly/rules/helpers.ts:78-128`
+- Freeze precedent: `daily_recap.payload` (`src/db/schema.ts:757`)
+
+## Progress
+
+> Convention: `- [ ]` pending, `- [x]` done. Append ` — <commit sha>` when a step lands. Do not rename step titles. See `references/progress-format.md`.
+
+### Phase 1: Availability fraction replaces story-point capacity
+
+#### Automated
+
+- [x] 1.1 Migration applies cleanly against local Supabase — f3207db
+- [x] 1.2 No `spCapacity` / `sp_capacity` references outside `src/db/migrations/` — f3207db
+- [x] 1.3 Unit tests pass, including `fte.ts` string→number boundary — f3207db
+- [x] 1.4 Integration test: unchanged roster save performs zero updates — f3207db
+- [x] 1.5 Type checking passes — f3207db
+- [x] 1.6 Linting passes — f3207db
+
+#### Manual
+
+- [ ] 1.7 `/settings/team` banner names the defaulted members and stays gone after confirming
+- [ ] 1.8 Availability select offers four options; 0.5 survives a reload
+- [ ] 1.9 Availability tab shows MD equal to Σ fte × working days
+
+### Phase 2: Team days off, and the empty seam wired at all five sites
+
+#### Automated
+
+- [x] 2.1 Unit tests: holiday costs one MD per full-time member; not double-subtracted inside an absence — 8acf76f
+- [x] 2.2 Unit tests: aging does not advance across a team day off; sprint-at-risk working days drop — 8acf76f
+- [x] 2.3 Integration test: `getNonWorkingDays` owner-scoped; duplicate insert is a no-op — 8acf76f
+- [x] 2.4 Every production `countWorkingDays*` call site passes `nonWorkingDays` — 8acf76f
+- [x] 2.5 Type checking passes — 8acf76f
+- [x] 2.6 Linting passes — 8acf76f
+
+#### Manual
+
+- [ ] 2.7 Adding a holiday lowers capacity by one MD per full-time member and the working-day count by one
+- [ ] 2.8 The same holiday stops a ticket's aging clock
+- [ ] 2.9 Removing the day off restores both numbers
+
+### Phase 3: Honest sprint sums
+
+#### Automated
+
+- [x] 3.1 Unit tests: `0.5` → `1`, non-finite → `null` — b710e5d
+- [x] 3.2 Unit tests for `computeDeliveredSp` (reopen, late close, carried-in, unestimated) — b710e5d
+- [x] 3.3 Integration test: committed SP frozen; `committed_frozen_at` stable — b710e5d
+- [x] 3.4 Integration test: `added_after_sprint_start` from the `Sprint` changelog, both branches + fallback — b710e5d
+- [x] 3.5 Integration test: `completed_sp` unchanged by a post-`endDate` cycle — b710e5d
+- [x] 3.6 Type checking passes — b710e5d
+- [x] 3.7 Linting passes — b710e5d
+- [x] 3.11 Unit test: the changelog item matches by `fieldId` on a non-English display name — b710e5d
+
+#### Manual
+
+- [ ] 3.8 Real sync writes `committed_sp` / `completed_sp` matching Jira (needs backlog row 1.8)
+- [ ] 3.9 Adding a mid-sprint ticket does not raise the committed figure
+- [ ] 3.10 A 0.5 estimate in Jira no longer wedges the sync
+
+### Phase 4: The per-sprint measurement record
+
+#### Automated
+
+- [x] 4.1 Integration test: sweep writes one record; re-running changes nothing — c3f882c
+- [x] 4.2 Integration test: a sweep three cycles late still records the closed sprint — c3f882c
+- [x] 4.3 Integration test: project deletion cascades `sprint` rows, leaves measurements intact — c3f882c
+- [x] 4.4 Integration test: finalized record's computed columns do not move — c3f882c
+- [x] 4.5 Unit tests for `shouldFinalize` / `shouldRecompute` — c3f882c
+- [x] 4.6 Type checking passes — c3f882c
+- [x] 4.7 Linting passes — c3f882c
+- [x] 4.10 Integration test: a re-stamped carried-over ticket still counts in the closed sprint's `delivered_sp` — c3f882c
+
+#### Manual
+
+- [ ] 4.8 After a real rollover, the record matches the sprint's last-day dashboard figures
+- [ ] 4.9 Switching the Jira project away and back leaves the record in place
+
+### Phase 5: The lead's override and correction
+
+#### Automated
+
+- [x] 5.1 Integration test: override leaves the computed capacity untouched; clearing restores it — 162eb16
+- [x] 5.2 Integration test: a sweep after an override leaves the override untouched — 162eb16
+- [x] 5.3 Integration test: cross-owner override is rejected — 162eb16
+- [x] 5.4 Unit tests for the validation schemas — 162eb16
+- [x] 5.5 Type checking passes — 162eb16
+- [x] 5.6 Linting passes — 162eb16
+- [x] 5.9 Integration test: `getSprintMeasurement` converts numerics and returns `null` with no record — 162eb16 (repointed off the dead `getActiveSprintMeasurement`, impl-review F5)
+
+#### Manual
+
+- [ ] 5.7 Override shows the badge with the computed value beneath; survives a reload
+- [ ] 5.8 Clearing the override returns the headline to the computed number
+
+### Phase 6: The relation, and the estimate
+
+#### Automated
+
+- [x] 6.1 Unit tests for `estimateNextSprintVelocity` (worked example, empty, zero-capacity, corrected-over-computed) — f166dc8 (symbol renamed to `estimateActiveSprintVelocity`, impl-review phase-6 F4)
+- [x] 6.2 Unit test on `toReliabilityView`: the ratio is unchanged by the capacity fields — f166dc8
+- [x] 6.7 The delivered-SP source decision is taken and recorded (§1, impl-review F9) — f166dc8
+- [x] 6.3 Type checking passes — f166dc8
+- [x] 6.4 Linting passes — f166dc8
+
+#### Manual
+
+- [ ] 6.5 With fewer than two closed sprints the estimate panel names the shortfall, not a number
+- [ ] 6.6 Reliability shows the capacity line; the percentage is unchanged
+
+### Phase 7: Sprint switcher on Sprint Detail
+
+#### Automated
+
+- [x] 7.1 Unit test for `sprint-selection.ts`, one per row of §1's table (absent / unknown / measurement-without-sprint-row) — 20d293a
+- [x] 7.2 Integration test: switcher list scoped to owner and current Jira project — 20d293a
+- [x] 7.3 Type checking passes — 20d293a
+- [x] 7.4 Linting passes — 20d293a
+- [x] 7.7 Integration test: a correction on the SELECTED closed sprint lands there, not on the active one (§4, impl-review F3) — 20d293a
+- [x] 7.8 Unit test: the delivered field is withheld when the record is not finalized, and when there is no `sprint` row (§4) — 20d293a
+
+#### Manual
+
+- [ ] 7.5 A pre-project-switch sprint shows its figures; detail tabs show the notice, not the active sprint's data
+- [ ] 7.6 `?sprint=<id>` is shareable and survives a reload
+- [ ] 7.9 A closed sprint offers the delivered-SP correction, and the computed measurement stays visible beside it

@@ -144,6 +144,9 @@ function githubFetch(opts?: {
 // --- Jira mock --------------------------------------------------------------
 
 const SP_FIELD = "customfield_10016";
+/** The Jira Software `Sprint` field. Its display name in the mock is
+ *  deliberately NOT the English "Sprint" — the parser must find it by id. */
+const SPRINT_FIELD = "customfield_10020";
 
 const JIRA_ISSUE = {
   id: "1001",
@@ -194,6 +197,9 @@ function jiraFetch(opts?: {
    *  A blanket `failStatus` is caught by `validateCredentials` first and would
    *  never exercise the reconcile's own 401 branch. */
   agileStatus?: number;
+  /** Drop the sprint field from `/field`, so the changelog parser falls back to
+   *  the English display name (S-23 phase 3 §2). */
+  hideSprintField?: boolean;
 }): {
   fetchImpl: typeof fetch;
   calls: string[];
@@ -232,6 +238,16 @@ function jiraFetch(opts?: {
           custom: true,
           schema: { custom: "com.pyxis.greenhopper.jira:jsw-story-points" },
         },
+        ...(opts?.hideSprintField
+          ? []
+          : [
+              {
+                id: SPRINT_FIELD,
+                name: "Sprintti",
+                custom: true,
+                schema: { custom: "com.pyxis.greenhopper.jira:gh-sprint" },
+              },
+            ]),
       ]);
     }
     if (url.includes("/rest/api/3/search/jql")) {
@@ -552,55 +568,55 @@ describe("syncOwner — Jira time zone (S-10)", () => {
   });
 });
 
-describe("syncOwner — sprint commitment scalars (S-10)", () => {
-  it("aggregates committed/completed SP from the ticket table, not the delta payload", async () => {
+describe("syncOwner — sprint commitment scalars (S-10, reshaped by S-23)", () => {
+  /** Insert one sprint ticket plus, optionally, the DONE transition that is now
+   *  what makes it count as delivered (FR-023 — first entry into Done). */
+  async function seedTicket(args: {
+    ownerId: string;
+    jiraProjectId: string;
+    sprintId: string;
+    jiraKey: string;
+    storyPoints: number | null;
+    currentCategory: "TODO" | "IN_PROGRESS" | "DONE";
+    addedAfterSprintStart: boolean | null;
+    firstDoneAt?: string;
+  }): Promise<string> {
+    const ticketId = randomUUID();
+    await db.insert(jiraTicket).values({
+      id: ticketId,
+      ownerId: args.ownerId,
+      jiraProjectId: args.jiraProjectId,
+      sprintId: args.sprintId,
+      jiraKey: args.jiraKey,
+      storyPoints: args.storyPoints,
+      currentCategory: args.currentCategory,
+      addedAfterSprintStart: args.addedAfterSprintStart,
+    });
+    if (args.firstDoneAt) {
+      await db.insert(jiraStatusHistory).values({
+        id: randomUUID(),
+        ownerId: args.ownerId,
+        ticketId,
+        toStatusId: "5",
+        toCategory: "DONE",
+        changedAt: new Date(args.firstDoneAt),
+        jiraChangelogId: `done-${args.jiraKey}`,
+      });
+    }
+    return ticketId;
+  }
+
+  it("aggregates committed SP from the ticket table, not the delta payload", async () => {
     const { ownerId, sprintId, jiraProjectId } = await newOwner();
+    const common = { ownerId, jiraProjectId, sprintId };
 
     // Pre-existing sprint tickets that this cycle's delta pull will NOT return.
-    await db.insert(jiraTicket).values([
-      {
-        id: randomUUID(),
-        ownerId,
-        jiraProjectId,
-        sprintId,
-        jiraKey: "SF-90",
-        storyPoints: 3,
-        currentCategory: "TODO",
-        addedAfterSprintStart: false,
-      },
-      {
-        id: randomUUID(),
-        ownerId,
-        jiraProjectId,
-        sprintId,
-        jiraKey: "SF-91",
-        storyPoints: 5,
-        currentCategory: "DONE",
-        addedAfterSprintStart: false,
-      },
-      {
-        // Scope crept in after start → excluded from committed, counted as done.
-        id: randomUUID(),
-        ownerId,
-        jiraProjectId,
-        sprintId,
-        jiraKey: "SF-92",
-        storyPoints: 2,
-        currentCategory: "DONE",
-        addedAfterSprintStart: true,
-      },
-      {
-        // NULL addedAfterSprintStart means "couldn't tell" → counts as committed.
-        id: randomUUID(),
-        ownerId,
-        jiraProjectId,
-        sprintId,
-        jiraKey: "SF-93",
-        storyPoints: 1,
-        currentCategory: "IN_PROGRESS",
-        addedAfterSprintStart: null,
-      },
-    ]);
+    await seedTicket({ ...common, jiraKey: "SF-90", storyPoints: 3, currentCategory: "TODO", addedAfterSprintStart: false });
+    await seedTicket({ ...common, jiraKey: "SF-91", storyPoints: 5, currentCategory: "DONE", addedAfterSprintStart: false, firstDoneAt: "2026-08-19T10:00:00.000Z" });
+    // Scope crept in after start → excluded from committed, still delivered.
+    await seedTicket({ ...common, jiraKey: "SF-92", storyPoints: 2, currentCategory: "DONE", addedAfterSprintStart: true, firstDoneAt: "2026-08-19T12:00:00.000Z" });
+    // NULL addedAfterSprintStart means "couldn't tell" → counts as committed.
+    await seedTicket({ ...common, jiraKey: "SF-93", storyPoints: 1, currentCategory: "IN_PROGRESS", addedAfterSprintStart: null });
 
     // Empty delta: `issues` is [], so a payload-sourced aggregate would write 0.
     const result = await syncOwner(
@@ -610,7 +626,8 @@ describe("syncOwner — sprint commitment scalars (S-10)", () => {
 
     const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
     expect(row.committedSp).toBe(9); // 3 + 5 + 1 (SF-92 crept in)
-    expect(row.completedSp).toBe(7); // 5 + 2
+    expect(row.completedSp).toBe(7); // 5 + 2, by FIRST entry into Done
+    expect(row.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
   });
 
   it("writes 0 rather than NULL when the sprint has no estimated tickets", async () => {
@@ -623,6 +640,284 @@ describe("syncOwner — sprint commitment scalars (S-10)", () => {
     const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
     expect(row.committedSp).toBe(0);
     expect(row.completedSp).toBe(0);
+  });
+
+  it("counts a DONE ticket only when its FIRST entry into Done is inside the window", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+    const common = { ownerId, jiraProjectId, sprintId };
+
+    // Carried over: finished in the PREVIOUS sprint, re-stamped into this one by
+    // the sync. Counting it again would double-count the team's own velocity.
+    await seedTicket({ ...common, jiraKey: "SF-80", storyPoints: 13, currentCategory: "DONE", addedAfterSprintStart: false, firstDoneAt: "2026-08-10T10:00:00.000Z" });
+    // Sitting in Done today, but it got there during this sprint.
+    await seedTicket({ ...common, jiraKey: "SF-81", storyPoints: 5, currentCategory: "DONE", addedAfterSprintStart: false, firstDoneAt: "2026-08-19T10:00:00.000Z" });
+    // In Done now but with NO recorded transition — the old rule counted this.
+    await seedTicket({ ...common, jiraKey: "SF-82", storyPoints: 8, currentCategory: "DONE", addedAfterSprintStart: false });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+    );
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(row.completedSp).toBe(5);
+  });
+
+  it("freezes committed SP at first sighting; a later cycle moves neither it nor the stamp", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+    const common = { ownerId, jiraProjectId, sprintId };
+
+    await seedTicket({ ...common, jiraKey: "SF-90", storyPoints: 3, currentCategory: "TODO", addedAfterSprintStart: false });
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl));
+
+    const [afterFirst] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(afterFirst.committedSp).toBe(3);
+    expect(afterFirst.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
+
+    // A ticket added mid-sprint that the store could not classify (NULL) would,
+    // under the old recompute-every-cycle rule, quietly raise the commitment.
+    await seedTicket({ ...common, jiraKey: "SF-94", storyPoints: 21, currentCategory: "TODO", addedAfterSprintStart: null });
+
+    const later = new Date("2026-08-21T12:00:00.000Z");
+    await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+      now: later,
+      bypassDueCheck: true,
+    });
+
+    const [afterSecond] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(afterSecond.committedSp).toBe(3);
+    expect(afterSecond.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
+  });
+
+  it("does not freeze on a delta cycle — the stamp waits for a full pull", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+    const common = { ownerId, jiraProjectId, sprintId };
+
+    // A ticket this cycle's delta will NOT return, still carrying whatever rule
+    // classified it last. `committed_sp` sums the WHOLE table, so a freeze here
+    // would bake that stale verdict in permanently — the `case when` guard means
+    // no later cycle could correct it, and FR-023's record would inherit it.
+    await seedTicket({ ...common, jiraKey: "SF-95", storyPoints: 8, currentCategory: "TODO", addedAfterSprintStart: false });
+
+    // A cursor pointing at THIS sprint is exactly what makes the pull a delta.
+    await db.insert(syncState).values({
+      id: randomUUID(),
+      ownerId,
+      integration: "JIRA",
+      jiraHistoryCursor: "2026-08-20T10:00:00.000Z",
+      jiraCursorSprintId: sprintId,
+      lastSuccessfulSyncAt: new Date("2026-08-20T10:00:00.000Z"),
+    });
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl));
+
+    const [afterDelta] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    // Still recomputing every cycle — which is safe precisely BECAUSE it is not
+    // frozen. Late is recoverable; wrong is not.
+    expect(afterDelta.committedSp).toBe(8);
+    expect(afterDelta.committedFrozenAt).toBeNull();
+
+    // Re-point the cursor at another sprint: the next cycle drops the delta
+    // clause and pulls in full, which is the cycle allowed to freeze.
+    await db
+      .update(syncState)
+      .set({ jiraCursorSprintId: randomUUID() })
+      .where(and(eq(syncState.ownerId, ownerId), eq(syncState.integration, "JIRA")));
+
+    const later = new Date("2026-08-21T12:00:00.000Z");
+    await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+      now: later,
+      bypassDueCheck: true,
+    });
+
+    const [afterFull] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(afterFull.committedFrozenAt?.toISOString()).toBe(later.toISOString());
+  });
+
+  it("leaves completed SP untouched by a cycle that runs after the sprint ended", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+    const common = { ownerId, jiraProjectId, sprintId };
+
+    await seedTicket({ ...common, jiraKey: "SF-91", storyPoints: 5, currentCategory: "DONE", addedAfterSprintStart: false, firstDoneAt: "2026-08-19T10:00:00.000Z" });
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl));
+    const [duringSprint] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(duringSprint.completedSp).toBe(5);
+
+    // A ticket finished a week AFTER the sprint's endDate (2026-08-31). Under the
+    // old "what is in Done right now" rule this rewrote the closed sprint's
+    // velocity — the loss the whole slice exists to stop.
+    await seedTicket({ ...common, jiraKey: "SF-95", storyPoints: 8, currentCategory: "DONE", addedAfterSprintStart: false, firstDoneAt: "2026-09-07T10:00:00.000Z" });
+
+    await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+      now: new Date("2026-09-08T12:00:00.000Z"),
+      bypassDueCheck: true,
+    });
+
+    const [afterClose] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(afterClose.completedSp).toBe(5);
+  });
+});
+
+/**
+ * S-23 phase 3 §3 — the reliability DENOMINATOR. `created_at > sprint_start`
+ * calls an old backlog item dragged in mid-sprint "committed", and since the
+ * commitment is now frozen at first sighting that verdict would be permanent.
+ */
+describe("syncOwner — added_after_sprint_start from the Sprint changelog", () => {
+  /** Created a MONTH before the sprint, so the `createdAt` rule alone would
+   *  always answer `false` — every branch below is therefore discriminating. */
+  const OLD_ISSUE_BASE = {
+    id: "2001",
+    key: "SF-200",
+    fields: {
+      summary: "Long-lived backlog item",
+      status: { id: "1", name: "To Do" },
+      created: "2026-07-15T08:00:00.000Z",
+      [SP_FIELD]: 3,
+    },
+  };
+
+  function sprintChange(item: Record<string, unknown>, created: string) {
+    return {
+      ...OLD_ISSUE_BASE,
+      changelog: { histories: [{ id: "h-sprint", created, items: [item] }] },
+    };
+  }
+
+  async function addedAfterFor(issue: unknown, jiraOpts?: { hideSprintField?: boolean }) {
+    const { ownerId } = await newOwner();
+    await syncOwner(
+      baseArgs(
+        ownerId,
+        githubFetch().fetchImpl,
+        jiraFetch({ issues: [issue], ...jiraOpts }).fetchImpl,
+      ),
+    );
+    const [ticket] = await db
+      .select()
+      .from(jiraTicket)
+      .where(and(eq(jiraTicket.ownerId, ownerId), eq(jiraTicket.jiraKey, "SF-200")));
+    return ticket.addedAfterSprintStart;
+  }
+
+  it("is TRUE when the Sprint transition follows sprint start, though the ticket is older", async () => {
+    const added = await addedAfterFor(
+      sprintChange(
+        { field: "Sprintti", fieldId: SPRINT_FIELD, from: null, to: "42" },
+        "2026-08-20T09:00:00.000Z", // sprint started 08-17
+      ),
+    );
+
+    expect(added).toBe(true);
+  });
+
+  it("is FALSE when the Sprint transition predates sprint start", async () => {
+    const added = await addedAfterFor(
+      sprintChange(
+        { field: "Sprintti", fieldId: SPRINT_FIELD, from: "41", to: "41, 42" },
+        "2026-08-15T09:00:00.000Z",
+      ),
+    );
+
+    expect(added).toBe(false);
+  });
+
+  it("ignores a transition into a DIFFERENT sprint and falls back to createdAt", async () => {
+    const added = await addedAfterFor(
+      sprintChange(
+        { field: "Sprintti", fieldId: SPRINT_FIELD, from: "42", to: "43" },
+        "2026-08-20T09:00:00.000Z",
+      ),
+    );
+
+    // Moved OUT of sprint 42 after it started — that says nothing about when it
+    // arrived, so the createdAt fallback answers, and it was created long ago.
+    expect(added).toBe(false);
+  });
+
+  it("falls back to createdAt when the issue carries no Sprint change at all", async () => {
+    const added = await addedAfterFor({
+      ...OLD_ISSUE_BASE,
+      changelog: {
+        histories: [
+          {
+            id: "h1",
+            created: "2026-08-20T09:00:00.000Z",
+            items: [{ field: "status", from: "1", fromString: "To Do", to: "3", toString: "In Progress" }],
+          },
+        ],
+      },
+    });
+
+    expect(added).toBe(false);
+  });
+
+  it("still reads the change by display name when the field id is unresolvable", async () => {
+    const added = await addedAfterFor(
+      sprintChange({ field: "Sprint", from: null, to: "42" }, "2026-08-20T09:00:00.000Z"),
+      { hideSprintField: true },
+    );
+
+    expect(added).toBe(true);
+  });
+
+  /** The durable half of the narrowing-predicate rule (impl-review F3/F5): the
+   *  operator log must tell "nobody moved sprints" apart from "the sprint id I
+   *  matched against is wrong", and must stay quiet when neither happened. */
+  async function jiraOutcomeFor(issue: unknown, jiraOpts?: { hideSprintField?: boolean }) {
+    const { ownerId } = await newOwner();
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [issue], ...jiraOpts }).fetchImpl),
+    );
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    return rows.at(-1)?.outcome ?? null;
+  }
+
+  it("records Sprint changes that named no known sprint in the attempt log", async () => {
+    // Same input as the "different sprint" case above: the issue HAS the evidence
+    // that should answer the question, and none of it names sprint 42. A stale
+    // stored `jira_sprint_id` produces exactly this shape for EVERY issue.
+    const outcome = await jiraOutcomeFor(
+      sprintChange(
+        { field: "Sprintti", fieldId: SPRINT_FIELD, from: "42", to: "43" },
+        "2026-08-20T09:00:00.000Z",
+      ),
+    );
+
+    expect(outcome).toContain("sprint_changes_naming_no_sprint=1");
+  });
+
+  it("records the unresolved sprint field, and stays silent on a healthy cycle", async () => {
+    const unresolved = await jiraOutcomeFor(
+      sprintChange({ field: "Sprint", from: null, to: "42" }, "2026-08-20T09:00:00.000Z"),
+      { hideSprintField: true },
+    );
+    expect(unresolved).toContain("sprint_field_unresolved");
+
+    // An issue whose only changelog is a status move is the NORMAL state of a
+    // ticket that was in the sprint from the start. The old `console.info` fired
+    // here, on essentially every healthy cycle; a signal that always fires is
+    // not a signal.
+    const healthy = await jiraOutcomeFor({
+      ...OLD_ISSUE_BASE,
+      changelog: {
+        histories: [
+          {
+            id: "h1",
+            created: "2026-08-20T09:00:00.000Z",
+            items: [{ field: "status", from: "1", fromString: "To Do", to: "3", toString: "In Progress" }],
+          },
+        ],
+      },
+    });
+    expect(healthy).toBeNull();
   });
 });
 

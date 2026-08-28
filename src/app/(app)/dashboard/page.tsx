@@ -6,7 +6,9 @@ import DashboardTodayTabs from "@/components/organisms/dashboard/today-tabs";
 import ReliabilityKpi from "@/components/organisms/dashboard/reliability-kpi";
 import SprintPulse from "@/components/organisms/dashboard/sprint-pulse";
 import SyncStatusBar from "@/components/organisms/dashboard/sync-status-bar";
+import VelocityEstimatePanel from "@/components/organisms/dashboard/velocity-estimate";
 import YesterdayActivity from "@/components/organisms/dashboard/yesterday-activity";
+import { toCapacityHeadline } from "@/components/organisms/dashboard/capacity-adjustments-view";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listAnomaliesForSprint } from "@/lib/anomaly/reader";
@@ -16,6 +18,9 @@ import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
 import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
+import { toVelocityEstimateView } from "@/lib/measurement/estimate";
+import { getSprintMeasurement } from "@/lib/measurement/overrides";
+import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
 import { listRoster } from "@/lib/roster";
@@ -55,19 +60,64 @@ export default async function DashboardPage() {
   // ONE Promise.all on the SAME `db` handle — no second pool, no second fan-out
   // (lessons.md #3). The two S-10 reads and S-08's availability read join the
   // original three.
-  const [rows, syncStateRaw, roster, burndown, yesterdayGrid, availability] =
-    await Promise.all([
-      sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
-      getSyncState(db, ownerId),
-      listRoster(db, ownerId),
-      sprint
-        ? getBurndownSeries(db, ownerId, sprint.id, now)
-        : Promise.resolve(EMPTY_BURNDOWN),
-      // The zone is already resolved above — pass it rather than re-reading it.
-      getActivityRollup(db, ownerId, yesterdayRange, timeZone),
-      // S-08: who is away, plus the capacity number absences reduce.
-      getSprintCapacity(db, ownerId),
-    ]);
+  const [
+    rows,
+    syncStateRaw,
+    roster,
+    burndown,
+    yesterdayGrid,
+    availability,
+    measurement,
+    history,
+  ] = await Promise.all([
+    sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
+    getSyncState(db, ownerId),
+    listRoster(db, ownerId),
+    sprint
+      ? getBurndownSeries(db, ownerId, sprint.id, now)
+      : Promise.resolve(EMPTY_BURNDOWN),
+    // The zone is already resolved above — pass it rather than re-reading it.
+    getActivityRollup(db, ownerId, yesterdayRange, timeZone),
+    // S-08: who is away, plus the capacity number absences reduce.
+    getSprintCapacity(db, ownerId),
+    // S-23 Phase 5: the lead's own override / correction for this sprint. Joined
+    // to the SAME fan-out on the SAME handle (lessons.md #3); `getSprintMeasurement`
+    // rather than `getActiveSprintMeasurement` because the active sprint is
+    // already resolved above and re-resolving it would be a second query for an
+    // answer we hold.
+    sprint
+      ? getSprintMeasurement(db, ownerId, sprint.jiraSprintId)
+      : Promise.resolve(null),
+    // S-23 Phase 6: the closed-sprint series FR-024 averages. Joined to the SAME
+    // fan-out on the SAME handle — the estimate adds one read, not a second
+    // round of them (`lessons.md` #3).
+    listSprintMeasurementsForOwner(db, ownerId),
+  ]);
+
+  // The lead's override replaces the WHOLE computed capacity (FR-022), so the
+  // ratio FR-024 scales by has to be taken over the same figure the Availability
+  // tab puts on its headline. Resolving it once, here, is what keeps the two
+  // surfaces from disagreeing about the number that feeds the average.
+  const currentCapacity = availability
+    ? {
+        adjustedMd: toCapacityHeadline({
+          adjustedMd: availability.capacity.adjustedMd,
+          nominalMd: availability.capacity.nominalMd,
+          overrideMd: measurement?.capacityOverrideMd ?? null,
+        }).md,
+        fullMd: availability.capacity.nominalMd,
+      }
+    : null;
+
+  // The active sprint is excluded even when it carries a finalized record: Jira
+  // can leave a sprint ACTIVE past its end date, and averaging a window still in
+  // flight would fold a part-delivered figure into the history it is compared
+  // against.
+  const closedSprints = history.filter((r) => r.jiraSprintId !== sprint?.jiraSprintId);
+  // The reducer resolves the estimate AND why there isn't one — the panel used
+  // to re-derive that from loose props and could contradict itself on screen
+  // (impl-review phase-6 F2).
+  const estimateView = toVelocityEstimateView(closedSprints, currentCapacity);
 
   // Name map covers ALL members (incl. deactivated) so an anomaly referencing a
   // deactivated member still resolves its name; the filter dropdown (below) uses
@@ -122,10 +172,30 @@ export default async function DashboardPage() {
         pulse={<SprintPulse series={burndown} />}
         yesterday={<YesterdayActivity grid={yesterdayGrid} dayKey={yesterdayKey} />}
         reliability={
-          <ReliabilityKpi
-            committedSp={sprint?.committedSp ?? null}
-            completedSp={sprint?.completedSp ?? null}
-          />
+          <div className="flex flex-col gap-6">
+            <ReliabilityKpi
+              committedSp={sprint?.committedSp ?? null}
+              // The FALLBACK, not the source: the delivered figure comes from
+              // the measurement record whenever there is one (impl-review F9),
+              // so the panel shows the same number FR-024 averages.
+              syncedDeliveredSp={sprint?.completedSp ?? null}
+              hasActiveSprint={sprint != null}
+              measurement={
+                measurement
+                  ? {
+                      deliveredSp: measurement.deliveredSp,
+                      deliveredSpCorrected: measurement.deliveredSpCorrected,
+                      capacityOverrideMd: measurement.capacityOverrideMd,
+                    }
+                  : null
+              }
+              capacity={availability?.capacity ?? null}
+            />
+            <VelocityEstimatePanel
+              view={estimateView}
+              sprintName={sprint?.name ?? null}
+            />
+          </div>
         }
         availability={
           <Availability
@@ -146,6 +216,19 @@ export default async function DashboardPage() {
             sprintEnd={availability?.sprintEnd.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
+            jiraSprintId={sprint?.jiraSprintId ?? null}
+            // A null record is ordinary, not an error: the sweep has simply not
+            // run since this sprint appeared. The override form creates one.
+            adjustments={
+              measurement
+                ? {
+                    capacityOverrideMd: measurement.capacityOverrideMd,
+                    deliveredSp: measurement.deliveredSp,
+                    deliveredSpCorrected: measurement.deliveredSpCorrected,
+                    isFinalized: measurement.finalizedAt !== null,
+                  }
+                : null
+            }
           />
         }
       />

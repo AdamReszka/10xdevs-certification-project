@@ -1,15 +1,28 @@
 import { and, eq, gte, lte } from "drizzle-orm";
 
-import { absence, teamMember } from "@/db/schema";
-import { countWorkingDaysInclusive } from "@/lib/anomaly/rules/helpers";
+import { absence, teamMember, type SelectSprint } from "@/db/schema";
+import {
+  countTeamDaysOffInclusive,
+  countWorkingDaysInclusive,
+} from "@/lib/anomaly/rules/helpers";
+import type { DayKey } from "@/lib/dashboard/day-bucket";
 import type { getDb } from "@/lib/db";
+import { toFte } from "@/lib/fte";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
+import { getNonWorkingDays } from "@/lib/team-day-off-store";
 
 /**
- * Sprint capacity (S-08, FR-010) — the third downstream effect of a recorded
- * absence, and `team_member.sp_capacity`'s first reader. Until now the roster
- * editor wrote that column and nothing read it.
+ * Sprint capacity in MAN-DAYS (S-23, FR-010/FR-022) — the third downstream
+ * effect of a recorded absence, and `team_member.fte`'s only reader.
+ *
+ * THE SHAPE CHANGED, NOT ONLY THE UNIT. The S-08 version computed
+ * `spCapacity × (available ÷ sprintWorkingDays)` — a ratio that cancels the day
+ * dimension, so a hand-entered story-point total came out the other side as a
+ * story-point total. Man-days are `fte × availableWorkingDays`: the divisor
+ * disappears, and the sprint's working-day count stops being an invisible
+ * intermediate and becomes the thing the number is built from. FR-022 requires
+ * it on screen next to the capacity for exactly that reason.
  *
  * Split the way every other dashboard module is (`aging.ts`): a PURE reducer that
  * a unit test can reach, plus an owner-scoped reader beside it.
@@ -27,7 +40,9 @@ type Db = ReturnType<typeof getDb>;
 
 export type CapacityMember = {
   id: string;
-  spCapacity: number | null;
+  /** Availability fraction, already converted from the driver's `numeric`
+   *  string by the reader — see `lib/fte.ts`. */
+  fte: number;
   isActive: boolean;
 };
 
@@ -38,27 +53,48 @@ export type CapacityAbsence = {
 };
 
 export type SprintCapacity = {
-  /** Team capacity after absences — the number the lead plans against. */
-  adjustedSp: number;
+  /** Man-days after absences — the number the lead plans against. */
+  adjustedMd: number;
   /** The same total with absences ignored, so the reduction is legible. */
-  nominalSp: number;
+  nominalMd: number;
   /**
-   * Active members whose `sp_capacity` is unset.
+   * The sprint's own working-day total, ALREADY NET of team-wide days off.
    *
-   * Surfaced rather than folded in, because a null is "not answered yet", never
-   * zero. Reading it as zero would understate the team and the lead would have
-   * no way to tell the number was wrong.
+   * No longer a divisor — it is now a MULTIPLIER, and FR-022 puts it on screen
+   * beside the capacity so the lead can see what the number was computed from.
+   * It has been computed since S-08 and rendered nowhere, which is precisely why
+   * a wrong divisor was invisible for as long as it was.
    */
-  membersWithoutCapacity: number;
-  /** The sprint's own working-day total — the divisor, and useful context. */
   sprintWorkingDays: number;
+  /**
+   * How many working days the team-wide day-off calendar removed from this
+   * sprint (S-23, FR-007). Zero when the sprint spans no holiday, or when the
+   * holidays it spans all fall on non-working weekdays.
+   *
+   * Reported separately from {@link sprintWorkingDays} rather than folded into
+   * it, because the two answer different questions: the total is what the
+   * capacity was multiplied by, and this is WHY that total is lower than the
+   * calendar suggests. Without it, a holiday looks like an arithmetic error.
+   */
+  teamDaysOff: number;
 };
 
 /**
- * Reduce roster + absences into the sprint's capacity.
+ * There is no `membersWithoutCapacity` any more, deliberately.
  *
- * Each active member with a capacity contributes
- * `spCapacity × (available working days ÷ sprint working days)`.
+ * `sp_capacity` was nullable, so "nobody answered yet" was a state the panel had
+ * to surface — a null read as 0 would have understated the team with no way for
+ * the lead to tell. `fte` is NOT NULL with a default, so that state cannot
+ * exist. What replaced it is a different problem in a different place: a value
+ * the MIGRATION guessed, surfaced by the `/settings/team` banner via
+ * `team_member.fte_confirmed_at`, not by this reducer.
+ */
+
+/**
+ * Reduce roster + absences into the sprint's capacity in man-days.
+ *
+ * Each active member contributes `fte × available working days`, where
+ * "available" is the sprint's working days minus the ones they are away for.
  *
  * No `now` parameter, deliberately, though the house convention injects one:
  * capacity is a property of the WHOLE sprint, not of the moment it is read, so a
@@ -72,6 +108,7 @@ export function computeSprintCapacity({
   sprintEnd,
   workingDays,
   timeZone,
+  nonWorkingDays,
 }: {
   members: CapacityMember[];
   absences: CapacityAbsence[];
@@ -79,12 +116,26 @@ export function computeSprintCapacity({
   sprintEnd: Date;
   workingDays: readonly string[] | null | undefined;
   timeZone: string | null;
+  /**
+   * Days the WHOLE team is off (S-23, FR-007). REQUIRED, not optional: an
+   * omission here would silently keep the old, holiday-blind number, and the
+   * caller would have no way to tell. Pass an empty set to mean "none".
+   */
+  nonWorkingDays: ReadonlySet<DayKey>;
 }): SprintCapacity {
   const sprintWorkingDays = countWorkingDaysInclusive(
     sprintStart,
     sprintEnd,
     workingDays,
     timeZone,
+    nonWorkingDays,
+  );
+  const teamDaysOff = countTeamDaysOffInclusive(
+    sprintStart,
+    sprintEnd,
+    workingDays,
+    timeZone,
+    nonWorkingDays,
   );
 
   const byMember = new Map<string, CapacityAbsence[]>();
@@ -92,21 +143,18 @@ export function computeSprintCapacity({
     byMember.set(a.teamMemberId, [...(byMember.get(a.teamMemberId) ?? []), a]);
   }
 
-  let adjustedSp = 0;
-  let nominalSp = 0;
-  let membersWithoutCapacity = 0;
+  let adjustedMd = 0;
+  let nominalMd = 0;
 
   for (const member of members) {
     if (!member.isActive) continue;
-    if (member.spCapacity == null) {
-      membersWithoutCapacity += 1;
-      continue;
-    }
 
-    nominalSp += member.spCapacity;
+    nominalMd += member.fte * sprintWorkingDays;
 
-    // Nothing to divide by — and a sprint with no working days genuinely has no
-    // capacity, so the reduced total is 0 while the ceiling above stays honest.
+    // A sprint with no working days genuinely has no capacity. The guard is kept
+    // from the S-08 version even though nothing divides any more: without it the
+    // absence loop below would run to produce a guaranteed zero, and the ceiling
+    // above stays honest at 0 either way.
     if (sprintWorkingDays === 0) continue;
 
     // Summing is safe because the store rejects overlapping windows for one
@@ -117,14 +165,23 @@ export function computeSprintCapacity({
       // this sprint.
       const from = a.startDate > sprintStart ? a.startDate : sprintStart;
       const to = a.endDate < sprintEnd ? a.endDate : sprintEnd;
-      absentWorkingDays += countWorkingDaysInclusive(from, to, workingDays, timeZone);
+      // The same `nonWorkingDays` the sprint total used. Passing it here is what
+      // stops a public holiday INSIDE someone's vacation from being subtracted
+      // twice — once as a day the sprint never had, once as a day they were away.
+      absentWorkingDays += countWorkingDaysInclusive(
+        from,
+        to,
+        workingDays,
+        timeZone,
+        nonWorkingDays,
+      );
     }
 
     const available = Math.max(0, sprintWorkingDays - absentWorkingDays);
-    adjustedSp += member.spCapacity * (available / sprintWorkingDays);
+    adjustedMd += member.fte * available;
   }
 
-  return { adjustedSp, nominalSp, membersWithoutCapacity, sprintWorkingDays };
+  return { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff };
 }
 
 export type CapacityReadResult = {
@@ -149,19 +206,38 @@ export async function getSprintCapacity(
   ownerId: string,
 ): Promise<CapacityReadResult | null> {
   const sprint = await getActiveSprintRow(db, ownerId);
-  if (!sprint?.startDate || !sprint.endDate) return null;
+  if (sprint === null) return null;
+  return getSprintCapacityFor(db, ownerId, sprint);
+}
+
+/**
+ * The same load for an ARBITRARY sprint row.
+ *
+ * Split out for S-23 Phase 4: {@link getSprintCapacity} was pinned to
+ * `getActiveSprintRow`, so no function in the system could answer "what was the
+ * capacity of the sprint that just closed?" — and the measurement sweep exists
+ * precisely to ask that, sometimes days late. Returns null for a sprint without
+ * both dates: a window that cannot be bounded has no working-day count, and an
+ * unbounded guess is worse than no measurement (FR-023).
+ */
+export async function getSprintCapacityFor(
+  db: Db,
+  ownerId: string,
+  sprint: SelectSprint,
+): Promise<CapacityReadResult | null> {
+  if (!sprint.startDate || !sprint.endDate) return null;
 
   const sprintStart = sprint.startDate;
   const sprintEnd = sprint.endDate;
   // Far edge of the "next window" the tab also draws.
   const lookahead = new Date(sprintEnd.getTime() + (sprintEnd.getTime() - sprintStart.getTime()));
 
-  const [members, absences, timeZone] = await Promise.all([
+  const [rows, absences, timeZone, nonWorkingDays] = await Promise.all([
     db
       .select({
         id: teamMember.id,
         name: teamMember.name,
-        spCapacity: teamMember.spCapacity,
+        fte: teamMember.fte,
         isActive: teamMember.isActive,
       })
       .from(teamMember)
@@ -182,11 +258,19 @@ export async function getSprintCapacity(
         ),
       ),
     getJiraTimeZone(db, ownerId),
+    // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
+    // inside the reducer for the same reason the zone is: the reducer is pure.
+    getNonWorkingDays({ db, ownerId }),
   ]);
+
+  // The driver hands `numeric` back as a string. Converting once, HERE, is what
+  // keeps every consumer of this reader — the reducer and the tab's grids alike
+  // — from having to remember (`lib/fte.ts`).
+  const rosterMembers = rows.map((m) => ({ ...m, fte: toFte(m.fte) }));
 
   return {
     capacity: computeSprintCapacity({
-      members,
+      members: rosterMembers,
       // Only this sprint's window feeds the capacity number; the reader pulls a
       // wider range because the tab's second grid needs it.
       absences,
@@ -194,11 +278,12 @@ export async function getSprintCapacity(
       sprintEnd,
       workingDays: sprint.workingDays,
       timeZone,
+      nonWorkingDays,
     }),
     sprintStart,
     sprintEnd,
     timeZone,
-    members,
+    members: rosterMembers,
     absences,
   };
 }

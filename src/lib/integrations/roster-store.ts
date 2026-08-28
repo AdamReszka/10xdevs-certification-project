@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, count, eq } from "drizzle-orm";
+import { and, count, eq, isNull } from "drizzle-orm";
 
 import {
   absence,
@@ -13,6 +13,7 @@ import {
   type technologyTrack,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
+import { fteToColumn, toFte } from "@/lib/fte";
 import {
   type GithubClientOpts,
   GithubAuthError,
@@ -125,7 +126,7 @@ export type ImportRosterResult = {
  *
  * MERGE-BY-KEY (FR-006) survives as MATCHING rather than skipping: an upstream
  * identity already present as a stored key yields that stored row untouched, so
- * user-owned fields (`name`, `role`, `spCapacity`, `technologyTrack`) and `MANUAL`
+ * user-owned fields (`name`, `role`, `fte`, `technologyTrack`) and `MANUAL`
  * rows still survive every re-import. GitHub logins match case-insensitively.
  *
  * FLAGGING IS PER-SOURCE AND NEVER GUESSES. A stored row is flagged
@@ -243,7 +244,7 @@ export async function previewRosterImport({
       githubUsername: m.githubUsername,
       jiraAccountId: m.jiraAccountId,
       role: m.role,
-      spCapacity: m.spCapacity,
+      fte: toFte(m.fte),
       technologyTrack: m.technologyTrack,
       isActive: m.isActive,
       source: m.source,
@@ -315,7 +316,8 @@ export type RosterMemberInput = {
   githubUsername?: string | null;
   jiraAccountId?: string | null;
   role?: string | null;
-  spCapacity?: number | null;
+  /** Availability fraction. Omitted ⇒ 1.0 (the column has no absent state). */
+  fte?: number;
   technologyTrack?: TechnologyTrack | null;
   /** Omitted ⇒ keep whatever the stored row has (never resurrect a deactivated
    *  member as a side effect of an unrelated field edit). */
@@ -400,10 +402,14 @@ export async function saveRoster({
       .where(eq(teamMember.ownerId, ownerId));
     const byId = new Map(existing.map((m) => [m.id, m]));
 
-    const updates: { id: string; values: MemberFields }[] = [];
+    const updates: { id: string; values: MemberFields; fteTouched: boolean }[] = [];
     const inserts: (typeof teamMember.$inferInsert)[] = [];
     // Positional, so the caller can zip it back onto its own submitted array.
     const ids: string[] = [];
+    // One instant for the whole save, so every row this call confirms carries the
+    // same stamp — a per-row `new Date()` would make them differ by milliseconds
+    // for no reason anyone could later interpret.
+    const now = new Date();
 
     for (const m of members) {
       if (m.id == null) {
@@ -411,7 +417,11 @@ export async function saveRoster({
         inserts.push({
           id,
           ownerId,
-          ...toMemberFields(m, true),
+          ...toColumnValues(toMemberFields(m, true)),
+          // An inserted row's availability came from the owner just now, so it is
+          // confirmed by construction — the banner is about rows the MIGRATION
+          // defaulted, and this row never went through it.
+          fteConfirmedAt: now,
         });
         ids.push(id);
         continue;
@@ -423,13 +433,25 @@ export async function saveRoster({
 
       ids.push(m.id);
       const values = toMemberFields(m, current.isActive);
-      if (!isUnchanged(current, values)) updates.push({ id: m.id, values });
+      if (!isUnchanged(current, values)) {
+        updates.push({
+          id: m.id,
+          values,
+          // Only an actual change to `fte` counts as confirming it. Editing an
+          // unrelated field must NOT silently clear the banner for a row whose
+          // availability is still the migration's guess.
+          fteTouched: toFte(current.fte) !== values.fte,
+        });
+      }
     }
 
     for (const u of updates) {
       await tx
         .update(teamMember)
-        .set(u.values)
+        .set({
+          ...toColumnValues(u.values),
+          ...(u.fteTouched ? { fteConfirmedAt: now } : {}),
+        })
         // The owner predicate is redundant given the id came from this owner's
         // set, and deliberately kept: defence in depth on the isolation guarantee.
         .where(and(eq(teamMember.id, u.id), eq(teamMember.ownerId, ownerId)));
@@ -449,11 +471,22 @@ type MemberFields = {
   githubUsername: string | null;
   jiraAccountId: string | null;
   role: string | null;
-  spCapacity: number | null;
+  /** Held as a NUMBER here so `isUnchanged` can compare it; converted to the
+   *  `numeric` literal only at the write, by `toColumnValues`. */
+  fte: number;
   technologyTrack: TechnologyTrack | null;
   source: TeamMemberRow["source"];
   isActive: boolean;
 };
+
+/**
+ * The write boundary: `MemberFields` carries `fte` as a number so `isUnchanged`
+ * can compare it, but the `numeric(3,2)` column wants the literal. One helper on
+ * the way out means neither the insert nor the update path can forget it.
+ */
+function toColumnValues(v: MemberFields) {
+  return { ...v, fte: fteToColumn(v.fte) };
+}
 
 /** A cleared text input arrives as `""` from the editor, which is "absent", not a
  *  value — `deriveSource` already treats it that way, so the persisted column
@@ -472,7 +505,7 @@ function toMemberFields(m: RosterMemberInput, fallbackActive: boolean): MemberFi
     githubUsername: blankToNull(m.githubUsername),
     jiraAccountId: blankToNull(m.jiraAccountId),
     role: blankToNull(m.role),
-    spCapacity: m.spCapacity ?? null,
+    fte: toFte(m.fte),
     technologyTrack: m.technologyTrack ?? null,
     source: deriveSource(m),
     isActive: m.isActive ?? fallbackActive,
@@ -486,7 +519,10 @@ function isUnchanged(current: TeamMemberRow, next: MemberFields): boolean {
     current.githubUsername === next.githubUsername &&
     current.jiraAccountId === next.jiraAccountId &&
     current.role === next.role &&
-    current.spCapacity === next.spCapacity &&
+    // `current.fte` is the driver's `numeric` STRING and `next.fte` a number, so
+    // a bare `===` is false for every row on every save — which would move every
+    // `updated_at` and defeat the whole point of this predicate.
+    toFte(current.fte) === next.fte &&
     current.technologyTrack === next.technologyTrack &&
     current.source === next.source &&
     current.isActive === next.isActive
@@ -689,11 +725,44 @@ export async function mergeMembers({
 
     await tx
       .update(teamMember)
-      .set(toMemberFields(merged, keep.isActive))
+      .set(toColumnValues(toMemberFields(merged, keep.isActive)))
       .where(and(eq(teamMember.id, keepId), eq(teamMember.ownerId, ownerId)));
 
     return { id: keepId };
   });
+}
+
+/**
+ * Stamp `fte_confirmed_at` on every member of this owner that still carries the
+ * 0012 migration's default, WITHOUT changing a single availability value.
+ *
+ * This is the banner's "Confirm availability" action. It exists because the
+ * migration could not convert `sp_capacity` — an `8` is indistinguishable as
+ * 8 story points and as 8 full-time equivalents — so every member was written as
+ * full-time and any team with part-timers had its capacity silently inflated.
+ * The banner is the only signal that happened; confirming is the owner saying
+ * "I have looked, these are right", which is a different act from editing a
+ * value and therefore gets its own path rather than riding on `saveRoster`.
+ *
+ * Idempotent: the `IS NULL` predicate means a second call stamps nothing, so a
+ * double-click cannot rewrite a stamp the owner set weeks ago.
+ */
+export async function confirmAllFte({
+  db,
+  ownerId,
+  now = new Date(),
+}: {
+  db: Db;
+  ownerId: string;
+  now?: Date;
+}): Promise<{ confirmed: number }> {
+  const rows = await db
+    .update(teamMember)
+    .set({ fteConfirmedAt: now })
+    .where(and(eq(teamMember.ownerId, ownerId), isNull(teamMember.fteConfirmedAt)))
+    .returning({ id: teamMember.id });
+
+  return { confirmed: rows.length };
 }
 
 // ============================================================================

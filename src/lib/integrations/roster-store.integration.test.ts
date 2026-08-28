@@ -29,6 +29,7 @@ import {
   saveCadence,
   saveRoster,
   setMemberActive,
+  confirmAllFte,
 } from "@/lib/integrations/roster-store";
 
 /**
@@ -247,7 +248,7 @@ describe("previewRosterImport — diff, not a write (FR-006, S-15)", () => {
     // The roster as it exists after the owner saved the first import.
     const octocatId = randomUUID();
     await db.insert(teamMember).values([
-      { id: octocatId, ownerId, name: "octocat", githubUsername: "octocat", role: "Tech Lead", spCapacity: 8, technologyTrack: "BACKEND", source: "GITHUB" },
+      { id: octocatId, ownerId, name: "octocat", githubUsername: "octocat", role: "Tech Lead", fte: "0.50", technologyTrack: "BACKEND", source: "GITHUB" },
       { id: randomUUID(), ownerId, name: "devtwo", githubUsername: "devtwo", source: "GITHUB" },
       { id: randomUUID(), ownerId, name: "Mia Krystof", jiraAccountId: "acc-1", source: "JIRA" },
       { id: randomUUID(), ownerId, name: "Sam Lee", jiraAccountId: "acc-2", source: "JIRA" },
@@ -267,7 +268,8 @@ describe("previewRosterImport — diff, not a write (FR-006, S-15)", () => {
     const edited = result.members.find((m) => m.githubUsername === "octocat");
     expect(edited?.id).toBe(octocatId);
     expect(edited?.role).toBe("Tech Lead");
-    expect(edited?.spCapacity).toBe(8);
+    // Converted to a number by the preview projection, not left as `'0.50'`.
+    expect(edited?.fte).toBe(0.5);
     expect(edited?.technologyTrack).toBe("BACKEND");
 
     const manual = result.members.find((m) => m.id === manualId);
@@ -1202,5 +1204,178 @@ describe("member lifecycle (S-15 Phase 2)", () => {
         }),
       ).rejects.toBeInstanceOf(UnknownMemberError);
     });
+  });
+});
+
+// ============================================================================
+// S-23 Phase 1 — the availability fraction across the `numeric` boundary
+//
+// `team_member.fte` is `numeric(3,2)`, and the `pg` driver returns `numeric` as
+// a STRING: `0.50` comes back as `'0.50'`, and `'0.50' === 0.5` is `false`.
+// Drizzle types the column as `string`, so a forgotten conversion is not a type
+// error — it surfaces here, as a save that rewrites rows it should have skipped.
+// ============================================================================
+
+describe("availability fraction — the numeric-as-string trap (S-23 Phase 1)", () => {
+  /** A persisted part-timer: the value where the string/number gap actually bites. */
+  async function seedHalfTimer(ownerId: string) {
+    const memberId = randomUUID();
+    await db.insert(teamMember).values({
+      id: memberId,
+      ownerId,
+      name: "Dana Osei",
+      githubUsername: "dana-o",
+      role: "QA",
+      fte: "0.50",
+      source: "GITHUB",
+    });
+    return memberId;
+  }
+
+  function payload(memberId: string, over: Record<string, unknown> = {}) {
+    return {
+      id: memberId,
+      name: "Dana Osei",
+      githubUsername: "dana-o",
+      role: "QA",
+      fte: 0.5,
+      ...over,
+    };
+  }
+
+  it("an unchanged save of a part-timer performs ZERO updates", async () => {
+    // THE REGRESSION THIS EXISTS FOR: with a bare `===` in `isUnchanged`, the
+    // stored `'0.50'` never equals the submitted `0.5`, so every save rewrites
+    // every row and moves every `updated_at` — silently, and forever.
+    const ownerId = await newOwner();
+    const memberId = await seedHalfTimer(ownerId);
+
+    const [before] = await db
+      .select({ updatedAt: teamMember.updatedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+
+    const result = await saveRoster({ db, ownerId, members: [payload(memberId)] });
+    expect(result).toEqual({ updated: 0, inserted: 0, ids: [memberId] });
+
+    const [after] = await db
+      .select({ updatedAt: teamMember.updatedAt, fte: teamMember.fte })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(after.updatedAt.getTime()).toBe(before.updatedAt.getTime());
+    expect(after.fte).toBe("0.50");
+  });
+
+  it("round-trips 0.5 through a save that changes something else", async () => {
+    const ownerId = await newOwner();
+    const memberId = await seedHalfTimer(ownerId);
+
+    await saveRoster({ db, ownerId, members: [payload(memberId, { role: "Lead QA" })] });
+
+    const [row] = await db
+      .select({ fte: teamMember.fte, role: teamMember.role })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(row.role).toBe("Lead QA");
+    expect(row.fte).toBe("0.50");
+  });
+
+  it("stamps fte_confirmed_at only when the availability itself changed", async () => {
+    const ownerId = await newOwner();
+    const memberId = await seedHalfTimer(ownerId);
+
+    // An unrelated edit must NOT clear the migration banner for this row: the
+    // owner has not looked at their availability, so claiming they confirmed it
+    // would hide exactly the inflation the banner exists to surface.
+    await saveRoster({ db, ownerId, members: [payload(memberId, { role: "Lead QA" })] });
+    const [afterUnrelated] = await db
+      .select({ fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(afterUnrelated.fteConfirmedAt).toBeNull();
+
+    // Changing the value IS the confirmation.
+    await saveRoster({
+      db,
+      ownerId,
+      members: [payload(memberId, { role: "Lead QA", fte: 0.75 })],
+    });
+    const [afterFte] = await db
+      .select({ fte: teamMember.fte, fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, memberId));
+    expect(afterFte.fte).toBe("0.75");
+    expect(afterFte.fteConfirmedAt).not.toBeNull();
+  });
+
+  it("stamps an inserted row, which never went through the migration", async () => {
+    const ownerId = await newOwner();
+
+    const { ids } = await saveRoster({
+      db,
+      ownerId,
+      members: [{ name: "New Hire", githubUsername: "newhire", fte: 0.25 }],
+    });
+
+    const [row] = await db
+      .select({ fte: teamMember.fte, fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, ids[0]));
+    expect(row.fte).toBe("0.25");
+    expect(row.fteConfirmedAt).not.toBeNull();
+  });
+
+  it("confirmAllFte stamps the unconfirmed, changes no value, and is idempotent", async () => {
+    const ownerId = await newOwner();
+    const unconfirmedId = await seedHalfTimer(ownerId);
+
+    const alreadyId = randomUUID();
+    const stampedAt = new Date("2026-08-01T09:00:00.000Z");
+    await db.insert(teamMember).values({
+      id: alreadyId,
+      ownerId,
+      name: "Bob Rivera",
+      githubUsername: "bob-r",
+      fte: "1.00",
+      fteConfirmedAt: stampedAt,
+      source: "GITHUB",
+    });
+
+    const first = await confirmAllFte({ db, ownerId });
+    expect(first.confirmed).toBe(1);
+
+    const [confirmed] = await db
+      .select({ fte: teamMember.fte, fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, unconfirmedId));
+    // Confirming is "I looked and these are right" — it must not edit anything.
+    expect(confirmed.fte).toBe("0.50");
+    expect(confirmed.fteConfirmedAt).not.toBeNull();
+
+    // An already-stamped row keeps its ORIGINAL stamp: a second click must not
+    // rewrite a confirmation the owner made weeks ago.
+    const [untouched] = await db
+      .select({ fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, alreadyId));
+    expect(untouched.fteConfirmedAt?.getTime()).toBe(stampedAt.getTime());
+
+    const second = await confirmAllFte({ db, ownerId });
+    expect(second.confirmed).toBe(0);
+  });
+
+  it("is owner-scoped — another account's unconfirmed rows are not touched", async () => {
+    const ownerId = await newOwner();
+    const otherId = await newOwner();
+    await seedHalfTimer(ownerId);
+    const foreignId = await seedHalfTimer(otherId);
+
+    await confirmAllFte({ db, ownerId });
+
+    const [foreign] = await db
+      .select({ fteConfirmedAt: teamMember.fteConfirmedAt })
+      .from(teamMember)
+      .where(eq(teamMember.id, foreignId));
+    expect(foreign.fteConfirmedAt).toBeNull();
   });
 });

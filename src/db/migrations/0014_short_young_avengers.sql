@@ -1,0 +1,1 @@
+ALTER TABLE "sprint" ADD COLUMN "committed_frozen_at" timestamp;

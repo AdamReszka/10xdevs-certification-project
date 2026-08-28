@@ -41,3 +41,30 @@ export async function getActiveSprintRow(
     .limit(1);
   return mostRecent ?? null;
 }
+
+/**
+ * One named sprint of the owner's, by its JIRA-side id (S-23 Phase 7).
+ *
+ * The Sprint Detail switcher navigates by `jira_sprint_id`, because that is the
+ * identity `sprint_measurement` is filed under and the only one that survives
+ * the raw `sprint` row being deleted. Returns `null` when no row matches, which
+ * is an ORDINARY state and not an error: a sprint recorded before a monitored
+ * Jira-project switch has had its row cascade away by design, and the page
+ * renders that sprint from its measurement record instead.
+ *
+ * Owner-scoped in the SQL, not in the caller's discipline — the id arrives from
+ * a query string.
+ */
+export async function getSprintRowByJiraId(
+  db: Db,
+  ownerId: string,
+  jiraSprintId: string,
+): Promise<SelectSprint | null> {
+  const [row] = await db
+    .select()
+    .from(sprint)
+    .where(and(eq(sprint.ownerId, ownerId), eq(sprint.jiraSprintId, jiraSprintId)))
+    .limit(1);
+
+  return row ?? null;
+}

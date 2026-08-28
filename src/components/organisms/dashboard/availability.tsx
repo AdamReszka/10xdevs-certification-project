@@ -4,12 +4,19 @@ import Link from "next/link";
 import { useMemo } from "react";
 
 import { formatDayHeader } from "@/components/organisms/dashboard/activity-matrix-view";
+import CapacityAdjustments from "@/components/organisms/dashboard/capacity-adjustments";
+import {
+  round1,
+  toCapacityHeadline,
+  toDeliveredView,
+} from "@/components/organisms/dashboard/capacity-adjustments-view";
 import {
   type AvailabilityGrid,
   type AvailabilityMember,
   buildAvailabilityGrid,
   nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,6 +40,26 @@ export type SerializedAbsence = {
 };
 
 /**
+ * The sprint-measurement fields this tab reads (S-23 Phase 5, FR-022/FR-023).
+ *
+ * A hand-picked slice of `SprintMeasurement` rather than the record itself: the
+ * full row carries `Date`s, which the house convention does not send across the
+ * client boundary, and three of its columns are the sweep's business alone.
+ */
+export type SprintAdjustments = {
+  capacityOverrideMd: number | null;
+  deliveredSp: number | null;
+  deliveredSpCorrected: number | null;
+  /**
+   * Whether the sweep has frozen this sprint's measurement. Gates the
+   * delivered-SP correction (impl-review F3): a figure that is still moving is
+   * not one worth correcting, and a correction entered mid-sprint would outlive
+   * the sweep into FR-024's average with nothing recording that it was premature.
+   */
+  isFinalized: boolean;
+};
+
+/**
  * Availability — the fifth tab on Dashboard "Today" (S-08, FR-010/FR-016).
  *
  * A tab rather than an always-on card, because FR-016 is explicit that the
@@ -52,6 +79,8 @@ export default function Availability({
   sprintEnd,
   timeZone,
   capacity,
+  jiraSprintId,
+  adjustments,
 }: {
   members: AvailabilityMember[];
   absences: SerializedAbsence[];
@@ -59,6 +88,18 @@ export default function Availability({
   sprintEnd: string | null;
   timeZone: string | null;
   capacity: SprintCapacity | null;
+  /**
+   * The displayed sprint's Jira id, or `null` when there is none to adjust. The
+   * manual-entry form is withheld without it: an entry has to name the sprint it
+   * belongs to rather than let the server guess at save time (impl-review F2).
+   */
+  jiraSprintId: string | null;
+  /**
+   * The lead's manual entries on this sprint's measurement record (S-23 Phase 5).
+   * `null` when the sweep has not written a record yet — an ordinary state, not
+   * an error, and one the override form itself can resolve by creating one.
+   */
+  adjustments: SprintAdjustments | null;
 }) {
   const windows = useMemo(() => {
     if (!sprintStart || !sprintEnd) return null;
@@ -112,7 +153,11 @@ export default function Availability({
           </p>
         ) : (
           <>
-            <CapacitySummary capacity={capacity} />
+            <CapacitySummary
+              capacity={capacity}
+              jiraSprintId={jiraSprintId}
+              adjustments={adjustments}
+            />
             <AvailabilitySection title="This sprint" grid={windows.current} />
             <AvailabilitySection title="Next window" grid={windows.next} />
           </>
@@ -123,42 +168,99 @@ export default function Availability({
 }
 
 /**
- * The capacity number, and the reason it may be understated.
+ * The capacity number in MAN-DAYS, and the working-day count it came from.
  *
- * A null `sp_capacity` is NEVER shown as 0 SP: it means the owner has not
- * answered yet, and a silent zero would hand the lead a number they cannot tell
- * is wrong.
+ * The divisor is on screen (FR-022) because it was not: `sprintWorkingDays` has
+ * been computed since S-08 and rendered nowhere, so a wrong working-day count —
+ * the thing the whole figure scales with — was unfalsifiable by the lead.
+ *
+ * TEAM DAYS OFF ARE NAMED SEPARATELY (S-23, FR-007) rather than folded silently
+ * into that count. `sprintWorkingDays` already has them subtracted, so without
+ * the second line a recorded public holiday would present as a working-day total
+ * that disagrees with the calendar — which reads as an arithmetic error rather
+ * than as the holiday the lead entered ten seconds earlier.
+ *
+ * There is no "nobody answered yet" empty state any more. `fte` is NOT NULL, so
+ * every active member contributes something; a member the migration guessed at
+ * is surfaced by the `/settings/team` banner instead, where it can actually be
+ * fixed.
  */
-function CapacitySummary({ capacity }: { capacity: SprintCapacity | null }) {
+function CapacitySummary({
+  capacity,
+  jiraSprintId,
+  adjustments,
+}: {
+  capacity: SprintCapacity | null;
+  jiraSprintId: string | null;
+  adjustments: SprintAdjustments | null;
+}) {
   if (!capacity) return null;
 
-  const { adjustedSp, nominalSp, membersWithoutCapacity } = capacity;
-  const noneSet = nominalSp === 0 && membersWithoutCapacity > 0;
+  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff } = capacity;
+  const headline = toCapacityHeadline({
+    adjustedMd,
+    nominalMd,
+    overrideMd: adjustments?.capacityOverrideMd ?? null,
+  });
+  const delivered = toDeliveredView({
+    deliveredSp: adjustments?.deliveredSp ?? null,
+    correctedSp: adjustments?.deliveredSpCorrected ?? null,
+  });
 
   return (
-    <div className="flex flex-col gap-1 rounded-md border p-4">
-      {noneSet ? (
-        <p className="text-sm text-muted-foreground">
-          No story-point capacity set for anyone on the team yet — add it on the
-          Team tab and this becomes a number.
+    <div className="flex flex-col gap-4 rounded-md border p-4">
+      <div className="flex flex-col gap-1">
+        <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums">
+          {round1(headline.md)} MD
+          {headline.beforeAbsencesMd !== null ? (
+            <span className="text-sm font-normal text-muted-foreground">
+              of {round1(headline.beforeAbsencesMd)} MD, after absences
+            </span>
+          ) : null}
+          {/* FR-022 makes an override a MARKED exception: the figure feeds
+              FR-024's normalisation, so it must never be mistaken for something
+              the system measured. */}
+          {headline.isOverridden ? <Badge variant="outline">Overridden</Badge> : null}
         </p>
-      ) : (
-        <>
-          <p className="text-2xl font-semibold tabular-nums">
-            {round1(adjustedSp)} SP
-            {adjustedSp < nominalSp ? (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                of {round1(nominalSp)} SP, after absences
-              </span>
+        <p className="text-sm text-muted-foreground">
+          Capacity for this sprint, over {sprintWorkingDays}{" "}
+          {sprintWorkingDays === 1 ? "working day" : "working days"}.
+        </p>
+        {headline.isOverridden ? (
+          <p className="text-sm text-muted-foreground">
+            Computed from the roster: {round1(headline.computedMd)} MD.
+          </p>
+        ) : null}
+        {teamDaysOff > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            − {teamDaysOff} team {teamDaysOff === 1 ? "day" : "days"} off already
+            subtracted (public holidays, company days off).
+          </p>
+        ) : null}
+        {delivered.sp !== null ? (
+          <p className="flex items-center gap-2 text-sm text-muted-foreground">
+            <span>
+              Delivered so far: {delivered.sp} SP
+              {delivered.isCorrected && delivered.computedSp !== null
+                ? ` (measured ${delivered.computedSp} SP)`
+                : ""}
+            </span>
+            {delivered.isCorrected ? (
+              <Badge variant="outline">Corrected</Badge>
             ) : null}
           </p>
-          <p className="text-sm text-muted-foreground">
-            Capacity for this sprint.
-            {membersWithoutCapacity > 0
-              ? ` ${membersWithoutCapacity} member${membersWithoutCapacity === 1 ? "" : "s"} without capacity set ${membersWithoutCapacity === 1 ? "is" : "are"} not counted.`
-              : null}
-          </p>
-        </>
+        ) : null}
+      </div>
+
+      {jiraSprintId === null ? null : (
+        <CapacityAdjustments
+          jiraSprintId={jiraSprintId}
+          computedMd={headline.computedMd}
+          overrideMd={adjustments?.capacityOverrideMd ?? null}
+          computedSp={delivered.computedSp}
+          correctedSp={adjustments?.deliveredSpCorrected ?? null}
+          canCorrectDelivered={adjustments?.isFinalized ?? false}
+        />
       )}
     </div>
   );
@@ -241,9 +343,4 @@ function AvailabilitySection({
       )}
     </div>
   );
-}
-
-/** One decimal, and no trailing `.0` — capacity is a planning number, not a measurement. */
-function round1(n: number): number {
-  return Math.round(n * 10) / 10;
 }

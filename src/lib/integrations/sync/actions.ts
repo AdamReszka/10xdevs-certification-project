@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/auth";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner, type IntegrationOutcome } from "@/lib/integrations/sync/run-sync";
+import { sweepSprintMeasurements } from "@/lib/measurement/sweep";
 
 /**
  * On-demand sync Server Action (S-05, Phase 5). Lets the just-finished-setup UI
@@ -92,6 +93,18 @@ export async function syncNow(): Promise<SyncNowResult> {
     } catch (err) {
       console.error(
         "[detect] syncNow detection failed:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    // S-23: record what each sprint was, on the same cycle (FR-023). Separate
+    // from the detection try/catch above so neither swallows the other, and
+    // best-effort for the same reason: a measurement the sweep can retry next
+    // cycle must never fail the owner's explicit "sync now".
+    try {
+      await sweepSprintMeasurements({ db, ownerId: session.user.id, now });
+    } catch (err) {
+      console.error(
+        "[measurement] syncNow sweep failed:",
         err instanceof Error ? err.message : err,
       );
     }
