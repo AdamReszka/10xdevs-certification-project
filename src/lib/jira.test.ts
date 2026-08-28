@@ -13,8 +13,6 @@ import {
   listProjectStatuses,
   normalizeWorkspaceUrl,
   resolveFieldIds,
-  resolveSprintFieldId,
-  resolveStoryPointFieldId,
   MAX_REFINEMENT_TICKETS_PER_CALL,
   fetchRefinementTickets,
   searchSprintIssues,
@@ -879,6 +877,17 @@ describe("searchSprintIssues", () => {
       expect(await storyPointsFor(Number.POSITIVE_INFINITY)).toBeNull();
       expect(await storyPointsFor("5")).toBeNull();
     });
+
+    it("maps an estimate past the int4 column's range to null, not to a number", async () => {
+      // Finite, so the non-finite guard lets it through; `Math.round` keeps it
+      // whole. Written unguarded it reaches an `integer` column INSIDE the sync
+      // transaction and raises `value out of range for type integer`, rolling
+      // the whole Jira pull back — the same wedge `0.5` used to cause.
+      expect(await storyPointsFor(1e10)).toBeNull();
+      expect(await storyPointsFor(2_147_483_648)).toBeNull();
+      // The domain itself is untouched: FR-009's largest bucket still passes.
+      expect(await storyPointsFor(21)).toBe(21);
+    });
   });
 
   /**
@@ -991,7 +1000,7 @@ describe("searchSprintIssues", () => {
   });
 });
 
-describe("resolveStoryPointFieldId", () => {
+describe("resolveFieldIds — the story-point id", () => {
   it("picks the custom field by greenhopper schema", async () => {
     const fetchImpl = onceFetch(
       jsonResponse([
@@ -1005,7 +1014,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBe("customfield_10016");
   });
@@ -1017,7 +1026,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBe("customfield_20000");
   });
@@ -1031,7 +1040,7 @@ describe("resolveStoryPointFieldId", () => {
       ]),
     );
 
-    const id = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl });
+    const { storyPointFieldId: id } = await resolveFieldIds(BASE, CREDS, { fetchImpl });
 
     expect(id).toBeNull();
   });
@@ -1040,20 +1049,20 @@ describe("resolveStoryPointFieldId", () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "Unauthorized" }, { status: 401 }));
 
     await expect(
-      resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }),
+      resolveFieldIds(BASE, CREDS, { fetchImpl }),
     ).rejects.toBeInstanceOf(JiraAuthError);
   });
 
   it("throws JiraUnavailableError on 5xx and never leaks the token", async () => {
     const fetchImpl = onceFetch(jsonResponse({ message: "boom" }, { status: 500 }));
 
-    const err = await resolveStoryPointFieldId(BASE, CREDS, { fetchImpl }).catch((e) => e);
+    const err = await resolveFieldIds(BASE, CREDS, { fetchImpl }).catch((e) => e);
     expect(err).toBeInstanceOf(JiraUnavailableError);
     expect(String(err)).not.toContain(TOKEN);
   });
 });
 
-describe("resolveSprintFieldId / resolveFieldIds", () => {
+describe("resolveFieldIds — the Sprint field id", () => {
   const FIELD_LIST = [
     { id: "summary", name: "Summary", custom: false, schema: { system: "summary" } },
     {
@@ -1075,7 +1084,9 @@ describe("resolveSprintFieldId / resolveFieldIds", () => {
   it("picks the Jira Software sprint field by its greenhopper schema", async () => {
     const fetchImpl = onceFetch(jsonResponse(FIELD_LIST));
 
-    expect(await resolveSprintFieldId(BASE, CREDS, { fetchImpl })).toBe("customfield_10020");
+    expect((await resolveFieldIds(BASE, CREDS, { fetchImpl })).sprintFieldId).toBe(
+      "customfield_10020",
+    );
   });
 
   it("returns null when the site exposes no sprint field", async () => {
@@ -1083,7 +1094,7 @@ describe("resolveSprintFieldId / resolveFieldIds", () => {
       jsonResponse([{ id: "customfield_1", name: "Sprint", custom: true, schema: {} }]),
     );
 
-    expect(await resolveSprintFieldId(BASE, CREDS, { fetchImpl })).toBeNull();
+    expect((await resolveFieldIds(BASE, CREDS, { fetchImpl })).sprintFieldId).toBeNull();
   });
 
   it("resolves BOTH ids from a single field listing", async () => {

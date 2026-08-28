@@ -878,6 +878,9 @@ function parseSprintFieldChanges(
  * `sync_state` ERROR every 15 minutes with no self-heal path. Rounding here is an
  * INPUT GUARD, not a model change: FR-009's thresholds are Fibonacci (1/2, 3, 5,
  * 8/13, 21), so half a story point is not a quantity this product knows. */
+/** Anything above this is a typo or a field that is not story points at all. */
+const MAX_STORY_POINTS = 1000;
+
 function extractStoryPoints(
   fields: Record<string, unknown>,
   storyPointFieldId: string | null,
@@ -885,7 +888,15 @@ function extractStoryPoints(
   if (storyPointFieldId === null) return null;
   const raw = fields[storyPointFieldId];
   if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
-  return Math.max(0, Math.round(raw));
+  const rounded = Math.max(0, Math.round(raw));
+  // The UPPER bound matters for the same reason the fractional guard does, and
+  // was missed with it (impl-review F4): `jira_ticket.story_points` is `integer`
+  // (int4), and the write happens INSIDE the sync transaction, so one
+  // out-of-range value rolls the whole Jira pull back and stamps `sync_state`
+  // ERROR every 15 minutes with no self-heal. `null` — "unestimated" — is the
+  // honest reading of a number this far outside the domain (FR-009's largest
+  // bucket is 21 SP); clamping to the cap would invent an estimate nobody gave.
+  return rounded > MAX_STORY_POINTS ? null : rounded;
 }
 
 /**
@@ -916,11 +927,6 @@ export async function searchSprintIssues(
   if (storyPointFieldId !== null) fields.push(storyPointFieldId);
 
   const issues: JiraSprintIssue[] = [];
-  /** Issues that HAD a changelog but yielded no `Sprint` change — the population
-   *  the store then resolves through its `createdAt` fallback. Counted so that
-   *  path is visible in the operator log instead of silent (lessons.md: an empty
-   *  result from a narrowing predicate reads as success). */
-  let noSprintChangeWithChangelog = 0;
   let nextPageToken: string | null = null;
   let pageCount = 0;
 
@@ -980,12 +986,6 @@ export async function searchSprintIssues(
       const status = f.status as { id?: unknown; name?: unknown } | undefined;
       const assignee = f.assignee as { accountId?: unknown } | undefined;
       const sprintFieldChanges = parseSprintFieldChanges(issue.changelog, sprintFieldId);
-      if (
-        sprintFieldChanges.length === 0 &&
-        changelogHistories(issue.changelog).length > 0
-      ) {
-        noSprintChangeWithChangelog += 1;
-      }
       issues.push({
         issueId: String(issue.id),
         jiraKey: issue.key,
@@ -1009,15 +1009,16 @@ export async function searchSprintIssues(
     if (nextPageToken === null) break;
   }
 
-  // ONE line per sync, counts only — never a field name or any issue content.
-  if (noSprintChangeWithChangelog > 0) {
-    console.info(
-      `[jira] sprint-field id ${sprintFieldId === null ? "UNRESOLVED" : "resolved"}; ` +
-        `${noSprintChangeWithChangelog} of ${issues.length} issue(s) with a changelog ` +
-        `carried no Sprint change — falling back to createdAt for those`,
-    );
-  }
-
+  // NO operator log here (impl-review F5). Two reasons, and they are separate.
+  // PLACEMENT: this client is log-free like `github.ts`, and on Workers a
+  // `console` line is ephemeral — the durable operator channel is
+  // `sync_attempt.outcome`, which `run-sync.ts` writes. CALIBRATION: the count
+  // this used to report was "issues with a changelog but no Sprint change",
+  // which is the NORMAL state of any ticket that was in the sprint from the
+  // start, so the line fired on essentially every healthy cycle. A signal that
+  // always fires is not a signal. The two conditions actually worth reporting —
+  // the sprint field id being unresolved, and Sprint changes that name no known
+  // sprint — are both visible to `run-sync.ts` and recorded there.
   return issues;
 }
 
@@ -1115,24 +1116,6 @@ export async function resolveFieldIds(
     storyPointFieldId: pickStoryPointField(fields),
     sprintFieldId: pickSprintField(fields),
   };
-}
-
-/** {@link resolveFieldIds}, narrowed to the story-point id. */
-export async function resolveStoryPointFieldId(
-  baseUrl: string,
-  creds: JiraCreds,
-  opts?: JiraClientOpts,
-): Promise<string | null> {
-  return pickStoryPointField(await fetchFieldDefinitions(baseUrl, creds, opts));
-}
-
-/** {@link resolveFieldIds}, narrowed to the Jira Software `Sprint` field id. */
-export async function resolveSprintFieldId(
-  baseUrl: string,
-  creds: JiraCreds,
-  opts?: JiraClientOpts,
-): Promise<string | null> {
-  return pickSprintField(await fetchFieldDefinitions(baseUrl, creds, opts));
 }
 
 /* ------------------------------------------------------------------------- *
