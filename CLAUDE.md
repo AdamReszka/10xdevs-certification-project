@@ -75,6 +75,35 @@ verification is real work but it is not what the deadline is measured on. Never
 block progress on a slice waiting for the user to finish clicking through the
 previous one.
 
+### The two tester-facing skills
+
+A second person — non-technical — runs the manual tests on their own Mac, with
+Jira and GitHub connected exactly like the owner's. Two skills serve them, both
+tracked in git under the `.claude/skills/sprintflow-*` exception in `.gitignore`
+(course `10x-*` skills stay untracked):
+
+- **`/sprintflow-health-check`** — verifies the environment is workable: global
+  tooling (Node 24, npm, git, Docker), repo dependencies, `.env` + `.env.local`
+  composed together, local Supabase, migrations, and that the app answers. It
+  diagnoses and *proposes* fixes; it never repairs without consent. Catalogue of
+  checks: `references/checks.md`.
+- **`/sprintflow-manual-testing`** — runs a testing session: creates a
+  `test/manual-testing-session-<date>` branch, takes the next unticked row from
+  `manual-test-backlog.md`, explains what it is for in business terms, walks the
+  tester through the UI click by click, and records the outcome. **It never
+  fixes code** — a failed test produces a note, not a patch.
+
+Both converse in Polish while working on the English files.
+
+### Failed manual tests live in `context/manual-tests/`
+
+**When asked "do we have any failing manual tests?", look there first.** One
+Markdown file per failed row, named `<SLICE>-<NUMER>-<slug>.md`; each separates
+what the tester observed from the hypothesis `/sprintflow-manual-testing` drew
+from the code without running anything. Passed tests leave no file — they are
+ticked in the backlog and in the source `plan.md`. A note is deleted in the same
+commit as its fix; a note that outlives its repair is actively misleading.
+
 ### At the start of every session
 
 **Ask the user for the state of outstanding manual tests before planning new
