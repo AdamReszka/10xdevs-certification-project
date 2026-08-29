@@ -12,7 +12,7 @@ import { getDb } from "@/lib/db";
 /**
  * Connect (or re-connect) GitHub, as a SINGLE action (S-10 Phase 9).
  *
- * Distinct from `/setup/github` on purpose. That route is step 1 of the 3-step
+ * Distinct from `/setup/github` on purpose. That route is step 2 of the 4-step
  * wizard: it renders `SetupWizardShell` with a progress bar and, on success, a
  * "Continue to Jira" CTA. An owner who came from Settings to fix one
  * integration should get neither — they asked for one thing and should land

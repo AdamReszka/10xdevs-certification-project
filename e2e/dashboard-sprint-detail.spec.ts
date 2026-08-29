@@ -192,7 +192,7 @@ test.describe("Settings — Connections (S-10 Phase 8)", () => {
 
   /**
    * Risk-tied (Phase 9): connecting ONE integration from Settings must not drag
-   * the owner into the 3-step wizard. Before the split, `reconnectHref` pointed
+   * the owner into the 4-step wizard. Before the split, `reconnectHref` pointed
    * at `/setup/github`, which renders the stepper and, on success, a "Continue
    * to Jira" CTA — a flow they never asked for.
    *
@@ -208,7 +208,7 @@ test.describe("Settings — Connections (S-10 Phase 8)", () => {
 
     // The real form is here — this is one action, not a tour.
     await expect(page.getByRole("heading", { name: "Connect GitHub" })).toBeVisible();
-    await expect(page.getByText(/Step \d+ of \d+/)).toHaveCount(0);
+    await expect(page.getByText(/Krok \d+ z \d+/)).toHaveCount(0);
     await expect(page.getByRole("progressbar")).toHaveCount(0);
     await expect(page.getByRole("link", { name: /Continue to Jira/ })).toHaveCount(0);
 
@@ -219,7 +219,7 @@ test.describe("Settings — Connections (S-10 Phase 8)", () => {
     // The wizard is untouched — this phase added an entry point, it did not
     // replace one. If this half fails, the fix went too far.
     await page.goto("/setup/github");
-    await expect(page.getByText(/Step 1 of 3/)).toBeVisible();
+    await expect(page.getByText(/Krok 2 z 4/)).toBeVisible();
 
     await page.close();
   });

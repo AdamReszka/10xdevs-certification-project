@@ -11,7 +11,7 @@ import { listRosterForEditor } from "@/lib/roster";
 import type { Weekday } from "@/lib/validations/roster";
 
 /**
- * Setup step 3 — team roster + sprint cadence (S-04, FR-006/FR-007). The final
+ * Setup step 4 — team roster + sprint cadence (S-04, FR-006/FR-007). The final
  * wizard step. Server component under the gated `(app)` group (inherits
  * `requireSession()` + `force-dynamic`): it SELECTs only NON-secret existing
  * state (saved roster rows + the active sprint's cadence columns) and hands it to
@@ -58,12 +58,12 @@ export default async function TeamSetupPage() {
 
   return (
     <SetupWizardShell
-      step={3}
+      step={4}
       // The roster grid is eight columns wide and one of them holds a
       // 43-character Jira account id — it needs the app shell's measure.
       wide
-      title="Team roster & sprint cadence"
-      description="Review the team we imported from GitHub and Jira, then confirm your sprint cadence. You can edit everything — SprintFlow keeps your changes."
+      title="Zespół i rytm sprintu"
+      description="Sprawdź skład zespołu zaciągnięty z GitHuba i Jiry, a potem potwierdź rytm sprintu. Wszystko możesz edytować — SprintFlow zapamięta Twoje zmiany."
     >
       <div className="flex flex-col gap-8">
         <RosterEditor initialMembers={initialMembers} />

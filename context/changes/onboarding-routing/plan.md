@@ -806,27 +806,27 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [x] 1.1 Lint passes: `npm run lint`
-- [x] 1.2 Type checking passes: `npx tsc --noEmit`
-- [x] 1.3 Unit tests pass, including new coverage of `setup-doorstep-view.ts`: `npm test`
-- [x] 1.4 Existing Playwright suite still green: `npm run test:e2e` — no regression (10 passed, 1 failed identically on the pre-change baseline; that row is `dashboard-sprint-detail.spec.ts:73`, which Phase 3 §3 already owns)
+- [x] 1.1 Lint passes: `npm run lint` — a6a0f13
+- [x] 1.2 Type checking passes: `npx tsc --noEmit` — a6a0f13
+- [x] 1.3 Unit tests pass, including new coverage of `setup-doorstep-view.ts`: `npm test` — a6a0f13
+- [x] 1.4 Existing Playwright suite still green: `npm run test:e2e` — no regression (10 passed, 1 failed identically on the pre-change baseline; that row is `dashboard-sprint-detail.spec.ts:73`, which Phase 3 §3 already owns) — a6a0f13
 
 #### Manual
 
-- [x] 1.5 `/setup` on a fresh account shows the Polish doorstep, both doors, and no navigation links — while `/setup/github` still shows its navigation
-- [x] 1.6 On a GitHub-only account, the configure door points at `/setup/jira`, not back at `/setup/github`
-- [x] 1.7 "Zobacz demo" loads the demo and lands on a populated dashboard under the demo banner, real credentials untouched
-- [x] 1.8 Sign-out is reachable from the doorstep
+- [x] 1.5 `/setup` on a fresh account shows the Polish doorstep, both doors, and no navigation links — while `/setup/github` still shows its navigation — a6a0f13
+- [x] 1.6 On a GitHub-only account, the configure door points at `/setup/jira`, not back at `/setup/github` — a6a0f13
+- [x] 1.7 "Zobacz demo" loads the demo and lands on a populated dashboard under the demo banner, real credentials untouched — a6a0f13
+- [x] 1.8 Sign-out is reachable from the doorstep — a6a0f13
 
 ### Phase 2: Renumber the wizard to four steps and polonise its chrome
 
 #### Automated
 
-- [ ] 2.1 Lint passes: `npm run lint`
-- [ ] 2.2 Type checking passes: `npx tsc --noEmit`
-- [ ] 2.3 Unit tests pass: `npm test`
-- [ ] 2.4 Playwright suite green, including the retargeted step assertion: `npm run test:e2e`
-- [ ] 2.5 No stale step-count prose remains: `grep -rniE "of 3|3-step|three-step|step [1-3]\b" src e2e`
+- [x] 2.1 Lint passes: `npm run lint`
+- [x] 2.2 Type checking passes: `npx tsc --noEmit`
+- [x] 2.3 Unit tests pass: `npm test`
+- [x] 2.4 Playwright suite green, including the retargeted step assertion: `npm run test:e2e` — the retargeted assertion (`dashboard-sprint-detail.spec.ts:202`) passes; the same single pre-existing failure at `:73` persists unchanged
+- [x] 2.5 No stale step-count prose remains: `grep -rniE "of 3|3-step|three-step|step [1-3]\b" src e2e`
 
 #### Manual
 

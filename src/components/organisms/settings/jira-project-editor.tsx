@@ -114,6 +114,17 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">
+          {/* THE ONE LINK FROM SETTINGS INTO THE WIZARD, and it is accepted
+              rather than fixed (`onboarding-routing` plan review F3). It lands
+              an English Settings page on the wizard's Polish "Krok 4 z 4"
+              stepper — a real seam, named here so the next reader does not
+              re-open it. Two reasons it stays: cadence import genuinely lives
+              on `/setup/team` and has no Settings-local surface, and this
+              button fires only after a Jira PROJECT SWITCH — a
+              re-configuration, not the token rotation the "never ejected from
+              Settings" rule protects. That rule is about the GATE anyway:
+              nothing redirects the lead here, they click. A Settings-local
+              cadence surface is a separate slice. */}
           <Button asChild>
             <Link href="/setup/team">Import sprint cadence</Link>
           </Button>
