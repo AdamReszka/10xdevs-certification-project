@@ -24,11 +24,15 @@ describe("decideWorkspace", () => {
         activeWorkspace: "REAL",
         demoOwner: { id: "demo-1", demoAnchorAt: ANCHOR },
         liveNow: LIVE,
+        realOnboarded: false,
       }),
     ).toEqual({
       ownerId: "real-1",
       realOwnerId: "real-1",
       isDemo: false,
+      // Reported `true` — "nothing to prompt about" — never the `false` that
+      // was passed in: outside demo the banner that reads this does not render.
+      realOnboarded: true,
       now: LIVE,
     });
   });
@@ -40,11 +44,13 @@ describe("decideWorkspace", () => {
         activeWorkspace: "DEMO",
         demoOwner: { id: "demo-1", demoAnchorAt: ANCHOR },
         liveNow: LIVE,
+        realOnboarded: false,
       }),
     ).toEqual({
       ownerId: "demo-1",
       realOwnerId: "real-1",
       isDemo: true,
+      realOnboarded: false,
       now: ANCHOR,
     });
   });
@@ -55,11 +61,42 @@ describe("decideWorkspace", () => {
       activeWorkspace: "DEMO",
       demoOwner: null,
       liveNow: LIVE,
+      realOnboarded: false,
     });
 
     expect(resolved.isDemo).toBe(false);
     expect(resolved.ownerId).toBe("real-1");
     expect(resolved.now).toBe(LIVE);
+  });
+
+  it("carries the real account's onboarding state through the demo branch", () => {
+    // What the demo banner reads to decide whether to offer the way back to the
+    // wizard (`onboarding-routing` Phase 4).
+    expect(
+      decideWorkspace({
+        realOwnerId: "real-1",
+        activeWorkspace: "DEMO",
+        demoOwner: { id: "demo-1", demoAnchorAt: ANCHOR },
+        liveNow: LIVE,
+        realOnboarded: true,
+      }).realOnboarded,
+    ).toBe(true);
+  });
+
+  it("reports realOnboarded true on every fallback to REAL", () => {
+    // A half-formed demo renders as REAL, so the banner is absent — the field
+    // must not report an un-onboarded state nobody will act on.
+    for (const demoOwner of [null, { id: "demo-1", demoAnchorAt: null }]) {
+      expect(
+        decideWorkspace({
+          realOwnerId: "real-1",
+          activeWorkspace: "DEMO",
+          demoOwner,
+          liveNow: LIVE,
+          realOnboarded: false,
+        }).realOnboarded,
+      ).toBe(true);
+    }
   });
 
   it("falls back to REAL when the demo owner's anchor is NULL", () => {
@@ -69,6 +106,7 @@ describe("decideWorkspace", () => {
       activeWorkspace: "DEMO",
       demoOwner: { id: "demo-1", demoAnchorAt: null },
       liveNow: LIVE,
+      realOnboarded: false,
     });
 
     expect(resolved.isDemo).toBe(false);

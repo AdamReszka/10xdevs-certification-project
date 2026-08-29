@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
+import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
 import { importCadenceAction, saveCadenceAction } from "@/app/(app)/setup/team/actions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -72,8 +73,16 @@ type InitialCadence = {
 
 export default function CadenceForm({
   initialCadence,
+  inDemo = false,
 }: {
   initialCadence: InitialCadence | null;
+  /**
+   * Whether the lead reached this step while the account is still in demo —
+   * they can, via the demo banner's "Dokończ konfigurację" link
+   * (`onboarding-routing` Phase 4). Passed in rather than resolved here so the
+   * ordinary real-account finish pays no extra action round-trip.
+   */
+  inDemo?: boolean;
 }) {
   const router = useRouter();
   const [formError, setFormError] = useState<string | null>(null);
@@ -139,6 +148,12 @@ export default function CadenceForm({
         setFormError(result.message);
         return;
       }
+      // Finishing the wizard from inside demo must land on the REAL dashboard
+      // just configured — otherwise the gate short-circuits on `isDemo` and
+      // returns the lead to fictional data with no sign the setup worked. The
+      // demo world is KEPT (exitDemoAction only flips `active_workspace`), so
+      // it can be re-entered from Settings.
+      if (inDemo) await exitDemoAction();
       router.push("/dashboard");
     } catch {
       setFormError("Something went wrong saving your cadence. Please try again.");

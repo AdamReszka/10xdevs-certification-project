@@ -21,7 +21,21 @@ import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
  * Rendered by the `(app)` layout above every gated route, so it cannot be missed
  * by navigating; the way out sits inside it rather than only on the settings tab.
  */
-export default function DemoBanner({ anchorLabel }: { anchorLabel: string | null }) {
+export default function DemoBanner({
+  anchorLabel,
+  needsSetup = false,
+}: {
+  anchorLabel: string | null;
+  /**
+   * True only while the REAL account behind this demo has not finished the
+   * wizard (`onboarding-routing` Phase 4). Then — and only then — the banner
+   * also carries the way back to `/setup`, because someone who entered demo
+   * from the doorstep has no other route to it: the doorstep is what they left,
+   * and Settings is the ONGOING-management surface, not the first-run one.
+   * Absent or false, the banner renders exactly as it did before.
+   */
+  needsSetup?: boolean;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -54,6 +68,11 @@ export default function DemoBanner({ anchorLabel }: { anchorLabel: string | null
               {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               Wyjdź z demo
             </Button>
+            {needsSetup ? (
+              <Button size="sm" variant="outline" asChild className="ml-2">
+                <Link href="/setup">Dokończ konfigurację</Link>
+              </Button>
+            ) : null}
           </span>
         </AlertDescription>
       </Alert>

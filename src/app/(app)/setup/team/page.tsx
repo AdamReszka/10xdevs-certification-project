@@ -5,7 +5,7 @@ import CadenceForm from "@/components/organisms/setup/cadence-form";
 import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { sprint } from "@/db/schema";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import { listRosterForEditor } from "@/lib/roster";
 import type { Weekday } from "@/lib/validations/roster";
@@ -20,6 +20,11 @@ import type { Weekday } from "@/lib/validations/roster";
  */
 export default async function TeamSetupPage() {
   const { ownerId } = await requireRealWorkspace();
+  // The wizard itself stays real (`requireRealWorkspace` above); this reads only
+  // WHICH workspace is active, so the last step can leave demo behind when it
+  // finishes. `resolveWorkspace` is `cache()`d and the `(app)` layout has
+  // already called it this render, so it costs no extra query and no extra pool.
+  const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -67,7 +72,7 @@ export default async function TeamSetupPage() {
     >
       <div className="flex flex-col gap-8">
         <RosterEditor initialMembers={initialMembers} />
-        <CadenceForm initialCadence={initialCadence} />
+        <CadenceForm initialCadence={initialCadence} inDemo={isDemo} />
       </div>
     </SetupWizardShell>
   );

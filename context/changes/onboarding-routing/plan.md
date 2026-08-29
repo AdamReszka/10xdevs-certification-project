@@ -837,11 +837,11 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [x] 3.1 Lint passes: `npm run lint`
-- [x] 3.2 Type checking passes: `npx tsc --noEmit`
-- [x] 3.3 Unit tests pass: `npm test`
-- [x] 3.4 Integration tests pass: `npm run test:integration`
-- [x] 3.5 Full Playwright suite green, including the new doorstep spec: `npm run test:e2e` — 14/14, the first fully green run of this change; the long-standing failure at `dashboard-sprint-detail.spec.ts` was a stale Reliability assertion, repaired in place
+- [x] 3.1 Lint passes: `npm run lint` — b6755a8
+- [x] 3.2 Type checking passes: `npx tsc --noEmit` — b6755a8
+- [x] 3.3 Unit tests pass: `npm test` — b6755a8
+- [x] 3.4 Integration tests pass: `npm run test:integration` — b6755a8
+- [x] 3.5 Full Playwright suite green, including the new doorstep spec: `npm run test:e2e` — 14/14, the first fully green run of this change; the long-standing failure at `dashboard-sprint-detail.spec.ts` was a stale Reliability assertion, repaired in place — b6755a8
 
 #### Manual
 
@@ -854,11 +854,11 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [ ] 4.1 Lint passes: `npm run lint`
-- [ ] 4.2 Type checking passes: `npx tsc --noEmit`
-- [ ] 4.3 Unit tests pass: `npm test`
-- [ ] 4.4 Integration tests pass: `npm run test:integration`
-- [ ] 4.5 Playwright suite green: `npm run test:e2e`
+- [x] 4.1 Lint passes: `npm run lint`
+- [x] 4.2 Type checking passes: `npx tsc --noEmit`
+- [x] 4.3 Unit tests pass: `npm test`
+- [x] 4.4 Integration tests pass: `npm run test:integration`
+- [x] 4.5 Playwright suite green: `npm run test:e2e`
 
 #### Manual
 
