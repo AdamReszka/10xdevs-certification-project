@@ -719,14 +719,14 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [x] 5.1 Type checking passes
-- [x] 5.2 Linting passes
-- [x] 5.3 Unit tests pass
-- [x] 5.4 Integration tests pass
-- [x] 5.5 Refinement action in demo refuses and never constructs the Anthropic client
-- [x] 5.6 Recap send action in demo refuses and never reaches the transport
-- [x] 5.7 No `db:seed:demo` script and no `scripts/seed-dashboard.mjs` remain tracked
-- [x] 5.8 Unit and integration suites pass with the seed script removed
+- [x] 5.1 Type checking passes — 143aeb6
+- [x] 5.2 Linting passes — 143aeb6
+- [x] 5.3 Unit tests pass — 143aeb6
+- [x] 5.4 Integration tests pass — 143aeb6
+- [x] 5.5 Refinement action in demo refuses and never constructs the Anthropic client — 143aeb6
+- [x] 5.6 Recap send action in demo refuses and never reaches the transport — 143aeb6
+- [x] 5.7 No `db:seed:demo` script and no `scripts/seed-dashboard.mjs` remain tracked — 143aeb6
+- [x] 5.8 Unit and integration suites pass with the seed script removed — 143aeb6
 
 #### Manual
 
