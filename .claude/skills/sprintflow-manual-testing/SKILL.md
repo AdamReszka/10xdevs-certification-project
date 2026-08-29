@@ -154,6 +154,21 @@ gdzie wejść, co kliknąć, i **co to robi**.
 i nie zakładaj, że krok się udał. Jeśli opisze coś innego niż oczekiwane —
 dopytaj, zanim uznasz to za błąd; bardzo często to inna nazwa tego samego.
 
+**Nie zapowiadaj wyniku, który zależy od stanu konta.** Opisz, co ma zrobić, i
+zapytaj, co widzi — zamiast mówić z góry, co zobaczy. Zapowiedź, która się nie
+sprawdzi, każe testerce zgłosić jako defekt coś, co jest poprawnym zachowaniem;
+zapowiedź trafiona podpowiada jej odpowiedź, zanim spojrzy na ekran.
+
+Najczęstszy przypadek: **po skasowaniu danych demonstracyjnych ekran NIE jest
+pusty**, jeśli konto ma podpięte prawdziwe integracje — aplikacja wraca wtedy
+do prawdziwych danych i tak ma być. Pustkę widać tylko na świeżym koncie.
+Zweryfikowane 2026-08-29 w sesji, w której padła właśnie ta zapowiedź.
+
+Gdy potrzebujesz twardego dowodu, że coś zniknęło albo się zapisało — **sprawdź
+to w bazie sam(a)** zapytaniem tylko do odczytu i powiedz jej wynik. Jej ekran
+odpowiada na pytanie „czy da się z tego korzystać", baza na „czy dane są tam,
+gdzie mają być". To dwa różne pytania i nie zastępują się nawzajem.
+
 🔴 **Wiersz oznaczony jako niszczący dane** (patrz `backlog-map.md`) wymaga
 osobnego ostrzeżenia **przed** krokiem, który kasuje:
 > Uwaga: następny krok trwale usunie ten wpis z bazy i nie da się go cofnąć.
