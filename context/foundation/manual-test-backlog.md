@@ -178,7 +178,8 @@ automatycznych zielone. Instrukcje krok po kroku:
 > początku projektu.
 >
 > Zostają **3 wiersze wymagające przeglądarki** (2.7, 3.7, 4.6) — tych z CLI
-> zasymulować się nie da.
+> zasymulować się nie da. **2.7 i 3.7 zaliczone 2026-08-29**; otwarty zostaje
+> sam **4.6**.
 
 - [x] **2.7** Kreator `/setup/team` nadal działa po przepięciu na
       `reconcile-sprint.ts` (nazwa aktywnego sprintu + chooser tablic).
@@ -211,9 +212,46 @@ automatycznych zielone. Instrukcje krok po kroku:
       upsert poszedł gałęzią CONFLICT. Nadpisana kadencja na **nowo utworzonym**
       wierszu jest pokryta tylko testem integracyjnym (case (i)), nie na żywo.
 
-- [ ] **3.7** Dashboard „Today" renderuje ticket'y i anomalie **nowego**
-      sprintu, ze świeżym timestampem. *Źródło:* `plan.md:824`
+- [x] **3.7** Dashboard „Today" renderuje ticket'y i anomalie **nowego**
+      sprintu, ze świeżym timestampem. **Zaliczone 2026-08-29** (sesja manualna,
+      Ania) — na koncie `anna.jozwiak19@gmail.com` (prawdziwe credentiale, GitHub
+      `AdamLisek`, Jira `foxmind`), które przed testem miało 0 ticketów i 0
+      anomalii, więc różnica „przed / po" jest widoczna, a nie założona.
+      Jeden „Sync now" z `/settings/connections` → Today: **3 anomalie**
+      (`TICKET_STATUS_AGING`, `TICKET_NO_COMMIT_LINK`, `SCOPE_CREEP`), wszystkie
+      z `sprint_id` aktywnego sprintu; Sprint Pulse: „18 committed SP", rozkład
+      To Do 3 / In Progress 1 / Code Review 0 / Testing 0 / Done 1 — co do sztuki
+      te same 5 ticketów (FM-1/2/3/6/8), które sync zapisał. Timestamp
+      `2026-08-29 21:20 UTC` = moment kliknięcia (23:20 CEST).
+      *Źródło:* `plan.md:824`
       *Wymaga przeglądarki* — nie da się zasymulować z CLI.
+
+      ⚠️ **Czego to NIE dowodzi: „nowego, a nie starego".** Konto ma dokładnie
+      **jeden** wiersz `sprint`, więc `getActiveSprintRow` nie miał z czego
+      wybierać — warunek spełnił się pusto, tak samo jak chooser tablic w 2.7.
+      Dowiedzione jest „nie pusto i z aktywnego sprintu", nie „nie z
+      poprzedniego". Rozstrzygnięcie tej połowy wymaga drugiego wiersza `sprint`
+      (rollover w Jirze albo inscenizacja jak przy 3.6).
+
+      ℹ️ **Fałszywy trop, na który nie warto tracić czasu drugi raz.** Timestamp
+      wygląda na „spóźniony o 2 h", bo UI świadomie renderuje **UTC**
+      (`sync-status-bar.tsx:34`, `integration-card.tsx:45` — string slice zamiast
+      `toLocaleString`, żeby SSR i hydracja nie rozjechały się). Polska latem to
+      UTC+2. Uwaga na własne skrypty diagnostyczne: kolumny `sync_state.*_at` są
+      `timestamp without time zone`, a `node-postgres` parsuje je w **strefie
+      procesu**, więc `psql`/node na macu pokaże wartość przesuniętą o 2 h w
+      drugą stronę niż aplikacja (runtime Workers stoi na UTC). Zapis w bazie
+      jest poprawnym UTC — porównuj przez `::text`, nie przez JS-owy `Date`.
+
+      🔵 **Obserwacja produktowa dla ownera (nie defekt, zgłoszone przez
+      testerkę).** Sprint Pulse podaje `committed`, ale `completed` nigdzie nie
+      pada, choć aplikacja tę liczbę zna (`sprint.completed_sp = 8`) — trzeba ją
+      wywnioskować z wykresu. Osobna pułapka czytelności na tym koncie: baseline
+      burndownu to suma SP **wszystkich** ticketów sprintu (26), a `committed_sp`
+      wyklucza dosypane po starcie (18), więc po odjęciu zrobionego FM-8
+      „Remaining SP" wychodzi **18** — ta sama liczba co „committed 18", licząca
+      zupełnie co innego. Zbieżność przypadkowa, ale czyta się jak „zespół nic
+      nie zrobił". Ten sam kształt co obserwacja przy wierszu **1.8**.
 
 - [x] **3.8** `select count(*) from sprint where owner_id = $1 and state = 'ACTIVE'`
       zwraca 1. **Zamknięte 2026-08-26** tym samym przebiegiem co 3.6: przed
