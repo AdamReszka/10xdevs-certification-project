@@ -736,9 +736,30 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       dashboardzie, żeby awaria recapa nie rozcieńczała bannera US-01 o
       nieświeżych danych z integracji.
 
-### Zablokowane do czasu Resenda
+### ✅ ODBLOKOWANE 2026-08-29 — Resend skonfigurowany
+
+**Do wykonania, nie „zaliczone".** Owner podpiął konto Resend: `RESEND_API_KEY`
+i `RESEND_FROM_ADDRESS` (`SprintFlow <no-reply@sprintflow.pl>`) są ustawione
+lokalnie **i** jako sekrety na Cloudflare, więc `email-transport.ts` przestaje
+schodzić na wypisywanie treści do logu i faktycznie wysyła.
+
+⚠️ **Dwie konsekwencje, zanim ktoś tknie te wiersze:**
+
+1. **Maile wychodzą naprawdę.** Od tej chwili każdy test dotykający resetu hasła
+   albo recapa trafia do prawdziwej skrzynki. Używaj własnego adresu.
+2. **Klucz nie dowodzi weryfikacji domeny.** Wiersz **3.7** (SPF/DKIM/DMARC w
+   panelu Resenda) trzeba wykonać jako pierwszy — dopóki domena nie jest
+   zweryfikowana, 3.8, 5.15 i 6.14 mogą paść z powodu, który nie ma nic
+   wspólnego z kodem SprintFlow, i zmarnują notatkę na nieistniejący defekt.
 
 - [ ] **3.7** Panel Resend pokazuje `sprintflow.pl` zweryfikowaną (SPF, DKIM, DMARC).
+      🔒 **Tylko ręcznie, w panelu — API tego nie powie.** Sprawdzone 2026-08-29:
+      `GET https://api.resend.com/domains` zwraca `401 restricted_api_key`
+      („This API key is restricted to only send emails"). Klucz jest celowo
+      ograniczony do wysyłki, więc nie odczyta ani listy domen, ani statusu
+      rekordów DNS. To zaleta, nie usterka — wyciek takiego klucza nie odsłania
+      konfiguracji konta. **Nie próbuj ponownie przez API**; zaloguj się do
+      panelu Resenda i odczytaj status trzech rekordów tam.
 - [ ] **3.8** Prawdziwy request resetu dowozi maila, którego link loguje na
       `/reset/confirm`.
 - [ ] **3.9** Log Workera z tego requestu **nie zawiera URL-a resetu**.
