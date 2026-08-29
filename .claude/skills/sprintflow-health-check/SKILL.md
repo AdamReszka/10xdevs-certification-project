@@ -47,6 +47,12 @@ jest do zrobienia i przez kogo.**
    żadnego zapisu do bazy** — niezależnie od tego, o co poprosi. Zgłaszasz to
    jako błąd krytyczny i kierujesz ją do właściciela projektu. Migracja na
    zdalnej bazie może zniszczyć produkcję.
+   🔴 **Adresy bazy są DWA i sprawdzasz oba** (C3a i C3b w `references/checks.md`):
+   `DATABASE_URL` obsługuje migracje i testy, a
+   `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` — samą aplikację.
+   Brak tej drugiej nie wygląda na błąd konfiguracji: wszystko świeci na zielono,
+   a rejestracja konta nie działa. Nigdy nie raportuj bazy jako ✅ na podstawie
+   samego `DATABASE_URL`.
 5. **Nie zgaduj.** Jeśli sprawdzenie nie da się wykonać, napisz „nie udało się
    sprawdzić" i dlaczego. Nigdy nie raportuj ✅ na podstawie domysłu.
 
