@@ -30,7 +30,7 @@ zostaną wykonane, webhook **nigdy nie dostanie żadnego żądania** — a to zn
 że wiersze F i G są nieosiągalne, nie „niezaliczone".
 
 1. W panelu Resenda → **Webhooks** → **Add Webhook**, endpoint URL:
-   `https://<twój-worker>/api/webhooks/resend`.
+   `https://sprintflow.pl/api/webhooks/resend`.
 2. Zasubskrybuj **oba** zdarzenia: `email.bounced` **i** `email.complained`.
    Sam `email.bounced` zamyka tylko połowę tego, po co ten webhook powstał.
 3. Skopiuj **signing secret** (zaczyna się od `whsec_`) ze strony tego webhooka.
@@ -197,13 +197,22 @@ jest **legible**, a nie pustym rekordem, którego nie da się zdiagnozować.
 3. Teraz sfałszuj żądanie z terminala — ten sam kształt ciała, **byle jaki**
    podpis:
    ```bash
-   curl -i -X POST https://<twój-worker>/api/webhooks/resend \
+   curl -i -X POST https://sprintflow.pl/api/webhooks/resend \
      -H "content-type: application/json" \
      -H "svix-id: msg_fake" \
      -H "svix-timestamp: $(date +%s)" \
      -H "svix-signature: v1,ZmFrZQ==" \
-     -d '{"type":"email.bounced","data":{"to":["'"$(whoami)"'@example.test"],"bounce":{"type":"Permanent"}}}'
+     -d '{"type":"email.bounced","data":{"to":["forged-probe@example.com"],"bounce":{"type":"Permanent"}}}'
    ```
+
+> ✅ **Połowa negatywna tego wiersza jest już zweryfikowana (2026-08-29).**
+> Cztery sondy na wdrożony endpoint: sfałszowany podpis → **401**, brak nagłówków
+> `svix-*` → **401**, podpis z timestampem sprzed doby → **401**, `GET` → **405**.
+> Zostaje **tylko** test delivery z panelu Resenda, który ma dać **200**.
+> Dlaczego 401 jest tu mocnym wynikiem, a nie tylko „nie wpuściło": pula bazy w
+> route'cie jest otwierana **dopiero po** udanej weryfikacji podpisu, więc przy
+> 401 handler wraca, zanim jakiekolwiek połączenie z bazą powstanie — sfałszowane
+> żądanie nie ma jak niczego zapisać.
 
 **Co musi być prawdą:**
 - testowa dostawa z panelu Resenda kończy się **200**;

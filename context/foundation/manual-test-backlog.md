@@ -1476,7 +1476,7 @@ rozpisana wersja tych samych siedmiu leży w
 
 > ⚠️ **Twarda zależność, jak przy S-11.** Wiersze **14.F** i **14.G** są
 > **nieosiągalne**, dopóki w panelu Resenda nie powstanie endpoint webhooka
-> wskazujący na `https://<worker>/api/webhooks/resend`, zasubskrybowany na
+> wskazujący na `https://sprintflow.pl/api/webhooks/resend`, zasubskrybowany na
 > **oba** zdarzenia (`email.bounced` + `email.complained`), a jego signing
 > secret (`whsec_…`) nie trafi przez `npx wrangler secret put
 > RESEND_WEBHOOK_SECRET`. To zadanie **operatorskie**, nie programistyczne —
