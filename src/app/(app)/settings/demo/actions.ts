@@ -1,0 +1,156 @@
+"use server";
+
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
+
+import { user } from "@/db/schema";
+import { getDb } from "@/lib/db";
+import { loadDemo, resetDemo } from "@/lib/demo/load";
+import { requireRealWorkspace, findDemoOwner } from "@/lib/workspace";
+
+/**
+ * The FR-008 surface's mutations (S-09 Phase 4).
+ *
+ * ALL FOUR PIN THE REAL OWNER (`requireRealWorkspace`), including the ones that
+ * run while the account is already viewing demo: `demo_of` is a column on the
+ * REAL user row's child, and `active_workspace` a column on the real row itself.
+ * Resolving the active workspace here would, in demo, aim every one of these at
+ * the demo owner — which holds neither.
+ *
+ * Each revalidates the whole authenticated tree. Switching workspace changes
+ * what EVERY gated route reads, not just this page, so anything narrower would
+ * leave the dashboard rendering the previous scope until the next navigation.
+ */
+
+export type DemoActionResult =
+  | { ok: true }
+  | { ok: false; error: "no_demo" | "unavailable"; message: string };
+
+/** Every route whose content depends on the active workspace. */
+const WORKSPACE_SCOPED_PATHS = [
+  "/dashboard",
+  "/dashboard/sprint-detail",
+  "/refinement",
+  "/settings/team",
+  "/settings/absences",
+  "/settings/recap",
+  "/settings/demo",
+];
+
+function revalidateWorkspace(): void {
+  for (const path of WORKSPACE_SCOPED_PATHS) revalidatePath(path);
+}
+
+/**
+ * Build the demo world and switch to it.
+ *
+ * `loadDemo` is itself idempotent (it resets first), so this is also the
+ * "give me a fresh demo" path. The switch is written only AFTER the load has
+ * committed and detection has run: flipping first would render an empty demo
+ * for however long the load took.
+ */
+export async function loadDemoAction(): Promise<DemoActionResult> {
+  const { ownerId } = await requireRealWorkspace();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await loadDemo({ db, realOwnerId: ownerId, now: new Date() });
+    await db
+      .update(user)
+      .set({ activeWorkspace: "DEMO" })
+      .where(eq(user.id, ownerId));
+    revalidateWorkspace();
+    return { ok: true };
+  } catch (err) {
+    return unavailable(err, "[settings/demo] loadDemo");
+  }
+}
+
+/**
+ * Switch back to a demo that is already loaded, keeping whatever was edited in
+ * it. Distinct from {@link loadDemoAction} on purpose: re-loading would discard
+ * the visitor's demo edits, which is not what "return to the demo" means.
+ */
+export async function enterDemoAction(): Promise<DemoActionResult> {
+  const { ownerId } = await requireRealWorkspace();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    // Refuse rather than flip blind: the resolver falls back to REAL when the
+    // demo owner is missing, so a blind flip would leave the account in a DEMO
+    // state that renders as real — a mode the banner would not announce.
+    const demoOwner = await findDemoOwner(db, ownerId);
+    if (!demoOwner) {
+      return {
+        ok: false,
+        error: "no_demo",
+        message: "Nie ma wczytanych danych demo. Wczytaj je najpierw.",
+      };
+    }
+
+    await db
+      .update(user)
+      .set({ activeWorkspace: "DEMO" })
+      .where(eq(user.id, ownerId));
+    revalidateWorkspace();
+    return { ok: true };
+  } catch (err) {
+    return unavailable(err, "[settings/demo] enterDemo");
+  }
+}
+
+/** Return to the real account. The demo world is KEPT so the lead can return. */
+export async function exitDemoAction(): Promise<DemoActionResult> {
+  const { ownerId } = await requireRealWorkspace();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await db
+      .update(user)
+      .set({ activeWorkspace: "REAL" })
+      .where(eq(user.id, ownerId));
+    revalidateWorkspace();
+    return { ok: true };
+  } catch (err) {
+    return unavailable(err, "[settings/demo] exitDemo");
+  }
+}
+
+/**
+ * Delete the demo world (FR-008's "Reset demo data").
+ *
+ * THE MODE IS CLEARED FIRST. `resetDemo` removes the demo owner row, and an
+ * account left on `active_workspace = DEMO` with no demo owner would depend on
+ * the resolver's fallback to render at all. That fallback exists as a safety
+ * net, not as a state this code is allowed to create deliberately.
+ */
+export async function resetDemoAction(): Promise<DemoActionResult> {
+  const { ownerId } = await requireRealWorkspace();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await db
+      .update(user)
+      .set({ activeWorkspace: "REAL" })
+      .where(eq(user.id, ownerId));
+    await resetDemo({ db, realOwnerId: ownerId });
+    revalidateWorkspace();
+    return { ok: true };
+  } catch (err) {
+    return unavailable(err, "[settings/demo] resetDemo");
+  }
+}
+
+function unavailable(err: unknown, tag: string): DemoActionResult {
+  console.error(`${tag} unexpected error:`, err);
+  return {
+    ok: false,
+    error: "unavailable",
+    message: "Coś poszło nie tak. Spróbuj ponownie.",
+  };
+}

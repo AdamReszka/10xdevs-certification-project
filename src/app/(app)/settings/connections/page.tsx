@@ -5,7 +5,7 @@ import JiraProjectEditor from "@/components/organisms/settings/jira-project-edit
 import RepoSelectionEditor from "@/components/organisms/settings/repo-selection-editor";
 import SyncHistory from "@/components/organisms/settings/sync-history";
 import SyncNowButton from "@/components/organisms/settings/sync-now-button";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import { getConnectionsOverview } from "@/lib/settings/connections";
 import { disconnectGithub } from "@/app/(app)/setup/github/actions";
@@ -29,7 +29,11 @@ import {
  * `force-dynamic`. One `getDb` handle, one owner-scoped read.
  */
 export default async function ConnectionsSettingsPage() {
+  // The OWNER is always the real account here — Connections never shows demo
+  // data. The demo FLAG is read separately, only to disable the two controls
+  // that would reach a live API with a fake token (the server refuses them too).
   const { ownerId } = await requireRealWorkspace();
+  const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -39,7 +43,7 @@ export default async function ConnectionsSettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <SyncNowButton />
+      <SyncNowButton isDemo={isDemo} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <IntegrationCard
@@ -50,6 +54,7 @@ export default async function ConnectionsSettingsPage() {
           onTest={testGithubConnection}
           reconnectHref="/settings/connections/github"
           onDisconnect={disconnectGithub}
+          isDemo={isDemo}
           editSlot={gh.connection.connected ? <RepoSelectionEditor /> : undefined}
         >
           {gh.connection.connected ? (
@@ -86,6 +91,7 @@ export default async function ConnectionsSettingsPage() {
           onTest={testJiraConnection}
           reconnectHref="/settings/connections/jira"
           onDisconnect={disconnectJira}
+          isDemo={isDemo}
           editSlot={
             jira.connection.connected ? (
               <JiraProjectEditor currentProjectKey={jira.connection.projectKey} />

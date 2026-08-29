@@ -27,6 +27,11 @@ import type { ConnectionTestResult } from "@/lib/settings/connection-service";
  *
  * Generic over the integration so GitHub and Jira share one layout; the
  * identity block differs and arrives as `children`.
+ *
+ * ALWAYS SHOWS THE REAL ACCOUNT, in demo mode too (S-09): integration
+ * configuration is not a thing to simulate, and a lead who loaded demo still
+ * needs to see whether their own token is healthy. Only the control that would
+ * reach the live API is disabled.
  */
 
 const STATUS_BADGE: Record<SyncStatus, { label: string; variant: "default" | "secondary" | "destructive" }> = {
@@ -62,6 +67,7 @@ export default function IntegrationCard({
   reconnectHref,
   onDisconnect,
   editSlot,
+  isDemo = false,
   children,
 }: {
   name: "GitHub" | "Jira";
@@ -73,6 +79,13 @@ export default function IntegrationCard({
   onDisconnect: () => Promise<{ ok: true }>;
   /** The selection editor, rendered inline when connected. */
   editSlot?: ReactNode;
+  /**
+   * S-09: the account is viewing demo data. The card still shows the REAL
+   * integration state — Connections is never simulated — but "Test connection"
+   * is meaningless from a demo screen, so it is disabled with a reason rather
+   * than left to fail.
+   */
+  isDemo?: boolean;
   /** The identity block — login / workspace / monitored selection. */
   children: ReactNode;
 }) {
@@ -178,7 +191,11 @@ export default function IntegrationCard({
             pushes only ITS actions down and the pair reads as misaligned. */}
         <div className="mt-auto flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleTest} disabled={testing}>
+            <Button
+              variant="outline"
+              onClick={handleTest}
+              disabled={testing || isDemo}
+            >
               {testing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               {testing ? "Testing…" : "Test connection"}
             </Button>
@@ -189,6 +206,14 @@ export default function IntegrationCard({
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </Button>
           </div>
+
+          {isDemo ? (
+            <p className="text-sm text-muted-foreground">
+              Test połączenia jest wyłączony w trybie demonstracyjnym. Powyżej
+              widzisz stan swojej prawdziwej integracji — wyjdź z demo, aby go
+              sprawdzić.
+            </p>
+          ) : null}
 
           {editSlot}
         </div>

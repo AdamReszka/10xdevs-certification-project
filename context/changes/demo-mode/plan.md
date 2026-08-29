@@ -679,17 +679,17 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [x] 3.1 Type checking passes
-- [x] 3.2 Linting passes
-- [x] 3.3 Unit tests pass
-- [x] 3.4 Integration tests pass
-- [x] 3.5 Demo-scoped dashboard reads return demo rows only
-- [x] 3.6 Absence saved in demo re-detects at the anchor
-- [x] 3.7 syncNow in demo returns the typed refusal and never calls syncOwner
-- [x] 3.8 No stray `session.user.id` outside the resolver and always-real call sites
-- [x] 3.10 Demo roster save writes under the demo owner; real roster byte-identical
-- [x] 3.11 importRoster/importCadence in demo refuse and construct no GitHub/Jira client
-- [x] 3.12 Every exported server action still reaches an auth guard
+- [x] 3.1 Type checking passes — d25fcce
+- [x] 3.2 Linting passes — d25fcce
+- [x] 3.3 Unit tests pass — d25fcce
+- [x] 3.4 Integration tests pass — d25fcce
+- [x] 3.5 Demo-scoped dashboard reads return demo rows only — d25fcce
+- [x] 3.6 Absence saved in demo re-detects at the anchor — d25fcce
+- [x] 3.7 syncNow in demo returns the typed refusal and never calls syncOwner — d25fcce
+- [x] 3.8 No stray `session.user.id` outside the resolver and always-real call sites — d25fcce
+- [x] 3.10 Demo roster save writes under the demo owner; real roster byte-identical — d25fcce
+- [x] 3.11 importRoster/importCadence in demo refuse and construct no GitHub/Jira client — d25fcce
+- [x] 3.12 Every exported server action still reaches an auth guard — d25fcce
 
 #### Manual
 
@@ -699,12 +699,12 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [ ] 4.1 Type checking passes
-- [ ] 4.2 Linting passes
-- [ ] 4.3 Unit tests pass
-- [ ] 4.4 Integration tests pass
-- [ ] 4.5 load/exit/reset actions drive active_workspace and demo rows correctly
-- [ ] 4.6 Settings-demo view offers only valid transitions per state
+- [x] 4.1 Type checking passes
+- [x] 4.2 Linting passes
+- [x] 4.3 Unit tests pass
+- [x] 4.4 Integration tests pass
+- [x] 4.5 load/exit/reset actions drive active_workspace and demo rows correctly
+- [x] 4.6 Settings-demo view offers only valid transitions per state
 
 #### Manual
 
