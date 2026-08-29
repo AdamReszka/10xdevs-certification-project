@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -11,8 +11,10 @@ import {
   bigint,
   jsonb,
   index,
+  uniqueIndex,
   unique,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 // Type-only (erased at compile time), so the JSONB `$type<>()` annotations below
 // cost this module no runtime dependency on the recap module. See the header of
@@ -121,18 +123,60 @@ export const memberSource = pgEnum("member_source", [
   "BOTH",
 ]);
 
-export const user = pgTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").default(false).notNull(),
-  image: text("image"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at")
-    .defaultNow()
-    .$onUpdate(() => /* @__PURE__ */ new Date())
-    .notNull(),
-});
+// Which scope an account is currently reading (S-09 / FR-008). Demo is modelled
+// as TENANCY, not as a per-row flag: three product tables are `UNIQUE(owner_id)`
+// (`github_credential`, `jira_credential`, `jira_project`), so one owner cannot
+// hold a real and a demo project at once — the demo lives under its own synthetic
+// `user` row instead.
+export const workspaceMode = pgEnum("workspace_mode", ["REAL", "DEMO"]);
+
+export const user = pgTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull().unique(),
+    emailVerified: boolean("email_verified").default(false).notNull(),
+    image: text("image"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+
+    // --- S-09 demo tenancy (FR-008) ---
+    //
+    // Self-referential and nullable: NULL means "this row is a real account".
+    // A non-NULL value means "this row is the demo scope belonging to that real
+    // account", so the cascade deletes an account's demo along with it, and
+    // `demo_of IS NULL` is the filter every user-enumerating query needs (the
+    // scheduler's `enumerateOnboardedOwners` above all — a demo owner
+    // necessarily holds a `github_credential`, so absent credentials cannot
+    // stand in for the exclusion).
+    // `AnyPgColumn` is required, not decorative: without it TS cannot infer the
+    // type of a table that references itself (TS7022).
+    demoOf: text("demo_of").references((): AnyPgColumn => user.id, {
+      onDelete: "cascade",
+    }),
+    // Which scope this ACCOUNT is viewing. Set on the real row; a demo row keeps
+    // the default and never reads it. In the DB rather than the URL or a cookie
+    // so the mode is durable across browsers and devices.
+    activeWorkspace: workspaceMode("active_workspace")
+      .notNull()
+      .default("REAL"),
+    // The frozen instant the demo data depicts. Set only on demo rows; NULL on a
+    // real one. A demo row with a NULL anchor is half-created and must never
+    // render as demo (see `resolveWorkspace`'s fallback).
+    demoAnchorAt: timestamp("demo_anchor_at"),
+  },
+  (table) => [
+    // Partial unique: at most ONE demo owner per account. NULLs are excluded by
+    // the WHERE, so real accounts are unconstrained.
+    uniqueIndex("user_demo_of_uq")
+      .on(table.demoOf)
+      .where(sql`${table.demoOf} is not null`),
+  ],
+);
 
 export const session = pgTable(
   "session",
