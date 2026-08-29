@@ -160,3 +160,46 @@ The following were not evaluated in this research:
 - CI/CD pipeline setup (GitHub Actions workflow files)
 - Production-scale architecture (multi-region, HA, DR)
 - Cloudflare D1 or KV as a database alternative (project targets external Neon/Supabase)
+
+---
+
+## Measured Worker size, and what the trend says (2026-08-29)
+
+The ceiling stopped being theoretical during S-14: `wrangler versions upload`
+refused the deploy with `code: 10027` — *"Your Worker exceeded the size limit of
+3 MiB"*. The account was still on the **free** plan, which the risk register
+above had not accounted for; the $5/month paid tier was assumed from the start
+but never actually enabled, because nothing had been deployed yet. Upgraded the
+same day.
+
+Four consecutive merges to `main`, each measured with
+`npx wrangler deploy --dry-run` after `npm run build:cf`:
+
+| after slice | gzip | delta |
+|---|---:|---:|
+| S-11 `daily-recap-email` (#53) | 2784.38 KiB | — |
+| S-13 `refinement-helper-ai` (#54) | 2922.41 KiB | +138.0 |
+| S-22 `capacity-in-man-days` (#55) | 2974.29 KiB | +51.9 |
+| S-09 `demo-mode` (#56) | 2985.56 KiB | +11.3 |
+| S-14 `anomaly-settings-page` (#57) | 3110.71 KiB | +125.2 |
+
+**~82 KiB per slice on average, 138 KiB at the worst.** With 7 roadmap slices
+left, the MVP lands around **3.7 MiB** (4.1 MiB if every remaining slice is as
+heavy as the worst one so far) — roughly **40% of the paid ceiling**. Reaching
+10 MiB at this rate would take on the order of 80 more slices.
+
+Two conclusions that change earlier advice in this repo:
+
+- **Removing the Anthropic SDK is not a size strategy.** S-13, the slice that
+  introduced it, cost **138 KiB gzip** — under two slices' worth of headroom.
+  The 13 MB the package occupies in `node_modules` is types and source maps,
+  not code that reaches the Worker. `deploy-plan.md` §E1 proposes a dynamic
+  import for the same purpose; on Workers that does nothing either, because the
+  limit applies to the whole uploaded script including every module it carries.
+  Dynamic imports shrink an *initial* bundle on platforms that stream code —
+  Workers is not one of them.
+- **The risk is a step, not the trend.** 82 KiB per slice is comfortably
+  affordable; one fat dependency landing in a single PR is not. That is what the
+  `bundle-size` CI job now watches (`.github/workflows/ci.yml`), which is the
+  mitigation the risk register named and nobody had wired — the reason this
+  ceiling was discovered at upload time rather than at PR time.

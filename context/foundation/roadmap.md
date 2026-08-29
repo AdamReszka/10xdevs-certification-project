@@ -45,7 +45,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | done     |
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
 | S-13 | refinement-helper-ai      | pick tickets from the backlog (or by key, or pasted); each gets a readiness verdict — "DOR met", or the specific gaps blocking it, stated in the ticket's own terms; session saved | S-01, F-02, S-03 | FR-020, FR-021 | done     |
-| S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | proposed |
+| S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | done     |
 | S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | done |
 | S-17 | working-days-calendar     | public holidays are DERIVED automatically from the team's country (per-sprint team-wide days off ship in S-23, entered by hand) | S-08, S-23 | FR-007, FR-009, FR-010                          | proposed |
@@ -377,7 +377,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-14: Anomaly threshold settings page
 
-- **Outcome:** user can navigate to a dedicated settings page (accessible after first run) and configure per-anomaly-type severity tiers (re-tier High/Medium/Low per anomaly rule) and detection thresholds (override the defaults from FR-009); changes take effect on the next detection cycle.
+- **Outcome:** user can navigate to a dedicated settings page (accessible after first run) and configure per-anomaly-type severity tiers (re-tier High/Medium/Low per anomaly rule) and detection thresholds (override the defaults from FR-009); **saving re-runs detection immediately**, so the Anomaly Inbox reflects the change on the next view rather than at the next cron tick.
 - **Change ID:** anomaly-settings-page
 - **PRD refs:** FR-009, FR-014
 - **Prerequisites:** S-06 (default thresholds must exist before they can be overridden), S-07 (settings page reachable from dashboard navigation)
@@ -385,8 +385,9 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:** —
 - **Head start (S-10, 2026-08-22):** the `/settings` route, its tabbed shell, and the nav entry already exist — S-10 built them for its Connections tab. **S-14 is now a second tab, not a new route.** Scope shrinks to the thresholds/severity form plus its persistence.
-- **Risk:** Threshold overrides must be per-account (not global defaults) — confirm the settings schema in F-02 scopes threshold values to the user's account; a missing account-scope constraint would cause one user's threshold changes to affect all users.
-- **Status:** proposed
+- **Risk:** Threshold overrides must be per-account (not global defaults) — confirm the settings schema in F-02 scopes threshold values to the user's account; a missing account-scope constraint would cause one user's threshold changes to affect all users. **Closed before planning (2026-08-29):** `anomaly_settings` is already `unique(owner_id, anomaly_type)` with `owner_id` FK → `user` `ON DELETE CASCADE`, so the scoping is structural rather than something S-14 had to add. That is why this slice skipped `/10x-frame`.
+- **Correction (2026-08-29):** this entry previously said a change took effect only at the following detection run. That contradicted decision **D1** (`context/archive/2026-08-25-absence-calendar/research.md:557-570`), which the owner generalised to every save of a factor feeding detection and which names S-14 explicitly. The implementation follows D1 — both the save and the reset action re-run `detectAnomalies` post-commit, best-effort, on the workspace clock. Leaving both statements in the repo would have left two versions of the truth.
+- **Status:** done
 
 ---
 

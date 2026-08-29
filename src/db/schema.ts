@@ -931,7 +931,11 @@ export const anomalySettings = pgTable(
     anomalyType: anomalyType("anomaly_type").notNull(),
     severityOverride: severity("severity_override"),
     thresholds: jsonb("thresholds"),
-    isDefault: boolean("is_default"),
+    // NO `is_default` COLUMN (dropped by S-14): a row exists here IF AND ONLY IF
+    // the rule differs from `src/db/defaults.ts`, so a boolean saying "these are
+    // the defaults" could only ever be false — and the flag was written nowhere
+    // and read nowhere. `saveAnomalyRule` enforces the invariant by deleting the
+    // row when a save equals the defaults (`src/lib/anomaly-settings.ts`).
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

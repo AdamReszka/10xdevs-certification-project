@@ -1,4 +1,8 @@
-import { anomalyType, severity } from "@/db/schema";
+// `import type`, deliberately: this module is pulled by the CLIENT settings
+// organism (`anomaly-rules-view.ts`), and a value import of the schema drags
+// the whole Drizzle table graph into the browser bundle. Both names are used
+// only in type position (`typeof …enumValues`), so nothing is lost.
+import type { anomalyType, severity } from "@/db/schema";
 
 /**
  * FR-009 sensible default thresholds + default severity for every anomaly rule.
