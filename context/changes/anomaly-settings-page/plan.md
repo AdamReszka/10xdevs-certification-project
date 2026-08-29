@@ -752,10 +752,10 @@ to backfill.
 
 #### Automated
 
-- [x] 3.1 Type checking passes: `npm run typecheck`
-- [x] 3.2 Linting passes: `npm run lint`
-- [x] 3.3 Unit tests pass: `npm test`
-- [x] 3.4 Production build succeeds: `npm run build`
+- [x] 3.1 Type checking passes: `npm run typecheck` — e870ab3
+- [x] 3.2 Linting passes: `npm run lint` — e870ab3
+- [x] 3.3 Unit tests pass: `npm test` — e870ab3
+- [x] 3.4 Production build succeeds: `npm run build` — e870ab3
 
 #### Manual
 
@@ -771,8 +771,8 @@ to backfill.
 
 #### Automated
 
-- [ ] 4.1 Both files exist and the checklist has 4 rows
-- [ ] 4.2 `roadmap.md` no longer contains "next detection cycle" in the S-14 entry
+- [x] 4.1 Both files exist and the checklist has 4 rows
+- [x] 4.2 `roadmap.md` no longer contains "next detection cycle" in the S-14 entry
 
 #### Manual
 

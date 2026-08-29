@@ -619,3 +619,92 @@ dostaje maila codziennie i codziennie twardo odbija — tak umiera reputacja
 ścieżka bounce → `enabled: false`; zapisane jako zakres **S-12**, obok historii
 recapów, która i tak by to renderowała. **Do tego czasu: jeśli w panelu Resend
 pojawią się bounce'y, wyłącz recap dla tego konta ręcznie.**
+
+---
+
+## 10. S-14 `anomaly-settings-page` — otwarte (2026-08-29)
+
+Cztery wiersze, które faktycznie blokują slice, są w
+`context/changes/anomaly-settings-page/MANUAL-CHECKLIST.md` (A–D). Tutaj leży
+reszta — nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
+
+Kontekst, który zmienia priorytety: **jedyna bariera runtime między formularzem
+a kolumną `jsonb` to `src/lib/validations/anomaly-settings.ts`**, a stoi ona po
+**obu** stronach kolumny (zapis w akcji, odczyt w `mergeRule`). Detektory czytają
+ciało progu niesprawdzonym rzutowaniem `as`, więc każdy wiersz niżej, który
+dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
+
+- [ ] **10.1** Formularz jest używalny przy szerokości **1024 px** (podłoga
+      tabletowa z NFR w PRD — poniżej niej wsparcie jest poza zakresem MVP).
+      *Co musi być prawdą:* siatka pól nie wychodzi poza ekran, przyciski
+      **Save** / **Reset to defaults** są klikalne bez przewijania w poziomie,
+      a siatka siedmiu kubełków SP nie nachodzi na sąsiednie pola.
+      *Dlaczego odłożone:* to samo ryzyko co §7.5 — układ, nie dane.
+
+- [ ] **10.2** **Reset to defaults** przywraca wartość i gasi odznakę na każdej
+      z ośmiu kart, nie tylko na *Pull request too big* (wiersz D checklisty
+      pokrywa jedną kartę).
+      *Co musi być prawdą:* po resecie pole wraca do wartości z
+      `src/db/defaults.ts`, odznaka **„Modified"** znika, a sam przycisk staje
+      się wyszarzony.
+      *Dlaczego:* reset kasuje wiersz `anomaly_settings`; przycisk aktywny przy
+      braku wiersza to cicha operacja pusta udająca sukces.
+
+- [ ] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
+      `DEFAULT_THRESHOLDS`: PR review stalled → 24 h; Developer inactive i Ticket
+      with no commits → 2 dni; Sprint at risk → 2 / 2 / 3 równolegle + 48 h;
+      Scope creep → 20 %; PR / ticket desync → samo Severity.
+      *Dlaczego:* pole przemianowane po jednej stronie daje detektorowi
+      `undefined`, a to jest właśnie ścieżka `NaN` → `risk_score`.
+
+- [ ] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
+      zostawia w bazie **wszystkie siedem**.
+      *Co zrobić:* zmień 3 SP na `96`, zapisz, odśwież — sprawdź, że 1, 2, 5, 8,
+      13 i 21 SP mają nadal swoje wartości (21 SP dalej „8 working days").
+      *Dlaczego:* scalanie nadpisania jest **jednopoziomowe**, więc częściowa mapa
+      **zastępuje** domyślną i kasuje resztę kubełków. `inProgressBudget` spada
+      wtedy do najbliższego niższego progu albo — dla pustej mapy — zwraca `null`
+      i pomija **każde** zadanie In Progress, co na ekranie wygląda jak zdrowy
+      sprint. To dokładnie lekcja „zawężający predykat zamienia złą wartość w
+      pusty wynik" z `lessons.md`.
+
+- [ ] **10.5** Kontrolka 21 SP działa w **obie** strony: przełącz na
+      „120 hours (5 days)", zapisz, odśwież, przełącz z powrotem na
+      „8 working days", zapisz, odśwież.
+      *Dlaczego:* `"8_WORKING_DAYS"` to sentinel, który detektor rozwiązuje
+      względem kalendarza dni roboczych sprintu; zapisanie go jako tekstu tam,
+      gdzie kod oczekuje liczby (albo odwrotnie), psuje regułę po cichu.
+
+- [ ] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
+      cofany przez **„Zresetuj dane demo"**.
+      *Co zrobić:* w demie zmień próg, zapisz, wróć do trybu realnego i sprawdź,
+      że karta w realnym workspace ma nadal wartość domyślną; potem w demie
+      kliknij **„Zresetuj dane demo"** i sprawdź, że nadpisanie zniknęło.
+      *Dlaczego:* zakładka celowo **nie** odmawia zapisu w demie (inaczej niż
+      `/settings/recap`) — bo tylko demo ma gwarantowany aktywny sprint, więc
+      tylko tam widać efekt D1. Cena tej decyzji to izolacja demo↔real, którą ten
+      wiersz sprawdza.
+
+- [ ] **10.7** Zmiana progu potrafi naruszyć **wciąż otwarte** wiersze S-07:
+      1.5, 2.5, 3.5, 3.6, 4.7 i 5.2–5.5 dotyczą zawartości Anomaly Inbox.
+      *Co musi być prawdą:* jeśli robisz te wiersze po S-14, **najpierw** upewnij
+      się, że reguły są na domyślnych (brak odznak „Modified" na
+      `/settings/anomalies`) — inaczej porównujesz inbox z innym progiem niż ten,
+      pod który wiersze S-07 były pisane.
+
+### Świadomie NIE zrobione w tym slice'ie
+
+**Sentinel `"8_WORKING_DAYS"` nie stał się danymi.** Kubełek 21 SP pozostaje
+wyborem dwupozycyjnym (`120 h` albo `8 dni roboczych`); „10 dni roboczych" jest
+niewyrażalne. Zmiana wymagałaby ruszenia `src/db/defaults.ts`,
+`ticket-status-aging.ts` **i** założeń fixture'a demo naraz.
+
+**Severity nie ma poziomu ponad `HIGH`.** `SPRINT_AT_RISK` startuje z `HIGH`, a
+`riskScore` nie ma wyższego stopnia — więc tę jedną regułę da się przesunąć
+wyłącznie w dół. To ograniczenie modelu, nie brak w formularzu; karta mówi o tym
+wprost.
+
+**Wiersze `RESOLVED` zachowują stary próg i stare severity na zawsze.** Świadomie
+nie ma o tym ani słowa w UI: `reader.ts` filtruje `status = ACTIVE`, a Daily Recap
+czyta przez ten sam reader — więc taki wiersz nie jest renderowany **nigdzie**.
+Ostrzeżenie o stanie niewidocznym zjadłoby budżet tekstu na karcie.
