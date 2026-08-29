@@ -890,35 +890,35 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly against local Supabase
-- [x] 1.2 Deleting a sprint row leaves the recaps with `sprint_id` NULL
-- [x] 1.3 `listRecaps` is newest-first, owner-scoped, limit-honouring
-- [x] 1.4 `getRecap` returns null for another owner's recap id
-- [x] 1.5 `getRecap` tolerates a row with NULL payload and rendered_message
-- [x] 1.6 Existing recap suites pass unchanged
-- [x] 1.7 Type checking passes
-- [x] 1.8 Linting passes
-- [x] 1.9 Unit suite passes
-- [x] 1.10 Integration suite passes
+- [x] 1.1 Migration applies cleanly against local Supabase — 1855031
+- [x] 1.2 Deleting a sprint row leaves the recaps with `sprint_id` NULL — 1855031
+- [x] 1.3 `listRecaps` is newest-first, owner-scoped, limit-honouring — 1855031
+- [x] 1.4 `getRecap` returns null for another owner's recap id — 1855031
+- [x] 1.5 `getRecap` tolerates a row with NULL payload and rendered_message — 1855031
+- [x] 1.6 Existing recap suites pass unchanged — 1855031
+- [x] 1.7 Type checking passes — 1855031
+- [x] 1.8 Linting passes — 1855031
+- [x] 1.9 Unit suite passes — 1855031
+- [x] 1.10 Integration suite passes — 1855031
 
 #### Manual
 
-- [x] 1.11 `\d daily_recap` shows nullable `sprint_id`, SET NULL, no sprint index
+- [x] 1.11 `\d daily_recap` shows nullable `sprint_id`, SET NULL, no sprint index — 1855031
 
 ### Phase 2: Retention cutoff and the purge
 
 #### Automated
 
-- [ ] 2.1 Fewer than three recorded sprints resolves to no cutoff
-- [ ] 2.2 The cutoff is the third-newest start day in the team's timezone
-- [ ] 2.3 A third sprint with no start date resolves to no cutoff
-- [ ] 2.4 Recaps strictly older than the cutoff are deleted; the boundary survives
-- [ ] 2.5 The purge is owner-scoped
-- [ ] 2.6 A throwing purge does not alter the cycle's other counters
-- [ ] 2.7 Type checking passes
-- [ ] 2.8 Linting passes
-- [ ] 2.9 Unit suite passes
-- [ ] 2.10 Integration suite passes
+- [x] 2.1 Fewer than three recorded sprints resolves to no cutoff
+- [x] 2.2 The cutoff is the third-newest start day in the team's timezone
+- [x] 2.3 A third sprint with no start date resolves to no cutoff
+- [x] 2.4 Recaps strictly older than the cutoff are deleted; the boundary survives
+- [x] 2.5 The purge is owner-scoped
+- [x] 2.6 A throwing purge does not alter the cycle's other counters
+- [x] 2.7 Type checking passes
+- [x] 2.8 Linting passes
+- [x] 2.9 Unit suite passes
+- [x] 2.10 Integration suite passes
 
 #### Manual
 

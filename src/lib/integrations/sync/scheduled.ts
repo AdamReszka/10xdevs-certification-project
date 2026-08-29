@@ -3,8 +3,10 @@ import { eq, isNull } from "drizzle-orm";
 import { githubCredential, jiraProject, user } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { syncOwner } from "@/lib/integrations/sync/run-sync";
 import { sweepSprintMeasurements } from "@/lib/measurement/sweep";
+import { purgeOldRecaps } from "@/lib/recap/retention";
 import { sendDailyRecap } from "@/lib/recap/send";
 
 /**
@@ -71,6 +73,8 @@ export type ScheduledSyncResult = {
   failed: number;
   /** S-11: recaps actually handed to the transport this cycle. */
   recapsSent: number;
+  /** S-12: recap rows deleted this cycle by the FR-019 retention rule. */
+  recapsPurged: number;
 };
 
 /**
@@ -86,6 +90,7 @@ export async function runScheduledSync(
     detectAnomalies?: typeof detectAnomalies;
     sweepSprintMeasurements?: typeof sweepSprintMeasurements;
     sendDailyRecap?: typeof sendDailyRecap;
+    purgeOldRecaps?: typeof purgeOldRecaps;
     now?: Date;
   },
 ): Promise<ScheduledSyncResult> {
@@ -94,6 +99,7 @@ export async function runScheduledSync(
   const runDetect = deps?.detectAnomalies ?? detectAnomalies;
   const runSweep = deps?.sweepSprintMeasurements ?? sweepSprintMeasurements;
   const runRecap = deps?.sendDailyRecap ?? sendDailyRecap;
+  const runPurge = deps?.purgeOldRecaps ?? purgeOldRecaps;
   const now = deps?.now ?? new Date();
 
   try {
@@ -103,6 +109,7 @@ export async function runScheduledSync(
     let synced = 0;
     let failed = 0;
     let recapsSent = 0;
+    let recapsPurged = 0;
     for (const ownerId of batch) {
       try {
         await runOwner({ db, ownerId, env, now });
@@ -156,9 +163,41 @@ export async function runScheduledSync(
           err instanceof Error ? err.message : String(err),
         );
       }
+
+      // A FOURTH sibling `try` (S-12, FR-019), for the same reason as the two
+      // above and one of its own: this is the repo's first irreversible
+      // deletion, and a purge that throws must be able to take down neither the
+      // sync, nor the measurement sweep, nor — least of all — the day's email.
+      //
+      // ORDERED AFTER THE RECAP SEND, deliberately: a recap written this cycle
+      // is then never a candidate for the delete that follows it.
+      try {
+        const timeZone = await getJiraTimeZone(db, ownerId);
+        const { cutoff, deleted } = await runPurge({ db, ownerId, timeZone });
+        recapsPurged += deleted;
+
+        // THE STEP LOGS ITS OWN RESULT — the cycle's does not survive
+        // (plan-review F2). `worker.ts:46` is
+        // `ctx.waitUntil(runScheduledSync(env, ctx))`, so the returned
+        // `ScheduledSyncResult` is discarded and the count on it exists for the
+        // tests and for a caller that may one day read it. What an operator can
+        // actually see is this line. A DayKey and an integer only: no address,
+        // no payload. Shipping the first irreversible deletion silent is what
+        // would make a wrong cutoff undiscoverable.
+        if (deleted > 0) {
+          console.info(
+            `[recap] purged ${deleted} recap(s) for owner ${ownerId} older than ${cutoff}`,
+          );
+        }
+      } catch (err) {
+        console.error(
+          `[recap] retention purge failed for owner ${ownerId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
 
-    return { enumerated: ownerIds.length, synced, failed, recapsSent };
+    return { enumerated: ownerIds.length, synced, failed, recapsSent, recapsPurged };
   } finally {
     // Close the Hyperdrive-backed pool AFTER the handler returns (lesson #3): the
     // scheduled path has no request after-hook, so it owns teardown.
