@@ -264,6 +264,22 @@ automatycznych zielone. Instrukcje krok po kroku:
       `jira_credential`, a Disconnect i tak kasuje sprint kaskadą. Nośną
       połową jest teraz **krok 2** (potwierdź, że widzisz kartę statusu, a nie
       picker) — pilnuje założenia, na którym oparto brak confirmation dialogu.
+      ✅ **Krok 2 zaliczony 2026-08-30** (sesja manualna, Ania) na koncie
+      `anna.jozwiak19@gmail.com` (prawdziwe credentiale, Jira `foxmind`,
+      projekt FM): `/setup/jira` pokazuje kartę „Jira connected" z projektem FM,
+      **bez** listy ani pola wyboru projektu; na stronie są tylko przyciski
+      **Disconnect** i **Continue**. Kaskada potwierdzona osobno, odczytem
+      `information_schema` na żywej bazie: `jira_credential` → `jira_project` →
+      `sprint` → `jira_ticket` / `anomaly` / `absence`, wszystko `ON DELETE
+      CASCADE`, więc stary sprint nie ma jak przeżyć odłączenia. **Otwarte
+      zostają kroki 3–4** (realne przepięcie na drugi projekt) — testerka
+      zakłada w tym celu drugi projekt w Jirze.
+      🔴 **Znalezisko poboczne, zgłoszone przez testerkę:**
+      `context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md` — założenie
+      z checklisty, że brak dialogu w kreatorze jest bezpieczny, „bo odpowiednik
+      jest w `/settings/connections`", **jest nieprawdziwe**: dialogu nie ma w
+      żadnym z tych miejsc, a jedno kliknięcie kasuje też ręcznie wpisane
+      nieobecności. Decyzja właściciela, nie defekt do naprawy w sesji manualnej.
 
 **Nie pokryte automatyką z innego powodu:** „okno pustki" po rollowerze
 (checklista, faza 3) — udokumentowane i zaakceptowane przy planowaniu, ale
