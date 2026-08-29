@@ -1,6 +1,12 @@
-# Claude Code: track shared hook/permission config, keep everything else local
+# Claude Code: track shared hook/permission config plus our own sprintflow-*
+# skills, keep everything else local. Order matters: git will not descend
+# into an ignored directory, so .claude/skills must be un-ignored before any
+# rule inside it can apply.
 .claude/*
 !.claude/settings.json
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/sprintflow-*
 
 # from next
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.

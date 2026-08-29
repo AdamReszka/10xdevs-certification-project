@@ -1285,7 +1285,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Manual
 
-- [ ] 6.6 Seed reset then re-run produces a coherent story across both dashboards
+- [x] 6.6 Seed reset then re-run produces a coherent story across both dashboards — manual 2026-08-29
 - [x] 6.7 `/10x-impl-review` run with findings triaged — report in `reviews/impl-review.md`; the triage IS Phase 11 (11.1–11.14, each with its commit). Only 11.15 (the manual pass) remains open there
 - [x] 6.8 Roadmap updated, including the corrected S-07 row — verified in-session (roadmap corrected in 4366af9)
 
@@ -1320,7 +1320,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 #### Still open — owner side
 
-- [ ] 11.15 F6 — the manual verification pass. **This is an umbrella item, not a single check**: it is done when every row in `MANUAL-CHECKLIST.md` (this folder) is ticked. That file has no row numbered 11.15 — its rows carry the numbers of the phases they belong to (4.5–4.11, 5.6–5.10, 2.5, 2.6, 3.5, 1.7, 7.7, 8.12, 6.6), plus a section **F** of live checks on this review's destructive fixes that has no Progress counterpart. Tick each row in its own phase above as it passes; tick 11.15 only when the whole file is clear.
+- [x] 11.15 F6 — the manual verification pass. **Closed 2026-08-29** with 6.6, the file's last open row. **This is an umbrella item, not a single check**: it is done when every row in `MANUAL-CHECKLIST.md` (this folder) is ticked. That file has no row numbered 11.15 — its rows carry the numbers of the phases they belong to (4.5–4.11, 5.6–5.10, 2.5, 2.6, 3.5, 1.7, 7.7, 8.12, 6.6), plus a section **F** of live checks on this review's destructive fixes that has no Progress counterpart. Tick each row in its own phase above as it passes; tick 11.15 only when the whole file is clear.
 
 ---
 
