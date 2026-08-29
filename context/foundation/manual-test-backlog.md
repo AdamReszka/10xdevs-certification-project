@@ -313,6 +313,19 @@ automatycznych zielone. Instrukcje krok po kroku:
       przeglądu i testów. Podpowiedź jest edytowalna, więc to nie jest defekt —
       ale FR-005 opiera całą detekcję anomalii na tym mapowaniu.
 
+      🔵 **Trzecia obserwacja produktowa (ta sama sesja):**
+      `context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md` — nigdzie
+      nie widać wprost, **którego sprintu** dotyczy to, na co się patrzy. W kroku
+      kadencji nazwa jest wpleciona w zdanie w `CardDescription`
+      (`cadence-form.tsx:156`); na „Today" pada wyłącznie w opisie panelu
+      *Estimated velocity* (`velocity-estimate.tsx:42`), który przy mniej niż
+      dwóch zamkniętych sprintach i tak renderuje „brak danych" — więc na świeżo
+      skonfigurowanym koncie nazwa może nie paść ani razu; na Sprint Detail jest
+      `Badge variant="secondary"`. Daty (`sprint.start_date` / `end_date`) są
+      pobrane z Jiry i nieużyte w UI. Zgłoszone przez testerkę po przepięciu
+      FM → PT, czyli w tym samym momencie, w którym incydent `1001` był
+      niewykrywalny.
+
 **Nie pokryte automatyką z innego powodu:** „okno pustki" po rollowerze
 (checklista, faza 3) — udokumentowane i zaakceptowane przy planowaniu, ale
 warto zobaczyć na oczy, że trwa sekundy, a nie minuty.
