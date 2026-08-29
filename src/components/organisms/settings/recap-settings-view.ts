@@ -49,6 +49,44 @@ export function describeLastSend(row: LastRecapRow | null, now: Date = new Date(
 }
 
 /**
+ * The auto-disable explanation, or null when there is nothing to explain.
+ *
+ * WHY THIS EXISTS AT ALL: a switch that flipped itself is indistinguishable from
+ * a decision the owner made months ago, and the first thing they do with an
+ * unexplained "off" is turn it back on — into the same bounce loop. Naming what
+ * happened is what makes re-enabling an informed act.
+ *
+ * A NULL `disabledReason` returns null even when the recap is off: that is the
+ * owner having turned it off themselves, which needs no explanation and must not
+ * be dressed up as a fault. The stored value is a stable CODE
+ * (`recap/webhook.ts`), so the prose lives here with the rest of the copy and a
+ * wording change is never a migration.
+ */
+export function describeAutoDisable(settings: {
+  disabledReason: string | null;
+  disabledAt: Date | string | null;
+}): string | null {
+  if (!settings.disabledReason) return null;
+
+  const when = settings.disabledAt
+    ? new Date(settings.disabledAt).toISOString().slice(0, 10)
+    : null;
+  const on = when ? ` on ${when}` : "";
+
+  switch (settings.disabledReason) {
+    case "BOUNCE_PERMANENT":
+      return `SprintFlow stopped sending your daily recap${on} because your email provider rejected it permanently — the address could not be delivered to. Check the address on your account is right and can receive mail, then turn the recap back on below.`;
+    case "COMPLAINT":
+      return `SprintFlow stopped sending your daily recap${on} because a recap was reported as spam from your address. Mark SprintFlow as safe in your mail client before turning it back on, or the next send will be blocked the same way.`;
+    default:
+      // An unknown code is still worth showing: it means SOMETHING switched the
+      // recap off, and silence would put the owner back in the dark this
+      // function exists to end.
+      return `SprintFlow stopped sending your daily recap${on}. Turn it back on below once the problem with your email address is resolved.`;
+  }
+}
+
+/**
  * The send-time helper text.
  *
  * LOAD-BEARING, not decoration. The cron resolution is 15 minutes

@@ -49,6 +49,9 @@ export default async function RecapSettingsPage() {
         enabled={settings.enabled}
         timeZone={timeZone}
         isDemo={isDemo}
+        disabledReason={settings.disabledReason}
+        // Dates cross as ISO strings, same convention as `lastRecap` below.
+        disabledAt={settings.disabledAt?.toISOString() ?? null}
         lastRecap={
           lastRecap
             ? {

@@ -7,12 +7,14 @@ import { toast } from "sonner";
 
 import { saveRecapSettingsAction } from "@/app/(app)/settings/recap/actions";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 import {
+  describeAutoDisable,
   describeLastSend,
   fromTimeValue,
   sendTimeHint,
@@ -37,6 +39,8 @@ export default function RecapSettingsForm({
   timeZone,
   lastRecap,
   isDemo = false,
+  disabledReason = null,
+  disabledAt = null,
 }: {
   sendHour: number;
   sendMinute: number;
@@ -49,6 +53,13 @@ export default function RecapSettingsForm({
    * inbox. The server refuses the save too.
    */
   isDemo?: boolean;
+  /**
+   * S-12 Phase 4. Set only when SPRINTFLOW switched the recap off after a
+   * permanent bounce or a spam complaint; null when the owner did it themselves.
+   */
+  disabledReason?: string | null;
+  /** ISO instant, matching the `lastRecap` convention. */
+  disabledAt?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -80,8 +91,19 @@ export default function RecapSettingsForm({
     });
   }
 
+  const autoDisabled = describeAutoDisable({ disabledReason, disabledAt });
+
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
+      {/* Above the switch, not below it: the owner has to read why it is off
+          before they reach the control that turns it back on. */}
+      {autoDisabled ? (
+        <Alert variant="destructive">
+          <AlertTitle>Your daily recap was turned off automatically</AlertTitle>
+          <AlertDescription>{autoDisabled}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">When the recap arrives</CardTitle>

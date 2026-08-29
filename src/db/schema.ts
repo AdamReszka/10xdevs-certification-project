@@ -973,6 +973,23 @@ export const recapSettings = pgTable(
     sendHour: integer("send_hour").default(15).notNull(),
     sendMinute: integer("send_minute").default(0).notNull(),
     enabled: boolean("enabled").default(true).notNull(),
+    /**
+     * WHY the recap is off, and since when — but ONLY when SprintFlow turned it
+     * off (S-12 Phase 4, closing S-11 plan-review F6).
+     *
+     * A NULL reason alongside `enabled: false` means the OWNER turned it off
+     * themselves. That is the ordinary case and needs no explanation. A non-null
+     * reason means Resend reported a permanent bounce or a spam complaint for
+     * the owner's address and the send was stopped for them.
+     *
+     * The distinction is the whole point of the columns: a switch that flipped
+     * itself is indistinguishable from a decision made months ago, and the first
+     * thing the owner does with an unexplained "off" is flip it back — into the
+     * same bounce loop. Cleared only by a save that sets `enabled: true`, never
+     * by an hour change while the recap is off.
+     */
+    disabledReason: text("disabled_reason"),
+    disabledAt: timestamp("disabled_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

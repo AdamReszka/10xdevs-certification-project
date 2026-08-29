@@ -1,8 +1,9 @@
 # S-12 Historia recapów — manual checklist (owner side)
 
-> Pięć pozycji. Wszystko poza nimi jest zielone automatycznie i **nie jest tu
-> powtarzane**: 1017 testów jednostkowych, 326 integracyjnych, `typecheck`,
-> `lint`. Reszta — wiersze odłożone, dług cross-slice — siedzi w
+> Siedem pozycji (A–E z faz 1–3, F–G z fazy 4). Wszystko poza nimi jest zielone
+> automatycznie i **nie jest tu powtarzane**: 1047 testów jednostkowych, 335
+> integracyjnych, `typecheck`, `lint`, build Workera (3191 KiB gzip przy progu
+> 5000). Reszta — wiersze odłożone, dług cross-slice — siedzi w
 > `context/foundation/manual-test-backlog.md` §14.
 
 **Jak to się ma do `plan.md` `## Progress`** (który zostaje kanoniczny): każdy
@@ -16,7 +17,30 @@ listy, mimo że fazy 1–3 dowożą całą funkcjonalność.
 
 > **Na którym koncie:** wiersze **A**, **B**, **C** i **D** wykonaj na koncie z
 > prawdziwymi credentialami (to, które dostaje realne recapy). Wiersz **E**
-> wykonaj **w trybie demo** — powód jest w samym wierszu.
+> wykonaj **w trybie demo** — powód jest w samym wierszu. Wiersze **F** i **G**
+> wymagają najpierw kroków operatorskich poniżej.
+
+---
+
+## ⚠️ Zanim zrobisz F i G — kroki operatorskie w panelu Resenda
+
+**To zadanie operatorskie, nie programistyczne.** Kod fazy 4 jest kompletny i
+wszystkie bramki automatyczne są zielone, ale dopóki poniższe cztery kroki nie
+zostaną wykonane, webhook **nigdy nie dostanie żadnego żądania** — a to znaczy,
+że wiersze F i G są nieosiągalne, nie „niezaliczone".
+
+1. W panelu Resenda → **Webhooks** → **Add Webhook**, endpoint URL:
+   `https://<twój-worker>/api/webhooks/resend`.
+2. Zasubskrybuj **oba** zdarzenia: `email.bounced` **i** `email.complained`.
+   Sam `email.bounced` zamyka tylko połowę tego, po co ten webhook powstał.
+3. Skopiuj **signing secret** (zaczyna się od `whsec_`) ze strony tego webhooka.
+4. `npx wrangler secret put RESEND_WEBHOOK_SECRET` i wklej wartość.
+   ⚠️ **Sekret, nie `var`.** Zwykłe `vars` rozwiązują się do `null` w
+   `getCloudflareContext().env` na tej wersji OpenNexta — a bez sekretu endpoint
+   odpowiada 500 i **nie dotyka bazy**, co jest zachowaniem zamierzonym.
+
+Bez sekretu lokalnie: endpoint zwraca 500. To poprawne — nic nie zostaje
+zapisane, a stan naprawia się sam, gdy tylko sekret się pojawi.
 
 ---
 
@@ -160,3 +184,72 @@ w demo byłby regresją zamrożonego zegara**: te dwa stany porównują `Date.no
 z `last_attempt_at`, więc pojawiłyby się dopiero po czasie i tylko u części
 oglądających. Wiersz *Failed* z czytelną treścią dowodzi, że nieudana wysyłka
 jest **legible**, a nie pustym rekordem, którego nie da się zdiagnozować.
+
+---
+
+## F. 🔒 Podpis jest jedyną bramką — sprawdź obie strony — faza 4
+
+**Gdzie:** panel Resenda → Twój webhook → **Send test event**; potem terminal.
+
+**Co zrobić:**
+1. W panelu Resenda wyślij **testową dostawę** na ten endpoint.
+2. Zobacz odpowiedź w panelu (Resend pokazuje kod HTTP).
+3. Teraz sfałszuj żądanie z terminala — ten sam kształt ciała, **byle jaki**
+   podpis:
+   ```bash
+   curl -i -X POST https://<twój-worker>/api/webhooks/resend \
+     -H "content-type: application/json" \
+     -H "svix-id: msg_fake" \
+     -H "svix-timestamp: $(date +%s)" \
+     -H "svix-signature: v1,ZmFrZQ==" \
+     -d '{"type":"email.bounced","data":{"to":["'"$(whoami)"'@example.test"],"bounce":{"type":"Permanent"}}}'
+   ```
+
+**Co musi być prawdą:**
+- testowa dostawa z panelu Resenda kończy się **200**;
+- sfałszowane żądanie z curla kończy się **401** — i **nic** się nie zmienia:
+  w `/settings/recap` recap dalej jest włączony;
+- w bazie nie przybył żaden wiersz:
+  ```bash
+  psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+    -c "select owner_id, enabled, disabled_reason from recap_settings where disabled_reason is not null;"
+  ```
+
+**Dlaczego to łapie:** to **jedyna** publiczna, nieuwierzytelniona trasa w całym
+repo, a podpis jest **całą** jej ochroną. Gdyby weryfikacja przepuszczała
+cokolwiek, dowolna osoba w internecie wyłączałaby recap dowolnemu ownerowi,
+podając jego adres e-mail — bez żadnego dostępu do konta. Testy jednostkowe
+sprawdzają to na 16 sposobów, ale **żaden z nich nie dowodzi, że prawdziwy
+Resend trafia w ten sam algorytm**: sam 200 z panelu jest jedynym dowodem, że
+podpisujemy dokładnie to, co on podpisuje.
+
+---
+
+## G. Bounce naprawdę wyłącza recap i mówi dlaczego — faza 4
+
+**Gdzie:** `/settings/recap` na koncie z prawdziwymi credentialami.
+
+**Co zrobić:**
+1. Doprowadź do wysyłki na adres testowy Resenda `bounced@resend.dev`
+   (najprościej: reset hasła na konto o tym adresie — **ten sam webhook** obsługuje
+   maile resetu, i to jest zamierzone).
+2. Poczekaj, aż Resend dostarczy zdarzenie (w panelu widać próbę i kod odpowiedzi).
+3. Wejdź na `/settings/recap`.
+4. Przełącz **Send me a daily recap** z powrotem na włączone i kliknij **Save**.
+5. Odśwież stronę.
+
+**Co musi być prawdą:**
+- po bounce przełącznik **Send me a daily recap** jest **wyłączony**;
+- **nad** przełącznikiem stoi czerwony komunikat, który mówi **co się stało**
+  (trwałe odrzucenie przez dostawcę poczty), **kiedy** (data) i **co naprawić
+  przed ponownym włączeniem**;
+- po ponownym włączeniu i zapisaniu **komunikat znika** i nie wraca po odświeżeniu;
+- ⚠️ **kontrola odwrotna:** wyłącz recap ręcznie, zapisz, odśwież — ma **nie
+  być** żadnego czerwonego komunikatu.
+
+**Dlaczego to łapie:** przełącznik, który sam się przestawił, jest nieodróżnialny
+od decyzji, którą owner podjął pół roku temu — i pierwsze, co zrobi, to włączy go
+z powrotem, prosto w tę samą pętlę odbić. Kontrola odwrotna jest tu równie ważna:
+komunikat pokazywany przy **ręcznym** wyłączeniu oskarżałby o awarię tam, gdzie
+nic się nie zepsuło. To dwa różne stany bazy (`disabled_reason` NULL kontra
+niepuste) i tylko ten wiersz sprawdza, że interfejs je rozróżnia.

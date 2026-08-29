@@ -928,16 +928,16 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [x] 3.1 `describeRecapRow` covers all five status shapes
-- [x] 3.2 `recap-settings-view.test.ts` passes unchanged after the refactor
-- [x] 3.3 An unknown payload `schemaVersion` falls back to the row's own columns
-- [x] 3.4 The demo load writes the expected recap rows, all terminal, one FAILED
-- [x] 3.5 A demo reset removes them all
-- [x] 3.6 E2E suite still passes
-- [x] 3.7 Type checking passes
-- [x] 3.8 Linting passes
-- [x] 3.9 Unit suite passes
-- [x] 3.10 Integration suite passes
+- [x] 3.1 `describeRecapRow` covers all five status shapes — 1772eec
+- [x] 3.2 `recap-settings-view.test.ts` passes unchanged after the refactor — 1772eec
+- [x] 3.3 An unknown payload `schemaVersion` falls back to the row's own columns — 1772eec
+- [x] 3.4 The demo load writes the expected recap rows, all terminal, one FAILED — 1772eec
+- [x] 3.5 A demo reset removes them all — 1772eec
+- [x] 3.6 E2E suite still passes — 1772eec
+- [x] 3.7 Type checking passes — 1772eec
+- [x] 3.8 Linting passes — 1772eec
+- [x] 3.9 Unit suite passes — 1772eec
+- [x] 3.10 Integration suite passes — 1772eec
 
 #### Manual
 
@@ -951,23 +951,23 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [ ] 4.1 A valid signature passes; a tampered body fails
-- [ ] 4.2 A timestamp outside the tolerance window fails
-- [ ] 4.3 A multi-signature header passes when any entry matches
-- [ ] 4.4 The real resolver with an empty env reports the missing secret
-- [ ] 4.5 The parser's accept/ignore taxonomy holds
-- [ ] 4.6 A Permanent bounce disables an owner with no settings row
-- [ ] 4.7 A complaint records the reason and timestamp
-- [ ] 4.8 An unknown address is a no-op
-- [ ] 4.9 A demo owner is never disabled
-- [ ] 4.10 A repeated delivery changes nothing
-- [ ] 4.11 Re-enabling clears the reason; an hour-only save while disabled does not
-- [ ] 4.12 Type checking passes
-- [ ] 4.13 Linting passes
-- [ ] 4.14 Unit suite passes
-- [ ] 4.15 Integration suite passes
-- [ ] 4.16 E2E suite still passes
-- [ ] 4.17 The Worker bundle-size CI gate still passes
+- [x] 4.1 A valid signature passes; a tampered body fails
+- [x] 4.2 A timestamp outside the tolerance window fails
+- [x] 4.3 A multi-signature header passes when any entry matches
+- [x] 4.4 The real resolver with an empty env reports the missing secret
+- [x] 4.5 The parser's accept/ignore taxonomy holds
+- [x] 4.6 A Permanent bounce disables an owner with no settings row
+- [x] 4.7 A complaint records the reason and timestamp
+- [x] 4.8 An unknown address is a no-op
+- [x] 4.9 A demo owner is never disabled
+- [x] 4.10 A repeated delivery changes nothing
+- [x] 4.11 Re-enabling clears the reason; an hour-only save while disabled does not
+- [x] 4.12 Type checking passes
+- [x] 4.13 Linting passes
+- [x] 4.14 Unit suite passes
+- [x] 4.15 Integration suite passes
+- [x] 4.16 E2E suite still passes
+- [x] 4.17 The Worker bundle-size CI gate still passes
 
 #### Manual
 

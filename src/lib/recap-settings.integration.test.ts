@@ -102,6 +102,10 @@ describe("getRecapSettings / saveRecapSettings", () => {
       sendHour: 15,
       sendMinute: 0,
       enabled: true,
+      // S-12 Phase 4 widened the type. Null on both is the honest no-row state:
+      // an owner who has never saved has never been auto-disabled either.
+      disabledReason: null,
+      disabledAt: null,
     });
     // No row is written by reading — the defaults live in code, not in a seeded
     // row that would drift from them.
@@ -124,6 +128,8 @@ describe("getRecapSettings / saveRecapSettings", () => {
       sendHour: 8,
       sendMinute: 30,
       enabled: true,
+      disabledReason: null,
+      disabledAt: null,
     });
 
     // Second save UPDATES rather than inserting a second row — the singleton
@@ -137,6 +143,10 @@ describe("getRecapSettings / saveRecapSettings", () => {
       sendHour: 17,
       sendMinute: 0,
       enabled: false,
+      // Off because the OWNER turned it off — no reason recorded, which is
+      // exactly what distinguishes it from an auto-disable (S-12 Phase 4).
+      disabledReason: null,
+      disabledAt: null,
     });
 
     const rows = await db
@@ -165,6 +175,8 @@ describe("getRecapSettings / saveRecapSettings", () => {
       sendHour: 9,
       sendMinute: 15,
       enabled: true,
+      disabledReason: null,
+      disabledAt: null,
     });
   });
 });
@@ -283,6 +295,8 @@ describe("DEFAULT_RECAP_SETTINGS", () => {
       sendHour: 15,
       sendMinute: 0,
       enabled: true,
+      disabledReason: null,
+      disabledAt: null,
     });
   });
 });

@@ -1386,14 +1386,15 @@ zostało już pokryte gdzie indziej.
 ## 14. S-12 `recap-history` — otwarte (2026-08-29)
 
 FR-019: przeglądanie historii daily recapów + automatyczne czyszczenie starszych
-niż bieżący sprint plus dwa poprzednie. Kod dowieziony w fazach 1–3
-(`1855031` → faza 3); faza 4 (webhook bounce/complaint Resenda) jest
-**odcinalna z założenia** i jeszcze nie ruszona.
+niż bieżący sprint plus dwa poprzednie. **Kod dowieziony w całości, 4 fazy**
+(`1855031`, `ed51cf3`, `1772eec`, + faza 4), PR #65. Wszystkie bramki
+automatyczne zielone: 1047 unit, 335 integration, `typecheck`, `lint`, build
+Workera 3191 KiB gzip przy progu 5000.
 
-Pięć wierszy blokujących (14.A–14.E) jest **tutaj w całości** — pełna, rozpisana
-wersja tych samych pięciu leży w
-`context/changes/recap-history/MANUAL-CHECKLIST.md`. Dalej (14.1–14.6) reszta z
-`plan.md`: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
+Siedem wierszy blokujących (14.A–14.G) jest **tutaj w całości** — pełna,
+rozpisana wersja tych samych siedmiu leży w
+`context/changes/recap-history/MANUAL-CHECKLIST.md`. Dalej (14.1) to, co
+świadomie NIE weszło w ten slice.
 
 ### Blokujące (odpowiadają wierszom 2.11 i 3.11–3.15 w `plan.md`)
 
@@ -1471,41 +1472,63 @@ wersja tych samych pięciu leży w
       `last_attempt_at`, więc pojawiłyby się dopiero po czasie i tylko u części
       oglądających.
 
-### Odłożone — faza 4 (webhook Resenda), jeszcze nie zaimplementowana
+### Faza 4 — webhook Resenda. Kod gotowy, ale najpierw KROKI OPERATORSKIE
 
-Wiersze **4.18–4.22** z `plan.md` są **nieosiągalne, dopóki faza 4 nie zostanie
-dowieziona**. Nie są długiem — są przed frontem robót. Zostają tu, żeby nie
-zniknęły, gdy faza 4 ruszy.
+> ⚠️ **Twarda zależność, jak przy S-11.** Wiersze **14.F** i **14.G** są
+> **nieosiągalne**, dopóki w panelu Resenda nie powstanie endpoint webhooka
+> wskazujący na `https://<worker>/api/webhooks/resend`, zasubskrybowany na
+> **oba** zdarzenia (`email.bounced` + `email.complained`), a jego signing
+> secret (`whsec_…`) nie trafi przez `npx wrangler secret put
+> RESEND_WEBHOOK_SECRET`. To zadanie **operatorskie**, nie programistyczne —
+> kod jest bez zarzutu, a webhook i tak nigdy nie dostanie żądania. Instrukcja
+> krok po kroku stoi na górze `MANUAL-CHECKLIST.md`.
+> **Bez sekretu endpoint odpowiada 500 i NIE dotyka bazy** — to zachowanie
+> zamierzone (`lessons.md` #6), nie awaria.
 
-- [ ] **14.1** (4.18) Endpoint webhooka istnieje w panelu Resenda, jest
-      zasubskrybowany na **oba** zdarzenia (bounce + complaint), a sekret
-      `whsec_…` jest wgrany przez `wrangler secret put`.
-      *Dlaczego to łapie:* to zadanie **operatorskie**, nie programistyczne —
-      kod może być bez zarzutu, a webhook i tak nigdy nie dostanie żądania.
+- [ ] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
+      *Gdzie:* panel Resenda → **Send test event**; potem `curl` z terminala.
+      *Co zrobić:* wyślij testową dostawę z panelu; potem powtórz to samo ciało
+      żądania z **byle jakim** podpisem (`svix-signature: v1,ZmFrZQ==`).
+      *Co musi być prawdą:* dostawa z panelu → **200**; sfałszowana → **401**;
+      po tej drugiej recap w `/settings/recap` **dalej jest włączony**, a
+      `select … from recap_settings where disabled_reason is not null` nie
+      pokazuje nowego wiersza.
+      *Dlaczego to łapie:* to **jedyna** publiczna, nieuwierzytelniona trasa w
+      całym repo, a podpis jest **całą** jej ochroną — gdyby przepuszczał
+      cokolwiek, dowolna osoba w internecie wyłączałaby recap dowolnemu
+      ownerowi, podając jego adres e-mail. 16 testów jednostkowych sprawdza
+      algorytm, ale **żaden nie dowodzi, że prawdziwy Resend podpisuje tak
+      samo** — 200 z panelu jest jedynym dowodem na to.
 
-- [ ] **14.2** (4.19) Testowa dostawa z panelu Resenda zwraca **200**,
-      a żądanie z **podmienionym podpisem** zwraca **401**.
-      *Dlaczego to łapie:* podpis jest **jedyną** autentykacją tego endpointu.
-      Wszystko po nim pochodzi z payloadu, który obcy człowiek chętnie
-      sfałszuje — łącznie z adresem e-mail, którym da się wyłączyć cudzy recap.
+- [ ] **14.G** (4.20 + 4.21) Bounce wyłącza recap, mówi dlaczego, a ręczne
+      wyłączenie **nie** udaje awarii.
+      *Gdzie:* `/settings/recap`, konto z prawdziwymi credentialami.
+      *Co zrobić:* doprowadź do wysyłki na `bounced@resend.dev` (najprościej
+      reset hasła — **ten sam webhook** obsługuje maile resetu, i to jest
+      zamierzone); potem włącz recap z powrotem i zapisz; na koniec wyłącz go
+      **ręcznie** i odśwież.
+      *Co musi być prawdą:* po bounce przełącznik jest **wyłączony**, a **nad
+      nim** stoi czerwony komunikat mówiący co się stało, **kiedy** i co
+      naprawić; po ponownym włączeniu komunikat **znika** i nie wraca po
+      odświeżeniu; po **ręcznym** wyłączeniu **nie ma** żadnego czerwonego
+      komunikatu.
+      *Dlaczego to łapie:* przełącznik, który sam się przestawił, jest
+      nieodróżnialny od decyzji sprzed pół roku — i pierwsze, co owner zrobi, to
+      włączy go z powrotem, prosto w tę samą pętlę odbić. Kontrola odwrotna jest
+      równie ważna: komunikat przy ręcznym wyłączeniu oskarżałby o awarię tam,
+      gdzie nic się nie zepsuło. To dwa różne stany bazy (`disabled_reason` NULL
+      kontra niepuste) i tylko ten wiersz sprawdza, że interfejs je rozróżnia.
 
-- [ ] **14.3** (4.20) Wysyłka na `bounced@resend.dev` wyłącza daily recap i
-      `/settings/recap` **mówi dlaczego**.
-      *Dlaczego to łapie:* wyłączenie bez wyjaśnienia jest gorsze od
-      niewyłączenia — owner włączy je z powrotem w tę samą pętlę.
-
-- [ ] **14.4** (4.21) Ponowne włączenie recapu **czyści** wyjaśnienie.
-      *Dlaczego to łapie:* powód, który przeżył swoją naprawę, jest aktywnie
-      mylący — dokładnie ta sama zasada, co przy notatkach w
-      `context/manual-tests/`.
-
-- [ ] **14.5** (4.22) `MANUAL-CHECKLIST.md` tego slice'a jest podpisana w całości.
+- [ ] **14.H** (4.22) `MANUAL-CHECKLIST.md` tego slice'a jest podpisana w całości
+      (A–G).
       *Dlaczego to łapie:* to jedyny wiersz, który pilnuje, że pozostałe zostały
-      naprawdę wykonane, a nie odhaczone hurtem przy archiwizacji.
+      naprawdę wykonane, a nie odhaczone hurtem przy archiwizacji. Rozjazd z
+      2026-08-29 (68 otwartych wierszy w planach kontra 27 znanych backlogowi)
+      wziął się dokładnie stąd.
 
 ### Świadomie NIE zrobione w tym slice'ie
 
-- [ ] **14.6** Retencja **surowych danych sync** (tickety, PR-y, commity,
+- [ ] **14.1** Retencja **surowych danych sync** (tickety, PR-y, commity,
       historia statusów) — non-goal z PRD mówi o tym samym oknie „bieżący sprint
       + 2 poprzednie", ale FR-019 i roadmapowy zakres S-12 nazywają **tylko
       recapy**. Tabele GitHuba nie mają żadnego FK do sprintu

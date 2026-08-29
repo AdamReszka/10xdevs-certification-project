@@ -19,6 +19,11 @@ declare global {
     // version, and a null sender fails every send with a 422.
     RESEND_API_KEY?: string;
     RESEND_FROM_ADDRESS?: string;
+    // Svix signing secret for the Resend bounce/complaint webhook (S-12). Also a
+    // Workers *secret* — this one genuinely is sensitive: it is the ONLY thing
+    // authenticating `/api/webhooks/resend`, so anyone holding it can turn off
+    // any owner's daily recap.
+    RESEND_WEBHOOK_SECRET?: string;
   }
 }
 
