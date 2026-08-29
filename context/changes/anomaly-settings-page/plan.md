@@ -726,27 +726,27 @@ to backfill.
 
 #### Automated
 
-- [x] 1.1 Migration generates and applies: `npm run db:generate` then `npm run db:migrate`
-- [x] 1.2 Type checking passes: `npm run typecheck`
-- [x] 1.3 Linting passes: `npm run lint`
-- [x] 1.4 Unit tests pass: `npm test`
-- [x] 1.5 `src/lib/anomaly/thresholds.test.ts` exists and covers the zero-row path
-- [x] 1.6 A stored body that fails the schema degrades that rule to its defaults and logs
-- [x] 1.7 Detection is untouched: `detect.ts` has no diff
+- [x] 1.1 Migration generates and applies: `npm run db:generate` then `npm run db:migrate` — cd73548
+- [x] 1.2 Type checking passes: `npm run typecheck` — cd73548
+- [x] 1.3 Linting passes: `npm run lint` — cd73548
+- [x] 1.4 Unit tests pass: `npm test` — cd73548
+- [x] 1.5 `src/lib/anomaly/thresholds.test.ts` exists and covers the zero-row path — cd73548
+- [x] 1.6 A stored body that fails the schema degrades that rule to its defaults and logs — cd73548
+- [x] 1.7 Detection is untouched: `detect.ts` has no diff — cd73548
 
 #### Manual
 
-- [x] 1.8 `\d anomaly_settings` on the local DB no longer lists `is_default`
+- [x] 1.8 `\d anomaly_settings` on the local DB no longer lists `is_default` — cd73548
 
 ### Phase 2: Write path — store, Server Action, and D1 re-detect
 
 #### Automated
 
-- [ ] 2.1 Type checking passes: `npm run typecheck`
-- [ ] 2.2 Linting passes: `npm run lint`
-- [ ] 2.3 Unit tests pass: `npm test`
-- [ ] 2.4 Integration tests pass: `npm run test:integration`
-- [ ] 2.5 Cross-account isolation case is present and passing
+- [x] 2.1 Type checking passes: `npm run typecheck`
+- [x] 2.2 Linting passes: `npm run lint`
+- [x] 2.3 Unit tests pass: `npm test`
+- [x] 2.4 Integration tests pass: `npm run test:integration`
+- [x] 2.5 Cross-account isolation case is present and passing
 
 ### Phase 3: The surface — `/settings/anomalies`
 

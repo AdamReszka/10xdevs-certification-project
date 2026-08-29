@@ -1,9 +1,13 @@
-import { eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 
+import { and, eq } from "drizzle-orm";
+
+import { equalsDefaults } from "@/components/organisms/settings/anomaly-rules-view";
 import { DEFAULT_THRESHOLDS } from "@/db/defaults";
 import { anomalySettings, anomalyType, severity } from "@/db/schema";
 import { mergeRule } from "@/lib/anomaly/thresholds";
 import type { getDb } from "@/lib/db";
+import type { AnomalyRuleSaveValues } from "@/lib/validations/anomaly-settings";
 
 /**
  * Owner-scoped read/write of the per-rule anomaly configuration (S-14, FR-009 +
@@ -78,4 +82,97 @@ export async function readAnomalyRules({
       isOverridden: override !== undefined,
     };
   });
+}
+
+/**
+ * Persist one rule's COMPLETE configuration, or remove its override when the
+ * submitted values are the shipped defaults.
+ *
+ * THE PAYLOAD IS ALWAYS THE WHOLE RULE BODY, never a partial patch. `mergeRule`
+ * spreads one level deep, so a stored `inProgressHoursBySp` REPLACES the default
+ * map rather than merging into it — a payload carrying only the changed bucket
+ * would delete the other six and silently drop In-Progress aging to the nearest
+ * remaining budget. `anomalyRuleSaveSchema` enforces the completeness; this
+ * function relies on it.
+ *
+ * NORMALISATION FIRST: a save whose severity and body equal
+ * `DEFAULT_THRESHOLDS[type]` DELETES the row instead of writing one. That is what
+ * keeps "a row exists iff the rule is modified" true, so the badge, the Reset
+ * button and `isOverridden` never disagree.
+ *
+ * `onConflictDoUpdate` on `anomaly_settings_owner_type_uq`, never
+ * delete-then-insert: `lessons.md` names "future settings/threshold sets" by
+ * hand, and it is the only form safe against two saves racing. `updatedAt` is set
+ * EXPLICITLY inside the `set` because Drizzle's `$onUpdate` does not fire on the
+ * conflict path (`measurement/overrides.ts:171`, `recap-settings.ts:88`).
+ */
+export async function saveAnomalyRule({
+  db,
+  ownerId,
+  input,
+}: {
+  db: Db;
+  ownerId: string;
+  input: AnomalyRuleSaveValues;
+}): Promise<{ stored: boolean }> {
+  const thresholds = input.thresholds as Record<string, unknown>;
+
+  if (equalsDefaults(input.anomalyType, { severity: input.severity, thresholds })) {
+    await resetAnomalyRule({ db, ownerId, anomalyType: input.anomalyType });
+    return { stored: false };
+  }
+
+  const now = new Date();
+  await db
+    .insert(anomalySettings)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      anomalyType: input.anomalyType,
+      severityOverride: input.severity,
+      thresholds,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [anomalySettings.ownerId, anomalySettings.anomalyType],
+      set: {
+        severityOverride: input.severity,
+        thresholds,
+        // `$onUpdate` does not fire on the conflict path.
+        updatedAt: now,
+      },
+    });
+
+  return { stored: true };
+}
+
+/**
+ * Remove one rule's override, returning it to the shipped defaults.
+ *
+ * The `ownerId` predicate stays even though `(owner_id, anomaly_type)` is the
+ * whole key: every table carries its own owner predicate and never inherits
+ * scoping (S-10 F9). There is no RLS behind this.
+ *
+ * Deleting a row that does not exist is a NO-OP, not an error — resetting an
+ * already-default rule is a legitimate thing for the surface to do, and there is
+ * no id here to forge: both key parts come from the session and the enum.
+ */
+export async function resetAnomalyRule({
+  db,
+  ownerId,
+  anomalyType: type,
+}: {
+  db: Db;
+  ownerId: string;
+  anomalyType: AnomalyTypeValue;
+}): Promise<void> {
+  await db
+    .delete(anomalySettings)
+    .where(
+      and(
+        eq(anomalySettings.ownerId, ownerId),
+        eq(anomalySettings.anomalyType, type),
+      ),
+    );
 }
