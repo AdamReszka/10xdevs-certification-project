@@ -55,3 +55,46 @@ jobs:
         run: |
           export TOKEN_ENCRYPTION_KEY="$(openssl rand -base64 32)"
           npm run test:integration
+
+  # Worker size gate. `infrastructure.md:105` named this mitigation
+  # ("monitor bundle size in CI with `wrangler deploy --dry-run`") and it was
+  # never wired — which is why S-14 crossing the free plan's 3 MiB ceiling
+  # surfaced only at `wrangler versions upload`, after a green CI and a merged-
+  # looking PR. The limit applies to the WHOLE uploaded script AFTER gzip, so a
+  # dynamic import moves code around the bundle without shrinking the upload.
+  #
+  # WARN_KIB is a tripwire, not the platform limit (10,240 KiB on the paid
+  # plan). It sits well below it on purpose: the danger is never the ~82 KiB
+  # per-slice trend, it is one fat dependency landing in a single PR. Raise it
+  # deliberately, in a commit that says why.
+  #
+  # Secret-free: `deploy --dry-run` neither uploads nor needs an API token.
+  bundle-size:
+    runs-on: ubuntu-latest
+    env:
+      WARN_KIB: 5000
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build:cf
+      - name: Measure gzipped Worker size
+        run: |
+          set -euo pipefail
+          npx wrangler deploy --dry-run --outdir .worker-dryrun | tee /tmp/dryrun.txt
+          kib=$(sed -n 's/.*gzip: \([0-9.]*\) KiB.*/\1/p' /tmp/dryrun.txt | tail -1)
+          if [ -z "$kib" ]; then
+            echo "::error::Could not read the gzip size from wrangler output."
+            exit 1
+          fi
+          echo "### Worker bundle: ${kib} KiB gzip (warn at ${WARN_KIB}, platform limit 10240)" >> "$GITHUB_STEP_SUMMARY"
+          over=$(awk -v a="$kib" -v b="$WARN_KIB" 'BEGIN { print (a > b) ? 1 : 0 }')
+          if [ "$over" = "1" ]; then
+            echo "::error::Worker bundle is ${kib} KiB gzip, over the ${WARN_KIB} KiB tripwire. The paid ceiling is 10240 KiB; see context/foundation/infrastructure.md."
+            exit 1
+          fi
+          echo "Worker bundle: ${kib} KiB gzip — under the ${WARN_KIB} KiB tripwire."
