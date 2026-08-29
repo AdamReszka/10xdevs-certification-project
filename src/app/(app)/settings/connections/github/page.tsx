@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import GithubConnectForm from "@/components/organisms/setup/github-connect-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { githubCredential } from "@/db/schema";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -29,7 +29,7 @@ import { getDb } from "@/lib/db";
  * visible. Inherits `requireSession()` + `force-dynamic` from `(app)/layout.tsx`.
  */
 export default async function SettingsConnectGithubPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -37,7 +37,7 @@ export default async function SettingsConnectGithubPage() {
   const [existing] = await db
     .select({ githubLogin: githubCredential.githubLogin })
     .from(githubCredential)
-    .where(eq(githubCredential.ownerId, session.user.id))
+    .where(eq(githubCredential.ownerId, ownerId))
     .limit(1);
 
   return (

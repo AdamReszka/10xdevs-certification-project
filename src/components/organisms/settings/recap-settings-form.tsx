@@ -35,12 +35,19 @@ export default function RecapSettingsForm({
   enabled,
   timeZone,
   lastRecap,
+  isDemo = false,
 }: {
   sendHour: number;
   sendMinute: number;
   enabled: boolean;
   timeZone: string | null;
   lastRecap: LastRecapRow | null;
+  /**
+   * S-09: in demo the recap row is a stored preview with a terminal send status
+   * — there is no schedule behind it to change, and a fictional team has no
+   * inbox. The server refuses the save too.
+   */
+  isDemo?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,7 +98,7 @@ export default function RecapSettingsForm({
               id="recap-enabled"
               checked={isEnabled}
               onCheckedChange={setIsEnabled}
-              disabled={pending}
+              disabled={pending || isDemo}
             />
           </div>
 
@@ -102,7 +109,7 @@ export default function RecapSettingsForm({
               type="time"
               value={time}
               onChange={(e) => setTime(e.target.value)}
-              disabled={pending || !isEnabled}
+              disabled={pending || isDemo || !isEnabled}
               className="w-40"
             />
             {/* Not decoration — the 15-minute cron cannot honour a minute
@@ -122,9 +129,15 @@ export default function RecapSettingsForm({
       </Card>
 
       <div>
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending || isDemo}>
           {pending ? "Saving…" : "Save"}
         </Button>
+        {isDemo ? (
+          <p className="text-sm text-muted-foreground">
+            Ustawienia recapu są wyłączone w trybie demonstracyjnym — powyżej
+            widzisz zapisany podgląd, który nigdy nie został wysłany.
+          </p>
+        ) : null}
       </div>
     </form>
   );

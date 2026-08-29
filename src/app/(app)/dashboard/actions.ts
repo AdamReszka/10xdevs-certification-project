@@ -2,7 +2,6 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
   UnknownSprintError,
@@ -13,15 +12,18 @@ import {
   capacityOverrideSaveSchema,
   deliveredCorrectionSaveSchema,
 } from "@/lib/validations/measurement";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Mutations for the Dashboard "Today" availability tab — the lead's per-sprint
  * capacity override (FR-022) and delivered-SP correction (FR-023).
  *
- * Deliberately thin, mirroring `settings/absences/actions.ts`: `requireSession()`
- * + `getCloudflareContext().env` + `getDb(env)` inside the body, then delegate to
- * the request-context-free service core with `ownerId = session.user.id`. No
- * business logic here.
+ * Deliberately thin, mirroring `settings/absences/actions.ts`:
+ * `resolveWorkspace()` + `getCloudflareContext().env` + `getDb(env)` inside the
+ * body, then delegate to the request-context-free service core with the resolved
+ * `ownerId`. No business logic here. The resolver carries the session guard, so
+ * the override follows the workspace: in demo it writes the DEMO sprint's
+ * measurement record, and the real account's is untouched.
  *
  * THE SPRINT COMES FROM THE PAYLOAD, and it is the one the surface was DISPLAYING
  * (impl-review F2). Re-resolving "the active sprint" here would read a different
@@ -53,7 +55,7 @@ export type MeasurementMutationResult = { ok: true; id: string } | ActionFailure
 export async function setCapacityOverrideAction(
   input: unknown,
 ): Promise<MeasurementMutationResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = capacityOverrideSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -64,7 +66,6 @@ export async function setCapacityOverrideAction(
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     const { id } = await setCapacityOverrideService({
@@ -86,7 +87,7 @@ export async function setCapacityOverrideAction(
 export async function setDeliveredCorrectionAction(
   input: unknown,
 ): Promise<MeasurementMutationResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = deliveredCorrectionSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -97,7 +98,6 @@ export async function setDeliveredCorrectionAction(
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     const { id } = await setDeliveredCorrectionService({

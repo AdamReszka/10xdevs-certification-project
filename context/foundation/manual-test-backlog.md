@@ -71,8 +71,14 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
 - [ ] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
       obu dashboardach.
       *Źródło:* `plan.md:1288` + `MANUAL-CHECKLIST.md` sekcja G
-      *Uwaga bezpieczeństwa:* `db:seed:demo` **kasuje credentiale** ownera, którego
-      dostanie. Patrz §5 — konta na lokalnej bazie mają mylące nazwy.
+      **Zaktualizowane 2026-08-29 (S-09).** `npm run db:seed:demo` **już nie
+      istnieje** — skrypt `scripts/seed-dashboard.mjs` został usunięty razem z
+      wpisem w `package.json`. Dane demo wczytuje się teraz z aplikacji:
+      Ustawienia → Demo → „Zobacz demo". Dawne ostrzeżenie o kasowaniu
+      credentiali **przestało obowiązywać**: demo leży pod osobnym właścicielem
+      (`user.demo_of`), a „Usuń dane demo" kasuje wyłącznie jego wiersze —
+      prawdziwe tokeny są nietykalne, co pilnuje test integracyjny
+      `src/lib/demo/load.integration.test.ts`.
 
 - [ ] **11.15** Parasol manualnej weryfikacji — zamyka się **sam**, gdy padnie 6.6.
       Pozostałe 21 z 22 wierszy `MANUAL-CHECKLIST.md` jest już zamkniętych.
@@ -452,10 +458,11 @@ klasa błędu, którą zamykał S-15.
 ### 8.8 — 6.5 Seed demo pokazuje wszystkie trzy efekty
 
 *Źródło:* `MANUAL-CHECKLIST.md`, faza 6
-*Gdzie:* terminal, potem `/dashboard`.
-*Jak:* `OWNER_ID=<id konta z atrapami> npm run db:seed:demo`.
-⚠️ **Sprawdź last4 przed uruchomieniem** — patrz §5; `db:seed:demo` **kasuje
-credentiale** swojego ownera.
+*Gdzie:* `/settings/demo`, potem `/dashboard`.
+*Jak:* zaloguj się i kliknij „Zobacz demo".
+**Zaktualizowane 2026-08-29 (S-09).** Skrypt `db:seed:demo` został usunięty;
+ostrzeżenie o last4 i o kasowaniu credentiali **nie dotyczy** nowej ścieżki —
+demo ma własnego właściciela i nie sięga do prawdziwych danych konta.
 *Co musi być prawdą:*
   - Availability: **Erik Lund**, **Bob Rivera** i **Chen Wu** mają zaznaczone dni;
     „Next window" **nie zachodzi** na „This sprint" (ostatnia kolumna pierwszej

@@ -9,7 +9,6 @@ import SyncStatusBar from "@/components/organisms/dashboard/sync-status-bar";
 import VelocityEstimatePanel from "@/components/organisms/dashboard/velocity-estimate";
 import YesterdayActivity from "@/components/organisms/dashboard/yesterday-activity";
 import { toCapacityHeadline } from "@/components/organisms/dashboard/capacity-adjustments-view";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listAnomaliesForSprint } from "@/lib/anomaly/reader";
 import { toInboxAnomalies } from "@/lib/anomaly/inbox-view";
@@ -23,6 +22,7 @@ import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
+import { resolveWorkspace } from "@/lib/workspace";
 import { listRoster } from "@/lib/roster";
 import type {
   InboxAnomaly,
@@ -40,12 +40,13 @@ import type { BurndownSeries } from "@/lib/dashboard/burndown-series";
  * owner-scoped (app-enforced cross-account isolation; no RLS).
  */
 export default async function DashboardPage() {
-  const session = await requireSession();
+  // S-09: the owner AND the clock both come from the workspace. In demo `now` is
+  // the frozen anchor, so every reader below — the burndown, the "yesterday"
+  // bucket, the capacity window — describes the same coherent moment however
+  // long after loading the demo is viewed.
+  const { ownerId, now } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
-
-  const now = new Date();
   const sprint = await getActiveSprintRow(db, ownerId);
 
   // "Yesterday" is a calendar day in the TEAM's zone, not a UTC one — resolving

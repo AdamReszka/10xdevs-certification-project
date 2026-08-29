@@ -19,8 +19,7 @@
     "test:mutation": "stryker run",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:seed:demo": "node scripts/seed-dashboard.mjs"
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.121.0",

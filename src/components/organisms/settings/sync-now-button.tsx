@@ -15,13 +15,20 @@ import { syncNow, type SyncNowResult } from "@/lib/integrations/sync/actions";
  * own comment anticipated "a future 'sync now' button". It bypasses the
  * freshness due-check, because an explicit user request always syncs.
  *
+ * A demo-mode refusal (S-09) is rendered as its own explanation rather than as
+ * a failure: the server refused on purpose, and the lead needs to know why the
+ * button did nothing. Phase 4 disables the button in demo; this branch is what
+ * the surface does if it is reached anyway.
+ *
  * SKIPPED is rendered as a normal result, not a failure. "Nothing to sync — no
  * active sprint" and "another run holds the lease" are both answers the lead
  * should be able to read; showing them as errors would train them to ignore the
  * surface.
  */
 
-type Outcome = SyncNowResult["github"];
+/** The successful branch — the one that actually carries per-integration status. */
+type SyncRan = Extract<SyncNowResult, { github: unknown }>;
+type Outcome = SyncRan["github"];
 
 function describe(outcome: Outcome): string {
   switch (outcome.status) {
@@ -36,7 +43,7 @@ function describe(outcome: Outcome): string {
   }
 }
 
-export default function SyncNowButton() {
+export default function SyncNowButton({ isDemo = false }: { isDemo?: boolean }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<SyncNowResult | null>(null);
@@ -57,7 +64,7 @@ export default function SyncNowButton() {
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <Button onClick={handleClick} disabled={running}>
+        <Button onClick={handleClick} disabled={running || isDemo}>
           {running ? (
             <Loader2 className="size-4 animate-spin" aria-hidden />
           ) : (
@@ -67,7 +74,20 @@ export default function SyncNowButton() {
         </Button>
       </div>
 
-      {result ? (
+      {isDemo ? (
+        <p className="text-sm text-muted-foreground">
+          Synchronizacja jest wyłączona w trybie demonstracyjnym — dane demo nie
+          pochodzą z Jiry ani GitHuba. Wyjdź z demo, aby zsynchronizować swoje
+          konto.
+        </p>
+      ) : null}
+
+      {result?.ok === false ? (
+        <Alert>
+          <AlertTitle>Tryb demonstracyjny</AlertTitle>
+          <AlertDescription>{result.message}</AlertDescription>
+        </Alert>
+      ) : result ? (
         <Alert>
           <AlertTitle>Sync finished</AlertTitle>
           <AlertDescription>

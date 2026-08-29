@@ -16,7 +16,6 @@ import {
   resolveSprintSelection,
   toSprintOptions,
 } from "@/app/(app)/dashboard/sprint-detail/sprint-selection";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getActivityRollup } from "@/lib/dashboard/activity";
 import { getTicketAging } from "@/lib/dashboard/aging";
@@ -25,6 +24,7 @@ import { listRoster } from "@/lib/roster";
 import { listRecordedSprintsForOwner, type SprintMeasurement } from "@/lib/measurement/reader";
 import { getActiveSprintRow, getSprintRowByJiraId } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Dashboard "Sprint Detail" (S-10, FR-017) — aging report, Team Activity Matrix,
@@ -46,11 +46,10 @@ export default async function SprintDetailPage({
 }: {
   searchParams: Promise<{ sprint?: string | string[] }>;
 }) {
-  const session = await requireSession();
+  // S-09: owner and clock together — in demo, `now` is the frozen anchor.
+  const { ownerId, now } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
-  const now = new Date();
 
   const requestedRaw = (await searchParams).sprint;
   // A repeated `?sprint=` gives an array. First wins rather than erroring — a

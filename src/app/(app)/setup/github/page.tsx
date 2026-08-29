@@ -5,7 +5,7 @@ import GithubConnectForm from "@/components/organisms/setup/github-connect-form"
 import GithubConnectionStatus from "@/components/organisms/setup/github-connection-status";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { githubCredential, monitoredRepo } from "@/db/schema";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -15,7 +15,7 @@ import { getDb } from "@/lib/db";
  * repo count); the encrypted token is never decrypted here.
  */
 export default async function GithubSetupPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -25,7 +25,7 @@ export default async function GithubSetupPage() {
       tokenLast4: githubCredential.tokenLast4,
     })
     .from(githubCredential)
-    .where(eq(githubCredential.ownerId, session.user.id))
+    .where(eq(githubCredential.ownerId, ownerId))
     .limit(1);
 
   let repoCount = 0;
@@ -33,7 +33,7 @@ export default async function GithubSetupPage() {
     const repos = await db
       .select({ id: monitoredRepo.id })
       .from(monitoredRepo)
-      .where(eq(monitoredRepo.ownerId, session.user.id));
+      .where(eq(monitoredRepo.ownerId, ownerId));
     repoCount = repos.length;
   }
 

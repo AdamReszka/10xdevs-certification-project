@@ -2,16 +2,17 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { saveRecapSettings } from "@/lib/recap-settings";
 import { recapSettingsSchema } from "@/lib/validations/recap";
+import { demoRefusal } from "@/lib/demo/refusal";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * S-11 Daily Recap settings mutation (FR-018) — deliberately thin, mirroring
- * `settings/absences/actions.ts`. `requireSession()` + `getCloudflareContext().env`
+ * `settings/absences/actions.ts`. `resolveWorkspace()` + `getCloudflareContext().env`
  * + `getDb(env)` in the body, then straight to the request-context-free service
- * core with `ownerId = session.user.id`. No business logic here.
+ * core with the resolved `ownerId`. No business logic here.
  *
  * NO DETECTION RE-RUN, unlike the absence actions. Those re-detect because
  * recording an absence changes which anomalies are true; the send TIME affects
@@ -21,14 +22,17 @@ import { recapSettingsSchema } from "@/lib/validations/recap";
 /** Shared token-free failure shape; the client reads `message` regardless. */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_input" | "integration_unavailable";
+  error: "invalid_input" | "integration_unavailable" | "demo_mode";
   message: string;
 };
 
 export type RecapSettingsResult = { ok: true } | ActionFailure;
 
 export async function saveRecapSettingsAction(input: unknown): Promise<RecapSettingsResult> {
-  const session = await requireSession();
+  const { ownerId, isDemo } = await resolveWorkspace();
+  // The demo's recap row is a stored preview with a terminal send status; there
+  // is no schedule behind it to change, and a fictional team has no inbox.
+  if (isDemo) return demoRefusal();
 
   const parsed = recapSettingsSchema.safeParse(input);
   if (!parsed.success) {
@@ -43,7 +47,7 @@ export async function saveRecapSettingsAction(input: unknown): Promise<RecapSett
   const db = getDb(env);
 
   try {
-    await saveRecapSettings({ db, ownerId: session.user.id, input: parsed.data });
+    await saveRecapSettings({ db, ownerId, input: parsed.data });
     return { ok: true };
   } catch (err) {
     // Only the unexpected branch logs — there is no user-fixable domain error on
