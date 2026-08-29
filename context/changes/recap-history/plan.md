@@ -951,23 +951,23 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [x] 4.1 A valid signature passes; a tampered body fails
-- [x] 4.2 A timestamp outside the tolerance window fails
-- [x] 4.3 A multi-signature header passes when any entry matches
-- [x] 4.4 The real resolver with an empty env reports the missing secret
-- [x] 4.5 The parser's accept/ignore taxonomy holds
-- [x] 4.6 A Permanent bounce disables an owner with no settings row
-- [x] 4.7 A complaint records the reason and timestamp
-- [x] 4.8 An unknown address is a no-op
-- [x] 4.9 A demo owner is never disabled
-- [x] 4.10 A repeated delivery changes nothing
-- [x] 4.11 Re-enabling clears the reason; an hour-only save while disabled does not
-- [x] 4.12 Type checking passes
-- [x] 4.13 Linting passes
-- [x] 4.14 Unit suite passes
-- [x] 4.15 Integration suite passes
-- [x] 4.16 E2E suite still passes
-- [x] 4.17 The Worker bundle-size CI gate still passes
+- [x] 4.1 A valid signature passes; a tampered body fails — 2a79172
+- [x] 4.2 A timestamp outside the tolerance window fails — 2a79172
+- [x] 4.3 A multi-signature header passes when any entry matches — 2a79172
+- [x] 4.4 The real resolver with an empty env reports the missing secret — 2a79172
+- [x] 4.5 The parser's accept/ignore taxonomy holds — 2a79172
+- [x] 4.6 A Permanent bounce disables an owner with no settings row — 2a79172
+- [x] 4.7 A complaint records the reason and timestamp — 2a79172
+- [x] 4.8 An unknown address is a no-op — 2a79172
+- [x] 4.9 A demo owner is never disabled — 2a79172
+- [x] 4.10 A repeated delivery changes nothing — 2a79172
+- [x] 4.11 Re-enabling clears the reason; an hour-only save while disabled does not — 2a79172
+- [x] 4.12 Type checking passes — 2a79172
+- [x] 4.13 Linting passes — 2a79172
+- [x] 4.14 Unit suite passes — 2a79172
+- [x] 4.15 Integration suite passes — 2a79172
+- [x] 4.16 E2E suite still passes — 2a79172
+- [x] 4.17 The Worker bundle-size CI gate still passes — 2a79172
 
 #### Manual
 
