@@ -1,10 +1,10 @@
 ---
 change_id: recap-history
 title: Recap history view with sprint-bounded auto-purge
-status: implemented
+status: archived
 created: 2026-08-29
 updated: 2026-08-29
-archived_at: null
+archived_at: 2026-08-29T21:21:14Z
 ---
 
 ## Notes
