@@ -135,3 +135,30 @@ run it (it is an optimistic cookie check with no DB access by design — see its
 own SECURITY NOTE), so the candidates are the `(app)` layout guard, the
 `/dashboard` page itself, or the two client forms' push targets. Only the first
 two cover a user who navigates directly to `/dashboard`.
+
+## Decision — 2026-08-29 (how this change gets shaped)
+
+Two questions were put to the owner before planning; they split across two steps.
+
+- **To `/10x-frame` — the WHAT.** Does a newly signed-up user belong in the setup
+  wizard at all, given that the PRD promises the same person a demo path that
+  exists precisely to avoid the wizard's GitHub PAT + Jira token wall? Access
+  Control ("on success, the user lands in the setup wizard") and US-02 / the demo
+  Success Criterion ("a new visitor signs up, clicks Load demo team, and
+  explores… without ever touching real Jira/GitHub") are BOTH primary, and a hard
+  post-signup redirect puts the second one behind the wall it was written to
+  bypass. Concretely verified: a fresh account reaches demo through nav →
+  Settings → `/settings/demo`, so a redirect placed in the `(app)` layout guard
+  would also catch `/settings/demo` and trap the visitor in the wizard with no
+  route to the demo. Owner chose the full framing round rather than settling this
+  inline. **No routing mechanism is pre-committed** — the three shapes sketched
+  when the question was asked (signup-only push + dashboard prompt; global guard
+  with an allowlist; something else) are inputs to the frame, not its answer.
+- **Deferred to `/10x-plan` — the mechanical half.** Whether the predicate is
+  handed `workspace.ownerId` or `realOwnerId`, and where the call site sits. The
+  owner deliberately left this to planning; it is only answerable once the frame
+  fixes whether a demo visitor is prompted at all.
+
+Research was deliberately SKIPPED: the surface is five files
+(`signup-form.tsx`, `login-form.tsx`, `(auth)/layout.tsx`, `(app)/layout.tsx`,
+`lib/onboarding.ts`), all read and recorded in the 2026-08-29 update above.
