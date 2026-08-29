@@ -367,7 +367,7 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Manual
 
-- [ ] 1.5 The three readers return expected shapes against a real repo+project
+- [x] 1.5 The three readers return expected shapes against a real repo+project — manual 2026-08-29
 
 ### Phase 2: Credential Read-Back Seam + Roster/Cadence Service Core
 
@@ -422,6 +422,6 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 
 #### Manual
 
-- [ ] 5.5 Continue on the Jira card lands on `/setup/team`
+- [x] 5.5 Continue on the Jira card lands on `/setup/team` — manual 2026-08-29
 - [ ] 5.6 Completing roster + cadence makes `isOnboardingComplete` true and routes to `/dashboard`
 - [x] 5.7 Coordination note filed with `onboarding-routing` confirming predicate name/location/shape

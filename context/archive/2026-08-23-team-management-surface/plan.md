@@ -900,7 +900,7 @@ No schema migration. Two behavioural migrations to be aware of:
 - [x] 5.3 Settings → Team reachable from the nav and renders the roster
 - [x] 5.4 Active tab is visually distinct on both tabs
 - [ ] 5.5 A track change from Settings reaches the sub-burndowns after a sync
-- [ ] 5.6 `/setup/team` still works end-to-end for a fresh account
+- [x] 5.6 `/setup/team` still works end-to-end for a fresh account — manual 2026-08-29
 - [ ] 5.7 Tablet width: grid scrolls, controls reachable (closes S-04 row 4.6)
 
 ### Phase 6: Documentation obligations
