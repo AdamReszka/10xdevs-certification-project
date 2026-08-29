@@ -1,10 +1,10 @@
 ---
 change_id: demo-mode
 title: Demo mode
-status: implemented
+status: archived
 created: 2026-08-28
 updated: 2026-08-29
-archived_at: null
+archived_at: 2026-08-29T09:41:00Z
 ---
 
 ## Notes

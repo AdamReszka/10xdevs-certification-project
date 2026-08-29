@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-28
+updated: 2026-08-29
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -297,7 +297,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   nothing recorded is).
 
 - **Deferred:** manual verification
-  (`context/archive/2026-08-29-demo-mode/MANUAL-CHECKLIST.md`, 5 rows). The
+  (`context/archive/2026-08-28-demo-mode/MANUAL-CHECKLIST.md`, 5 rows). The
   irreversible one — real GitHub + Jira tokens surviving load-then-reset through
   the UI — is asserted at row level by
   `src/lib/demo/load.integration.test.ts`.
@@ -843,4 +843,5 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-10: user can open Dashboard "Sprint Detail" and see: (1) a workflow aging report — tickets sorted by time-since-last-movement with cumulative time-in-each-status shown inline; (2) Team Activity Matrix — Developer × Day with commit, line, PR, and review counts; (3) per-technology sub-burndowns (SP burndown filtered by frontend / backend / mobile / QA track).** — Archived 2026-08-26 → `context/archive/2026-08-21-dashboard-sprint-detail/`. Lesson: null is not zero — an unmeasured value rendered as 0 reads as a real measurement.
 - **S-15: the owner can review, edit, merge and remove team members after first run, from a **Settings tab** — without re-entering the setup wizard. Re-import reconciles against the existing roster instead of only appending.** — Archived 2026-08-26 → `context/archive/2026-08-23-team-management-surface/`. Lesson: delete-then-insert is only safe for tables with no hand-entered children. NOTE: no impl-review on disk; PR #49 was reviewed on GitHub.
 - **S-23: the lead sees the team's capacity in man-days next to the sprint's delivered story points, and the relation between them — so 100% reliability at full strength stops looking identical to 100% at half strength. Each closed sprint leaves a durable measurement record, and past sprints are normalised to full capacity before they are averaged.** — Archived 2026-08-28 → `context/archive/2026-08-27-capacity-in-man-days/`. Lesson: —.
+- **S-09: user can load a single realistic mixed-state demo dataset (healthy-flow and crisis signals combined) and explore Dashboard "Today" with at least 4 anomaly types from the 8 rules plus Dashboard "Sprint Detail" — all without connecting real Jira or GitHub credentials; "Reset demo data" returns the user to the uninitialized state.** — Archived 2026-08-29 → `context/archive/2026-08-28-demo-mode/`. Lesson: the missing DISTINCTION, not the missing feature — three prior incidents (`jira_sprint_id=1001`, the `alice-kim` roster keys, seeded anomalies resolved by the reconcile) were each patched per-table at the consumer; none introduced the concept the schema lacked, so the same root produced a fourth symptom every slice.
 - **S-13: at refinement time the lead picks tickets to check — from the monitored project's Jira backlog, by ticket key, or pasted as text — and each one comes back with a readiness verdict: "DOR met", or the specific gaps blocking it, each stated in that ticket's own terms. Gap count follows the ticket, not a quota. A verdict may also be that the ticket should not enter the sprint at all (FR-021). Session saved for later review.** — Archived 2026-08-28 → `context/archive/2026-08-26-refinement-helper-ai/`. Lesson: —.
