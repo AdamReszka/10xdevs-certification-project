@@ -113,10 +113,11 @@ export async function loadDemo({
     // Both screens are in demo scope, so both must have something to show —
     // and neither may call out. The refinement verdicts are stored results
     // (no Anthropic client is ever constructed in demo), and the recap row is
-    // written with a TERMINAL send status so no sender can claim it.
+    // written with a TERMINAL send status so no sender can claim it. There are
+    // five of them (S-12) so the history surface has a list, not a single row.
     await tx.insert(refinementRun).values(fixture.refinementRun);
     await tx.insert(refinementTicketVerdict).values(fixture.refinementVerdicts);
-    await tx.insert(dailyRecap).values(fixture.dailyRecap);
+    await tx.insert(dailyRecap).values(fixture.dailyRecaps);
   });
 
   // AFTER the commit, never inside it. `detectAnomalies` reads a snapshot of the

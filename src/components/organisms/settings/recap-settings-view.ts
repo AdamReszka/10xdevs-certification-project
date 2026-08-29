@@ -7,22 +7,15 @@
  * `absence-calendar-view.ts` and `roster-merge.ts`.
  */
 
-export type LastRecapRow = {
-  recapDay: string;
-  sendStatus: "PENDING" | "SENT" | "FAILED";
-  /** ISO instant, or null when the send never completed. */
-  sentAt: string | null;
-  attemptCount: number;
-  /** ISO instant the current attempt claimed the row; null on an unclaimed one. */
-  lastAttemptAt: string | null;
-};
+import { classifyRecapSend, MAX_ATTEMPTS, type RecapSendRow } from "./recap-history-view";
 
 /**
- * The claim TTL from `recap/send.ts`. A PENDING row older than this was orphaned
- * by a crashed invocation and the next cron tick reclaims it — so the copy must
- * stop saying "being sent right now".
+ * The last-send row this card renders. An alias, not a second declaration:
+ * S-12 moved the shape — and the send-state mapping over it — into
+ * `recap-history-view.ts`, so the history list and this card cannot drift apart
+ * about the same row.
  */
-const CLAIM_TTL_MS = 10 * 60 * 1000;
+export type LastRecapRow = RecapSendRow;
 
 /**
  * The one "did it actually work" line.
@@ -37,24 +30,21 @@ export function describeLastSend(row: LastRecapRow | null, now: Date = new Date(
     return "No recap has been sent yet. The first one goes out at your chosen time, once Jira has an active sprint.";
   }
 
-  switch (row.sendStatus) {
+  // The five-way split — PENDING in-flight vs stalled, FAILED retryable vs
+  // exhausted — is `classifyRecapSend`'s, shared with the history list. Only the
+  // wording is this card's, because it speaks about "the last one" and the list
+  // speaks about "this one".
+  switch (classifyRecapSend(row, now)) {
     case "SENT":
       return `Last recap sent for ${row.recapDay}.`;
-    case "PENDING": {
-      // Two different situations wear the same status. Inside the claim TTL the
-      // send really is in flight; past it, the Worker died mid-send and the row
-      // is waiting to be reclaimed. Reporting the second as the first is how a
-      // stalled recap reads as healthy indefinitely (impl-review F6).
-      const claimedAt = row.lastAttemptAt ? Date.parse(row.lastAttemptAt) : NaN;
-      const stalled = Number.isNaN(claimedAt) || now.getTime() - claimedAt >= CLAIM_TTL_MS;
-      return stalled
-        ? `The recap for ${row.recapDay} stalled mid-send. SprintFlow will retry it within 15 minutes.`
-        : `A recap for ${row.recapDay} is being sent right now.`;
-    }
-    case "FAILED":
-      return row.attemptCount >= 3
-        ? `The recap for ${row.recapDay} could not be delivered after 3 attempts. The next one is tomorrow.`
-        : `The recap for ${row.recapDay} failed on attempt ${row.attemptCount}. SprintFlow will try again within 15 minutes.`;
+    case "PENDING_STALLED":
+      return `The recap for ${row.recapDay} stalled mid-send. SprintFlow will retry it within 15 minutes.`;
+    case "PENDING_IN_FLIGHT":
+      return `A recap for ${row.recapDay} is being sent right now.`;
+    case "FAILED_EXHAUSTED":
+      return `The recap for ${row.recapDay} could not be delivered after ${MAX_ATTEMPTS} attempts. The next one is tomorrow.`;
+    case "FAILED_RETRYABLE":
+      return `The recap for ${row.recapDay} failed on attempt ${row.attemptCount}. SprintFlow will try again within 15 minutes.`;
   }
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -123,8 +124,17 @@ export default function RecapSettingsForm({
         <CardHeader>
           <CardTitle className="text-base">Last send</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-3">
           <p className="text-sm text-muted-foreground">{describeLastSend(lastRecap)}</p>
+          {/* S-12 (FR-019). The archive is unreachable without a link from the
+              page that owns the concept — this card is the only place the owner
+              is already thinking about sends. */}
+          <Link
+            href="/settings/recap/history"
+            className="w-fit text-sm underline-offset-4 hover:underline"
+          >
+            See all past recaps →
+          </Link>
         </CardContent>
       </Card>
 

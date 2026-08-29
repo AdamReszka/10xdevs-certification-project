@@ -190,24 +190,43 @@ describe("loadDemo — the two screens that must not call out", () => {
     expect(verdicts.find((v) => v.verdict === "DOR_MET")!.gaps).toEqual([]);
   });
 
-  it("saves a recap row with a TERMINAL send status", async () => {
+  it("saves a recap HISTORY: five terminal rows on distinct days, exactly one FAILED", async () => {
     const realOwnerId = await seedRealOwner();
     const { demoOwnerId } = await loadDemo({ db, realOwnerId, now: ANCHOR });
 
-    const [recap] = await db
+    const recaps = await db
       .select()
       .from(schema.dailyRecap)
       .where(eq(schema.dailyRecap.ownerId, demoOwnerId));
 
-    expect(recap).toBeDefined();
-    // Load-bearing TWICE (plan-review F5): it keeps the row out of the sender's
-    // reach, AND it keeps the one browser clock in the tree — `describeLastSend`
-    // compares Date.now() on the PENDING branch alone — out of the demo. A
-    // PENDING demo recap would be a frozen-clock regression.
-    expect(recap.sendStatus).not.toBe("PENDING");
-    expect(recap.sendStatus).toBe("SENT");
-    expect(recap.payload).not.toBeNull();
-    expect(recap.renderedMessage?.subject).toBeTruthy();
+    // S-12: one row proves the page renders; a list is what US-02 asks the demo
+    // to show in one sitting.
+    expect(recaps).toHaveLength(5);
+
+    // Load-bearing TWICE (S-11 plan-review F5): it keeps the rows out of the
+    // sender's reach, AND it keeps the one browser clock in the tree —
+    // `classifyRecapSend` compares Date.now() on the PENDING branch alone — out
+    // of the demo. A PENDING demo recap would be a frozen-clock regression.
+    for (const recap of recaps) {
+      expect(recap.sendStatus).not.toBe("PENDING");
+      // Legible rather than blank: the FAILED row keeps its payload and its
+      // frozen bytes too, so the drill-in has something to show.
+      expect(recap.payload).not.toBeNull();
+      expect(recap.renderedMessage?.subject).toBeTruthy();
+    }
+
+    // A failed send is the most valuable thing on the archive — it is what the
+    // list exists to let the lead notice.
+    expect(recaps.filter((r) => r.sendStatus === "FAILED")).toHaveLength(1);
+
+    // `daily_recap_owner_day_uq(owner_id, recap_day)` would reject a repeat, so
+    // this asserts the fixture's day offsets are genuinely distinct rather than
+    // relying on the insert to have failed loudly.
+    expect(new Set(recaps.map((r) => r.recapDay)).size).toBe(5);
+
+    // A FAILED row never left, so it has no `sent_at`. Handing it one would make
+    // the history list's timestamp column lie.
+    expect(recaps.find((r) => r.sendStatus === "FAILED")!.sentAt).toBeNull();
   });
 });
 
@@ -234,6 +253,29 @@ describe("resetDemo", () => {
 
     const demoUser = await db.select({ id: user.id }).from(user).where(eq(user.id, demoOwnerId));
     expect(demoUser).toHaveLength(0);
+  });
+
+  it("takes the whole recap archive with it", async () => {
+    // S-12 named explicitly rather than left to the sweep above: the archive is
+    // the one demo surface whose row COUNT grew, and FR-008's "reset returns the
+    // user to the uninitialized state" has to hold for all five, not for the one
+    // the fixture used to write.
+    const realOwnerId = await seedRealOwner();
+    const { demoOwnerId } = await loadDemo({ db, realOwnerId, now: ANCHOR });
+
+    const before = await db
+      .select()
+      .from(schema.dailyRecap)
+      .where(eq(schema.dailyRecap.ownerId, demoOwnerId));
+    expect(before).toHaveLength(5);
+
+    expect(await resetDemo({ db, realOwnerId })).toBe(true);
+
+    const after = await db
+      .select()
+      .from(schema.dailyRecap)
+      .where(eq(schema.dailyRecap.ownerId, demoOwnerId));
+    expect(after).toHaveLength(0);
   });
 
   it("reports false when there is no demo to remove", async () => {

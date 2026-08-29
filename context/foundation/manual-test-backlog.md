@@ -1382,3 +1382,136 @@ zostało już pokryte gdzie indziej.
       sprawdzianem, że predykat naprawdę bramkuje routing, a nie tylko istnieje.
 
 ---
+
+## 14. S-12 `recap-history` — otwarte (2026-08-29)
+
+FR-019: przeglądanie historii daily recapów + automatyczne czyszczenie starszych
+niż bieżący sprint plus dwa poprzednie. Kod dowieziony w fazach 1–3
+(`1855031` → faza 3); faza 4 (webhook bounce/complaint Resenda) jest
+**odcinalna z założenia** i jeszcze nie ruszona.
+
+Pięć wierszy blokujących (14.A–14.E) jest **tutaj w całości** — pełna, rozpisana
+wersja tych samych pięciu leży w
+`context/changes/recap-history/MANUAL-CHECKLIST.md`. Dalej (14.1–14.6) reszta z
+`plan.md`: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
+
+### Blokujące (odpowiadają wierszom 2.11 i 3.11–3.15 w `plan.md`)
+
+- [x] **14.A** (1.11) `daily_recap` przeżywa zmianę projektu Jira. **ZALICZONE 2026-08-29.**
+      *Gdzie:* terminal, lokalna baza Supabase.
+      *Co zrobić:* `psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -c '\d daily_recap'`.
+      *Co musi być prawdą:* `sprint_id` jest **nullable**; FK
+      `daily_recap_sprint_id_sprint_id_fk` ma **`ON DELETE SET NULL`**; indeksu
+      `daily_recap_owner_sprint_idx` **nie ma**.
+      *Dlaczego to łapie:* przy `CASCADE` przełączenie monitorowanego projektu
+      Jira kasowało **całe archiwum recapów** ownera i dzisiejszy wiersz-claim,
+      co dawało **drugiego maila za ten sam dzień**.
+
+- [ ] **14.B** (2.11) Pełny cykl crona loguje purge i nie psuje pozostałych kroków.
+      *Gdzie:* terminal + `/settings/connections`, konto z prawdziwymi credentialami.
+      *Co zrobić:* wywołaj pełny cykl crona (sync → detekcja → recap → pomiar
+      sprintu) i przeczytaj log cyklu.
+      *Co musi być prawdą:* w logu jest **licznik purge** (**0 to poprawny
+      wynik** przy mniej niż trzech zapisanych sprintach); **wszystkie
+      pozostałe kroki** cyklu kończą się jak wcześniej; w „Recent sync attempts"
+      jest nowy wiersz.
+      *Dlaczego to łapie:* purge to jedyny krok tego slice'a, który **trwale
+      kasuje wiersze**, i chodzi co 15 minut. Wyjątek z niego może zabrać kroki
+      wykonywane po nim — a te wysyłają maile i zamykają pomiar sprintu.
+      „0 usuniętych" jest wynikiem pozytywnym: model świadomie zawodzi w stronę
+      **zachowania danych**.
+
+- [ ] **14.C** (3.11 + 3.12 + 3.13) Historia jest osiągalna, kompletna i otwiera się.
+      *Gdzie:* `/settings/recap` → `/settings/recap/history` → wiersz listy.
+      Konto z prawdziwymi recapami.
+      *Co zrobić:* Settings → **Daily recap** → w karcie *Last send* kliknij
+      **„See all past recaps →"** → kliknij dzień w pierwszym wierszu.
+      *Co musi być prawdą:* link istnieje; zakładka **Daily recap** zostaje
+      podświetlona na **obu** nowych trasach; lista jest **od najnowszego dnia**
+      i pokazuje **wszystkie** recapy, także nieudane; każdy wiersz ma dzień,
+      odznakę, godzinę i zdanie „co się stało"; kliknięcie otwiera treść maila
+      taką, jaka poszła; **linki Jira / GitHub w mailu są klikalne i otwierają
+      nową kartę**.
+      *Dlaczego to łapie:* brak linku z `/settings/recap` czyni powierzchnię
+      nieosiągalną — istnieje pod adresem, ale nikt jej nie znajdzie. Lista
+      wyłącznie z udanymi wysyłkami byłaby gorsza od braku listy: nieudany recap
+      to jedyna rzecz, na którą lead ma zareagować. Klikalność linków jest
+      **nieoczywista** — treść leci w `<iframe sandbox>`, a pusty sandbox blokuje
+      nawigację; bez tokenów `allow-popups` /
+      `allow-popups-to-escape-sandbox` linki wyglądałyby normalnie i **nie
+      robiłyby nic**, czyli piąty atrybut z FR-014 byłby martwy.
+
+- [ ] **14.D** 🔒 (3.14) Cudzy recap zwraca **404**, a nie pustą stronę.
+      *Gdzie:* `/settings/recap/history/<id>` z podmienionym `id`.
+      *Co zrobić:* wejdź z (a) losowym, nieistniejącym UUID-em i (b) prawdziwym
+      `id` recapu **innego konta** (`select id, owner_id, recap_day from
+      daily_recap order by recap_day desc limit 10;`).
+      *Co musi być prawdą:* **oba** przypadki dają **tę samą stronę 404**;
+      w żadnym nie widać dnia, statusu ani treści maila.
+      *Dlaczego to łapie:* pod tymi tabelami **nie ma RLS** — predykat `owner_id`
+      **jest** izolacją. Zapomniany predykat nie wywala się głośno: pokazuje
+      cudzy recap z nazwami zadań, nazwiskami ludzi i linkami do cudzej Jiry.
+      Osobno: inny komunikat dla cudzego wiersza niż dla nieistniejącego sam w
+      sobie **potwierdzałby istnienie wiersza** komuś, kto nie ma prawa go
+      czytać.
+
+- [ ] **14.E** (3.15) Demo pokazuje historię, a nie jeden wiersz.
+      *Gdzie:* `/settings/demo` → **„Zobacz demo"** → `/settings/recap/history`.
+      *Co zrobić:* załaduj demo → Settings → Daily recap → **„See all past
+      recaps →"** → otwórz wiersz **Failed** → wróć, zresetuj demo, wejdź
+      ponownie na listę.
+      *Co musi być prawdą:* **pięć** recapów na **pięciu różnych dniach**, od
+      najnowszego; **dokładnie jeden** *Failed*, reszta *Sent*; **żaden** wiersz
+      nie ma „Sending" ani „Stalled"; wiersz *Failed* **otwiera się i pokazuje
+      treść maila**; po resecie lista pokazuje „No recaps yet…", a nie błąd.
+      *Dlaczego to łapie:* demo to jedyna droga, którą ktoś bez integracji
+      zobaczy tę powierzchnię (US-02), a lista z jednym elementem wygląda tak
+      samo jak zepsute sortowanie. „Sending"/„Stalled" w demo byłoby **regresją
+      zamrożonego zegara** — te dwa stany porównują `Date.now()` z
+      `last_attempt_at`, więc pojawiłyby się dopiero po czasie i tylko u części
+      oglądających.
+
+### Odłożone — faza 4 (webhook Resenda), jeszcze nie zaimplementowana
+
+Wiersze **4.18–4.22** z `plan.md` są **nieosiągalne, dopóki faza 4 nie zostanie
+dowieziona**. Nie są długiem — są przed frontem robót. Zostają tu, żeby nie
+zniknęły, gdy faza 4 ruszy.
+
+- [ ] **14.1** (4.18) Endpoint webhooka istnieje w panelu Resenda, jest
+      zasubskrybowany na **oba** zdarzenia (bounce + complaint), a sekret
+      `whsec_…` jest wgrany przez `wrangler secret put`.
+      *Dlaczego to łapie:* to zadanie **operatorskie**, nie programistyczne —
+      kod może być bez zarzutu, a webhook i tak nigdy nie dostanie żądania.
+
+- [ ] **14.2** (4.19) Testowa dostawa z panelu Resenda zwraca **200**,
+      a żądanie z **podmienionym podpisem** zwraca **401**.
+      *Dlaczego to łapie:* podpis jest **jedyną** autentykacją tego endpointu.
+      Wszystko po nim pochodzi z payloadu, który obcy człowiek chętnie
+      sfałszuje — łącznie z adresem e-mail, którym da się wyłączyć cudzy recap.
+
+- [ ] **14.3** (4.20) Wysyłka na `bounced@resend.dev` wyłącza daily recap i
+      `/settings/recap` **mówi dlaczego**.
+      *Dlaczego to łapie:* wyłączenie bez wyjaśnienia jest gorsze od
+      niewyłączenia — owner włączy je z powrotem w tę samą pętlę.
+
+- [ ] **14.4** (4.21) Ponowne włączenie recapu **czyści** wyjaśnienie.
+      *Dlaczego to łapie:* powód, który przeżył swoją naprawę, jest aktywnie
+      mylący — dokładnie ta sama zasada, co przy notatkach w
+      `context/manual-tests/`.
+
+- [ ] **14.5** (4.22) `MANUAL-CHECKLIST.md` tego slice'a jest podpisana w całości.
+      *Dlaczego to łapie:* to jedyny wiersz, który pilnuje, że pozostałe zostały
+      naprawdę wykonane, a nie odhaczone hurtem przy archiwizacji.
+
+### Świadomie NIE zrobione w tym slice'ie
+
+- [ ] **14.6** Retencja **surowych danych sync** (tickety, PR-y, commity,
+      historia statusów) — non-goal z PRD mówi o tym samym oknie „bieżący sprint
+      + 2 poprzednie", ale FR-019 i roadmapowy zakres S-12 nazywają **tylko
+      recapy**. Tabele GitHuba nie mają żadnego FK do sprintu
+      (`github_commit` / `github_pull_request` wiszą pod `monitored_repo`), więc
+      ich czyszczenie wymaga własnej reguły datowej — to osobna decyzja, nie
+      dokładka do tej.
+      *Co musi być prawdą, gdy ktoś to podejmie:* reguła datowa jest zapisana
+      **zanim** powstanie kod kasujący, bo to kolejny krok, który trwale usuwa
+      wiersze.

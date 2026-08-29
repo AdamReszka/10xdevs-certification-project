@@ -928,16 +928,16 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [ ] 3.1 `describeRecapRow` covers all five status shapes
-- [ ] 3.2 `recap-settings-view.test.ts` passes unchanged after the refactor
-- [ ] 3.3 An unknown payload `schemaVersion` falls back to the row's own columns
-- [ ] 3.4 The demo load writes the expected recap rows, all terminal, one FAILED
-- [ ] 3.5 A demo reset removes them all
-- [ ] 3.6 E2E suite still passes
-- [ ] 3.7 Type checking passes
-- [ ] 3.8 Linting passes
-- [ ] 3.9 Unit suite passes
-- [ ] 3.10 Integration suite passes
+- [x] 3.1 `describeRecapRow` covers all five status shapes
+- [x] 3.2 `recap-settings-view.test.ts` passes unchanged after the refactor
+- [x] 3.3 An unknown payload `schemaVersion` falls back to the row's own columns
+- [x] 3.4 The demo load writes the expected recap rows, all terminal, one FAILED
+- [x] 3.5 A demo reset removes them all
+- [x] 3.6 E2E suite still passes
+- [x] 3.7 Type checking passes
+- [x] 3.8 Linting passes
+- [x] 3.9 Unit suite passes
+- [x] 3.10 Integration suite passes
 
 #### Manual
 
