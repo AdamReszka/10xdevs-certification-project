@@ -221,14 +221,58 @@ export {};
 > Secrets are encrypted at rest and injected into the Worker at runtime via `env`. They never appear in `wrangler.toml`, logs, or any client payload.
 
 - [x] **[HUMAN]** `DATABASE_URL` secret set via `wrangler secret put`
-- [x] **[HUMAN]** `SUPABASE_SERVICE_ROLE_KEY` secret set via `wrangler secret put`
-- [ ] **[HUMAN]** Set auth secret once auth library is chosen (NextAuth or Better Auth):
-  ```bash
-  npx wrangler secret put NEXTAUTH_SECRET
-  # or: npx wrangler secret put BETTER_AUTH_SECRET
-  # Generate: openssl rand -base64 32
-  ```
-- [ ] Verify all secrets registered: `npx wrangler secret list`
+- [x] ~~`SUPABASE_SERVICE_ROLE_KEY` secret~~ — **removed 2026-08-29.** Nothing reads
+  it: `@supabase/supabase-js` is not a dependency, no code constructs a Supabase
+  client, and the app reaches Postgres solely through the `HYPERDRIVE` binding.
+  It was also revoked upstream during the rotation below, so the value was dead.
+- [x] **[HUMAN]** `BETTER_AUTH_SECRET` set — Better Auth was the library chosen (F-01)
+- [x] Verify all secrets registered: `npx wrangler secret list`
+
+### Secrets as of 2026-08-29 (all seven active on the deployed version)
+
+`ANTHROPIC_API_KEY`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `DATABASE_URL`,
+`RESEND_API_KEY`, `RESEND_FROM_ADDRESS`, `TOKEN_ENCRYPTION_KEY`.
+
+⚠️ **`RESEND_FROM_ADDRESS` is a secret although it is not secret.** Plain `vars`
+resolve to `null` in `getCloudflareContext().env` on this OpenNext version, and
+the `vars` block in `wrangler.jsonc` is authoritative — a value added in the
+dashboard is overwritten on the next deploy. The same reasoning applies to
+`BETTER_AUTH_URL`.
+
+⚠️ **`wrangler secret put` fails when the latest version is not deployed**
+("Secret edit failed… the latest version of your Worker isn't currently
+deployed"). Each secret write uploads a new version; if one is left undeployed,
+the next write is refused. Use `wrangler versions secret put <KEY>` and then
+`wrangler versions deploy <id>@100`. A secret that sits in an undeployed version
+is not in effect, so `wrangler secret list` alone does not prove production has it.
+
+### Rotation of 2026-08-29
+
+Credentials were exposed to a session transcript by an editor selection and were
+rotated. Recorded because two findings outlive the incident.
+
+**Production had never worked.** The database was 16 migrations behind (3 of 19
+applied, 22 tables of 27) and three secrets the code requires were absent —
+including `TOKEN_ENCRYPTION_KEY`, whose absence makes `src/lib/crypto.ts` throw
+on every credential read or write. Zero rows existed in `user`,
+`github_credential`, `jira_credential`, `sprint` or `anomaly`. Fixed the same
+day: migrations applied through the pooler, secrets set, version deployed, and
+`/api/auth/get-session` verified returning `200` — proof the Worker reaches
+Postgres through Hyperdrive.
+
+**The direct database host is unreachable from an IPv4 network.**
+`db.<ref>.supabase.co` publishes AAAA only. Migrating production from a
+developer machine needs the pooler:
+`postgresql://postgres.<ref>@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`
+(this project is in West EU / Ireland). Cloudflare is unaffected, so the
+Hyperdrive origin still points at the direct host.
+
+Local and production now hold **different** `TOKEN_ENCRYPTION_KEY` values, which
+is deliberate: a local dump cannot be restored into production, because the
+production key will not decrypt locally-encrypted tokens. Rotating that key
+without re-encrypting orphans every stored token, so
+`scripts/rotate-token-encryption-key.ts` exists to do it in one transaction with
+verification before commit.
 
 ---
 
