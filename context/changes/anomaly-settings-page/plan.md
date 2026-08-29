@@ -771,8 +771,8 @@ to backfill.
 
 #### Automated
 
-- [x] 4.1 Both files exist and the checklist has 4 rows
-- [x] 4.2 `roadmap.md` no longer contains "next detection cycle" in the S-14 entry
+- [x] 4.1 Both files exist and the checklist has 4 rows — 4168cad
+- [x] 4.2 `roadmap.md` no longer contains "next detection cycle" in the S-14 entry — 4168cad
 
 #### Manual
 
