@@ -3,13 +3,13 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import AbsenceEditor from "@/components/organisms/settings/absence-editor";
 import TeamDaysOffEditor from "@/components/organisms/settings/team-days-off-editor";
 import { listAbsences } from "@/lib/absence-store";
-import { requireSession } from "@/lib/auth";
 import { dayKeyInTimeZone } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getDb } from "@/lib/db";
 import { listRoster } from "@/lib/roster";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { listTeamDaysOff } from "@/lib/team-day-off-store";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Absence settings — where the owner records who is not working: individual
@@ -32,10 +32,9 @@ import { listTeamDaysOff } from "@/lib/team-day-off-store";
  * bounded one. The reasoning above still holds; the bound does not yet.
  */
 export default async function AbsenceSettingsPage() {
-  const session = await requireSession();
-  const { env } = getCloudflareContext();
+    const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
+  const { ownerId } = await resolveWorkspace();
 
   const [members, absences, timeZone, sprint, daysOff] = await Promise.all([
     listRoster(db, ownerId),

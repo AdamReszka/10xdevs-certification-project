@@ -9,7 +9,6 @@ import {
   complete,
   getAnthropicClient,
 } from "@/lib/anthropic";
-import { requireSession } from "@/lib/auth";
 import { TokenCryptoError } from "@/lib/crypto";
 import { getDb } from "@/lib/db";
 import {
@@ -28,12 +27,14 @@ import {
   type RefinementRequest,
 } from "@/lib/refinement/run-service";
 import { refinementRequestSchema } from "@/lib/validations/refinement";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * The one mutation behind `/refinement` (S-13 phase 6, FR-020/FR-021).
  *
  * Deliberately thin, mirroring `settings/absences/actions.ts`: resolve the
- * session, the Cloudflare env and the DB handle here, build the two
+ * workspace (which carries the session guard), the Cloudflare env and the DB
+ * handle here, build the two
  * outside-world seams here, and let the request-context-free core
  * (`run-service.ts`) do the dispatch. No business logic in this file.
  *
@@ -72,7 +73,7 @@ export type RefinementRunResponse =
 export async function runRefinementAction(
   input: unknown,
 ): Promise<RefinementRunResponse> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   // The discriminant is written into a Postgres enum column and decides which
   // branch of the dispatch runs, so it is refused here rather than at the
@@ -88,7 +89,6 @@ export async function runRefinementAction(
   const request: RefinementRequest = parsed.data;
 
   const { env } = getCloudflareContext();
-  const ownerId = session.user.id;
 
   // Nothing has been read or written at this point, and nothing will be if the
   // key is absent — this is the no-run, no-record path FR-020's degradation

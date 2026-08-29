@@ -5,7 +5,7 @@ import CadenceForm from "@/components/organisms/setup/cadence-form";
 import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { sprint } from "@/db/schema";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import { listRosterForEditor } from "@/lib/roster";
 import type { Weekday } from "@/lib/validations/roster";
@@ -19,10 +19,9 @@ import type { Weekday } from "@/lib/validations/roster";
  * Actions. Credentials are NEVER decrypted here — that lives in the service core.
  */
 export default async function TeamSetupPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   // Shared with Settings → Team so the two editor mounts cannot drift.
   const initialMembers = await listRosterForEditor(db, ownerId);

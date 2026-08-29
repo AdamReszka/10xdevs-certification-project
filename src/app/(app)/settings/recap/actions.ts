@@ -2,16 +2,16 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { saveRecapSettings } from "@/lib/recap-settings";
 import { recapSettingsSchema } from "@/lib/validations/recap";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * S-11 Daily Recap settings mutation (FR-018) — deliberately thin, mirroring
- * `settings/absences/actions.ts`. `requireSession()` + `getCloudflareContext().env`
+ * `settings/absences/actions.ts`. `resolveWorkspace()` + `getCloudflareContext().env`
  * + `getDb(env)` in the body, then straight to the request-context-free service
- * core with `ownerId = session.user.id`. No business logic here.
+ * core with the resolved `ownerId`. No business logic here.
  *
  * NO DETECTION RE-RUN, unlike the absence actions. Those re-detect because
  * recording an absence changes which anomalies are true; the send TIME affects
@@ -28,7 +28,7 @@ export type ActionFailure = {
 export type RecapSettingsResult = { ok: true } | ActionFailure;
 
 export async function saveRecapSettingsAction(input: unknown): Promise<RecapSettingsResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = recapSettingsSchema.safeParse(input);
   if (!parsed.success) {
@@ -43,7 +43,7 @@ export async function saveRecapSettingsAction(input: unknown): Promise<RecapSett
   const db = getDb(env);
 
   try {
-    await saveRecapSettings({ db, ownerId: session.user.id, input: parsed.data });
+    await saveRecapSettings({ db, ownerId, input: parsed.data });
     return { ok: true };
   } catch (err) {
     // Only the unexpected branch logs — there is no user-fixable domain error on

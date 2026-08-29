@@ -6,7 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import JiraConnectForm from "@/components/organisms/setup/jira-connect-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { jiraCredential } from "@/db/schema";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -20,14 +20,14 @@ import { getDb } from "@/lib/db";
  * intact; those are Jira's connect flow, not the wizard's step sequence.
  */
 export default async function SettingsConnectJiraPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   const [existing] = await db
     .select({ workspaceUrl: jiraCredential.workspaceUrl })
     .from(jiraCredential)
-    .where(eq(jiraCredential.ownerId, session.user.id))
+    .where(eq(jiraCredential.ownerId, ownerId))
     .limit(1);
 
   return (

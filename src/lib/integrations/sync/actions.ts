@@ -2,11 +2,12 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
+import { demoRefusal } from "@/lib/demo/refusal";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner, type IntegrationOutcome } from "@/lib/integrations/sync/run-sync";
 import { sweepSprintMeasurements } from "@/lib/measurement/sweep";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 
 /**
  * On-demand sync Server Action (S-05, Phase 5). Lets the just-finished-setup UI
@@ -15,11 +16,19 @@ import { sweepSprintMeasurements } from "@/lib/measurement/sweep";
  * Reuses the exact store layer the scheduled loop calls, bypassing the freshness
  * due-check (an explicit user request always syncs).
  *
- * Thin by design, mirroring the setup actions: `requireSession` →
- * `getCloudflareContext().env` → `getDbWithPool(env)` → `syncOwner`. Owns pool
- * teardown (lesson #3) via `ctx.waitUntil(pool.end())`, or an awaited close when
- * no `ctx` is present (e.g. `next dev`). Returns non-secret per-integration
- * status — see `SyncNowOutcome` for what is deliberately withheld.
+ * Thin by design, mirroring the setup actions: workspace resolution →
+ * `getCloudflareContext().env` → `getDbWithPool(env)` → `syncOwner`.
+ *
+ * ALWAYS-REAL, AND REFUSED IN DEMO (S-09 / FR-008). Syncing is not a thing to
+ * simulate: the demo owner holds a fake token, so a real call would spend it
+ * against GitHub and Jira and come back 401. The refusal is here, on the server,
+ * because a Server Action is its own entry point — Phase 4 disables the button
+ * too, but this is the half that is a boundary rather than a courtesy.
+ *
+ * Owns pool teardown (lesson #3) via `ctx.waitUntil(pool.end())`, or an awaited
+ * close when no `ctx` is present (e.g. `next dev`). Returns non-secret
+ * per-integration status — see `SyncNowOutcome` for what is deliberately
+ * withheld.
  */
 /**
  * The client-facing projection of `IntegrationOutcome` — same discriminants,
@@ -55,10 +64,14 @@ export type SyncNowOutcome =
     }
   | { status: "ERROR" | "RATE_LIMITED" };
 
-export type SyncNowResult = {
-  github: SyncNowOutcome;
-  jira: SyncNowOutcome;
-};
+export type SyncNowResult =
+  | {
+      ok?: undefined;
+      github: SyncNowOutcome;
+      jira: SyncNowOutcome;
+    }
+  /** S-09: the account is viewing demo data; nothing was synced. */
+  | { ok: false; error: "demo_mode"; message: string };
 
 function toClientOutcome(outcome: IntegrationOutcome): SyncNowOutcome {
   if (outcome.status === "SKIPPED") {
@@ -71,7 +84,17 @@ function toClientOutcome(outcome: IntegrationOutcome): SyncNowOutcome {
 }
 
 export async function syncNow(): Promise<SyncNowResult> {
-  const session = await requireSession();
+  // Both resolvers carry the same session guard. The real owner is the one whose
+  // credentials would be used; the demo flag is what stops us using them from a
+  // screen that says "demo".
+  const [{ ownerId }, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  // BEFORE `getDbWithPool` — a refused sync must not open a connection it then
+  // has to tear down, and must never reach `syncOwner`.
+  if (isDemo) return demoRefusal();
+
   const { env, ctx } = getCloudflareContext();
   const { db, pool } = getDbWithPool(env);
   // One clock shared by sync and detection for this cycle.
@@ -80,7 +103,7 @@ export async function syncNow(): Promise<SyncNowResult> {
   try {
     const result = await syncOwner({
       db,
-      ownerId: session.user.id,
+      ownerId,
       env,
       now,
       bypassDueCheck: true,
@@ -89,7 +112,7 @@ export async function syncNow(): Promise<SyncNowResult> {
     // Best-effort: a detection failure must not fail the user's sync/setup finish
     // (the cron loop isolates detection per owner the same way).
     try {
-      await detectAnomalies({ db, ownerId: session.user.id, now });
+      await detectAnomalies({ db, ownerId, now });
     } catch (err) {
       console.error(
         "[detect] syncNow detection failed:",
@@ -101,7 +124,7 @@ export async function syncNow(): Promise<SyncNowResult> {
     // best-effort for the same reason: a measurement the sweep can retry next
     // cycle must never fail the owner's explicit "sync now".
     try {
-      await sweepSprintMeasurements({ db, ownerId: session.user.id, now });
+      await sweepSprintMeasurements({ db, ownerId, now });
     } catch (err) {
       console.error(
         "[measurement] syncNow sweep failed:",

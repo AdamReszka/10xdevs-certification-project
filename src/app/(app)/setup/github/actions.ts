@@ -2,7 +2,7 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import {
   GithubAuthError,
@@ -24,7 +24,7 @@ import {
  * `requireSession()` + `getCloudflareContext().env` + `getDb(env)` (inside the
  * body, never at module scope — same discipline as `src/lib/auth.ts`), then
  * delegates to the request-context-free service core with
- * `ownerId = session.user.id`. No business logic lives here.
+ * `ownerId = ownerId`. No business logic lives here.
  *
  * SECURITY: no action return type or `console.*` may include the raw token; the
  * validate action returns repos + scopes but NEVER the token, and the store
@@ -80,7 +80,7 @@ function githubOptsFromEnv(): GithubClientOpts | undefined {
 export async function validateGithubToken(
   token: string,
 ): Promise<ValidateResult> {
-  await requireSession();
+  await requireRealWorkspace();
 
   const parsed = githubTokenSchema.safeParse({ token });
   if (!parsed.success) {
@@ -120,7 +120,7 @@ export async function storeGithubIntegration(
   token: string,
   selectedRepoIds: string[],
 ): Promise<StoreResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
 
   const tokenParsed = githubTokenSchema.safeParse({ token });
   if (!tokenParsed.success) {
@@ -147,7 +147,7 @@ export async function storeGithubIntegration(
   try {
     const { login, tokenLast4, repoCount } = await storeGithubIntegrationService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       token: tokenParsed.data.token,
       selectedRepoIds: selectionParsed.data.selectedRepoIds,
       opts: githubOptsFromEnv(),
@@ -161,11 +161,11 @@ export async function storeGithubIntegration(
 
 /** Clear the credential + its repos for the signed-in account. */
 export async function disconnectGithub(): Promise<{ ok: true }> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  await disconnectGithubService({ db, ownerId: session.user.id });
+  await disconnectGithubService({ db, ownerId: ownerId });
   return { ok: true };
 }
 

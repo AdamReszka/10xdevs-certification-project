@@ -2,7 +2,7 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import {
   disconnectJira as disconnectJiraService,
@@ -28,7 +28,7 @@ import {
  * S-03 setup mutations — deliberately thin, mirroring `setup/github/actions.ts`.
  * Each action does `requireSession()` + (for writes) `getCloudflareContext().env`
  * + `getDb(env)` inside the body, then delegates to the request-context-free
- * service core / client with `ownerId = session.user.id`. No business logic here.
+ * service core / client with `ownerId = ownerId`. No business logic here.
  *
  * The credentials cross three stages held in the client form's memory (as S-02
  * holds the token). No action return type or `console.*` may include the token:
@@ -117,7 +117,7 @@ export async function validateJiraCredentials(
   email: string,
   token: string,
 ): Promise<ValidateResult> {
-  await requireSession();
+  await requireRealWorkspace();
 
   const parsed = jiraCredentialSchema.safeParse({ workspaceUrl, email, token });
   if (!parsed.success) {
@@ -156,7 +156,7 @@ export async function fetchProjectStatuses(
   token: string,
   jiraProjectId: string,
 ): Promise<StatusesResult> {
-  await requireSession();
+  await requireRealWorkspace();
 
   const credParsed = jiraCredentialSchema.safeParse({ workspaceUrl, email, token });
   const projParsed = projectSelectionSchema.safeParse({ jiraProjectId });
@@ -201,7 +201,7 @@ export async function storeJiraIntegration(
   jiraProjectId: string,
   mappings: StatusMappingInput[],
 ): Promise<StoreResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
 
   const credParsed = jiraCredentialSchema.safeParse(credentials);
   const projParsed = projectSelectionSchema.safeParse({ jiraProjectId });
@@ -225,7 +225,7 @@ export async function storeJiraIntegration(
     const base = effectiveBase(credParsed.data.workspaceUrl);
     const result = await storeJiraIntegrationService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       baseUrl: base.baseUrl,
       workspaceUrl: base.workspaceUrl,
       creds: { email: credParsed.data.email, token: credParsed.data.token },
@@ -248,11 +248,11 @@ export async function storeJiraIntegration(
 
 /** Clear the credential + its project + mappings for the signed-in account. */
 export async function disconnectJira(): Promise<{ ok: true }> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  await disconnectJiraService({ db, ownerId: session.user.id });
+  await disconnectJiraService({ db, ownerId: ownerId });
   return { ok: true };
 }
 

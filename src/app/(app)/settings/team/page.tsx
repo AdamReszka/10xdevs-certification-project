@@ -1,9 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import RosterEditor from "@/components/organisms/setup/roster-editor";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { listRosterForEditor } from "@/lib/roster";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Team settings (S-15) — the post-setup roster surface, and the half of FR-006
@@ -23,11 +23,11 @@ import { listRosterForEditor } from "@/lib/roster";
  * owner-scoped read through the shared editor reader.
  */
 export default async function TeamSettingsPage() {
-  const session = await requireSession();
+    const { ownerId } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  const initialMembers = await listRosterForEditor(db, session.user.id);
+  const initialMembers = await listRosterForEditor(db, ownerId);
 
   return (
     <div className="flex flex-col gap-6">

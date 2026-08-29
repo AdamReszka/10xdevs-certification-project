@@ -3,7 +3,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { detectAnomalies } from "@/lib/anomaly/detect";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
   type AbsenceInput,
@@ -24,14 +23,17 @@ import {
   teamDayOffIdSchema,
   teamDayOffSaveSchema,
 } from "@/lib/validations/team-day-off";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Mutations for the `/settings/absences` page: S-08 absences (FR-010) and S-23
  * team-wide days off (FR-007) — deliberately thin, mirroring
  * `setup/team/actions.ts`.
- * Each action does `requireSession()` + `getCloudflareContext().env` +
+ * Each action does `resolveWorkspace()` + `getCloudflareContext().env` +
  * `getDb(env)` inside the body, then delegates to the request-context-free
- * service core with `ownerId = session.user.id`. No business logic here.
+ * service core with the resolved `ownerId`. No business logic here. The resolver
+ * carries the session guard (it is built on `requireSession()`), so replacing the
+ * id read did not remove the authorization check each action performs for itself.
  *
  * EVERY MUTATION RE-RUNS DETECTION (owner decision D1). Detection is a
  * *reconcile*: a `dedupKey` that stops being emitted is flipped to `RESOLVED`, so
@@ -39,6 +41,10 @@ import {
  * inbox and deleting it brings the row back. Without the re-run the owner would
  * record an absence and watch the anomaly they just explained sit there until the
  * next 15-minute cron cycle — the surface would look broken.
+ *
+ * THE RE-RUN USES THE WORKSPACE CLOCK, not `new Date()` (S-09). In demo that is
+ * the frozen anchor: re-detecting at the live clock would age the whole demo by
+ * however long it had existed, the first time the visitor recorded an absence.
  *
  * The re-run is deliberately best-effort: it happens AFTER the write has
  * committed, inside a try/catch that swallows failures. The user's save
@@ -62,7 +68,7 @@ export type AbsenceMutationResult = { ok: true; id: string } | ActionFailure;
 
 /** Record a new absence. `sprint_id` and the day→instant conversion are server-side. */
 export async function createAbsenceAction(input: unknown): Promise<AbsenceMutationResult> {
-  const session = await requireSession();
+  const { ownerId, now } = await resolveWorkspace();
 
   const parsed = absenceSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -73,7 +79,6 @@ export async function createAbsenceAction(input: unknown): Promise<AbsenceMutati
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     const { id } = await createAbsenceService({
@@ -81,7 +86,7 @@ export async function createAbsenceAction(input: unknown): Promise<AbsenceMutati
       ownerId,
       input: toInput(parsed.data),
     });
-    await redetect(db, ownerId);
+    await redetect(db, ownerId, now);
     return { ok: true, id };
   } catch (err) {
     return toFailure(err, "[settings/absences] createAbsence");
@@ -90,7 +95,7 @@ export async function createAbsenceAction(input: unknown): Promise<AbsenceMutati
 
 /** Edit an existing absence. The payload's `id` names the row. */
 export async function updateAbsenceAction(input: unknown): Promise<AbsenceMutationResult> {
-  const session = await requireSession();
+  const { ownerId, now } = await resolveWorkspace();
 
   const parsed = absenceSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -102,7 +107,6 @@ export async function updateAbsenceAction(input: unknown): Promise<AbsenceMutati
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     const { id } = await updateAbsenceService({
@@ -111,7 +115,7 @@ export async function updateAbsenceAction(input: unknown): Promise<AbsenceMutati
       absenceId: parsed.data.id,
       input: toInput(parsed.data),
     });
-    await redetect(db, ownerId);
+    await redetect(db, ownerId, now);
     return { ok: true, id };
   } catch (err) {
     return toFailure(err, "[settings/absences] updateAbsence");
@@ -122,18 +126,17 @@ export async function updateAbsenceAction(input: unknown): Promise<AbsenceMutati
 export async function deleteAbsenceAction(
   absenceId: unknown,
 ): Promise<AbsenceMutationResult> {
-  const session = await requireSession();
+  const { ownerId, now } = await resolveWorkspace();
 
   const parsed = absenceIdSchema.safeParse(absenceId);
   if (!parsed.success) return invalidInput("Pick an absence and try again.");
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     await deleteAbsenceService({ db, ownerId, absenceId: parsed.data });
-    await redetect(db, ownerId);
+    await redetect(db, ownerId, now);
     return { ok: true, id: parsed.data };
   } catch (err) {
     return toFailure(err, "[settings/absences] deleteAbsence");
@@ -152,7 +155,7 @@ export async function deleteAbsenceAction(
 export async function createTeamDayOffAction(
   input: unknown,
 ): Promise<AbsenceMutationResult> {
-  const session = await requireSession();
+  const { ownerId, now } = await resolveWorkspace();
 
   const parsed = teamDayOffSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -163,7 +166,6 @@ export async function createTeamDayOffAction(
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     const { id } = await createTeamDayOffService({
@@ -171,7 +173,7 @@ export async function createTeamDayOffAction(
       ownerId,
       input: { day: parsed.data.day, label: parsed.data.label ?? null },
     });
-    await redetect(db, ownerId);
+    await redetect(db, ownerId, now);
     // `created: false` (the date was already recorded) is deliberately NOT an
     // error: the owner asked for that day to be off, and it is.
     return { ok: true, id };
@@ -184,18 +186,17 @@ export async function createTeamDayOffAction(
 export async function deleteTeamDayOffAction(
   teamDayOffId: unknown,
 ): Promise<AbsenceMutationResult> {
-  const session = await requireSession();
+  const { ownerId, now } = await resolveWorkspace();
 
   const parsed = teamDayOffIdSchema.safeParse(teamDayOffId);
   if (!parsed.success) return invalidInput("Pick a day off and try again.");
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
 
   try {
     await deleteTeamDayOffService({ db, ownerId, teamDayOffId: parsed.data });
-    await redetect(db, ownerId);
+    await redetect(db, ownerId, now);
     return { ok: true, id: parsed.data };
   } catch (err) {
     return toFailure(err, "[settings/absences] deleteTeamDayOff");
@@ -218,9 +219,13 @@ function toInput(data: { id?: string } & AbsenceInput): AbsenceInput {
  * asked for has already succeeded, and a stale inbox for one cron cycle is a far
  * smaller failure than telling them their absence was not recorded.
  */
-async function redetect(db: ReturnType<typeof getDb>, ownerId: string): Promise<void> {
+async function redetect(
+  db: ReturnType<typeof getDb>,
+  ownerId: string,
+  now: Date,
+): Promise<void> {
   try {
-    await detectAnomalies({ db, ownerId });
+    await detectAnomalies({ db, ownerId, now });
   } catch (err) {
     console.error("[settings/absences] re-detect after save failed:", err);
   }

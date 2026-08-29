@@ -2,7 +2,7 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
+import { demoRefusal } from "@/lib/demo/refusal";
 import { TokenCryptoError } from "@/lib/crypto";
 import { getDb } from "@/lib/db";
 import { GithubAuthError, type GithubClientOpts, GithubUnavailableError } from "@/lib/github";
@@ -30,14 +30,34 @@ import {
   mergeMembersSchema,
   rosterSaveSchema,
 } from "@/lib/validations/roster";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
+
 import type { DerivedCadence } from "@/lib/integrations/cadence";
 
 /**
  * S-04 setup mutations — deliberately thin, mirroring `setup/github/actions.ts`
- * and `setup/jira/actions.ts`. Each action does `requireSession()` +
+ * and `setup/jira/actions.ts`. Each action does its workspace resolution +
  * `getCloudflareContext().env` + `getDb(env)` inside the body, then delegates to
- * the request-context-free service core with `ownerId = session.user.id`. No
- * business logic here; the merge/derivation/persistence live in `roster-store.ts`.
+ * the request-context-free service core with the resolved `ownerId`. No business
+ * logic here; the merge/derivation/persistence live in `roster-store.ts`.
+ *
+ * OWNER RESOLUTION IS PER ACTION, NOT PER DIRECTORY (S-09, plan-review F1). This
+ * file sits under `setup/`, which is an always-real area — but the organism it
+ * serves (`organisms/setup/roster-editor.tsx`) is ALSO mounted by
+ * `/settings/team`, which follows the active workspace. A blanket
+ * `requireRealWorkspace()` here would make demo READ the demo roster and WRITE
+ * against the real owner: `saveRoster` would refuse outright (its owner-scoped
+ * lookup rejects a submitted id outside the caller's set), and
+ * `confirmAvailability` would silently mutate the real team while the banner
+ * said "demo".
+ *
+ * So the split is:
+ *  - roster + cadence reads and writes follow `resolveWorkspace()` — demo edits
+ *    land under the demo owner, and resetting the demo undoes them;
+ *  - `importRosterAction` and `importCadenceAction` keep
+ *    `requireRealWorkspace()` AND refuse in demo, because they call the real
+ *    GitHub and Jira APIs with the account's real credentials. There is nothing
+ *    to simulate there, and a fake token must never be spent.
  *
  * The roster + cadence experience is one page but two independent save actions
  * plus one import each, so a failure in one does not block the other.
@@ -70,7 +90,13 @@ export type ClientMember = {
 /** Shared token-free failure shape; the client reads `message` regardless. */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_token" | "integration_unavailable" | "decrypt_failed" | "invalid_input";
+  error:
+    | "invalid_token"
+    | "integration_unavailable"
+    | "decrypt_failed"
+    | "invalid_input"
+    /** S-09: the action reaches outside the app and the account is in demo. */
+    | "demo_mode";
   message: string;
 };
 
@@ -140,6 +166,21 @@ function githubOptsFromEnv(): GithubClientOpts | undefined {
   return baseUrl ? { baseUrl } : undefined;
 }
 
+/**
+ * The always-real workspace, plus whether the account is currently viewing demo.
+ *
+ * The two import actions need BOTH: the real owner (their credentials live
+ * there) and the demo flag (so they refuse rather than quietly acting on the
+ * real account from a screen that says "demo").
+ */
+async function workspaceForImport(): Promise<{ ownerId: string; isDemo: boolean }> {
+  const [real, active] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  return { ownerId: real.ownerId, isDemo: active.isDemo };
+}
+
 /** Test-only Jira base override (`JIRA_API_BASE_URL`); undefined in production. */
 function jiraBaseOverride(): string | undefined {
   if (process.env.NODE_ENV === "production") return undefined;
@@ -169,14 +210,16 @@ function toClientPreviewMember(m: PreviewMember): ClientPreviewMember {
  * never a hard failure — the step continues with Jira-seeded + manual members.
  */
 export async function importRosterAction(): Promise<ImportRosterResult> {
-  const session = await requireSession();
+  const { ownerId, isDemo } = await workspaceForImport();
+  if (isDemo) return demoRefusal();
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
     const result = await previewRosterImportService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       env,
       githubOpts: githubOptsFromEnv(),
       jiraBaseUrl: jiraBaseOverride(),
@@ -196,7 +239,7 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
 
 /** Persist the user-edited roster (full owner-scoped set). */
 export async function saveRosterAction(input: unknown): Promise<SaveRosterResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = rosterSaveSchema.safeParse(input);
   if (!parsed.success) {
@@ -213,7 +256,7 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
   try {
     const { ids } = await saveRosterService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       members: parsed.data.members,
     });
     return { ok: true, ids };
@@ -230,14 +273,16 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
 export async function importCadenceAction(
   chosenBoardId?: number,
 ): Promise<ImportCadenceResult> {
-  const session = await requireSession();
+  const { ownerId, isDemo } = await workspaceForImport();
+  if (isDemo) return demoRefusal();
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
     const result = await importCadenceService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       env,
       chosenBoardId,
       jiraBaseUrl: jiraBaseOverride(),
@@ -258,7 +303,7 @@ export async function importCadenceAction(
 
 /** Persist the user-confirmed / overridden cadence (flips `cadence_overridden`). */
 export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = cadenceSchema.safeParse(input);
   if (!parsed.success) {
@@ -275,7 +320,7 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
   try {
     await saveCadenceService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       cadence: {
         lengthDays: parsed.data.lengthDays,
         startDay: parsed.data.startDay,
@@ -300,7 +345,7 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
 export async function getMemberHistoryAction(
   memberId: unknown,
 ): Promise<MemberHistoryResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = memberIdSchema.safeParse(memberId);
   if (!parsed.success) return invalidInput("Pick a member and try again.");
@@ -311,7 +356,7 @@ export async function getMemberHistoryAction(
   try {
     const history = await getMemberHistoryService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       memberId: parsed.data,
     });
     return { ok: true, ...history };
@@ -325,7 +370,7 @@ export async function setMemberActiveAction(
   memberId: unknown,
   isActive: unknown,
 ): Promise<SetMemberActiveResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsedId = memberIdSchema.safeParse(memberId);
   if (!parsedId.success) return invalidInput("Pick a member and try again.");
@@ -337,7 +382,7 @@ export async function setMemberActiveAction(
   try {
     await setMemberActiveService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       memberId: parsedId.data,
       isActive,
     });
@@ -349,7 +394,7 @@ export async function setMemberActiveAction(
 
 /** Permanently delete a member. Refused when they carry history or are the last. */
 export async function deleteMemberAction(memberId: unknown): Promise<DeleteMemberResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = memberIdSchema.safeParse(memberId);
   if (!parsed.success) return invalidInput("Pick a member and try again.");
@@ -358,7 +403,7 @@ export async function deleteMemberAction(memberId: unknown): Promise<DeleteMembe
   const db = getDb(env);
 
   try {
-    await deleteMemberService({ db, ownerId: session.user.id, memberId: parsed.data });
+    await deleteMemberService({ db, ownerId, memberId: parsed.data });
     return { ok: true };
   } catch (err) {
     return toFailure(err, "[setup/team] deleteMember");
@@ -367,7 +412,7 @@ export async function deleteMemberAction(memberId: unknown): Promise<DeleteMembe
 
 /** Fuse two imported rows into one member. `keepId` is the row the grid keeps. */
 export async function mergeMembersAction(input: unknown): Promise<MergeMembersResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
 
   const parsed = mergeMembersSchema.safeParse(input);
   if (!parsed.success) {
@@ -382,7 +427,7 @@ export async function mergeMembersAction(input: unknown): Promise<MergeMembersRe
   try {
     const result = await mergeMembersService({
       db,
-      ownerId: session.user.id,
+      ownerId,
       keepId: parsed.data.keepId,
       dropId: parsed.data.dropId,
       merged: parsed.data.merged,
@@ -402,12 +447,12 @@ export async function mergeMembersAction(input: unknown): Promise<MergeMembersRe
  * every row would clear the banner for members nobody checked.
  */
 export async function confirmAvailabilityAction(): Promise<ConfirmAvailabilityResult> {
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
-    const { confirmed } = await confirmAllFteService({ db, ownerId: session.user.id });
+    const { confirmed } = await confirmAllFteService({ db, ownerId });
     return { ok: true, confirmed };
   } catch (err) {
     return toFailure(err, "[setup/team] confirmAvailability");

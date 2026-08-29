@@ -3,12 +3,12 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import RefinementForm from "@/components/organisms/refinement/refinement-form";
 import { resolveApiKey } from "@/lib/anthropic";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { MAX_TICKETS_PER_RUN } from "@/lib/refinement/analyze";
 import { loadBacklog } from "@/lib/refinement/backlog";
 import { plural } from "@/components/organisms/refinement/run-view";
 import { listRuns } from "@/lib/refinement/store";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Refinement Helper (S-13, FR-020/FR-021) — pick tickets, run, read verdicts.
@@ -24,10 +24,9 @@ import { listRuns } from "@/lib/refinement/store";
  * after.
  */
 export default async function RefinementPage() {
-  const session = await requireSession();
-  const { env } = getCloudflareContext();
+    const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
+  const { ownerId } = await resolveWorkspace();
 
   const [backlog, runs] = await Promise.all([
     loadBacklog({ db, ownerId, env }),

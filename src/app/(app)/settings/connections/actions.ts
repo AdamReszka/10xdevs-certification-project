@@ -2,7 +2,7 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import type { GithubClientOpts } from "@/lib/github";
 import { suggestCategory, type JiraClientOpts } from "@/lib/jira";
@@ -55,13 +55,13 @@ const NO_JIRA_OPTS: JiraClientOpts | undefined = undefined;
 
 /** Re-validate the STORED GitHub credential against GitHub, right now. */
 export async function testGithubConnection(): Promise<ConnectionTestResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   return testGithubConnectionService({
     db,
-    ownerId: session.user.id,
+    ownerId: ownerId,
     opts: githubOptsFromEnv(),
     env,
   });
@@ -69,13 +69,13 @@ export async function testGithubConnection(): Promise<ConnectionTestResult> {
 
 /** Re-validate the STORED Jira credential against Jira, right now. */
 export async function testJiraConnection(): Promise<ConnectionTestResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   return testJiraConnectionService({
     db,
-    ownerId: session.user.id,
+    ownerId: ownerId,
     baseUrl: jiraBaseOverride(),
     opts: NO_JIRA_OPTS,
     env,
@@ -108,14 +108,14 @@ export type LoadReposResult =
 
 /** List what the stored GitHub credential can see, to seed the edit picker. */
 export async function loadAvailableRepos(): Promise<LoadReposResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
     const result = await listAvailableReposService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       opts: githubOptsFromEnv(),
       env,
     });
@@ -140,14 +140,14 @@ export type LoadProjectsResult =
 
 /** List what the stored Jira credential can see, to seed the project picker. */
 export async function loadAvailableProjects(): Promise<LoadProjectsResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
     const { email, projects } = await listAvailableProjectsService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       baseUrl: jiraBaseOverride(),
       opts: NO_JIRA_OPTS,
       env,
@@ -177,14 +177,14 @@ export type LoadStatusesResult =
 export async function loadProjectStatuses(
   projectIdOrKey: string,
 ): Promise<LoadStatusesResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
     const statuses = await listStatusesForProjectService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       projectIdOrKey,
       baseUrl: jiraBaseOverride(),
       opts: NO_JIRA_OPTS,
@@ -215,7 +215,7 @@ export async function loadProjectStatuses(
 export async function updateMonitoredRepos(
   selectedRepoIds: string[],
 ): Promise<UpdateSelectionResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -226,7 +226,7 @@ export async function updateMonitoredRepos(
   try {
     const { repoCount } = await updateMonitoredReposService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       selectedRepoIds,
       opts: githubOptsFromEnv(),
       env,
@@ -256,7 +256,7 @@ export async function updateJiraProject(
   jiraProjectId: string,
   mappings: StatusMappingEntry[],
 ): Promise<UpdateSelectionResult> {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -267,7 +267,7 @@ export async function updateJiraProject(
   try {
     const { projectKey, mappedStatusCount, sprintsDiscarded } = await updateJiraProjectService({
       db,
-      ownerId: session.user.id,
+      ownerId: ownerId,
       jiraProjectId,
       mappings,
       baseUrl: jiraBaseOverride(),

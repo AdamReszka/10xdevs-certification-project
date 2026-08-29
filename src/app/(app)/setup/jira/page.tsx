@@ -5,7 +5,7 @@ import JiraConnectForm from "@/components/organisms/setup/jira-connect-form";
 import JiraConnectionStatus from "@/components/organisms/setup/jira-connection-status";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { jiraCredential, jiraProject, statusMapping } from "@/db/schema";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -15,7 +15,7 @@ import { getDb } from "@/lib/db";
  * last4, project key, mapping count); the encrypted token is never decrypted here.
  */
 export default async function JiraSetupPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -26,7 +26,7 @@ export default async function JiraSetupPage() {
       tokenLast4: jiraCredential.tokenLast4,
     })
     .from(jiraCredential)
-    .where(eq(jiraCredential.ownerId, session.user.id))
+    .where(eq(jiraCredential.ownerId, ownerId))
     .limit(1);
 
   let projectKey: string | null = null;
@@ -35,7 +35,7 @@ export default async function JiraSetupPage() {
     const [project] = await db
       .select({ id: jiraProject.id, projectKey: jiraProject.projectKey })
       .from(jiraProject)
-      .where(eq(jiraProject.ownerId, session.user.id))
+      .where(eq(jiraProject.ownerId, ownerId))
       .limit(1);
     if (project) {
       projectKey = project.projectKey;

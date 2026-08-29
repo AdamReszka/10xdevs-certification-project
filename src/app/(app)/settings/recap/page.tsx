@@ -1,10 +1,10 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import RecapSettingsForm from "@/components/organisms/settings/recap-settings-form";
-import { requireSession } from "@/lib/auth";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getDb } from "@/lib/db";
 import { getLastRecap, getRecapSettings } from "@/lib/recap-settings";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * Daily Recap settings (S-11, FR-018) — when the email arrives, and whether it
@@ -21,10 +21,9 @@ import { getLastRecap, getRecapSettings } from "@/lib/recap-settings";
  * settings page did not show.
  */
 export default async function RecapSettingsPage() {
-  const session = await requireSession();
-  const { env } = getCloudflareContext();
+    const { env } = getCloudflareContext();
   const db = getDb(env);
-  const ownerId = session.user.id;
+  const { ownerId } = await resolveWorkspace();
 
   const [settings, timeZone, lastRecap] = await Promise.all([
     getRecapSettings({ db, ownerId }),

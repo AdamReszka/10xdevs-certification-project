@@ -661,15 +661,15 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [x] 2.1 Type checking passes
-- [x] 2.2 Linting passes
-- [x] 2.3 Unit tests pass
-- [x] 2.4 Integration tests pass
-- [x] 2.5 loadDemo produces ≥4 distinct engine-written anomaly types
-- [x] 2.6 Re-detect at the anchor resolves zero anomalies (idempotence)
-- [x] 2.7 resetDemo leaves zero demo rows and no demo user row
-- [x] 2.8 Load+reset on an account with real credentials leaves them byte-identical
-- [x] 2.9 enumerateOnboardedOwners excludes demo owners
+- [x] 2.1 Type checking passes — b4559cc
+- [x] 2.2 Linting passes — b4559cc
+- [x] 2.3 Unit tests pass — b4559cc
+- [x] 2.4 Integration tests pass — b4559cc
+- [x] 2.5 loadDemo produces ≥4 distinct engine-written anomaly types — b4559cc
+- [x] 2.6 Re-detect at the anchor resolves zero anomalies (idempotence) — b4559cc
+- [x] 2.7 resetDemo leaves zero demo rows and no demo user row — b4559cc
+- [x] 2.8 Load+reset on an account with real credentials leaves them byte-identical — b4559cc
+- [x] 2.9 enumerateOnboardedOwners excludes demo owners — b4559cc
 
 #### Manual
 
@@ -679,17 +679,17 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [ ] 3.1 Type checking passes
-- [ ] 3.2 Linting passes
-- [ ] 3.3 Unit tests pass
-- [ ] 3.4 Integration tests pass
-- [ ] 3.5 Demo-scoped dashboard reads return demo rows only
-- [ ] 3.6 Absence saved in demo re-detects at the anchor
-- [ ] 3.7 syncNow in demo returns the typed refusal and never calls syncOwner
-- [ ] 3.8 No stray `session.user.id` outside the resolver and always-real call sites
-- [ ] 3.10 Demo roster save writes under the demo owner; real roster byte-identical
-- [ ] 3.11 importRoster/importCadence in demo refuse and construct no GitHub/Jira client
-- [ ] 3.12 Every exported server action still reaches an auth guard
+- [x] 3.1 Type checking passes
+- [x] 3.2 Linting passes
+- [x] 3.3 Unit tests pass
+- [x] 3.4 Integration tests pass
+- [x] 3.5 Demo-scoped dashboard reads return demo rows only
+- [x] 3.6 Absence saved in demo re-detects at the anchor
+- [x] 3.7 syncNow in demo returns the typed refusal and never calls syncOwner
+- [x] 3.8 No stray `session.user.id` outside the resolver and always-real call sites
+- [x] 3.10 Demo roster save writes under the demo owner; real roster byte-identical
+- [x] 3.11 importRoster/importCadence in demo refuse and construct no GitHub/Jira client
+- [x] 3.12 Every exported server action still reaches an auth guard
 
 #### Manual
 

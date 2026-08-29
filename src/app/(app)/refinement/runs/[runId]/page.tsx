@@ -3,9 +3,9 @@ import { notFound } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import RunPanel from "@/components/organisms/refinement/run-panel";
-import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getRun } from "@/lib/refinement/store";
+import { resolveWorkspace } from "@/lib/workspace";
 
 /**
  * One saved refinement run (S-13 phase 6).
@@ -23,11 +23,11 @@ export default async function RefinementRunPage({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
-  const session = await requireSession();
+  const { ownerId } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  const run = await getRun(db, session.user.id, runId);
+  const run = await getRun(db, ownerId, runId);
   if (!run) notFound();
 
   return (

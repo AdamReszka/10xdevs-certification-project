@@ -5,7 +5,7 @@ import JiraProjectEditor from "@/components/organisms/settings/jira-project-edit
 import RepoSelectionEditor from "@/components/organisms/settings/repo-selection-editor";
 import SyncHistory from "@/components/organisms/settings/sync-history";
 import SyncNowButton from "@/components/organisms/settings/sync-now-button";
-import { requireSession } from "@/lib/auth";
+import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import { getConnectionsOverview } from "@/lib/settings/connections";
 import { disconnectGithub } from "@/app/(app)/setup/github/actions";
@@ -29,11 +29,11 @@ import {
  * `force-dynamic`. One `getDb` handle, one owner-scoped read.
  */
 export default async function ConnectionsSettingsPage() {
-  const session = await requireSession();
+  const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  const overview = await getConnectionsOverview(db, session.user.id);
+  const overview = await getConnectionsOverview(db, ownerId);
   const gh = overview.github;
   const jira = overview.jira;
 
