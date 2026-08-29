@@ -1,7 +1,7 @@
 ---
 change_id: anomaly-settings-page
 title: Anomaly settings page
-status: new
+status: preparing
 created: 2026-08-29
 updated: 2026-08-29
 archived_at: null
