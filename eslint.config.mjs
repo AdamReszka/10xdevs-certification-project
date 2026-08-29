@@ -15,6 +15,10 @@ const eslintConfig = defineConfig([
     // Generated Cloudflare/OpenNext build output (gitignored — never source):
     ".open-next/**",
     ".wrangler/**",
+    // The bundled worker a local `deploy --dry-run` leaves behind. Gitignored
+    // like the two above, and 240k lines of generated code — linting it reports
+    // ~100 errors that belong to nobody.
+    ".worker-dryrun/**",
   ]),
 ]);
 

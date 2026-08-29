@@ -30,6 +30,10 @@ export type DemoActionResult =
 /** Every route whose content depends on the active workspace. */
 const WORKSPACE_SCOPED_PATHS = [
   "/dashboard",
+  // The first-run doorstep offers "Zobacz demo" as one of its two doors, so it
+  // is a route the demo can be loaded FROM — without this, coming back to it
+  // renders a cached screen that predates the switch.
+  "/setup",
   "/dashboard/sprint-detail",
   "/refinement",
   "/settings/team",

@@ -1,9 +1,9 @@
 ---
 change_id: onboarding-routing
 title: First-run routing into the setup wizard + entry point for returning users
-status: new
+status: implementing
 created: 2026-08-19
-updated: 2026-08-29
+updated: 2026-08-30
 archived_at: null
 depends_on: setup-team-roster-cadence (S-04 — in review, PR #42)
 ---
@@ -162,3 +162,33 @@ Two questions were put to the owner before planning; they split across two steps
 Research was deliberately SKIPPED: the surface is five files
 (`signup-form.tsx`, `login-form.tsx`, `(auth)/layout.tsx`, `(app)/layout.tsx`,
 `lib/onboarding.ts`), all read and recorded in the 2026-08-29 update above.
+
+## Update — 2026-08-29 (research run after all, post-frame)
+
+The note above says research was deliberately skipped. That held for the change as
+originally scoped (five files). `frame.md` then reframed the unit of work from a
+redirect to a **first-run doorstep with two doors**, which widened the surface to
+the wizard shell, the demo/workspace tenancy model, the `(app)` layout guard and
+the whole Playwright suite. Research was therefore run and is recorded in
+`research.md` (four parallel sub-agents: wizard anatomy, demo/workspace, guards +
+tests, archive/PRD history).
+
+Three findings the plan cannot skip:
+
+- **The demo fixture satisfies all six conditions of `isOnboardingComplete` — under
+  the DEMO owner.** So a gate on `resolveWorkspace().ownerId` passes a demo visitor
+  with zero real credentials, and a gate on `requireRealWorkspace().ownerId` locks
+  them out permanently. The frame's "must not fire on DEMO" rule is satisfiable
+  from `isDemo` alone, without the predicate ever seeing a demo id.
+- **S-09 recorded "No demo for Connections or Setup"** as an explicit non-goal, and
+  every `/setup/**` page and action calls `requireRealWorkspace()` by contract. A
+  demo door placed on `/setup` needs that boundary read explicitly, one way or the
+  other.
+- **`e2e/auth.setup.ts:31` waits for `**/dashboard`** and is the `setup` project the
+  entire chromium project depends on — any post-signup change fails every e2e test
+  at once. A server-side gate additionally breaks five more `/dashboard` entry
+  points, including a seeded owner that does not satisfy the predicate.
+
+Two premises corrected: the middleware is at the repo root (`middleware.ts`, not
+`src/middleware.ts`), and there are four post-auth destinations, not three — the
+fourth is the wizard's own exit, `cadence-form.tsx:142`.

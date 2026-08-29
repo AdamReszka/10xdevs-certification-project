@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 
@@ -15,10 +18,28 @@ const NAV_ITEMS: { label: string; href: string }[] = [
 ];
 
 /**
- * Horizontal nav-link group for the app-shell header. Static server component;
- * active-link styling (needs `usePathname`) is deferred until real routes exist.
+ * The one route that renders without navigation: the first-run doorstep.
+ *
+ * EXACT match, never `startsWith` — `/setup/github|jira|team` must KEEP their
+ * nav. Those steps are reached by choice and a returning lead has a legitimate
+ * need to reach Settings from them; the doorstep is the forced landing, where
+ * four header links would be four exits the first-run design does not want.
+ *
+ * Why here and not in `AppShell`: the `(app)` layout that renders the shell is a
+ * server component and cannot read the child route, middleware is a stated
+ * non-goal for this change, and a route-group split would take steps 2–4 along
+ * with the doorstep. Client-side `usePathname` routing logic already has a
+ * precedent in this repo (`settings-tabs.tsx`).
+ */
+const NAV_FREE_PATHS = new Set(["/setup"]);
+
+/**
+ * Horizontal nav-link group for the app-shell header.
  */
 export default function MainNav({ className }: { className?: string }) {
+  const pathname = usePathname();
+  if (pathname != null && NAV_FREE_PATHS.has(pathname)) return null;
+
   return (
     <nav className={cn("flex items-center gap-6 text-sm", className)}>
       {NAV_ITEMS.map((item) => (
