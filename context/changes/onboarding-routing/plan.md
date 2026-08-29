@@ -854,11 +854,11 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [x] 4.1 Lint passes: `npm run lint`
-- [x] 4.2 Type checking passes: `npx tsc --noEmit`
-- [x] 4.3 Unit tests pass: `npm test`
-- [x] 4.4 Integration tests pass: `npm run test:integration`
-- [x] 4.5 Playwright suite green: `npm run test:e2e`
+- [x] 4.1 Lint passes: `npm run lint` — 0785d21
+- [x] 4.2 Type checking passes: `npx tsc --noEmit` — 0785d21
+- [x] 4.3 Unit tests pass: `npm test` — 0785d21
+- [x] 4.4 Integration tests pass: `npm run test:integration` — 0785d21
+- [x] 4.5 Playwright suite green: `npm run test:e2e` — 0785d21
 
 #### Manual
 
@@ -871,8 +871,8 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [ ] 5.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs`
-- [ ] 5.2 Lint passes: `npm run lint`
+- [x] 5.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs`
+- [x] 5.2 Lint passes: `npm run lint`
 
 #### Manual
 

@@ -53,7 +53,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
-| S-22 | onboarding-routing        | a newly signed-up user lands in the setup wizard instead of an empty dashboard                 | S-01, S-04         | PRD Access Control ("lands in the setup wizard") | proposed |
+| S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04         | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | proposed |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 
 ## Streams
@@ -711,31 +711,54 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-22: First-run routing into the setup wizard
 
-- **Outcome:** a user who signs up lands in `/setup` and is carried through the
-  wizard; a user whose onboarding is already complete lands on `/dashboard`.
-  Today both go to `/dashboard`, and `/setup` is reachable only by typing the URL.
+- **Outcome:** a user who signs up lands on a **doorstep** at `/setup` — a first
+  screen inside the wizard shell, with the navigation suppressed, that says what
+  SprintFlow needs and offers exactly two doors: continue configuring (GitHub, or
+  whichever step is actually still missing), or see the demo. A user whose
+  onboarding is already complete lands on `/dashboard` as before. Today both go
+  to `/dashboard` — the full S-07/S-10 surface rendering zeros — and `/setup` is
+  reachable only by typing the URL.
 - **Change ID:** onboarding-routing
-- **PRD refs:** Access Control — *"Sign-up: on success, the user lands in the setup wizard."*
+- **PRD refs:** Access Control — *"Sign-up: on success, the user lands in the setup wizard."*; FR-008 / US-02 (the demo door)
 - **Prerequisites:** S-01, S-04
 - **Status:** proposed
 
+- **Two doors, not a redirect — this is the shape decision.** The original
+  prescription here was "post-sign-up routing plus a prompt on the dashboard
+  until onboarding completes". That was rejected in framing
+  (`context/changes/onboarding-routing/frame.md`): a redirect can name only ONE
+  destination, and the PRD makes two promises to the same person — Access Control
+  says they land in the setup wizard, US-02 says they can explore demo data
+  *without touching real Jira/GitHub*. A hard redirect to the credential form
+  honours the first by burying the second, and demo was already undiscoverable
+  (nav → Settings → the sixth tab → the button). The doorstep honours both.
 - **Half of the original change is already delivered.** The folder's second scope
   item — a persistent entry point for returning users to manage integrations —
   shipped with S-10 as the **Settings** nav tab. What remains is the first-run
   routing.
 - **The predicate is BUILT AND UNUSED.** `isOnboardingComplete`
-  (`src/lib/onboarding.ts:28`) exists, is owner-scoped, and has its own
-  integration test — and has **zero production callers**. Nothing imports it
-  outside `onboarding.integration.test.ts`. This slice is mostly wiring an
-  existing, tested predicate to the two places that need it (post-sign-up
-  redirect, and a "finish setup" affordance for a returning half-onboarded user),
-  not building new logic.
+  (`src/lib/onboarding.ts`) exists, is owner-scoped, and has its own integration
+  test — and has **zero production callers**. The slice wires it to a per-page
+  server-side gate on `/dashboard` and to the doorstep's door-selection (which
+  step is missing), and adds no new completeness logic of its own.
+- **The gate must not fire in demo.** Demo is tenancy, not a flag: the demo
+  fixture satisfies all six of the predicate's conditions under the DEMO owner,
+  so a gate reading the resolved `ownerId` waves a demo visitor through with zero
+  real credentials, and one reading `realOwnerId` locks them out of the very
+  thing they chose. `resolveWorkspace().isDemo` settles it without the predicate
+  ever seeing a demo id. The corollary: while the REAL account behind a demo is
+  still un-onboarded, the demo banner carries the way back to the wizard —
+  otherwise the doorstep is a screen the visitor can never return to.
 - **Do NOT add "Setup" as a standalone nav item** — that contradicts the
-  onboarding-flow intent recorded in the original change folder. Post-sign-up
-  routing plus a prompt on the dashboard until onboarding completes.
+  onboarding-flow intent recorded in the original change folder. The wizard is
+  first-run; **Settings** is ongoing management, and `/settings/**` is never
+  gated (a lead disconnecting GitHub to rotate a PAT must stay on the page
+  holding the reconnect button).
 - **Watch the cost:** `scheduled.ts:43` already records that
   `isOnboardingComplete` is 6 sequential queries, too expensive to run per owner
   in a loop. On a single request path that is fine; do not let it drift into one.
+  Both call sites thread an existing `db` handle rather than opening a pool
+  (`getDb` IS the pool constructor — see S-21).
 
 ---
 
