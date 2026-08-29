@@ -180,8 +180,18 @@ automatycznych zielone. Instrukcje krok po kroku:
 > Zostają **3 wiersze wymagające przeglądarki** (2.7, 3.7, 4.6) — tych z CLI
 > zasymulować się nie da.
 
-- [ ] **2.7** Kreator `/setup/team` nadal działa po przepięciu na
+- [x] **2.7** Kreator `/setup/team` nadal działa po przepięciu na
       `reconcile-sprint.ts` (nazwa aktywnego sprintu + chooser tablic).
+      **Zaliczone 2026-08-29** (sesja manualna, Ania) — na ŚWIEŻYM koncie, co jest
+      mocniejszym przebiegiem niż zakładała instrukcja: bez wiersza `sprint`
+      `initialCadence` jest `null`, więc `CadenceForm` odpala auto-pull sam
+      (`cadence-form.tsx:126`) i przechodzi całą ścieżkę Server Action → formularz.
+      Na koncie z istniejącym sprintem formularz tylko prefilluje z bazy i tej
+      ścieżki NIE dotyka. Wynik: „SCRUM Sprint 1", 14 dni, pon–pt — zgodne z
+      aktywnym sprintem Jiry (`jira_sprint_id=1`); po zapisie wiersz `sprint`
+      nowego konta jest co do wartości identyczny z wierszem właściciela.
+      Chooser tablic się nie pojawił — projekt FM ma jedną tablicę scrumową,
+      więc warunek „przy wielu tablicach" jest spełniony pusto, nie sprawdzony.
       *Źródło:* `context/changes/sprint-reconciliation/plan.md:809`
       *Dlaczego:* faza 2 wypatroszyła `importCadence`; testy integracyjne
       pokrywają serwis, ale nie spięcie Server Action → formularz → chooser.
@@ -378,6 +388,61 @@ pliku.
 **Nie da się uruchomić drugiego `next dev`** w tym samym katalogu (Next 16
 blokuje), a worktree z symlinkiem do `node_modules` wywraca Turbopack.
 
+**Brak `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` w `.env.local`
+kładzie CAŁE logowanie i rejestrację, a UI raportuje to jako złe hasło.**
+Zdiagnozowane 2026-08-29 w sesji manualnej — kosztowało pół sesji i dwa fałszywe
+rozpoznania („zapomniane hasło do demo", potem „nie da się założyć konta").
+
+*Objaw:* każdy endpoint `/api/auth/*`, który dotyka bazy, zwraca **500** —
+`sign-in/email`, `sign-up/email`, `request-password-reset`. Logowanie na
+**nieistniejące** konto też zwraca 500 (poprawna aplikacja odpowiedziałaby
+odmową), i to jest najtańszy test odróżniający tę awarię od złego hasła.
+`get-session` bez ciasteczka zwraca 200 (nie dotyka bazy), `/login` zwraca 200
+(`getOptionalSession` jest fail-open), `/dashboard` zwraca 307 — czyli
+**„aplikacja odpowiada" z Fazy 0 tej awarii NIE wykrywa.**
+
+*W logu `next dev`:* `Failed query: select ... from "user" where email = $1`
+z `[cause] AggregateError { code: 'ECONNREFUSED' }` (dwa podbłędy = próba na
+`::1` i `127.0.0.1`).
+
+*Przyczyna:* `getDb()` (`src/lib/db.ts:12`) bierze
+`env.HYPERDRIVE.connectionString` **przed** `process.env.DATABASE_URL`. Pod
+`next dev` binding HYPERDRIVE dostarcza platform proxy OpenNexta, a bez tej
+zmiennej środowiskowej wpada `localConnectionString` z `wrangler.jsonc:32` —
+czyli atrapa `postgresql://user:password@localhost:5432/db`. Na porcie 5432 nic
+nie słucha (lokalna baza stoi na **54322**), stąd ECONNREFUSED. `DATABASE_URL`
+może być przy tym całkowicie poprawny i baza w pełni sprawna — nie ma to
+znaczenia, bo ta gałąź nigdy się nie wykona.
+
+*Kiedy to wraca:* przy każdym przepisaniu `.env.local` — zmienna jest
+udokumentowana w `.env.example:17`, ale łatwo ją zgubić, bo poza `wrangler dev`
+nic o niej nie przypomina. Tak stało się przy rotacji sekretów 2026-08-29
+(`.env.local` przepisany o 19:44).
+
+*Diagnoza w jednej komendzie* — 500 zamiast 401 przesądza sprawę:
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  http://localhost:3000/api/auth/sign-in/email \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"nie-ma-takiego@example.test","password":"cokolwiek123"}'
+```
+
+🔴 **Osobna obserwacja produktowa dla ownera — decyzja, nie defekt do naprawy
+przez testerkę.** `login-form.tsx:50` i `signup-form.tsx:56` robią
+`error.message ?? "…Check your email and password."`. Odpowiedź 500 nie niesie
+`message`, więc **awaria bazy renderuje się jako „sprawdź login i hasło"**. To
+dokładnie ten kształt, przed którym ostrzega guardrail PRD o czytelnym banerze
+błędu zamiast cichej degradacji — tam napisany dla Jiry i GitHuba, tu trafiony
+przez własną bazę.
+
+✅ *Potwierdzone jednym ruchem 2026-08-29:* dopisanie zmiennej (wartość = ta sama
+co `DATABASE_URL`) + **restart** `next dev` — sam hot-reload `.env.local` NIE
+wystarcza, bo binding czyta się przy starcie platform proxy. Po restarcie log
+mówi wprost: *„Found a non-empty CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE
+variable for binding"*, a `sign-in` na nieistniejące konto wraca **401
+`INVALID_EMAIL_OR_PASSWORD`** zamiast 500. Brak tej linijki w logu startowym to
+najszybszy sygnał, że pułapka wróciła.
+
 ---
 
 ## 6. Nie powtarzaj tego — już zweryfikowane dowodowo
@@ -471,6 +536,14 @@ weryfikowana. Wymaga pełnego cyklu synca — najdroższy test w puli.
 *Jak:* załóż nowe konto → przejdź kreator do kroku Team.
 *Co musi być prawdą:* auto-import odpala się sam na pustym rosterze, grid się
 wypełnia, Save zapisuje.
+✅ **Zaliczone 2026-08-29** (sesja manualna, Ania). Auto-import odpalił się sam,
+siatka wypełniła się 6 osobami, Save zapisał 6 wierszy `team_member`
+(`fte = 1.00`, `is_active = true`).
+⚠️ **Do protokołu, bo wygląda jak defekt, a nie jest:** żaden wiersz nie ma
+kompletu GitHub + Jira — 3 wiersze mają sam `github_username`, 3 sam
+`jira_account_id`. Auto-import **nie scala tożsamości między źródłami** (brak
+wspólnego klucza; scalanie jest ręczne — §7.7), a `role` i `technology_track`
+zostają NULL, bo żadne źródło ich nie zna. Oba stany są oczekiwane.
 *Dlaczego odłożone:* auto-import na pustym rosterze ma test integracyjny
 („fresh import proposes members from both sources"), a **oba** mounty edytora
 czytają przez `listRosterForEditor`, więc nie mogą się rozjechać (komentarz w
@@ -1329,8 +1402,11 @@ zostało już pokryte gdzie indziej.
 
 **Wciąż otwarte:**
 
-- [ ] **13.1** (1.5) Trzy readery zwracają oczekiwane kształty na **prawdziwym**
-      repo + projekcie.
+- [x] **13.1** (1.5) Trzy readery zwracają oczekiwane kształty na **prawdziwym**
+      repo + projekcie. **Zaliczone 2026-08-29** (sesja manualna, Ania): świeże
+      konto, `AdamLisek/tenexdevs1` + projekt FM. Kolaboranci GitHuba → 3 osoby,
+      członkowie projektu Jiry → 3 osoby, konfiguracja aktywnego sprintu →
+      „SCRUM Sprint 1" / 14 dni. Żadna z trzech list nie wróciła pusta.
       *Gdzie:* konto `demo@sprintflow.test`, `/setup/github` → `/setup/jira` →
       `/setup/team`, albo skrypt scratch.
       *Co musi być prawdą:* import kolaborantów GitHuba, członków projektu Jiry i
@@ -1364,19 +1440,48 @@ zostało już pokryte gdzie indziej.
       człowieka.
 
 - [ ] **13.5** (4.5) Trzy bannery pojawiają się w swoich przypadkach.
+      ⏸️ **Próbowane 2026-08-29 — nie da się zamknąć przy sprawnym środowisku.**
+      Pełne przejście kreatora na świeżym koncie nie pokazało ŻADNEGO z trzech, i
+      to jest poprawne: token miał komplet uprawnień (`scopes = 'repo'`, repo
+      osobiste — degradacja nie zaszła), sprint w Jirze był aktywny, a projekt FM
+      ma jedną tablicę scrumową. Wszystkie trzy to ścieżki degradacji — żeby je
+      zobaczyć, trzeba środowisko celowo popsuć (wąski PAT → §7.6, konto między
+      sprintami, projekt z ≥2 tablicami). Ten wiersz wymaga preparacji, nie
+      przejścia happy-path — dopisane, żeby nikt nie tracił na to trzeciej sesji.
       *Co musi być prawdą:* **banner zakresu PAT** przy wąskim tokenie; **banner
       braku aktywnego sprintu** z edytowalnymi wartościami domyślnymi; **wybór
       boardu** tylko wtedy, gdy projekt ma więcej niż jeden board scrumowy.
       *Dlaczego to łapie:* wszystkie trzy to ścieżki degradacji — bez nich
       kreator kończy się pustym ekranem bez wyjaśnienia.
 
-- [ ] **13.6** (5.5) Z karty „Jira connected" przycisk **Continue** prowadzi na
-      `/setup/team`, a **nie** na `/dashboard`.
+- [x] **13.6** (5.5) Z karty „Jira connected" przycisk **Continue** prowadzi na
+      `/setup/team`, a **nie** na `/dashboard`. **Zaliczone 2026-08-29** (sesja
+      manualna, Ania): świeże konto, pełne przejście kreatora; cel przycisku
+      sprawdzony przez najechanie — `/setup/team`.
       *Dlaczego to łapie:* skrót do dashboardu zostawia konto bez rosteru, czyli w
       stanie, w którym detekcja nie ma kogo przypisać do anomalii.
 
 - [ ] **13.7** (5.6) Ukończenie rosteru + kadencji sprawia, że `isOnboardingComplete`
       zwraca `true` i przenosi na `/dashboard`.
+      ⏸️ **NIE ODHACZONY 2026-08-29 — połowa wiersza jest dziś niesprawdzalna.**
+      Przebieg wykonany w całości (sesja manualna, Ania, świeże konto): „Save &
+      finish setup" przeniosło na `/dashboard`, wszystkie sześć składników
+      predykatu jest w bazie (1 `github_credential`, 1 `monitored_repo`, 1
+      `jira_credential`, 1 `jira_project`, 5 `status_mapping`, 6 `team_member`),
+      pulpit renderuje dane zespołu w zakładkach Yesterday i Availability.
+      **Ale to, po co ten wiersz istnieje — „predykat naprawdę bramkuje routing" —
+      jest dowodowo NIEPRAWDĄ i nie jest defektem.** W tej samej sesji konto tuż po
+      rejestracji, z zerem integracji, weszło prosto na `/dashboard`: nic nie
+      skierowało go do kreatora. Zgadza się to z roadmapą, która o
+      `isOnboardingComplete` mówi wprost „BUILT AND UNUSED… zero production
+      callers" (`roadmap.md:712`) i planuje podpięcie jako **S-22**
+      (`onboarding-routing`, status *proposed*). Przekierowanie na `/dashboard` po
+      kreatorze pochodzi z `cadence-form.tsx:142` (`router.push`), a nie z
+      predykatu — więc obserwowalna połowa przeszłaby także wtedy, gdyby predykat
+      w ogóle nie istniał.
+      **Do decyzji ownera:** wiersz zamknie się sam wraz z S-22; do tego czasu
+      przepisanie go na „kreator kończy się na `/dashboard`" odhaczyłoby coś, czego
+      on nie sprawdza.
       *Dlaczego to łapie:* ⚠️ `isOnboardingComplete` to znany w tym repo przypadek
       szwu **zbudowanego i niepodpiętego** (S-22). Ten wiersz jest jedynym
       sprawdzianem, że predykat naprawdę bramkuje routing, a nie tylko istnieje.
