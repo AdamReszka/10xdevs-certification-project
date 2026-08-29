@@ -52,13 +52,16 @@ angielsku i taka zostaje.
 
 ---
 
-## 1. Teraz — blokuje domknięcie S-10 (PR #46)
+## 1. ✅ ZAMKNIĘTA 2026-08-29 — blokada domknięcia S-10 (PR #46)
 
-PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
-świadomie — merge bez nich jest decyzją, nie przeoczeniem.
+Te trzy pozycje zostały otwarte świadomie — merge bez nich był decyzją, nie
+przeoczeniem. **Wszystkie trzy padły 2026-08-29** w sesjach manualnych: 6.6 i
+11.15 na danych demo, 1.8 po tym, jak owner wpisał wyceny w Jirze i dodał piąty
+ticket, co zniosło blokadę „pusto po obu stronach" z 2026-08-26. Sekcja zostaje
+w pliku jako zapis dowodu — nie dopisuj tu nowych wierszy.
 
-- [ ] **1.8** Realny sync zapisuje `sprint.committed_sp` / `completed_sp`
-      zgodne z ręcznym przeliczeniem w Jirze.
+- [x] **1.8** Realny sync zapisuje `sprint.committed_sp` / `completed_sp`
+      zgodne z ręcznym przeliczeniem w Jirze. **ZALICZONE 2026-08-29.**
       *Źródło:* `context/changes/dashboard-sprint-detail/plan.md:1140`
       *Jak:* konto z prawdziwymi credentialami → „Sync now" w `/settings/connections`
       → porównaj `select committed_sp, completed_sp from sprint` z sumą SP w Jirze.
@@ -105,6 +108,41 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
       `added_after_sprint_start = true`, a `completed_sp` liczy tylko kategorię
       `DONE`. Ręczna suma w Jirze musi iść tą samą regułą, inaczej rozjazd nie
       będzie bugiem.
+
+      ✅ **Zamknięte 2026-08-29 — blokada z 2026-08-26 zniesiona.** Owner wpisał
+      wyceny w Jirze i dodał piąty ticket. Dwa cykle „Sync now" na koncie z
+      prawdziwymi credentialami (projekt FM):
+
+      | ticket | SP | dodany po starcie | kategoria po 2. cyklu |
+      |--------|----|-------------------|------------------------|
+      | FM-1   | 3  | nie               | IN_PROGRESS |
+      | FM-2   | 1  | nie               | TODO |
+      | FM-3   | 1  | nie               | TODO |
+      | FM-6   | 13 | nie               | TODO |
+      | FM-8   | 8  | **tak**           | **DONE** |
+
+      Zapisane skalary: `committed_sp = 18`, `completed_sp = 8`. Przeliczenie
+      ręczne tą samą regułą: 3+1+1+13 = **18** (FM-8 wyłączony jako dosypany),
+      DONE = **8**. Zgodność co do jednego, po obu stronach niezerowa — czyli
+      pułapka „pusto = pusto", która blokowała ten wiersz, przestała obowiązywać.
+
+      **Pułapka z wyborem pola NIE wystąpiła:** po syncu 0 z 5 ticketów miało
+      `story_points = NULL`, więc `resolveStoryPointFieldId` trafił w to pole, w
+      które owner wpisywał. Gdyby trafił w drugie, dostalibyśmy `0/0` czytające
+      się jak sukces — sprawdzone wprost, a nie założone.
+
+      **Drugi cykl był konieczny.** Po pierwszym `completed_sp = 0`, bo nic nie
+      było w Done — to samo „zero po obu stronach" co przed odblokowaniem, tylko
+      węższe. Dopiero przeniesienie ticketu do Done dało niezerowy dowód na
+      drugą połowę skalara. `committed_sp` przy tym nie drgnęło (18 → 18), co
+      potwierdza, że zamraża stan startowy zamiast przeliczać się przy każdym
+      ruchu.
+
+      ⚠️ **Obserwacja produktowa, nie defekt.** Do Done trafił FM-8 — jedyny
+      ticket dosypany po starcie. Wyszło `completed = 8` liczące zadanie,
+      którego `committed = 18` nie zawiera, więc Reliability pokaże „8 z 18",
+      gdzie ósemka nie jest częścią osiemnastki. Zgodne z regułą zapisaną w tym
+      wierszu, ale warte świadomej decyzji ownera.
 
 - [x] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
       obu dashboardach. **Zaliczone 2026-08-29** (sesja manualna, Ania):

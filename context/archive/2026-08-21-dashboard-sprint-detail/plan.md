@@ -1137,7 +1137,7 @@ Recorded here so they survive a context reset. None block the PR.
 
 - [x] 1.6 Real sync populates `jira_project.time_zone` — verified in-session (real Jira sync on demo@sprintflow.test wrote tz=Europe/Warsaw)
 - [x] 1.7 No token or raw error text in Worker logs
-- [ ] 1.8 Real sync populates `sprint.committed_sp`/`completed_sp` matching a manual Jira count
+- [x] 1.8 Real sync populates `sprint.committed_sp`/`completed_sp` matching a manual Jira count — manual 2026-08-29: committed 18, completed 8, both matching a hand recount over the same rules
 
 ### Phase 2: The three reducers (M1 / M2 / M3)
 
