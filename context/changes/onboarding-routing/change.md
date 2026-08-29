@@ -3,7 +3,7 @@ change_id: onboarding-routing
 title: First-run routing into the setup wizard + entry point for returning users
 status: new
 created: 2026-08-19
-updated: 2026-08-20
+updated: 2026-08-29
 archived_at: null
 depends_on: setup-team-roster-cadence (S-04 — in review, PR #42)
 ---
@@ -88,3 +88,50 @@ Remaining scope for this change is unchanged: (1) first-run post-signup routing 
 `/setup` using the predicate, landing in `/dashboard` once complete; (2) the
 returning-user entry to integration management (persistent Settings surface —
 still undecided). Both are plannable once S-04 merges.
+
+## Update — 2026-08-29 (state re-verified before planning; scope halved)
+
+Re-read against the current tree at `ef54ee9`. Two of the three things this
+change was tracking are **already closed by later slices**; one is untouched.
+
+**Closed — scope item (2), the returning-user entry to integration management.**
+S-02/S-03's wizard cards are no longer the only surface: `/settings/connections`
+exists with `/settings/connections/github` and `/settings/connections/jira`, and
+Settings also carries Team, Absences, Anomaly rules, Recap and Demo. The
+"setup-as-onboarding vs settings-as-ongoing-management" question this change left
+unpinned has been answered in code — Settings owns ongoing management. **Item (2)
+is dropped from this change's scope.**
+
+**Closed — the predicate.** `isOnboardingComplete({ db, ownerId })` is in
+`src/lib/onboarding.ts` exactly as the pinned contract describes, with
+`onboarding.integration.test.ts` covering it.
+
+**Still open — scope item (1), first-run routing. Nothing consumes the predicate.**
+Verified: `grep -rn "lib/onboarding" src/` returns only its own test file, and
+`grep -rn '"/setup"' src/` returns NOTHING outside tests. The four wizard pages
+(`/setup`, `/setup/github`, `/setup/jira`, `/setup/team`) exist and are reachable
+ONLY by hand-typing the URL — no link, no redirect, no nav entry anywhere in the
+app. The two push targets the original note named are unchanged:
+`signup-form.tsx:60` and `login-form.tsx:56` both `router.push("/dashboard")`, and
+`(auth)/layout.tsx` redirects an authenticated visitor to `/dashboard` too.
+
+`/dashboard` is no longer the 22-line placeholder — it is the real S-07/S-10
+surface (254 lines) — so the "empty dashboard" symptom now reads as a dashboard
+full of zeros rather than a stub, which is arguably worse for a first impression.
+
+**New question the plan must answer — demo mode (S-09) crosses this.**
+`isOnboardingComplete` is owner-scoped, and demo is modelled as TENANCY: a
+synthetic `user` row with `demo_of` pointing at the real account
+(`src/lib/workspace.ts`). So the predicate's answer depends on which id it is
+handed. Passing `workspace.ownerId` makes a demo account look fully onboarded
+(the demo fixture writes credentials, repos, mappings and members); passing
+`realOwnerId` would shove a visitor who deliberately chose "explore with demo
+data" (FR-008 / US-02) into the wizard they were trying to avoid. The plan must
+pin which id the routing reads and what a demo visitor sees. This did not exist
+when the change was opened — S-09 shipped nine days later.
+
+**Where the redirect lives** is the other open decision: `middleware.ts` cannot
+run it (it is an optimistic cookie check with no DB access by design — see its
+own SECURITY NOTE), so the candidates are the `(app)` layout guard, the
+`/dashboard` page itself, or the two client forms' push targets. Only the first
+two cover a user who navigates directly to `/dashboard`.
