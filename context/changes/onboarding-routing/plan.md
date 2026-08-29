@@ -871,8 +871,8 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [x] 5.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs`
-- [x] 5.2 Lint passes: `npm run lint`
+- [x] 5.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs` — 79d18f3
+- [x] 5.2 Lint passes: `npm run lint` — 79d18f3
 
 #### Manual
 
