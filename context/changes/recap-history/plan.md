@@ -909,16 +909,16 @@ in this slice; a rollback is a restore.
 
 #### Automated
 
-- [x] 2.1 Fewer than three recorded sprints resolves to no cutoff
-- [x] 2.2 The cutoff is the third-newest start day in the team's timezone
-- [x] 2.3 A third sprint with no start date resolves to no cutoff
-- [x] 2.4 Recaps strictly older than the cutoff are deleted; the boundary survives
-- [x] 2.5 The purge is owner-scoped
-- [x] 2.6 A throwing purge does not alter the cycle's other counters
-- [x] 2.7 Type checking passes
-- [x] 2.8 Linting passes
-- [x] 2.9 Unit suite passes
-- [x] 2.10 Integration suite passes
+- [x] 2.1 Fewer than three recorded sprints resolves to no cutoff — ed51cf3
+- [x] 2.2 The cutoff is the third-newest start day in the team's timezone — ed51cf3
+- [x] 2.3 A third sprint with no start date resolves to no cutoff — ed51cf3
+- [x] 2.4 Recaps strictly older than the cutoff are deleted; the boundary survives — ed51cf3
+- [x] 2.5 The purge is owner-scoped — ed51cf3
+- [x] 2.6 A throwing purge does not alter the cycle's other counters — ed51cf3
+- [x] 2.7 Type checking passes — ed51cf3
+- [x] 2.8 Linting passes — ed51cf3
+- [x] 2.9 Unit suite passes — ed51cf3
+- [x] 2.10 Integration suite passes — ed51cf3
 
 #### Manual
 
