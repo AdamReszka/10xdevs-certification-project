@@ -106,8 +106,12 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
       `DONE`. Ręczna suma w Jirze musi iść tą samą regułą, inaczej rozjazd nie
       będzie bugiem.
 
-- [ ] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
-      obu dashboardach.
+- [x] **6.6** Reset seeda i ponowne uruchomienie dają spójną historię sprintu na
+      obu dashboardach. **Zaliczone 2026-08-29** (sesja manualna, Ania):
+      wczytanie demo → Today 14 anomalii / Sprint Pulse 40 / Reliability 18 z 40,
+      Sprint Detail te same 40 i 18 → „Usuń dane demo" → baza potwierdza 0 kont
+      demo i 0 anomalii demo, credentiale GitHub i Jira nietknięte → ponowne
+      wczytanie odtwarza identyczne liczby na obu dashboardach.
       *Źródło:* `plan.md:1288` + `MANUAL-CHECKLIST.md` sekcja G
       **Zaktualizowane 2026-08-29 (S-09).** `npm run db:seed:demo` **już nie
       istnieje** — skrypt `scripts/seed-dashboard.mjs` został usunięty razem z
@@ -118,9 +122,9 @@ PR jest `ready for review` i `MERGEABLE`. Te trzy pozycje zostały otwarte
       prawdziwe tokeny są nietykalne, co pilnuje test integracyjny
       `src/lib/demo/load.integration.test.ts`.
 
-- [ ] **11.15** Parasol manualnej weryfikacji — zamyka się **sam**, gdy padnie 6.6.
-      Pozostałe 21 z 22 wierszy `MANUAL-CHECKLIST.md` jest już zamkniętych.
-      *Nie odhaczaj ręcznie przed 6.6.*
+- [x] **11.15** Parasol manualnej weryfikacji — **zamknięty 2026-08-29** wraz z
+      6.6. Zweryfikowano przed odhaczeniem: `MANUAL-CHECKLIST.md` slice'u miał
+      21 z 22 wierszy zamkniętych, a 6.6 był jedynym otwartym.
 
 ---
 

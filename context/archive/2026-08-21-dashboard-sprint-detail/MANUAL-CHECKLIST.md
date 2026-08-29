@@ -297,7 +297,7 @@ Not in Progress; these are new in this review and only covered by integration te
 
 ## G. Closeout (Progress 6.6)
 
-- [ ] **6.6** Seed reset then re-run produces a coherent sprint story across both
+- [x] **6.6** Seed reset then re-run produces a coherent sprint story across both
       dashboards.
 
 ---
