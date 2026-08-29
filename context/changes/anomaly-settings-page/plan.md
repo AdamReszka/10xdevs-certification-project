@@ -742,20 +742,20 @@ to backfill.
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npm run typecheck`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Unit tests pass: `npm test`
-- [x] 2.4 Integration tests pass: `npm run test:integration`
-- [x] 2.5 Cross-account isolation case is present and passing
+- [x] 2.1 Type checking passes: `npm run typecheck` — 688d9c6
+- [x] 2.2 Linting passes: `npm run lint` — 688d9c6
+- [x] 2.3 Unit tests pass: `npm test` — 688d9c6
+- [x] 2.4 Integration tests pass: `npm run test:integration` — 688d9c6
+- [x] 2.5 Cross-account isolation case is present and passing — 688d9c6
 
 ### Phase 3: The surface — `/settings/anomalies`
 
 #### Automated
 
-- [ ] 3.1 Type checking passes: `npm run typecheck`
-- [ ] 3.2 Linting passes: `npm run lint`
-- [ ] 3.3 Unit tests pass: `npm test`
-- [ ] 3.4 Production build succeeds: `npm run build`
+- [x] 3.1 Type checking passes: `npm run typecheck`
+- [x] 3.2 Linting passes: `npm run lint`
+- [x] 3.3 Unit tests pass: `npm test`
+- [x] 3.4 Production build succeeds: `npm run build`
 
 #### Manual
 

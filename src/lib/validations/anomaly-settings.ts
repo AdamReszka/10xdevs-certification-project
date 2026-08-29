@@ -259,3 +259,21 @@ export const anomalyRuleResetSchema = z.object({
 });
 
 export type AnomalyRuleResetValues = z.infer<typeof anomalyRuleResetSchema>;
+
+/**
+ * The union members keyed by anomaly type.
+ *
+ * Phase 3 gives every card its own `zodResolver`, and each needs exactly ONE
+ * member: a resolver over the whole union would validate correctly but hand
+ * react-hook-form the union of all eight bodies as its field type.
+ */
+export const RULE_SAVE_SCHEMAS = {
+  PR_REVIEW_STALLED: prReviewStalledRuleSchema,
+  TICKET_STATUS_AGING: ticketStatusAgingRuleSchema,
+  DEVELOPER_INACTIVE: developerInactiveRuleSchema,
+  TICKET_NO_COMMIT_LINK: ticketNoCommitLinkRuleSchema,
+  SPRINT_AT_RISK: sprintAtRiskRuleSchema,
+  PR_TOO_BIG: prTooBigRuleSchema,
+  SCOPE_CREEP: scopeCreepRuleSchema,
+  PR_TICKET_DESYNC: prTicketDesyncRuleSchema,
+} as const;
