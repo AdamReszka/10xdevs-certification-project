@@ -646,12 +646,12 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly
-- [x] 1.2 Type checking passes
-- [x] 1.3 Linting passes
-- [x] 1.4 Unit tests pass
-- [x] 1.5 Resolver fallback unit tests (DEMO without owner, DEMO with NULL anchor, REAL)
-- [x] 1.7 Resolver redirects with no session and never returns an ownerId
+- [x] 1.1 Migration applies cleanly — bff4be7
+- [x] 1.2 Type checking passes — bff4be7
+- [x] 1.3 Linting passes — bff4be7
+- [x] 1.4 Unit tests pass — bff4be7
+- [x] 1.5 Resolver fallback unit tests (DEMO without owner, DEMO with NULL anchor, REAL) — bff4be7
+- [x] 1.7 Resolver redirects with no session and never returns an ownerId — bff4be7
 
 #### Manual
 
@@ -661,15 +661,15 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [ ] 2.1 Type checking passes
-- [ ] 2.2 Linting passes
-- [ ] 2.3 Unit tests pass
-- [ ] 2.4 Integration tests pass
-- [ ] 2.5 loadDemo produces ≥4 distinct engine-written anomaly types
-- [ ] 2.6 Re-detect at the anchor resolves zero anomalies (idempotence)
-- [ ] 2.7 resetDemo leaves zero demo rows and no demo user row
-- [ ] 2.8 Load+reset on an account with real credentials leaves them byte-identical
-- [ ] 2.9 enumerateOnboardedOwners excludes demo owners
+- [x] 2.1 Type checking passes
+- [x] 2.2 Linting passes
+- [x] 2.3 Unit tests pass
+- [x] 2.4 Integration tests pass
+- [x] 2.5 loadDemo produces ≥4 distinct engine-written anomaly types
+- [x] 2.6 Re-detect at the anchor resolves zero anomalies (idempotence)
+- [x] 2.7 resetDemo leaves zero demo rows and no demo user row
+- [x] 2.8 Load+reset on an account with real credentials leaves them byte-identical
+- [x] 2.9 enumerateOnboardedOwners excludes demo owners
 
 #### Manual
 

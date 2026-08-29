@@ -84,6 +84,25 @@ describe("enumerateOnboardedOwners", () => {
     expect(result).toContain(onboarded);
     expect(result).not.toContain(ghOnly);
   });
+
+  /**
+   * S-09 / FR-008. A demo owner is fully "onboarded" by this query's own proxy —
+   * `github_commit → monitored_repo → github_credential` is NOT NULL end to end,
+   * so it MUST hold a github credential, and it holds a jira project too. Absent
+   * credentials therefore cannot stand in for the exclusion. Without the explicit
+   * `demo_of IS NULL`, this loop would sync a fictional account with a fake token
+   * every 15 minutes and hand it to `sendDailyRecap`.
+   */
+  it("excludes a demo owner even though it has both a jira project and a github credential", async () => {
+    const real = await seedUser(true);
+    const demo = await seedUser(true);
+    await db.update(user).set({ demoOf: real }).where(eq(user.id, demo));
+
+    const result = await enumerateOnboardedOwners(db);
+
+    expect(result).toContain(real);
+    expect(result).not.toContain(demo);
+  });
 });
 
 describe("runScheduledSync", () => {

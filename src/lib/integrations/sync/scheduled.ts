@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 
-import { githubCredential, jiraProject } from "@/db/schema";
+import { githubCredential, jiraProject, user } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
 import { detectAnomalies } from "@/lib/anomaly/detect";
 import { syncOwner } from "@/lib/integrations/sync/run-sync";
@@ -45,12 +45,23 @@ type Db = ReturnType<typeof getDbWithPool>["db"];
  * the invocation budget before any sync runs). An owner with a `jira_project` AND
  * a `github_credential` is a cheap onboarded proxy; both tables are unique on
  * `owner_id`, so the join yields one row per owner.
+ *
+ * DEMO OWNERS ARE EXCLUDED EXPLICITLY (S-09 / FR-008), and the exclusion is
+ * mandatory rather than defensive: `github_commit.repo_id → monitored_repo
+ * .credential_id → github_credential.id` is NOT NULL the whole way, so a demo
+ * owner NECESSARILY holds a `github_credential` and therefore matches the join
+ * above. Without `demo_of IS NULL` the cycle would attempt a real GitHub/Jira
+ * sync with a fake token every 15 minutes and — worse — hand a fictional account
+ * to `sendDailyRecap`, which this same loop drives. Still ONE set-based query;
+ * the comment above about not going per-owner still governs.
  */
 export async function enumerateOnboardedOwners(db: Db): Promise<string[]> {
   const rows = await db
     .select({ ownerId: jiraProject.ownerId })
     .from(jiraProject)
-    .innerJoin(githubCredential, eq(githubCredential.ownerId, jiraProject.ownerId));
+    .innerJoin(githubCredential, eq(githubCredential.ownerId, jiraProject.ownerId))
+    .innerJoin(user, eq(user.id, jiraProject.ownerId))
+    .where(isNull(user.demoOf));
   return rows.map((r) => r.ownerId);
 }
 
