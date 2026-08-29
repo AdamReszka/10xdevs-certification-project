@@ -993,19 +993,33 @@ export const dailyRecap = pgTable(
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    // NOT NULL: the S-12 retention purge is keyed to sprint boundaries.
-    //
-    // ACCEPTED CONSEQUENCE (plan-review F5): a Jira PROJECT SWITCH deletes the
-    // owner's sprint rows (`connection-service.ts:405-411`), which cascades
-    // today's claim row away — so the next tick re-claims and sends a SECOND
-    // email for the same local day, and the stored recap history for that sprint
-    // goes with it. Bounded to a deliberate, confirmed, destructive action; the
-    // fix (nullable `sprint_id` + `ON DELETE SET NULL` + a `recap_day`-keyed
-    // purge) belongs to S-12, where the retention logic lives. What S-11 owes it
-    // is honest confirmation copy — see `jira-project-editor.tsx`.
-    sprintId: text("sprint_id")
-      .notNull()
-      .references(() => sprint.id, { onDelete: "cascade" }),
+    /**
+     * NULLABLE with `ON DELETE SET NULL`: **a recap outlives its sprint** (S-12,
+     * FR-019).
+     *
+     * This closes the consequence S-11 accepted at plan-review F5 and assigned
+     * here by name. A Jira PROJECT SWITCH deletes the owner's sprint rows
+     * (`connection-service.ts:405-411`, defensive twin at `jira-store.ts:239-259`);
+     * under the old `ON DELETE CASCADE` that took today's claim row with it — so
+     * the next tick re-claimed and sent a SECOND email for the same local day —
+     * and destroyed the stored history the owner is now promised. The reference
+     * is kept rather than dropped because it is still the honest provenance of a
+     * live row; it simply stops being load-bearing once the sprint is gone.
+     *
+     * NOTHING READS THIS TO RENDER. `payload.sprint` (`recap/types.ts:RecapSprint`)
+     * already carries the sprint's name as a denormalized snapshot, for exactly
+     * the reason stated at `recap/types.ts:12-16` — so the detail view needs no
+     * join and a recap keeps showing the sprint it was actually about.
+     *
+     * RETENTION DOES NOT USE IT EITHER. The S-12 purge is keyed to `recap_day`
+     * (`recap/retention.ts`); the sprint boundary supplies the CUTOFF, read from
+     * `sprint_measurement`, which is deliberately FK-free so it outlives both a
+     * project switch and the retention bound. Deleting via `sprint_id` would tie
+     * retention to rows that cascade away — the failure this reshape repairs.
+     */
+    sprintId: text("sprint_id").references(() => sprint.id, {
+      onDelete: "set null",
+    }),
     /**
      * The local calendar day this recap is for — a `DayKey` (`YYYY-MM-DD` in the
      * team's zone), matching `day-bucket.ts:17`.
@@ -1037,8 +1051,6 @@ export const dailyRecap = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
-    // Kept: this is what S-12's sprint-scoped retention purge will use.
-    index("daily_recap_owner_sprint_idx").on(table.ownerId, table.sprintId),
     /**
      * The exactly-once guarantee. `sprint_id` is EXCLUDED from the key on
      * purpose: S-16's reconcile can create a new sprint row mid-cycle

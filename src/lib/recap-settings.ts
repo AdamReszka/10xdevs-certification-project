@@ -123,7 +123,14 @@ export type LastRecap = {
  * is already on when they care.
  *
  * `payload` and `rendered_message` are excluded — they are kilobytes of JSONB the
- * page does not render. Listing and drilling into past recaps is S-12 (FR-019).
+ * page does not render.
+ *
+ * OVERLAPS `listRecaps` (`recap/history.ts`) AND STAYS. That is S-12's list read
+ * over the same table; this one is `limit(1)` and projects five columns for a
+ * single line on the settings page, so collapsing them would either make the
+ * settings page pay for a list it does not show or make the list carry a shape
+ * it does not need. Two narrow reads, one table — but only two: a third reader
+ * over `daily_recap` should extend one of these rather than appear beside them.
  */
 export async function getLastRecap({
   db,
