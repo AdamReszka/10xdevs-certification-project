@@ -117,19 +117,32 @@ aplikacja. Sprawdzenie samego `.env.local` zgłasza braki na w pełni sprawnym
 leżą w `.env`, nie w `.env.local`). Kolejność flag poniżej jest znacząca —
 plik podany później wygrywa.
 
+🔴 **Baza siedzi w DWÓCH zmiennych i one obsługują różne rzeczy.** To nie jest
+duplikat — `DATABASE_URL` czyta `drizzle.config.ts` (migracje, testy),
+a `CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` czyta Miniflare pod
+`next dev` i to **z niej korzysta sama aplikacja**. Muszą mieć **identyczną**
+wartość. Szczegóły i tryb awarii — w C3 poniżej.
+
 ```bash
 echo "C1 .env:       $([ -f .env ] && echo jest || echo BRAK)"
 echo "C1 .env.local: $([ -f .env.local ] && echo jest || echo BRAK)"
 if [ ! -f .env ] && [ ! -f .env.local ]; then echo "C1: BRAK OBU PLIKOW"; else
 node --env-file-if-exists=.env --env-file-if-exists=.env.local -e '
-const need = ["DATABASE_URL","TOKEN_ENCRYPTION_KEY","BETTER_AUTH_SECRET","BETTER_AUTH_URL","NEXT_PUBLIC_SUPABASE_URL","NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"];
+const need = ["DATABASE_URL","CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE","TOKEN_ENCRYPTION_KEY","BETTER_AUTH_SECRET","BETTER_AUTH_URL","NEXT_PUBLIC_SUPABASE_URL","NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"];
 for (const k of need) {
   const v = process.env[k];
-  console.log("C2", k.padEnd(36), v ? `jest (${v.length} znakow)` : "BRAK");
+  console.log("C2", k.padEnd(52), v ? `jest (${v.length} znakow)` : "BRAK");
 }
-try { const u = new URL(process.env.DATABASE_URL);
-  console.log("C3 baza wskazuje na:", `${u.hostname}:${u.port}`, (u.hostname==="127.0.0.1"||u.hostname==="localhost") && u.port==="54322" ? "= LOKALNA, OK" : "= NIE JEST LOKALNA !!!");
-} catch { console.log("C3 baza wskazuje na: NIE DA SIE ODCZYTAC"); }
+for (const [label, raw] of [
+  ["C3a DATABASE_URL (migracje, testy)", process.env.DATABASE_URL],
+  ["C3b HYPERDRIVE   (sama aplikacja) ", process.env.CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE],
+]) {
+  if (!raw) { console.log(label, "=> BRAK !!!"); continue; }
+  try { const u = new URL(raw);
+    const ok = (u.hostname==="127.0.0.1"||u.hostname==="localhost") && u.port==="54322";
+    console.log(label, "=>", `${u.hostname}:${u.port}`, ok ? "= LOKALNA, OK" : "= NIE JEST LOKALNA !!!");
+  } catch { console.log(label, "=> NIE DA SIE ODCZYTAC"); }
+}
 const t = process.env.TOKEN_ENCRYPTION_KEY;
 console.log("C4 dlugosc klucza szyfrujacego:", t ? Buffer.from(t,"base64").length + " bajtow (wymagane 32)" : "BRAK");
 console.log("C5 BETTER_AUTH_URL:", process.env.BETTER_AUTH_URL === "http://localhost:3000" ? "OK" : "powinno byc http://localhost:3000");
@@ -154,22 +167,60 @@ fi
   wyłącznie po jej wyraźnej zgodzie i nigdy nie nadpisuj istniejącego pliku.
 
 ### C2 — wymagane wartości
-- **Zalicza:** wszystkie sześć obecne i niepuste.
+- **Zalicza:** wszystkie **siedem** obecne i niepuste.
+- 🔴 **`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE` jest na tej
+  liście od 2026-08-29 i jest tu najważniejsza.** Wcześniej jej nie było, przez
+  co ten health-check raportował ✅ na środowisku, na którym **nie dało się
+  założyć konta** — dokładnie ten przypadek zdarzył się osobie testującej.
 - **Brak którejś:** ❌, droga jak w C1 — to plik od właściciela. Nie zgaduj, w
   którym z dwóch plików wartość „powinna" być; interesuje Cię tylko wynik
   złożenia.
 
-### C3 — baza MUSI być lokalna 🔴
-- **Zalicza:** host `127.0.0.1` (lub `localhost`) i port `54322`.
+### C3 — baza MUSI być lokalna, i to w OBU zmiennych 🔴
+- **Zalicza:** **obie** linie — C3a i C3b — pokazują `127.0.0.1` (lub
+  `localhost`) i port `54322`.
 - **Uwaga:** `.env` w tym projekcie wskazuje na bazę **zdalną** — i tak ma być.
   Chroni Was `.env.local`, który ją nadpisuje. Dlatego sprawdzasz wartość
   **po złożeniu obu plików**: to ta, której faktycznie użyje aplikacja.
-- **Nie zalicza:** **przerwij wszystko.** Nie uruchamiaj `db:migrate`, nie
-  uruchamiaj aplikacji, nie zapisuj nic do bazy. Napisz:
+- **Nie zalicza (host/port spoza lokalnej):** **przerwij wszystko.** Nie
+  uruchamiaj `db:migrate`, nie uruchamiaj aplikacji, nie zapisuj nic do bazy.
+  Napisz:
   > Ustawienia wskazują na bazę, która nie jest Twoją lokalną. Zatrzymuję się
   > tutaj — uruchomienie czegokolwiek mogłoby zmienić prawdziwe dane. Napisz do
   > właściciela projektu, zanim pójdziemy dalej.
-- To jedyne sprawdzenie, którego wynik unieważnia cały resztę raportu.
+- To jedyne sprawdzenie, którego wynik unieważnia całą resztę raportu.
+
+#### 🔴 C3b puste („BRAK") — najbardziej mylący błąd w tym projekcie
+
+**Objaw:** wszystko inne jest zielone, `npm run db:migrate` przechodzi bez
+zarzutu, aplikacja się uruchamia — i **nie da się założyć konta**. W logu pada
+próba połączenia z `localhost:5432` (bez dwójki na końcu), mimo że w
+ustawieniach widać `54322`.
+
+**Dlaczego tak jest:** to nie są dwie kopie tej samej wartości. Ścieżka
+rejestracji idzie `createAuth(env)` → `getDb(env)` → `src/lib/db.ts:12-13`:
+
+```
+env?.HYPERDRIVE?.connectionString ?? process.env.DATABASE_URL
+```
+
+Pod `next dev` binding `HYPERDRIVE` **zawsze istnieje** (deklaruje go
+`wrangler.jsonc`), więc `??` **nigdy** nie schodzi do `DATABASE_URL`. Gdy
+zmiennej C3b brakuje, wrangler bierze wartość zapasową wprost z
+`wrangler.jsonc:32` — `postgresql://user:password@localhost:5432/db`. Stąd `5432`
+i cudze hasło. Migracje działają dalej, bo `drizzle.config.ts` czyta
+`DATABASE_URL` — i to właśnie sprawia, że środowisko wygląda na sprawne.
+
+(Nazwa zmiennej to konwencja Cloudflare
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_<NAZWA_BINDINGU>`; starsze
+`WRANGLER_...` to alias z 2024 i tu go nie używamy.)
+
+**Naprawa — bezpieczna, ale wyłącznie za zgodą:** dopisać do `.env.local` linię
+`CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=` z **dokładnie tą
+samą wartością**, którą ma tam `DATABASE_URL`. Nie wypisuj tej wartości na
+ekran — poproś ją o skopiowanie w edytorze. Po zapisie **konieczny restart**
+`npm run dev`: zmienne czyta się tylko przy starcie. Weryfikacja to ponowne
+uruchomienie komendy z sekcji C — C3b ma pokazać `127.0.0.1:54322`.
 
 ### C4 — klucz szyfrujący
 - **Zalicza:** po odkodowaniu dokładnie **32 bajty**.

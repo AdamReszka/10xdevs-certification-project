@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  describeAutoDisable,
   describeLastSend,
   fromTimeValue,
   sendTimeHint,
@@ -85,6 +86,52 @@ describe("describeLastSend", () => {
     expect(
       describeLastSend(row({ sendStatus: "PENDING", sentAt: null, lastAttemptAt: null })),
     ).toContain("stalled");
+  });
+});
+
+describe("describeAutoDisable", () => {
+  it("says NOTHING when the owner turned the recap off themselves", () => {
+    // A null reason with the recap off is the ordinary case. Dressing it up as
+    // a fault would tell the owner something went wrong when nothing did.
+    expect(describeAutoDisable({ disabledReason: null, disabledAt: null })).toBeNull();
+    expect(
+      describeAutoDisable({ disabledReason: null, disabledAt: "2026-08-29T10:00:00.000Z" }),
+    ).toBeNull();
+  });
+
+  it("names a permanent bounce, the date, and what to fix first", () => {
+    const out = describeAutoDisable({
+      disabledReason: "BOUNCE_PERMANENT",
+      disabledAt: "2026-08-29T10:00:00.000Z",
+    })!;
+    expect(out).toContain("2026-08-29");
+    expect(out).toContain("rejected it permanently");
+    // Without an action the owner can only flip the switch back into the same
+    // loop, which is exactly what these columns exist to prevent.
+    expect(out).toContain("Check the address");
+  });
+
+  it("names a spam complaint and asks for the mail client to be fixed first", () => {
+    const out = describeAutoDisable({
+      disabledReason: "COMPLAINT",
+      disabledAt: new Date("2026-08-29T10:00:00.000Z"),
+    })!;
+    expect(out).toContain("reported as spam");
+    expect(out).toContain("Mark SprintFlow as safe");
+  });
+
+  it("still explains an UNKNOWN reason code rather than going silent", () => {
+    // A code this build does not know still means something switched the recap
+    // off. Silence would put the owner back in the dark.
+    const out = describeAutoDisable({ disabledReason: "SOMETHING_NEW", disabledAt: null })!;
+    expect(out).toContain("stopped sending your daily recap");
+    expect(out).not.toContain("undefined");
+    expect(out).not.toContain("null");
+  });
+
+  it("omits the date rather than printing a broken one", () => {
+    const out = describeAutoDisable({ disabledReason: "COMPLAINT", disabledAt: null })!;
+    expect(out).not.toContain(" on ");
   });
 });
 

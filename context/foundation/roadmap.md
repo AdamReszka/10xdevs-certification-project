@@ -43,7 +43,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07, S-10   | FR-008, US-02                             | done |
 | S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns; **plus** the Today tab shell with Sprint Pulse, Yesterday's Activity and the Reliability KPI, and the three sync writes they need (commit churn, Jira time zone, sprint SP scalars) | S-05, S-07 | FR-016, FR-017 | done     |
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | done     |
-| S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
+| S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | done     |
 | S-13 | refinement-helper-ai      | pick tickets from the backlog (or by key, or pasted); each gets a readiness verdict — "DOR met", or the specific gaps blocking it, stated in the ticket's own terms; session saved | S-01, F-02, S-03 | FR-020, FR-021 | done     |
 | S-14 | anomaly-settings-page     | configure per-anomaly-type severity tiers and thresholds from a settings page                | S-06, S-07         | FR-009, FR-014                                  | done     |
 | S-15 | team-management-surface   | manage the team roster after setup from a **Settings → Team** tab: edit, deactivate/reactivate, merge, delete with confirmation; the save is a differential upsert and re-import proposes a diff instead of appending (PR #49) | S-04, S-10 | FR-006 | done     |
@@ -352,7 +352,21 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Blockers:** —
 - **Unknowns:** —
 - **Risk:** Auto-purge logic must be keyed to sprint boundaries, not calendar days — confirm sprint end-date metadata is stored per sync in F-02's schema so the purge query can correctly identify "current + 2 previous sprints".
-- **Status:** proposed
+  - **Answered during implementation (2026-08-29).** The CUTOFF is keyed to a
+    sprint boundary and the PREDICATE is `recap_day`, and those are not in
+    tension. `sprint_measurement` — the only durable, ordered sprint series, and
+    deliberately FK-free so it outlives a project switch — supplies the third
+    newest sprint's `start_date`, which is converted to a `DayKey` in the team's
+    zone and deleted strictly below. Deleting via `sprint_id` instead would tie
+    retention to rows that cascade away on a Jira project switch, which is the
+    very failure Phase 1 repaired. Fewer than three recorded sprints, or a third
+    sprint with no start date, resolves to NO cutoff and NO delete — every
+    uncertain case fails toward keeping data.
+- **Status:** done — code delivered 2026-08-29 in 4 phases (`1855031`, `ed51cf3`,
+  `1772eec`, + the webhook phase). Also carried the two things only this slice
+  could: the `daily_recap.sprint_id` reshape S-11 deferred here by name, and the
+  Resend bounce/complaint webhook S-11's plan-review left open as F6. Manual rows
+  remain open in `manual-test-backlog.md` §14.
 
 ---
 
@@ -538,7 +552,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-09       | demo-mode                 | Demo mode: load/reset mixed-state fixture dataset                      | done                   | ✅ Implemented & merged — PR #56 (2026-08-29), five phases; archived 2026-08-29. Both plan-bearing findings closed at the root rather than patched: demo is now **tenancy** (a synthetic `user` row with `demo_of`, all 25 owner FKs cascading), so reset is exact and cannot reach real credentials; and demo anomalies come from the real engine at a **frozen clock**, so the reconcile re-derives them instead of resolving them away. `scripts/seed-dashboard.mjs` and `db:seed:demo` deleted — one fixture, one entry point |
 | S-10       | dashboard-sprint-detail   | Dashboard "Sprint Detail" — aging report + activity matrix (+ S-07's deferred burndown + Yesterday's Activity) | done                   | ✅ Implemented & reviewed — PR #46 (2026-08-23); archived 2026-08-26 |
 | S-11       | daily-recap-email         | Daily Recap email via Resend + Cron Trigger                            | done                   | ✅ Implemented, reviewed & archived — PR #53 (2026-08-26). ✅ **Resend provisioned 2026-08-29** — API key and `RESEND_FROM_ADDRESS` (`SprintFlow <no-reply@sprintflow.pl>`) set locally and as Cloudflare secrets, so the transport no longer falls back to the console log. The 7 rows in `manual-test-backlog.md` §9 are now *executable*, not *passed* — 3.7 is still a live check of SPF/DKIM/DMARC in the Resend panel, which a present key does not evidence |
-| S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | yes                    | **Unblocked** — S-11 shipped and `daily_recap` now stores a versioned `payload` + `rendered_message` per send. Also the home for the deferred Resend bounce/complaint webhook |
+| S-12       | recap-history             | Recap history view with sprint-bounded auto-purge                      | done                   | ✅ Code delivered 2026-08-29 across 4 phases (PR #65): FK reshape so the archive outlives a Jira project switch, the `recap_day`-keyed purge behind a sprint-boundary cutoff, `/settings/recap/history` + drill-in rendering the FROZEN stored bytes in a sandboxed frame, and the Resend bounce/complaint webhook (S-11 plan-review F6) with the repo's first signature verification. Manual rows open in `manual-test-backlog.md` §14 |
 | S-13       | refinement-helper-ai      | Refinement Helper: per-ticket DOR readiness verdict over the Jira backlog | done                   | ✅ Implemented, reviewed & merged — PR #54 (2026-08-27). The only AI surface; model pinned to `claude-sonnet-5` |
 | S-14       | anomaly-settings-page     | Anomaly threshold + severity settings page                             | done                   | ✅ Implemented, reviewed & merged — PR #57 (2026-08-29); archived 2026-08-29. Shipped as a second tab inside the `/settings` shell S-10 built, not a new route: the per-owner `anomaly_settings` table and `resolveEffectiveThresholds` were already live from S-06, so account scoping was structural rather than something this slice had to add. No `/10x-frame` round — the roadmap's stated framing risk (per-account scoping) was already closed in code and FR-009 settles the placement question outright. Closed with a CI gate on Worker bundle size that records the measured trend |
 | S-15       | team-management-surface   | Settings → Team: edit, deactivate, merge, delete; differential-upsert save | done                   | ✅ Implemented & reviewed — PR #49 (2026-08-25); archived 2026-08-26 |

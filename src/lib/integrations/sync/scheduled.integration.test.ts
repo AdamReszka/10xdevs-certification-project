@@ -255,3 +255,108 @@ describe("runScheduledSync — daily recap", () => {
     expect(result.recapsSent).toBe(0);
   });
 });
+
+/**
+ * S-12 — the retention purge is a FOURTH sibling `try`, and it is the repo's
+ * first irreversible deletion. Two things follow: it must not be able to take
+ * the cycle down, and it must run last, so a recap written this cycle is never a
+ * candidate for the delete that follows it.
+ */
+describe("runScheduledSync — retention purge", () => {
+  const noopSync = vi.fn(async () => ({
+    github: { status: "OK" as const },
+    jira: { status: "OK" as const },
+  })) as unknown as typeof import("@/lib/integrations/sync/run-sync").syncOwner;
+  const noopDetect = vi.fn(async () => undefined) as unknown as typeof import("@/lib/anomaly/detect").detectAnomalies;
+
+  function harness() {
+    return {
+      getDbWithPool: () => ({ db, pool: { end: vi.fn().mockResolvedValue(undefined) } as unknown as Pool }),
+      syncOwner: noopSync,
+      detectAnomalies: noopDetect,
+    };
+  }
+
+  it("leaves synced, failed and recapsSent untouched when the purge throws", async () => {
+    await seedUser(true);
+
+    const recap = vi.fn(async () => ({ status: "SENT" as const })) as unknown as typeof import("@/lib/recap/send").sendDailyRecap;
+    const purge = vi.fn(async () => {
+      throw new Error("delete blew up");
+    }) as unknown as typeof import("@/lib/recap/retention").purgeOldRecaps;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      sendDailyRecap: recap,
+      purgeOldRecaps: purge,
+    });
+
+    // A purge failure is nobody else's failure. Above all the email already went
+    // out this cycle and must stay counted.
+    expect(result.synced).toBeGreaterThanOrEqual(1);
+    expect(result.failed).toBe(0);
+    expect(result.recapsSent).toBeGreaterThanOrEqual(1);
+    expect(result.recapsPurged).toBe(0);
+    expect(JSON.stringify(errorSpy.mock.calls)).toContain("retention purge failed");
+    errorSpy.mockRestore();
+  });
+
+  it("runs the purge AFTER the recap send and totals what it deleted", async () => {
+    const owner = await seedUser(true);
+
+    // Scoped to OUR owner: the local database holds other onboarded accounts,
+    // and the loop visits every one of them.
+    const order: string[] = [];
+    const recap = vi.fn(async ({ ownerId }: { ownerId: string }) => {
+      if (ownerId === owner) order.push("recap");
+      return { status: "SENT" as const };
+    }) as unknown as typeof import("@/lib/recap/send").sendDailyRecap;
+    const purge = vi.fn(async ({ ownerId }: { ownerId: string }) => {
+      if (ownerId !== owner) return { cutoff: null, deleted: 0 };
+      order.push("purge");
+      return { cutoff: "2026-07-20", deleted: 4 };
+    }) as unknown as typeof import("@/lib/recap/retention").purgeOldRecaps;
+    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
+
+    const result = await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      sendDailyRecap: recap,
+      purgeOldRecaps: purge,
+    });
+
+    // Ordering is load-bearing, not incidental: today's recap must exist before
+    // the delete runs, never the other way round.
+    expect(order).toEqual(["recap", "purge"]);
+    expect(result.recapsPurged).toBe(4);
+    // The cycle's own result is discarded by `worker.ts:46`, so this log line is
+    // the only thing an operator can see of the deletion.
+    expect(JSON.stringify(infoSpy.mock.calls)).toContain("2026-07-20");
+    infoSpy.mockRestore();
+  });
+
+  it("STILL purges for an owner whose sync threw", async () => {
+    const owner = await seedUser(true);
+
+    const throwingSync = vi.fn(async () => {
+      throw new Error("Jira rejected the token (invalid or expired).");
+    }) as unknown as typeof import("@/lib/integrations/sync/run-sync").syncOwner;
+    const purged: string[] = [];
+    const purge = vi.fn(async ({ ownerId }: { ownerId: string }) => {
+      purged.push(ownerId);
+      return { cutoff: null, deleted: 0 };
+    }) as unknown as typeof import("@/lib/recap/retention").purgeOldRecaps;
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await runScheduledSync({}, { waitUntil: vi.fn() }, {
+      ...harness(),
+      syncOwner: throwingSync,
+      purgeOldRecaps: purge,
+    });
+
+    // Retention is DB-only, like the sweep: an expired token is no reason to let
+    // an owner's archive grow past its bound indefinitely.
+    expect(purged).toContain(owner);
+    errorSpy.mockRestore();
+  });
+});

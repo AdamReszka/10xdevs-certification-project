@@ -28,13 +28,27 @@ export type RecapSettings = {
   sendHour: number;
   sendMinute: number;
   enabled: boolean;
+  /**
+   * Why SPRINTFLOW switched the recap off — `BOUNCE_PERMANENT` or `COMPLAINT`
+   * (S-12 Phase 4). NULL alongside `enabled: false` means the OWNER turned it
+   * off themselves, which needs no explanation.
+   */
+  disabledReason: string | null;
+  disabledAt: Date | null;
 };
 
-/** FR-018's stated default: 15:00 local, on. */
+/**
+ * FR-018's stated default: 15:00 local, on.
+ *
+ * Both disabled-* fields are null, which is the honest no-row state: an owner
+ * who has never saved has never been disabled either.
+ */
 export const DEFAULT_RECAP_SETTINGS: RecapSettings = {
   sendHour: 15,
   sendMinute: 0,
   enabled: true,
+  disabledReason: null,
+  disabledAt: null,
 };
 
 export async function getRecapSettings({
@@ -49,6 +63,11 @@ export async function getRecapSettings({
       sendHour: recapSettings.sendHour,
       sendMinute: recapSettings.sendMinute,
       enabled: recapSettings.enabled,
+      // Read in the SAME query, not a second one: `/settings/recap` keeps its
+      // single `Promise.all` (`page.tsx:28-32`), and a second round trip for two
+      // columns is the fan-out `lessons.md` #3 rejects.
+      disabledReason: recapSettings.disabledReason,
+      disabledAt: recapSettings.disabledAt,
     })
     .from(recapSettings)
     .where(eq(recapSettings.ownerId, ownerId))
@@ -63,6 +82,13 @@ export async function getRecapSettings({
  * Conflicts on `recap_settings_owner_uq` rather than reading-then-branching: the
  * singleton-per-owner shape of `githubCredential` / `jiraCredential` /
  * `jiraProject`, and the only form that is safe against two saves racing.
+ *
+ * THE AUTO-DISABLE EXPLANATION IS CLEARED ONLY BY A SAVE THAT RE-ENABLES
+ * (S-12 Phase 4). The distinction is load-bearing, not tidiness: changing the
+ * send hour while the recap is off must NOT erase why it went off, or the next
+ * thing the owner sees is an unexplained "off" switch and they flip it straight
+ * back into the same bounce loop. Only `enabled: true` is the owner saying they
+ * have dealt with it.
  */
 export async function saveRecapSettings({
   db,
@@ -88,6 +114,11 @@ export async function saveRecapSettings({
         sendHour: input.sendHour,
         sendMinute: input.sendMinute,
         enabled: input.enabled,
+        // Spread, so the two columns are ABSENT from the SET list on a save that
+        // does not re-enable — `undefined` would be a no-op in drizzle, but
+        // omitting them says the intent out loud and cannot be undone by a
+        // future change to how drizzle treats undefined.
+        ...(input.enabled ? { disabledReason: null, disabledAt: null } : {}),
         updatedAt: new Date(),
       },
     })
@@ -95,6 +126,8 @@ export async function saveRecapSettings({
       sendHour: recapSettings.sendHour,
       sendMinute: recapSettings.sendMinute,
       enabled: recapSettings.enabled,
+      disabledReason: recapSettings.disabledReason,
+      disabledAt: recapSettings.disabledAt,
     });
 
   return row ?? DEFAULT_RECAP_SETTINGS;
@@ -123,7 +156,14 @@ export type LastRecap = {
  * is already on when they care.
  *
  * `payload` and `rendered_message` are excluded — they are kilobytes of JSONB the
- * page does not render. Listing and drilling into past recaps is S-12 (FR-019).
+ * page does not render.
+ *
+ * OVERLAPS `listRecaps` (`recap/history.ts`) AND STAYS. That is S-12's list read
+ * over the same table; this one is `limit(1)` and projects five columns for a
+ * single line on the settings page, so collapsing them would either make the
+ * settings page pay for a list it does not show or make the list carry a shape
+ * it does not need. Two narrow reads, one table — but only two: a third reader
+ * over `daily_recap` should extend one of these rather than appear beside them.
  */
 export async function getLastRecap({
   db,

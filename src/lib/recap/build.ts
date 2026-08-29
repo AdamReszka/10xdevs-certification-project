@@ -10,6 +10,7 @@ import {
   enumerateDayKeys,
 } from "@/lib/dashboard/day-bucket";
 import type { getDb } from "@/lib/db";
+import { RECAP_SCHEMA_VERSION } from "@/lib/recap/schema-version";
 import { listRoster } from "@/lib/roster";
 import { getSyncState } from "@/lib/sync-state";
 import type {
@@ -112,7 +113,7 @@ export async function buildRecapPayload({
   const activity: RecapActivity = { ...foldTeamActivity(grid), ticketsMovedToDone };
 
   return {
-    schemaVersion: 1,
+    schemaVersion: RECAP_SCHEMA_VERSION,
     generatedAt: now.toISOString(),
     dayKey,
     timeZone,

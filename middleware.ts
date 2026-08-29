@@ -23,7 +23,14 @@ import { getSessionCookie } from "better-auth/cookies";
 // startsWith("//"), which no real path matches — so "/" opens ONLY the exact
 // landing page, not every route. The marketing landing must be reachable
 // unauthenticated (F-03); child routes stay gated.
-const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/reset", "/api/auth"];
+// "/api/webhooks" (S-12 Phase 4) is deliberately NARROWER than "/api": it opens
+// the Resend bounce/complaint endpoint and nothing else. For this prefix the
+// security boundary is the SIGNATURE CHECK inside the route
+// (`recap/webhook-signature.ts`) — nothing upstream authenticates it, and there
+// is no session to check because the caller is Resend, not a person. Without the
+// entry the endpoint is invisible: Resend gets a 302 to /login and the webhook
+// silently does nothing forever.
+const PUBLIC_PREFIXES = ["/", "/login", "/signup", "/reset", "/api/auth", "/api/webhooks"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PREFIXES.some(

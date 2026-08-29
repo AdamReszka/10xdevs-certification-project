@@ -103,7 +103,12 @@ export type DemoFixture = {
   sprintMeasurements: (typeof sprintMeasurementTable.$inferInsert)[];
   refinementRun: typeof refinementRunTable.$inferInsert;
   refinementVerdicts: (typeof refinementTicketVerdictTable.$inferInsert)[];
-  dailyRecap: typeof dailyRecapTable.$inferInsert;
+  /**
+   * S-12 (FR-019): a HISTORY, not a single row. One recap demonstrates that the
+   * page renders; five demonstrate the surface US-02 asks for — a list with
+   * something to compare, including a send that did not land.
+   */
+  dailyRecaps: (typeof dailyRecapTable.$inferInsert)[];
 };
 
 /**
@@ -668,6 +673,43 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     ],
   };
 
+  /**
+   * The recap ARCHIVE (S-12, FR-019). Five days of the demo sprint, newest
+   * first, so `/settings/recap/history` shows a list worth reading rather than a
+   * single row that proves only that the table renders.
+   *
+   * EVERY ROW IS TERMINAL, and that is load-bearing TWICE (S-11 plan-review F5).
+   * It keeps the rows out of `sendDailyRecap`'s reach — a demo account must
+   * never email anyone — and it keeps the ONE browser clock in the tree out of
+   * the demo: `classifyRecapSend` compares `Date.now()` against
+   * `last_attempt_at`, but only on the PENDING branch. A PENDING demo recap
+   * would therefore be a frozen-clock regression, not a cosmetic choice.
+   *
+   * ONE ROW IS `FAILED`, with its payload and its rendered bytes intact. A
+   * failed send is the most valuable thing on this list — it is what the archive
+   * exists to let the lead notice — and a blank one would demonstrate nothing.
+   * The `daily_recap_owner_day_uq(owner_id, recap_day)` constraint is what makes
+   * the distinct day keys mandatory rather than cosmetic.
+   */
+  const dailyRecaps = RECAP_HISTORY_DAYS.map(({ dayOffset, status, attempts, subject }) => ({
+    id: randomUUID(),
+    ownerId,
+    sprintId,
+    recapDay: dayKey(dayOffset),
+    sendStatus: status,
+    // A FAILED row never left, so it has no `sent_at` — only the attempt that
+    // gave up. Handing it one would make the list's timestamp column lie.
+    sentAt: status === "SENT" ? h(2 - dayOffset * 24) : null,
+    lastAttemptAt: h(2 - dayOffset * 24),
+    attemptCount: attempts,
+    payload: { ...recapPayload, dayKey: dayKey(dayOffset), generatedAt: h(2 - dayOffset * 24).toISOString() },
+    renderedMessage: { subject, html: RECAP_HTML, text: RECAP_TEXT },
+    // Empty on purpose: the engine writes the anomaly rows AFTER this fixture
+    // commits, so no id here could be real. The payload above is the snapshot
+    // the surface renders, exactly as a live recap stores it.
+    anomalyIds: [],
+  }));
+
   return {
     jiraCredential: {
       id: jiraCredentialId,
@@ -771,32 +813,7 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     sprintMeasurements,
     refinementRun,
     refinementVerdicts,
-    dailyRecap: {
-      id: randomUUID(),
-      ownerId,
-      sprintId,
-      recapDay: dayKey(0),
-      // TERMINAL, and load-bearing TWICE (plan-review F5). It keeps the row out
-      // of `sendDailyRecap`'s reach — a demo account must never email anyone —
-      // and it keeps the ONE browser clock in the tree out of the demo:
-      // `describeLastSend` compares `Date.now()` against `last_attempt_at`, but
-      // only on the PENDING branch. A PENDING demo recap would therefore be a
-      // frozen-clock regression, not a cosmetic choice.
-      sendStatus: "SENT" as const,
-      sentAt: h(2),
-      lastAttemptAt: h(2),
-      attemptCount: 1,
-      payload: recapPayload,
-      renderedMessage: {
-        subject: "SprintFlow — Sprint 24, 4 rzeczy na dziś",
-        html: RECAP_HTML,
-        text: RECAP_TEXT,
-      },
-      // Empty on purpose: the engine writes the anomaly rows AFTER this fixture
-      // commits, so no id here could be real. The payload above is the snapshot
-      // the surface renders, exactly as a live recap stores it.
-      anomalyIds: [],
-    },
+    dailyRecaps,
   };
 }
 
@@ -821,6 +838,38 @@ const STATUS_MAPPINGS = [
   { id: "12", name: "Code Review", category: "CODE_REVIEW" as const },
   { id: "13", name: "Testing", category: "TESTING" as const },
   { id: "14", name: "Done", category: "DONE" as const },
+];
+
+/**
+ * The five demo recap days (S-12), newest first.
+ *
+ * `dayOffset` is the offset the fixture's own `dayKey` helper takes: `0` is the
+ * anchor day, `-1` the day before it. They are distinct because
+ * `daily_recap_owner_day_uq(owner_id, recap_day)` will not have it otherwise,
+ * and they all sit inside the demo sprint's window (it started 12.5 days before
+ * the anchor), so nothing here is older than the retention cutoff the purge
+ * applies.
+ *
+ * The FAILED row carries `attemptCount: 3` — the cap in `recap/send.ts:65` — so
+ * it reads as exhausted rather than as "will retry", which on a frozen-clock
+ * demo would be a promise nothing can keep.
+ */
+const RECAP_HISTORY_DAYS: {
+  dayOffset: number;
+  status: "SENT" | "FAILED";
+  attempts: number;
+  subject: string;
+}[] = [
+  { dayOffset: 0, status: "SENT", attempts: 1, subject: "SprintFlow — Sprint 24, 4 rzeczy na dziś" },
+  { dayOffset: -1, status: "SENT", attempts: 1, subject: "SprintFlow — Sprint 24, 3 rzeczy na dziś" },
+  {
+    dayOffset: -2,
+    status: "FAILED",
+    attempts: 3,
+    subject: "SprintFlow — Sprint 24, 5 rzeczy na dziś",
+  },
+  { dayOffset: -3, status: "SENT", attempts: 1, subject: "SprintFlow — Sprint 24, 2 rzeczy na dziś" },
+  { dayOffset: -4, status: "SENT", attempts: 2, subject: "SprintFlow — Sprint 24, 4 rzeczy na dziś" },
 ];
 
 /** The recap's frozen HTML, kept short — the surface renders a preview, not a mailbox. */
