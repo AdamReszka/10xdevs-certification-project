@@ -753,6 +753,13 @@ schodzić na wypisywanie treści do logu i faktycznie wysyła.
    wspólnego z kodem SprintFlow, i zmarnują notatkę na nieistniejący defekt.
 
 - [ ] **3.7** Panel Resend pokazuje `sprintflow.pl` zweryfikowaną (SPF, DKIM, DMARC).
+      🔒 **Tylko ręcznie, w panelu — API tego nie powie.** Sprawdzone 2026-08-29:
+      `GET https://api.resend.com/domains` zwraca `401 restricted_api_key`
+      („This API key is restricted to only send emails"). Klucz jest celowo
+      ograniczony do wysyłki, więc nie odczyta ani listy domen, ani statusu
+      rekordów DNS. To zaleta, nie usterka — wyciek takiego klucza nie odsłania
+      konfiguracji konta. **Nie próbuj ponownie przez API**; zaloguj się do
+      panelu Resenda i odczytaj status trzech rekordów tam.
 - [ ] **3.8** Prawdziwy request resetu dowozi maila, którego link loguje na
       `/reset/confirm`.
 - [ ] **3.9** Log Workera z tego requestu **nie zawiera URL-a resetu**.
