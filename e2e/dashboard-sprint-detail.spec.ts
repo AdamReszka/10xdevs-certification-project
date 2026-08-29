@@ -3,6 +3,14 @@ import { randomUUID } from "node:crypto";
 import { expect, test, type Browser, type BrowserContext } from "@playwright/test";
 import pg from "pg";
 
+import {
+  DB_URL,
+  deleteAccount,
+  resolveOwnerId,
+  signUpFreshAccount,
+  signUpOnboardedAccount,
+} from "./accounts";
+
 /**
  * S-10 — Dashboard "Sprint Detail" + the Today tab retrofit.
  *
@@ -31,38 +39,35 @@ import pg from "pg";
  * sync, which is what the read-side reducers consume anyway.
  */
 
-const DB_URL =
-  process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
-const PASSWORD = "Sprint-Flow-1!";
-
-/**
- * Create a brand-new authenticated browser context, without going through the
- * login UI.
- *
- * Used by the two describes that cannot share the suite's `storageState`
- * account: one needs an owner with NO sprint and no integrations, the other
- * seeds its own data. The setup specs connect GitHub and Jira on the shared
- * account, so under `fullyParallel` any assertion about the unconnected state
- * is a coin flip there.
- */
-async function signUpFreshAccount(browser: Browser, email: string): Promise<BrowserContext> {
-  const context = await browser.newContext();
-  const res = await context.request.post("/api/auth/sign-up/email", {
-    // Better Auth rejects a cross-origin-looking POST (MISSING_OR_NULL_ORIGIN);
-    // APIRequestContext sends no Origin by default, so set it explicitly.
-    headers: { origin: baseURL },
-    data: { name: "S10 E2E", email, password: PASSWORD },
-  });
-  expect(res.ok(), `sign-up failed: ${res.status()} ${await res.text()}`).toBeTruthy();
-  return context;
-}
+// Account fixtures (sign-up, onboarding rows, cleanup) live in `./accounts` —
+// shared with `seed.spec.ts` and `setup-doorstep.spec.ts`.
 
 // ---------------------------------------------------------------------------
-// Risks 1 & 2 — run on the suite's shared (unseeded) account.
+// Risks 1 & 2 — each on its OWN onboarded, unseeded account.
+//
+// They cannot use the suite's shared `storageState` account any more: since
+// `onboarding-routing` Phase 3, `/dashboard` redirects an un-onboarded account
+// to the first-run doorstep, and the shared account is deliberately left
+// un-onboarded (the setup specs disconnect its integrations in `afterEach`).
+// An onboarded-but-unseeded account is exactly what both risks want — the
+// dashboard renders, and there is still no sprint.
 // ---------------------------------------------------------------------------
 
 test.describe("Dashboard Today — S-10 tab retrofit", () => {
+  const email = `e2e-s10-today-${Date.now()}@example.test`;
+
+  let context: BrowserContext;
+  let ownerId: string;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, ownerId } = await signUpOnboardedAccount(browser, email));
+  });
+
+  test.afterAll(async () => {
+    if (ownerId) await deleteAccount(ownerId);
+    await context?.close();
+  });
+
   /**
    * Risk-tied: FR-016 — "the Today dashboard opens on the Anomaly Inbox as the
    * default view", the differentiator S-07 shipped. If the retrofit had made
@@ -70,9 +75,8 @@ test.describe("Dashboard Today — S-10 tab retrofit", () => {
    * this fails: `aria-selected` would sit on the wrong tab and the inbox panel
    * would not be visible.
    */
-  test("Today still opens on the Anomaly Inbox, and each tab reveals its panel", async ({
-    page,
-  }) => {
+  test("Today still opens on the Anomaly Inbox, and each tab reveals its panel", async () => {
+    const page = await context.newPage();
     await page.goto("/dashboard");
 
     await expect(page.getByRole("heading", { name: "Dashboard — Today" })).toBeVisible();
@@ -91,14 +95,24 @@ test.describe("Dashboard Today — S-10 tab retrofit", () => {
 
     // Each remaining tab reveals its own panel. The locators target content
     // unique to each panel, not the tab label — clicking a tab that revealed
-    // nothing would still leave the label on screen.
+    // nothing would still leave the label on screen. Scoped to the ACTIVE
+    // tabpanel for the same reason the inbox assertions above are: an unscoped
+    // match can collide with copy the header or a sibling panel also carries.
+    //
+    // STALE-ASSERTION REPAIR (`onboarding-routing` Phase 3): the Reliability row
+    // used to expect /hasn't recorded this sprint/, the branch for an account
+    // that HAS an active sprint with no measurement yet. This account has no
+    // sprint at all, so S-23's `no-sprint` branch renders instead
+    // (`reliability-kpi.tsx:63`) and the assertion had been red since that
+    // branch was added. The behaviour under test — the tab reveals its panel —
+    // is unchanged; only the copy the panel shows for THIS account is.
     for (const [tabName, panelContent] of [
       ["Sprint Pulse", "Tickets by status"],
       ["Yesterday", "Yesterday's activity"],
-      ["Reliability", /hasn't recorded this sprint/],
+      ["Reliability", /No active sprint yet/],
     ] as const) {
       await page.getByRole("tab", { name: tabName }).click();
-      await expect(page.getByText(panelContent)).toBeVisible();
+      await expect(page.getByRole("tabpanel").getByText(panelContent)).toBeVisible();
       await expect(freshness).toBeVisible();
     }
 
@@ -107,10 +121,26 @@ test.describe("Dashboard Today — S-10 tab retrofit", () => {
     // Scoped to the active tabpanel: the same copy also appears in the page
     // header, so an unscoped match would pass even with the panel empty.
     await expect(page.getByRole("tabpanel").getByText("Anomaly Inbox")).toBeVisible();
+
+    await page.close();
   });
 });
 
 test.describe("Sprint Detail — no sprint (plan review F2)", () => {
+  const email = `e2e-s10-nosprint-${Date.now()}@example.test`;
+
+  let context: BrowserContext;
+  let ownerId: string;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, ownerId } = await signUpOnboardedAccount(browser, email));
+  });
+
+  test.afterAll(async () => {
+    if (ownerId) await deleteAccount(ownerId);
+    await context?.close();
+  });
+
   /**
    * Risk-tied: test-plan.md Risk #6 ("no white screen, no unhandled crash") and
    * plan review F2. The three reducers all take a non-optional `sprintId`; if
@@ -118,9 +148,8 @@ test.describe("Sprint Detail — no sprint (plan review F2)", () => {
    * the page would 500 instead of rendering the empty state. The assertion fails
    * exactly then — Next's error surface carries neither the heading nor the copy.
    */
-  test("an owner with no sprint reaches Sprint Detail from the nav and gets the empty state", async ({
-    page,
-  }) => {
+  test("an owner with no sprint reaches Sprint Detail from the nav and gets the empty state", async () => {
+    const page = await context.newPage();
     await page.goto("/dashboard");
 
     // Reachability is part of the risk: the route is only useful if the nav
@@ -135,6 +164,8 @@ test.describe("Sprint Detail — no sprint (plan review F2)", () => {
 
     // Graceful degradation, not a crash: the freshness bar still renders.
     await expect(page.getByText(/Jira last synced:/)).toBeVisible();
+
+    await page.close();
   });
 });
 
@@ -168,7 +199,12 @@ test.describe("Settings — Connections (S-10 Phase 8)", () => {
    */
   test("Settings is reachable from the nav and reports both integrations", async () => {
     const page = await context.newPage();
-    await page.goto("/dashboard");
+    // Enter the nav from Sprint Detail, not `/dashboard`: this account is
+    // unconnected on purpose, and since `onboarding-routing` Phase 3 an
+    // un-onboarded account is redirected off `/dashboard` to the first-run
+    // doorstep, which renders no nav. Sprint Detail is not gated, so the
+    // nav-reachability risk this test exists for is still exercised end to end.
+    await page.goto("/dashboard/sprint-detail");
 
     await page.getByRole("link", { name: "Settings" }).click();
     // /settings redirects to its first section, mirroring the wizard.
@@ -238,11 +274,8 @@ test.describe("Sprint Detail — seeded sprint", () => {
 
   /** Sign up through the API (never the UI) and resolve the new owner's id. */
   async function signUpAndResolveOwner(browser: Browser): Promise<void> {
-    context = await signUpFreshAccount(browser, email);
-
-    const { rows } = await client.query('select id from "user" where email = $1', [email]);
-    expect(rows, "the sign-up did not create a user row").toHaveLength(1);
-    ownerId = rows[0].id;
+    context = await signUpFreshAccount(browser, email, "S10 E2E");
+    ownerId = await resolveOwnerId(client, email);
   }
 
   /**

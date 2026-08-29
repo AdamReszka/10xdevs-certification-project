@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type BrowserContext } from "@playwright/test";
+
+import { deleteAccount, signUpOnboardedAccount } from "./accounts";
 
 /**
  * SEED TEST — the reference every generated E2E test in this project is modeled on.
@@ -25,14 +27,37 @@ import { expect, test } from "@playwright/test";
  * a signed-OUT user opt out with `test.use({ storageState: ... empty })`.
  */
 
-test.describe("dashboard (authenticated — uses saved storageState)", () => {
+test.describe("dashboard (authenticated)", () => {
+  /**
+   * ISOLATION (`onboarding-routing` Phase 3): `/dashboard` is gated on
+   * `isOnboardingComplete`, and the suite's shared `storageState` account is
+   * deliberately left un-onboarded — the setup specs disconnect its integrations
+   * in `afterEach`, so under `fullyParallel` its onboarding state is a coin
+   * flip. This describe asserts the REAL dashboard, so it takes an account that
+   * satisfies the predicate by construction.
+   */
+  const email = `e2e-seed-dashboard-${Date.now()}@example.test`;
+
+  let context: BrowserContext;
+  let ownerId: string;
+
+  test.beforeAll(async ({ browser }) => {
+    ({ context, ownerId } = await signUpOnboardedAccount(browser, email));
+  });
+
+  test.afterAll(async () => {
+    if (ownerId) await deleteAccount(ownerId);
+    await context?.close();
+  });
+
   /**
    * Risk-tied: FR-001 + US-01 — a signed-in lead reaches their app surface.
-   * Runs authenticated for free (no UI login here) because the setup project
-   * already saved the session. If the session/guard chain broke, `requireSession`
-   * would redirect to /login and the dashboard heading would never appear.
+   * No UI login here: the account is signed up through the auth API. If the
+   * session/guard chain broke, `requireSession` would redirect to /login and the
+   * dashboard heading would never appear.
    */
-  test("authenticated user can view the dashboard", async ({ page }) => {
+  test("authenticated user can view the dashboard", async () => {
+    const page = await context.newPage();
     await page.goto("/dashboard");
 
     // Wait for STATE (the heading rendering), not a fixed duration. Assert the
@@ -48,6 +73,8 @@ test.describe("dashboard (authenticated — uses saved storageState)", () => {
     // The assertion has been red on main ever since — nothing regressed here,
     // the test was simply never updated. The behavior under test is unchanged.
     await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+
+    await page.close();
   });
 });
 

@@ -822,11 +822,11 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [x] 2.1 Lint passes: `npm run lint`
-- [x] 2.2 Type checking passes: `npx tsc --noEmit`
-- [x] 2.3 Unit tests pass: `npm test`
-- [x] 2.4 Playwright suite green, including the retargeted step assertion: `npm run test:e2e` — the retargeted assertion (`dashboard-sprint-detail.spec.ts:202`) passes; the same single pre-existing failure at `:73` persists unchanged
-- [x] 2.5 No stale step-count prose remains: `grep -rniE "of 3|3-step|three-step|step [1-3]\b" src e2e`
+- [x] 2.1 Lint passes: `npm run lint` — dddce35
+- [x] 2.2 Type checking passes: `npx tsc --noEmit` — dddce35
+- [x] 2.3 Unit tests pass: `npm test` — dddce35
+- [x] 2.4 Playwright suite green, including the retargeted step assertion: `npm run test:e2e` — the retargeted assertion (`dashboard-sprint-detail.spec.ts:202`) passes; the same single pre-existing failure at `:73` persists unchanged — dddce35
+- [x] 2.5 No stale step-count prose remains: `grep -rniE "of 3|3-step|three-step|step [1-3]\b" src e2e` — dddce35
 
 #### Manual
 
@@ -837,11 +837,11 @@ ship on different tracks in this project.
 
 #### Automated
 
-- [ ] 3.1 Lint passes: `npm run lint`
-- [ ] 3.2 Type checking passes: `npx tsc --noEmit`
-- [ ] 3.3 Unit tests pass: `npm test`
-- [ ] 3.4 Integration tests pass: `npm run test:integration`
-- [ ] 3.5 Full Playwright suite green, including the new doorstep spec: `npm run test:e2e`
+- [x] 3.1 Lint passes: `npm run lint`
+- [x] 3.2 Type checking passes: `npx tsc --noEmit`
+- [x] 3.3 Unit tests pass: `npm test`
+- [x] 3.4 Integration tests pass: `npm run test:integration`
+- [x] 3.5 Full Playwright suite green, including the new doorstep spec: `npm run test:e2e` — 14/14, the first fully green run of this change; the long-standing failure at `dashboard-sprint-detail.spec.ts` was a stale Reliability assertion, repaired in place
 
 #### Manual
 

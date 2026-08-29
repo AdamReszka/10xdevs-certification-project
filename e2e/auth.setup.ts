@@ -13,6 +13,14 @@ import { STORAGE_STATE } from "../playwright.config";
  * We SIGN UP a fresh account each run (unique timestamp email) rather than
  * depending on a pre-seeded user, so the suite is self-contained on any clean
  * database. autoSignIn is enabled, so a successful sign-up lands authenticated.
+ *
+ * THE DESTINATION IS THE DOORSTEP, NOT THE DASHBOARD (`onboarding-routing`
+ * Phase 3). The sign-up form still pushes to `/dashboard`, but the first-run
+ * gate there sends an un-onboarded account to `/setup`. This project's job is a
+ * SESSION, not a destination — and the account is left deliberately
+ * un-onboarded, because `setup-github.spec.ts` and `setup-jira.spec.ts` need it
+ * that way. Specs that assert the real dashboard take their own onboarded
+ * account from `e2e/accounts.ts`.
  */
 setup("authenticate", async ({ page }) => {
   const email = `e2e-user-${Date.now()}@example.test`;
@@ -26,12 +34,11 @@ setup("authenticate", async ({ page }) => {
   await page.getByLabel("Confirm password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
 
-  // Wait until the session cookie is set and the app has navigated to the gated
-  // dashboard — proof we are actually authenticated before saving state.
-  await page.waitForURL("**/dashboard");
-  await expect(
-    page.getByRole("heading", { name: /Dashboard/ }),
-  ).toBeVisible();
+  // Wait until the session cookie is set and the app has navigated to a GATED
+  // surface — proof we are actually authenticated before saving state. For a
+  // brand-new account that surface is the first-run doorstep.
+  await page.waitForURL("**/setup");
+  await expect(page.getByRole("heading", { name: "Zaczynamy" })).toBeVisible();
 
   await page.context().storageState({ path: STORAGE_STATE });
 });
