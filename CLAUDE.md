@@ -84,6 +84,30 @@ and ask which of them they got through. They test during token-limit waits, so
 the answer is usually "some of them" — tick what they confirm, then move on to
 building. Do not re-derive the state from git or assume nothing was done.
 
+### The backlog must stay equal to the plans — check it, don't assume it
+
+**`context/foundation/manual-test-backlog.md` must contain EVERY open manual row
+that exists in the repo.** A second person works from that file alone; a row
+missing from it does not exist for them.
+
+Three places hold the truth and they drift on their own: `## Progress` `- [ ]`
+rows under `#### Manual` in every `context/**/plan.md` (canonical), the per-slice
+`MANUAL-CHECKLIST.md` files (full descriptions, in `changes/` **and** in
+`archive/`), and the backlog (the one list). **Archiving a slice does not close
+its manual rows** — that mistake left 68 canonical open rows against 27 known to
+the backlog, including the one S-15 row that permanently deletes a database row.
+
+Run `node scripts/manual-test-sweep.mjs` and act on it:
+
+- **at the closing phase of `/10x-implement`**, before the epilogue commit;
+- **at `/10x-archive`**, before the folder moves;
+- **whenever the user asks what is left to test.**
+
+It exits non-zero when a slice with open rows, or a checklist, has no mention in
+the backlog. It only checks presence — writing the row is still yours, and it
+carries the four things below. A row that is genuinely obsolete moves to the
+backlog's §6 with the reason; it is never deleted quietly.
+
 ### Two files, two jobs
 
 - **`context/changes/<change-id>/MANUAL-CHECKLIST.md` — the short list.** Only
