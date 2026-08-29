@@ -40,7 +40,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-06 | anomaly-detection-engine  | system detects all 8 anomaly types with default thresholds; each anomaly has 5 attributes; inbox ordered by severity | S-05 | FR-009, FR-013, FR-014, FR-015          | done     |
 | S-07 | dashboard-today           | open Dashboard "Today" — Anomaly Inbox (render + sort/filter); freshness timestamp + error banner; real-data smoke-test. Burndown, Yesterday's Activity **and the Reliability KPI + tab shell** all shipped in S-10, not here | S-06, F-03 | FR-015, FR-016, US-01 | done     |
 | S-08 | absence-calendar          | record team member absences; DEVELOPER_INACTIVE suppressed + SPRINT_AT_RISK adjusted during window; sprint capacity + availability tab | S-04, S-06 | FR-010                        | done     |
-| S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07, S-10   | FR-008, US-02                             | proposed |
+| S-09 | demo-mode                 | load realistic mixed-state demo dataset; explore both dashboards without real integrations; reset demo data | S-07, S-10   | FR-008, US-02                             | done |
 | S-10 | dashboard-sprint-detail   | open Dashboard "Sprint Detail" — aging report, activity matrix, per-tech sub-burndowns; **plus** the Today tab shell with Sprint Pulse, Yesterday's Activity and the Reliability KPI, and the three sync writes they need (commit churn, Jira time zone, sprint SP scalars) | S-05, S-07 | FR-016, FR-017 | done     |
 | S-11 | daily-recap-email         | receive daily-recap email at configured time with anomalies + one-line suggested actions     | S-06, S-07         | FR-018                                          | done     |
 | S-12 | recap-history             | browse past daily recaps (current + 2 previous sprints); older recaps auto-purged            | S-11               | FR-019                                          | proposed |
@@ -271,8 +271,36 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Unknowns:**
   - ~~PRD Open Question #1: Demo data ↔ real integrations interaction~~ — **resolved 2026-08-29** (`context/changes/demo-mode/frame.md`): the owner's answer is **any account may hold both**, including one with real credentials connected. Recording it changed nothing about the slice's readiness, which is the finding: this was never the blocker. The frame relocated it one layer down — nothing in the schema marks a row as demo (`src/db/schema.ts`), so demo is *impersonated* by fake-but-validly-encrypted credentials plus hand-written rows in the production tables. All three candidate answers to this question are equally unbuildable until that distinction exists.
 - **Risk:** Demo dataset quality directly determines the product's first impression; the fixture must produce at least 4 distinct anomaly types (medium or high severity) plus healthy-flow signals, and must render realistic Sprint Pulse + Activity numbers.
-- **Head start (S-10):** `scripts/seed-dashboard.mjs` now seeds the full upstream set both dashboards read — tickets with SP and assignees, status transitions (incl. a re-open and an unmapped status), commits with and without churn, PRs, and reviews — and stays idempotent. It is a script, not the in-app FR-008 flow, but it is the fixture S-09 can build on.
-- **Status:** proposed — unblocked on dashboards; still gated on Open Question #1
+- ~~**Head start (S-10):** `scripts/seed-dashboard.mjs` …~~ — **superseded 2026-08-29.** The script's *content* was the head start and was ported; the script itself is **deleted**, along with `db:seed:demo`. One dataset, one entry point: the fixture now lives in `src/lib/demo/fixture.ts` and is reached only through `loadDemo()`.
+- **Status:** done — shipped 2026-08-29 (PR #56, issue #19)
+
+- **How it was built:** demo is modelled as **tenancy, not a flag**. The account
+  gains a second, synthetic `user` row whose `demo_of` points back at the real
+  one; the fixture lives in the ordinary product tables under that `owner_id`.
+  Three properties of the code forced this shape: `owner_id` is `UNIQUE` on
+  `github_credential`, `jira_credential` and `jira_project`, so one owner cannot
+  hold a real and a demo project at once (which rules out an `is_demo` column);
+  all 25 owner foreign keys are `ON DELETE CASCADE`, which makes reset exact by
+  construction; and `session.user.id` was read inline at ~22 call sites with no
+  seam. One `cache()`d `resolveWorkspace()` → `{ ownerId, realOwnerId, isDemo,
+  now }` now answers "which owner, and what time is it for them", so demo's
+  isolation is the same mechanism already trusted to isolate two real customers.
+
+- **The risk above was met by the engine, not by the fixture's literals.** Demo
+  anomalies are produced by `detectAnomalies` run over fixture rows at a
+  **frozen clock** (`user.demo_anchor_at`). Because both the data and the clock
+  are fixed, re-detection is idempotent — the reconcile that used to resolve
+  hand-written demo rows away now re-derives exactly the same set. The tuned
+  fixture crosses the default thresholds for **all 8 anomaly types**, alongside
+  healthy-flow counter-examples no rule touches, and FR-010 suppression is
+  visible on one screen (an absent developer is not flagged; a quiet one with
+  nothing recorded is).
+
+- **Deferred:** manual verification
+  (`context/archive/2026-08-29-demo-mode/MANUAL-CHECKLIST.md`, 5 rows). The
+  irreversible one — real GitHub + Jira tokens surviving load-then-reset through
+  the UI — is asserted at row level by
+  `src/lib/demo/load.integration.test.ts`.
 
 ---
 
