@@ -26,7 +26,7 @@ import { resolveWorkspace } from "@/lib/workspace";
 export default async function RefinementPage() {
     const { env } = getCloudflareContext();
   const db = getDb(env);
-  const { ownerId } = await resolveWorkspace();
+  const { ownerId, isDemo } = await resolveWorkspace();
 
   const [backlog, runs] = await Promise.all([
     loadBacklog({ db, ownerId, env }),
@@ -55,6 +55,7 @@ export default async function RefinementPage() {
         backlog={backlog}
         maxTickets={MAX_TICKETS_PER_RUN}
         aiConfigured={aiConfigured}
+        isDemo={isDemo}
       />
 
       <div className="flex flex-col gap-3">

@@ -23,7 +23,7 @@ import { resolveWorkspace } from "@/lib/workspace";
 export default async function RecapSettingsPage() {
     const { env } = getCloudflareContext();
   const db = getDb(env);
-  const { ownerId } = await resolveWorkspace();
+  const { ownerId, isDemo } = await resolveWorkspace();
 
   const [settings, timeZone, lastRecap] = await Promise.all([
     getRecapSettings({ db, ownerId }),
@@ -48,6 +48,7 @@ export default async function RecapSettingsPage() {
         sendMinute={settings.sendMinute}
         enabled={settings.enabled}
         timeZone={timeZone}
+        isDemo={isDemo}
         lastRecap={
           lastRecap
             ? {

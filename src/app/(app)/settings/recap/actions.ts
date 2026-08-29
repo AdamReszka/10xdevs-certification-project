@@ -5,6 +5,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { getDb } from "@/lib/db";
 import { saveRecapSettings } from "@/lib/recap-settings";
 import { recapSettingsSchema } from "@/lib/validations/recap";
+import { demoRefusal } from "@/lib/demo/refusal";
 import { resolveWorkspace } from "@/lib/workspace";
 
 /**
@@ -21,14 +22,17 @@ import { resolveWorkspace } from "@/lib/workspace";
 /** Shared token-free failure shape; the client reads `message` regardless. */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_input" | "integration_unavailable";
+  error: "invalid_input" | "integration_unavailable" | "demo_mode";
   message: string;
 };
 
 export type RecapSettingsResult = { ok: true } | ActionFailure;
 
 export async function saveRecapSettingsAction(input: unknown): Promise<RecapSettingsResult> {
-  const { ownerId } = await resolveWorkspace();
+  const { ownerId, isDemo } = await resolveWorkspace();
+  // The demo's recap row is a stored preview with a terminal send status; there
+  // is no schedule behind it to change, and a fictional team has no inbox.
+  if (isDemo) return demoRefusal();
 
   const parsed = recapSettingsSchema.safeParse(input);
   if (!parsed.success) {

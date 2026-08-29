@@ -699,12 +699,12 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [x] 4.1 Type checking passes
-- [x] 4.2 Linting passes
-- [x] 4.3 Unit tests pass
-- [x] 4.4 Integration tests pass
-- [x] 4.5 load/exit/reset actions drive active_workspace and demo rows correctly
-- [x] 4.6 Settings-demo view offers only valid transitions per state
+- [x] 4.1 Type checking passes — ce62df1
+- [x] 4.2 Linting passes — ce62df1
+- [x] 4.3 Unit tests pass — ce62df1
+- [x] 4.4 Integration tests pass — ce62df1
+- [x] 4.5 load/exit/reset actions drive active_workspace and demo rows correctly — ce62df1
+- [x] 4.6 Settings-demo view offers only valid transitions per state — ce62df1
 
 #### Manual
 
@@ -719,14 +719,14 @@ fake tokens); a developer wanting the new shape resets and re-loads.
 
 #### Automated
 
-- [ ] 5.1 Type checking passes
-- [ ] 5.2 Linting passes
-- [ ] 5.3 Unit tests pass
-- [ ] 5.4 Integration tests pass
-- [ ] 5.5 Refinement action in demo refuses and never constructs the Anthropic client
-- [ ] 5.6 Recap send action in demo refuses and never reaches the transport
-- [ ] 5.7 No `db:seed:demo` script and no `scripts/seed-dashboard.mjs` remain tracked
-- [ ] 5.8 Unit and integration suites pass with the seed script removed
+- [x] 5.1 Type checking passes
+- [x] 5.2 Linting passes
+- [x] 5.3 Unit tests pass
+- [x] 5.4 Integration tests pass
+- [x] 5.5 Refinement action in demo refuses and never constructs the Anthropic client
+- [x] 5.6 Recap send action in demo refuses and never reaches the transport
+- [x] 5.7 No `db:seed:demo` script and no `scripts/seed-dashboard.mjs` remain tracked
+- [x] 5.8 Unit and integration suites pass with the seed script removed
 
 #### Manual
 

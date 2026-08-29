@@ -33,6 +33,7 @@ export default function RefinementForm({
   backlog,
   maxTickets,
   aiConfigured,
+  isDemo = false,
 }: {
   backlog: BacklogResult;
   maxTickets: number;
@@ -40,6 +41,12 @@ export default function RefinementForm({
    * may be reading history — but the run button says why it will not work
    * rather than letting them find out after picking tickets. */
   aiConfigured: boolean;
+  /**
+   * S-09: the account is viewing demo data. The saved run below is a fixture, so
+   * history stays readable — but nothing may reach Anthropic from here. The
+   * server refuses first (`runRefinementAction`); this only says why.
+   */
+  isDemo?: boolean;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
@@ -78,6 +85,16 @@ export default function RefinementForm({
 
   return (
     <div className="flex flex-col gap-4">
+      {isDemo ? (
+        <Alert>
+          <AlertDescription>
+            Analiza jest wyłączona w trybie demonstracyjnym — poniżej widzisz
+            zapisany przykładowy przebieg. Wyjdź z demo, aby sprawdzić własne
+            zadania.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {!aiConfigured ? (
         <Alert variant="destructive">
           <AlertDescription>
@@ -116,7 +133,7 @@ export default function RefinementForm({
 
           <div className="flex flex-wrap items-center gap-3">
             <Button
-              disabled={pending || selected.length === 0 || !jiraReady}
+              disabled={pending || isDemo || selected.length === 0 || !jiraReady}
               onClick={() => run({ source: "BACKLOG", ticketKeys: selected })}
             >
               {pending ? "Analizuję…" : "Sprawdź zaznaczone"}
@@ -145,7 +162,7 @@ export default function RefinementForm({
           </div>
           <div>
             <Button
-              disabled={pending || typedKeys.trim() === ""}
+              disabled={pending || isDemo || typedKeys.trim() === ""}
               onClick={() =>
                 run({ source: "KEYS", ticketKeys: splitKeys(typedKeys) })
               }
@@ -173,7 +190,7 @@ export default function RefinementForm({
           </div>
           <div>
             <Button
-              disabled={pending || pasted.trim() === ""}
+              disabled={pending || isDemo || pasted.trim() === ""}
               onClick={() => run({ source: "PASTED_TEXT", text: pasted })}
             >
               {pending ? "Analizuję…" : "Sprawdź tę historyjkę"}

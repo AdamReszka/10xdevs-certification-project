@@ -27,6 +27,7 @@ import {
   type RefinementRequest,
 } from "@/lib/refinement/run-service";
 import { refinementRequestSchema } from "@/lib/validations/refinement";
+import { demoRefusal } from "@/lib/demo/refusal";
 import { resolveWorkspace } from "@/lib/workspace";
 
 /**
@@ -45,6 +46,11 @@ import { resolveWorkspace } from "@/lib/workspace";
  * BEFORE anything is persisted, and ends in a reported skip rather than a
  * durable record of failure.
  *
+ * REFUSED IN DEMO (S-09 / FR-008). The refusal is the FIRST thing the action
+ * does — before the payload is parsed, before the client is configured, before
+ * anything is read. `/refinement` in demo renders the fixture's saved run
+ * instead, and Phase 4's banner explains the disabled control.
+ *
  * ERRORS NEVER CARRY A TOKEN. Every branch below returns a hand-written
  * sentence; no upstream error object is spread into the payload.
  */
@@ -53,8 +59,8 @@ export type RefinementRunFailure = {
   ok: false;
   /** What the lead can do about it, not what went wrong internally.
    * `not_configured` has no retry; `unavailable` does; `invalid_input` needs an
-   * edit first. */
-  error: "not_configured" | "unavailable" | "invalid_input";
+   * edit first; `demo_mode` needs leaving demo. */
+  error: "not_configured" | "unavailable" | "invalid_input" | "demo_mode";
   message: string;
 };
 
@@ -73,7 +79,11 @@ export type RefinementRunResponse =
 export async function runRefinementAction(
   input: unknown,
 ): Promise<RefinementRunResponse> {
-  const { ownerId } = await resolveWorkspace();
+  const { ownerId, isDemo } = await resolveWorkspace();
+  // BEFORE the payload is parsed and long before `getAnthropicClient`: a demo
+  // account must not spend a token, and the saved fixture run is what the
+  // surface shows instead.
+  if (isDemo) return demoRefusal();
 
   // The discriminant is written into a Postgres enum column and decides which
   // branch of the dispatch runs, so it is refused here rather than at the

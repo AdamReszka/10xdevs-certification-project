@@ -156,6 +156,61 @@ describe("loadDemo", () => {
   });
 });
 
+describe("loadDemo — the two screens that must not call out", () => {
+  it("saves a refinement run carrying both a DOR_MET verdict and one with gaps", async () => {
+    const realOwnerId = await seedRealOwner();
+    const { demoOwnerId } = await loadDemo({ db, realOwnerId, now: ANCHOR });
+
+    const [run] = await db
+      .select()
+      .from(schema.refinementRun)
+      .where(eq(schema.refinementRun.ownerId, demoOwnerId));
+    expect(run).toBeDefined();
+    // Recorded for legibility: a verdict is only interpretable against the model
+    // that produced it, and the demo's were produced by nothing at all.
+    expect(run.model).toBe("claude-sonnet-5");
+
+    const verdicts = await db
+      .select()
+      .from(schema.refinementTicketVerdict)
+      .where(eq(schema.refinementTicketVerdict.ownerId, demoOwnerId));
+
+    // FR-020's BOTH halves: a mechanism that only ever finds gaps is as useless
+    // as one that only ever rephrases, so the demo has to show it can say
+    // "this ticket is ready".
+    expect(verdicts.map((v) => v.verdict).sort()).toEqual([
+      "DOR_MET",
+      "GAPS",
+      "NOT_VIABLE",
+    ]);
+    const withGaps = verdicts.find((v) => v.verdict === "GAPS");
+    expect(withGaps!.gaps.length).toBeGreaterThan(0);
+    // Grounded in the ticket's own content, per FR-020 — not a generic DOR question.
+    expect(withGaps!.gaps[0].groundingClause).toContain("regulamin");
+    expect(verdicts.find((v) => v.verdict === "DOR_MET")!.gaps).toEqual([]);
+  });
+
+  it("saves a recap row with a TERMINAL send status", async () => {
+    const realOwnerId = await seedRealOwner();
+    const { demoOwnerId } = await loadDemo({ db, realOwnerId, now: ANCHOR });
+
+    const [recap] = await db
+      .select()
+      .from(schema.dailyRecap)
+      .where(eq(schema.dailyRecap.ownerId, demoOwnerId));
+
+    expect(recap).toBeDefined();
+    // Load-bearing TWICE (plan-review F5): it keeps the row out of the sender's
+    // reach, AND it keeps the one browser clock in the tree — `describeLastSend`
+    // compares Date.now() on the PENDING branch alone — out of the demo. A
+    // PENDING demo recap would be a frozen-clock regression.
+    expect(recap.sendStatus).not.toBe("PENDING");
+    expect(recap.sendStatus).toBe("SENT");
+    expect(recap.payload).not.toBeNull();
+    expect(recap.renderedMessage?.subject).toBeTruthy();
+  });
+});
+
 describe("resetDemo", () => {
   it("leaves zero rows for the demo owner across every owner-scoped table", async () => {
     const realOwnerId = await seedRealOwner();

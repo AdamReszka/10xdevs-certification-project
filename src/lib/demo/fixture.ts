@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   absence as absenceTable,
+  dailyRecap as dailyRecapTable,
   githubCommit as githubCommitTable,
   githubCredential as githubCredentialTable,
   githubPullRequest as githubPullRequestTable,
@@ -11,6 +12,8 @@ import type {
   jiraStatusHistory as jiraStatusHistoryTable,
   jiraTicket as jiraTicketTable,
   monitoredRepo as monitoredRepoTable,
+  refinementRun as refinementRunTable,
+  refinementTicketVerdict as refinementTicketVerdictTable,
   sprint as sprintTable,
   sprintMeasurement as sprintMeasurementTable,
   statusMapping as statusMappingTable,
@@ -98,6 +101,9 @@ export type DemoFixture = {
   jiraTickets: (typeof jiraTicketTable.$inferInsert)[];
   jiraStatusHistory: (typeof jiraStatusHistoryTable.$inferInsert)[];
   sprintMeasurements: (typeof sprintMeasurementTable.$inferInsert)[];
+  refinementRun: typeof refinementRunTable.$inferInsert;
+  refinementVerdicts: (typeof refinementTicketVerdictTable.$inferInsert)[];
+  dailyRecap: typeof dailyRecapTable.$inferInsert;
 };
 
 /**
@@ -492,6 +498,176 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     },
   ];
 
+  // --- Refinement run (FR-020's both halves) ------------------------------
+  // One saved run with BOTH a `DOR_MET` verdict and one carrying gaps. Both are
+  // required: a mechanism that only ever finds gaps is as useless as one that
+  // only ever rephrases, and the demo has to show that it can say "this ticket
+  // is ready". No AI is involved — these are stored results, and the analyse
+  // action refuses while in demo.
+  const refinementRunId = randomUUID();
+  const refinementRun: typeof refinementRunTable.$inferInsert = {
+    id: refinementRunId,
+    ownerId,
+    source: "BACKLOG",
+    // The pinned model, recorded for legibility: a verdict is only interpretable
+    // against the thing that produced it.
+    model: "claude-sonnet-5",
+    ticketCount: 3,
+    createdAt: h(26),
+  };
+
+  const refinementVerdicts: (typeof refinementTicketVerdictTable.$inferInsert)[] = [
+    {
+      id: randomUUID(),
+      runId: refinementRunId,
+      ownerId,
+      ticketKey: "WEB-104",
+      ticketSummary: "Podmienić regulamin serwisu na wersję z 1 września",
+      taskKind: "FILE_OR_DOCUMENT_SWAP",
+      verdict: "GAPS",
+      gaps: [
+        {
+          gapClass: "FILE_ATTACHMENT_MISSING",
+          groundingClause:
+            "To zadanie polega na opublikowaniu nowego regulaminu, ale nie ma " +
+            "załączonego pliku ani linku do niego.",
+          question: "Gdzie jest docelowy plik regulaminu?",
+        },
+        {
+          gapClass: "EFFECTIVE_DATE_MISSING",
+          groundingClause:
+            "Tytuł mówi o wersji z 1 września, ale opis nie mówi, od kiedy nowy " +
+            "regulamin ma obowiązywać na stronie.",
+          question: "Czy publikujemy 1 września, czy wcześniej z datą wejścia w życie?",
+        },
+        {
+          gapClass: "OLD_ARTIFACT_DISPOSITION_MISSING",
+          groundingClause:
+            "Nie wiadomo, co ma się stać ze starym regulaminem — zniknąć czy " +
+            "trafić do archiwum.",
+        },
+      ],
+      droppedClasses: [],
+      sourceUrl: `${JIRA_BASE}/browse/WEB-104`,
+    },
+    {
+      id: randomUUID(),
+      runId: refinementRunId,
+      ownerId,
+      ticketKey: "WEB-106",
+      ticketSummary: "Dodać filtr po technologii na widoku Sprint Detail",
+      taskKind: "NEW_VIEW_OR_COMPONENT",
+      // The other half of FR-020: a ticket that is genuinely complete gets a
+      // clean verdict, not a manufactured gap.
+      verdict: "DOR_MET",
+      gaps: [],
+      droppedClasses: [],
+      sourceUrl: `${JIRA_BASE}/browse/WEB-106`,
+    },
+    {
+      id: randomUUID(),
+      runId: refinementRunId,
+      ownerId,
+      ticketKey: "WEB-108",
+      ticketSummary: "Zintegrować się z API partnera, które wyłączono w lipcu",
+      taskKind: "FRONTEND_ON_BACKEND_DATA",
+      // FR-021: not "something is missing" but "this should not enter the
+      // sprint at all".
+      verdict: "NOT_VIABLE",
+      gaps: [
+        {
+          gapClass: "API_CONTRACT_MISSING",
+          groundingClause:
+            "Zadanie konsumuje API partnera, które według opisu zostało " +
+            "wyłączone — nie ma czego zintegrować, dopóki nie pojawi się " +
+            "następca.",
+          question: "Czy partner udostępnił nowe API, czy zadanie należy zamknąć?",
+        },
+      ],
+      droppedClasses: [],
+      sourceUrl: `${JIRA_BASE}/browse/WEB-108`,
+    },
+  ];
+
+  // --- Daily recap (FR-018) -----------------------------------------------
+  // A stored, already-SENT recap so `/settings/recap` has a preview to render.
+  // The payload is a denormalized SNAPSHOT, exactly as a live recap stores one —
+  // it is not read back off the anomaly table.
+  const recapPayload = {
+    schemaVersion: 1 as const,
+    generatedAt: h(2).toISOString(),
+    dayKey: dayKey(0),
+    timeZone: ZONE,
+    sprint: {
+      name: "Sprint 24",
+      dayNumber: 13,
+      totalDays: 14,
+      committedSp: 40,
+      remainingSp: 22,
+      byCategory: {
+        TODO: 3,
+        IN_PROGRESS: 3,
+        CODE_REVIEW: 3,
+        TESTING: 1,
+        DONE: 4,
+        UNKNOWN: 1,
+      },
+    },
+    activity: {
+      commits: 4,
+      additions: 578,
+      deletions: 81,
+      prsOpened: 1,
+      prsMerged: 0,
+      reviews: 2,
+      ticketsMovedToDone: 0,
+    },
+    syncState: {
+      GITHUB: { lastSuccessfulSyncAt: h(0.2).toISOString(), status: "OK" as const },
+      JIRA: { lastSuccessfulSyncAt: h(0.07).toISOString(), status: "OK" as const },
+    },
+    anomalies: [
+      {
+        id: "demo-recap-1",
+        type: "SPRINT_AT_RISK" as const,
+        severity: "HIGH" as const,
+        description:
+          "Bob Rivera is unexpectedly away for 3 of the 3 working day(s) left in the sprint — the commitment did not account for it.",
+        suggestedAction:
+          "Re-plan around Bob Rivera's absence — 3 of the 3 working day(s) left in the sprint are gone.",
+        sourceUrl: null,
+        identityLabel: "Sprint 24",
+        memberName: "Bob Rivera",
+        riskScore: 100,
+      },
+      {
+        id: "demo-recap-2",
+        type: "TICKET_STATUS_AGING" as const,
+        severity: "MEDIUM" as const,
+        description:
+          'WEB-88 "Incremental Jira history pull" has sat in Code Review past the team\'s aging budget.',
+        suggestedAction:
+          "Unblock WEB-88 — it has sat in Code Review past the team's aging threshold.",
+        sourceUrl: `${JIRA_BASE}/browse/WEB-88`,
+        identityLabel: "WEB-88",
+        memberName: "Bob Rivera",
+        riskScore: 67,
+      },
+      {
+        id: "demo-recap-3",
+        type: "PR_REVIEW_STALLED" as const,
+        severity: "MEDIUM" as const,
+        description:
+          'PR #142 "WEB-89: Retry backoff for GitHub 403s" has awaited review for 31h (team target 24h).',
+        suggestedAction: "Ping a reviewer for PR #142 — 31h with no review yet.",
+        sourceUrl: PR_URL(142),
+        identityLabel: "PR #142",
+        memberName: "Bob Rivera",
+        riskScore: 43,
+      },
+    ],
+  };
+
   return {
     jiraCredential: {
       id: jiraCredentialId,
@@ -593,6 +769,34 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     jiraTickets,
     jiraStatusHistory,
     sprintMeasurements,
+    refinementRun,
+    refinementVerdicts,
+    dailyRecap: {
+      id: randomUUID(),
+      ownerId,
+      sprintId,
+      recapDay: dayKey(0),
+      // TERMINAL, and load-bearing TWICE (plan-review F5). It keeps the row out
+      // of `sendDailyRecap`'s reach — a demo account must never email anyone —
+      // and it keeps the ONE browser clock in the tree out of the demo:
+      // `describeLastSend` compares `Date.now()` against `last_attempt_at`, but
+      // only on the PENDING branch. A PENDING demo recap would therefore be a
+      // frozen-clock regression, not a cosmetic choice.
+      sendStatus: "SENT" as const,
+      sentAt: h(2),
+      lastAttemptAt: h(2),
+      attemptCount: 1,
+      payload: recapPayload,
+      renderedMessage: {
+        subject: "SprintFlow — Sprint 24, 4 rzeczy na dziś",
+        html: RECAP_HTML,
+        text: RECAP_TEXT,
+      },
+      // Empty on purpose: the engine writes the anomaly rows AFTER this fixture
+      // commits, so no id here could be real. The payload above is the snapshot
+      // the surface renders, exactly as a live recap stores it.
+      anomalyIds: [],
+    },
   };
 }
 
@@ -618,3 +822,12 @@ const STATUS_MAPPINGS = [
   { id: "13", name: "Testing", category: "TESTING" as const },
   { id: "14", name: "Done", category: "DONE" as const },
 ];
+
+/** The recap's frozen HTML, kept short — the surface renders a preview, not a mailbox. */
+const RECAP_HTML =
+  "<h1>SprintFlow — Sprint 24</h1>" +
+  "<p>3 rzeczy do sprawdzenia dziś. Podgląd demonstracyjny — ten e-mail nigdy nie został wysłany.</p>";
+
+const RECAP_TEXT =
+  "SprintFlow — Sprint 24\n\n" +
+  "3 rzeczy do sprawdzenia dziś. Podgląd demonstracyjny — ten e-mail nigdy nie został wysłany.";
