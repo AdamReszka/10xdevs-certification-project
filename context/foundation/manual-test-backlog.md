@@ -257,29 +257,61 @@ automatycznych zielone. Instrukcje krok po kroku:
       zwraca 1. **Zamknięte 2026-08-26** tym samym przebiegiem co 3.6: przed
       cyklem 2 wiersze ACTIVE, po cyklu 1.
 
-- [ ] **4.6** Zmiana projektu Jiry w kreatorze nie zostawia starego sprintu.
+- [x] **4.6** Zmiana projektu Jiry w kreatorze nie zostawia starego sprintu.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania) — pełną ścieżką, nie tylko
+      nośnym krokiem 2.
       *Źródło:* `plan.md:839`
       ⚠️ **Wiersz zmienił sens** — patrz checklista. Ustalenie z fazy 4:
       `/setup/jira` nie pokazuje pickera projektu, dopóki istnieje
       `jira_credential`, a Disconnect i tak kasuje sprint kaskadą. Nośną
       połową jest teraz **krok 2** (potwierdź, że widzisz kartę statusu, a nie
       picker) — pilnuje założenia, na którym oparto brak confirmation dialogu.
-      ✅ **Krok 2 zaliczony 2026-08-30** (sesja manualna, Ania) na koncie
-      `anna.jozwiak19@gmail.com` (prawdziwe credentiale, Jira `foxmind`,
-      projekt FM): `/setup/jira` pokazuje kartę „Jira connected" z projektem FM,
-      **bez** listy ani pola wyboru projektu; na stronie są tylko przyciski
-      **Disconnect** i **Continue**. Kaskada potwierdzona osobno, odczytem
-      `information_schema` na żywej bazie: `jira_credential` → `jira_project` →
-      `sprint` → `jira_ticket` / `anomaly` / `absence`, wszystko `ON DELETE
-      CASCADE`, więc stary sprint nie ma jak przeżyć odłączenia. **Otwarte
-      zostają kroki 3–4** (realne przepięcie na drugi projekt) — testerka
-      zakłada w tym celu drugi projekt w Jirze.
+
+      **Krok 2** — konto `anna.jozwiak19@gmail.com` (prawdziwe credentiale, Jira
+      `foxmind`, projekt FM): `/setup/jira` pokazuje kartę „Jira connected" z
+      projektem FM, **bez** listy ani pola wyboru projektu; na stronie są tylko
+      przyciski **Disconnect** i **Continue**. Założenie z fazy 4 trzyma się.
+
+      **Kroki 3–4 wykonane na żywo**, na drugim projekcie Jiry (`PT`) założonym
+      przez testerkę na potrzeby tego wiersza. Przebieg: Disconnect → konto
+      zostaje z 0 wierszy `jira_credential` / `jira_project` / `sprint` /
+      `jira_ticket` / `anomaly`, przy nietkniętych 6 wierszach `team_member` i
+      integracji GitHub (1 credential, 1 repo) → ponowne połączenie tymi samymi
+      credentialami → picker pokazuje **dwa** projekty (FM, PT) → wybór PT →
+      mapowanie 5 statusów → zapis. Stan końcowy: `project_key = 'PT'`,
+      5 mapowań z PT, **0 sprintów** — ani jednego wiersza po FM. Warunek
+      zaliczenia z checklisty spełniony **obserwacją**, nie wnioskowaniem z
+      kluczy obcych (te potwierdzono osobno, przed kliknięciem).
+
+      ℹ️ **Przy okazji ustalone, przydatne przy kolejnych przebiegach kreatora:**
+      credential zapisuje się dopiero w `storeJiraIntegration` — na końcu kroku 3
+      — a `fetchProjectStatuses` pobiera statusy w momencie wyboru projektu.
+      Status dodany w Jirze **w trakcie** kreatora nie pojawi się więc na liście
+      mapowania; trzeba przejść krok wyboru projektu jeszcze raz (odświeżenie
+      strony wystarcza, nic nie jest jeszcze zapisane). Testerka trafiła na to,
+      dokładając w Jirze kolumnę „In Tests" już po wybraniu PT.
+
       🔴 **Znalezisko poboczne, zgłoszone przez testerkę:**
-      `context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md` — założenie
-      z checklisty, że brak dialogu w kreatorze jest bezpieczny, „bo odpowiednik
-      jest w `/settings/connections`", **jest nieprawdziwe**: dialogu nie ma w
-      żadnym z tych miejsc, a jedno kliknięcie kasuje też ręcznie wpisane
-      nieobecności. Decyzja właściciela, nie defekt do naprawy w sesji manualnej.
+      `context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md` — żadna z
+      czterech ścieżek **Disconnect** (kreator ×2, ustawienia ×2) nie pyta o
+      potwierdzenie, mimo że kasuje sprint, ticket'y, anomalie, ręcznie wpisane
+      nieobecności, a po stronie GitHuba całą historię commitów, PR-ów i recenzji.
+      Argument z checklisty („odpowiednik jest w `/settings/connections`")
+      wskazuje na ostrzeżenie, które faktycznie istnieje, ale zabezpiecza
+      **zmianę projektu**, nie odłączenie. Decyzja właściciela, nie defekt do
+      naprawy w sesji manualnej.
+
+      🔵 **Druga obserwacja produktowa (ta sama sesja):** auto-mapowanie statusów
+      rozpoznaje wyłącznie **angielskie** nazwy (`suggestCategory`,
+      `src/lib/jira.ts:435-452`). Na polskim projekcie PT trafiło 3 z 4 nazw, ale
+      nie dzięki nazwie — dzięki `nativeCategoryKey` z Jiry (`new` → To Do,
+      `indeterminate` → In Progress, `done` → Done). Pomyliło się dokładnie tam,
+      gdzie Jira nie rozstrzyga: „W trakcie weryfikacji" dostało *In Progress*,
+      bo Code Review i Testing są dla Jiry tym samym `indeterminate` i rozróżnia
+      je tylko nazwa. Angielskie „In Tests" trafiło do *Testing* bez pudła. Dla
+      polskojęzycznego zespołu oznacza to ręczną poprawkę przy każdym statusie
+      przeglądu i testów. Podpowiedź jest edytowalna, więc to nie jest defekt —
+      ale FR-005 opiera całą detekcję anomalii na tym mapowaniu.
 
 **Nie pokryte automatyką z innego powodu:** „okno pustki" po rollowerze
 (checklista, faza 3) — udokumentowane i zaakceptowane przy planowaniu, ale
