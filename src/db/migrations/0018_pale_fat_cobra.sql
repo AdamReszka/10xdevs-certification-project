@@ -1,0 +1,1 @@
+ALTER TABLE "anomaly_settings" DROP COLUMN "is_default";

@@ -127,6 +127,13 @@
       "when": 1787993138125,
       "tag": "0017_bored_sunset_bain",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788000273539,
+      "tag": "0018_pale_fat_cobra",
+      "breakpoints": true
     }
   ]
 }
