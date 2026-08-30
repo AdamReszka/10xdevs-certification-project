@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { cache } from "react";
-import { getDb } from "@/lib/db";
+import { getDb, getDbWithPool } from "@/lib/db";
 import * as schema from "@/db/schema";
 import { dispatchPasswordReset } from "@/lib/auth-email";
 import {
@@ -69,7 +69,10 @@ async function resolveWaitUntil(): Promise<
  * schema-gen CLI only (Node, build time) and is never used by the Worker.
  */
 export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
-  const db = getDb(env);
+  // No env means the static schema-gen export below — the one `createAuth` call
+  // that happens outside a request. It takes its own unmemoized handle so it can
+  // never become the memo's first constructor (see the docblock below).
+  const db = env ? getDb(env) : getDbWithPool().db;
   const secret = env?.BETTER_AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET;
   const baseURL = env?.BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL;
 
@@ -163,14 +166,46 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
  * Static instance for the Better Auth schema-gen CLI (`@better-auth/cli generate`),
  * which runs in Node at build time and reads `auth.options`. Do NOT import this in
  * Worker request paths — use `createAuth(env)` there.
+ *
+ * It is also never the first constructor of the request-scoped `db` memo (S-21).
+ * It supplies no env, so `createAuth` gives it `getDbWithPool().db`. Without that
+ * it would be benign on Workers (module scope has no ALS store) but wrong in
+ * `next dev`, where `initOpenNextCloudflareForDev` has already installed the
+ * global context by the time this module is evaluated: this line would become
+ * the process-global pool for the entire dev server and every later
+ * `getDb(env)` would silently inherit ITS env. `getDbWithPool` is equally lazy,
+ * so construction still opens no connection.
  */
 export const auth = createAuth();
 
 /**
+ * The three facts a session lookup can establish. `null` used to carry two of
+ * them at once — "there is no session" and "we could not tell" — and the two
+ * consumers below read that `null` in OPPOSITE directions, each documented as
+ * correct. Under a database error both fired: the signed-in user was bounced to
+ * `/login`, and `/login` then rendered happily for them. That is why S-21's
+ * connection exhaustion read as E2E flake for weeks — the noun is multiplicity,
+ * not a leak (`lessons.md` #3).
+ *
+ * `lessons.md` — "A narrowing predicate turns 'wrong value' into 'empty result',
+ * which reads as success". This code predates the lesson.
+ */
+export type SessionLookup =
+  | { status: "active"; session: AuthSession }
+  | { status: "anonymous" }
+  | { status: "unavailable"; cause: unknown };
+
+/** The session object Better Auth hands back, minus its "no session" `null`. */
+type AuthSession = NonNullable<
+  Awaited<ReturnType<ReturnType<typeof createAuth>["api"]["getSession"]>>
+>;
+
+/**
  * Non-fatal, full DB-backed session lookup for gated server components/layouts.
- * Returns the session on success, or `null` both when there is no session AND
- * when validation errors (fail-closed: a DB/Hyperdrive blip is treated as "no
- * session" so callers never surface an error page — PRD guardrail).
+ * Distinguishes all three outcomes (see {@link SessionLookup}); still logs on
+ * the failure branch. Non-fatal means it does not throw — deciding what a
+ * failed lookup MEANS is the caller's job, and the two callers decide
+ * differently on purpose.
  *
  * Wrapped in React `cache()` so multiple callers in one request render (e.g. the
  * `(app)` layout guard + the dashboard page reading `user.name`) share a single
@@ -179,32 +214,48 @@ export const auth = createAuth();
  * Request-only modules are imported lazily so the static `auth` export above
  * stays safe to import from the Node build / schema-gen CLI.
  */
-export const getOptionalSession = cache(async () => {
+export const getOptionalSession = cache(async (): Promise<SessionLookup> => {
   const { getCloudflareContext } = await import("@opennextjs/cloudflare");
   const { headers } = await import("next/headers");
 
   const { env } = getCloudflareContext();
 
   try {
-    return await createAuth(env).api.getSession({ headers: await headers() });
+    const session = await createAuth(env).api.getSession({
+      headers: await headers(),
+    });
+    return session ? { status: "active", session } : { status: "anonymous" };
   } catch (error) {
     console.error("[auth] getOptionalSession: getSession failed", error);
-    return null;
+    return { status: "unavailable", cause: error };
   }
 });
 
 /**
  * Authoritative session guard for gated server components/layouts (consumed by
  * S-01's gated `(app)` layout). The real security boundary behind the optimistic
- * cookie check in `middleware.ts` (defense-in-depth; CVE-2025-29927). Redirects
- * to `/login` when there is no valid session.
+ * cookie check in `middleware.ts` (defense-in-depth; CVE-2025-29927).
+ *
+ * Public contract unchanged: returns a guaranteed session, or does not return.
+ * What changed is WHICH non-return. No session still redirects to `/login`; a
+ * failed lookup now throws and lands on `src/app/error.tsx` instead of
+ * impersonating a signed-out user. The consequence inside a Server Action is
+ * the point: a database blip used to redirect the user to `/login`, and now the
+ * action rejects and the form reports a failure. "Couldn't save" is true; "you
+ * have been signed out" was not.
  */
 export async function requireSession() {
   const { redirect } = await import("next/navigation");
 
-  const session = await getOptionalSession();
+  const lookup = await getOptionalSession();
 
-  if (!session) {
+  if (lookup.status === "unavailable") {
+    // The cause is carried for the server log only. `error.tsx` renders neither
+    // it nor `message` — a driver error can quote the connection string.
+    throw new Error("Session lookup failed", { cause: lookup.cause });
+  }
+
+  if (lookup.status === "anonymous") {
     redirect("/login");
     // redirect() throws (NEXT_REDIRECT), so this is unreachable at runtime; it
     // narrows the inferred return type to a guaranteed-present session for
@@ -212,5 +263,5 @@ export async function requireSession() {
     throw new Error("unreachable: redirect did not throw");
   }
 
-  return session;
+  return lookup.session;
 }

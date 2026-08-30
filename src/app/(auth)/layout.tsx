@@ -14,9 +14,15 @@ export const dynamic = "force-dynamic";
  * middleware.ts public prefixes).
  *
  * Inverse of the `(app)` guard: a signed-in user has no business on the auth
- * pages, so redirect them to /dashboard. Uses the shared, non-fatal
- * getOptionalSession() (fail-open: on a DB error it returns null and we render
- * the auth page rather than trapping the user out of login).
+ * pages, so redirect them to /dashboard.
+ *
+ * FAIL-OPEN, and now it says what it is open ABOUT: only the `active` outcome
+ * redirects. `anonymous` and `unavailable` both render the auth page, because a
+ * database blip must never trap a user out of the login screen — the one place
+ * they can still do something useful. This is the exact opposite reading of the
+ * same failure from `requireSession`, which throws on it, and both are correct:
+ * the gated side must not pretend a failed lookup means "signed out", and this
+ * side must not pretend it means "signed in".
  */
 export default async function AuthLayout({
   children,
@@ -25,9 +31,9 @@ export default async function AuthLayout({
 }) {
   const { redirect } = await import("next/navigation");
 
-  const session = await getOptionalSession();
+  const lookup = await getOptionalSession();
 
-  if (session) {
+  if (lookup.status === "active") {
     redirect("/dashboard");
   }
 

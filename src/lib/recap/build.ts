@@ -35,7 +35,9 @@ import type {
  * has already done for its send-time predicate.
  *
  * All reads go into ONE `Promise.all` on ONE handle (lessons.md #3) — the way
- * both dashboard pages do it. No second pool, no second fan-out.
+ * both dashboard pages do it. Since S-21 that handle is memoized per request
+ * context, so what a single fan-out avoids is the second round trip, not a
+ * second pool.
  *
  * NOTHING HERE MAY IMPORT `suggested-action.ts`. The action string is copied off
  * the row by `toInboxAnomalies`; regenerating it would need detection-time `now`,

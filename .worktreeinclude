@@ -1,0 +1,17 @@
+# Pliki ignorowane przez git, kopiowane do każdego nowego worktree.
+# Składnia jak w .gitignore; kopiowane są tylko pliki, które PASUJĄ do wzorca
+# i jednocześnie są gitignorowane (pliki śledzone nigdy się nie duplikują).
+
+# Sekrety i konfiguracja środowiska
+.env
+.env.local
+.npmrc
+
+# Skille kursowe 10x-* (.claude/skills/* jest gitignorowane, a na nich stoi
+# cały workflow: /10x-plan, /10x-implement, /10x-frame, /10x-archive...).
+# Skille sprintflow-* są śledzone w gicie, więc przyjdą same.
+.claude/skills/**
+
+# Lokalne slash-commands i prompty
+.claude/commands/**
+.claude/prompts/**

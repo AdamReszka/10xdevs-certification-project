@@ -39,15 +39,20 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // ONE WORKER EVERYWHERE, not just in CI. Every spec drives the real app
-  // against local Postgres, and the request path still leaks its `pg.Pool` per
-  // invocation (`lessons.md` #3 / roadmap S-21): under concurrent workers the
-  // suite burns through Supabase's 100 connection slots mid-run and specs fail
-  // with "remaining connection slots are reserved for roles with the SUPERUSER
-  // attribute" — a failure that looks like a product bug and is not one. CI has
-  // always run at 1; local was the only place seeing the flake. Serial costs a
-  // few seconds here and buys a deterministic suite. Revisit when S-21 lands.
-  workers: 1,
+  // Parallel locally, serial in CI. Local was pinned to 1 as well until S-21
+  // (`db-pool-teardown`): `getDb` built a fresh `pg.Pool` on every call — three
+  // per gated GET, four per Server Action — so connection count scaled with
+  // worker count, the suite burned through Supabase's 100 slots mid-run, and
+  // specs failed with "remaining connection slots are reserved for roles with
+  // the SUPERUSER attribute". `getDb` now memoizes ONE handle per request
+  // context, bounded by a single `POOL_MAX` (`src/lib/db.ts`), and in `next dev`
+  // that pool is process-global — so the whole dev server has one ceiling no
+  // matter how many workers drive it. The local pin has nothing left to hold.
+  //
+  // CI stays at 1 for reasons unrelated to connections: the GitHub runner is a
+  // 2-core box where extra workers buy little, and a serial run keeps the
+  // `retries: 2` output readable when a spec does fail.
+  workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI ? [["github"], ["html"]] : "list",
 
   use: {

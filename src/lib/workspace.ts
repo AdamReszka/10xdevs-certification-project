@@ -144,14 +144,17 @@ export const resolveWorkspace = cache(async (): Promise<Workspace> => {
   const demoOwnerRow = demoOwner ?? null;
 
   // Demo only, and only once the demo scope is fully formed. The predicate reuses
-  // the `db` this function already built — the layout has no handle of its own
-  // and `getDb` IS the pool constructor (`db.ts`), so computing this one level up
-  // would leak a Hyperdrive-backed connection on every gated render in demo.
+  // the `db` this function already built. It USED to say that computing it one
+  // level up would open a second Hyperdrive-backed connection on every gated
+  // render — since S-21 that is no longer true: `getDb` memoizes one handle per
+  // request context (`lessons.md` #3), and the layout would get this very same
+  // instance back.
   //
-  // The anchor guard mirrors `decideWorkspace`'s own condition on purpose: a
-  // half-formed demo falls back to REAL, where the field is reported `true`
-  // regardless — so running the query first would spend a round trip on an answer
-  // that is then discarded (impl-review F6).
+  // What survives is the anchor guard, and it is now the whole justification. It
+  // mirrors `decideWorkspace`'s own condition on purpose: a half-formed demo
+  // falls back to REAL, where the field is reported `true` regardless — so
+  // running the query first would spend a round trip on an answer that is then
+  // discarded (impl-review F6).
   const realOnboarded =
     demoOwnerRow?.demoAnchorAt != null
       ? await isOnboardingComplete({ db, ownerId: realOwnerId })

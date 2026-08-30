@@ -1,7 +1,7 @@
 ---
 change_id: db-pool-teardown
-title: Close the request-scoped pg.Pool at request end (fix per-invocation connection leak)
-status: new
+title: One `db` handle per request (kill the 3-4x pool multiplicity)
+status: implementing
 created: 2026-08-19
 updated: 2026-08-30
 archived_at: null
@@ -14,6 +14,38 @@ Spun out of the S-02 (`setup-github-integration`) impl-review as finding F3. `ge
 Systemic, pre-existing (not an S-02 regression). The naive fix is **wrong**: `ctx.waitUntil(pool.end())` inside `getDb` fires `pool.end()` immediately and closes the pool before the caller's queries run. Correct direction: reuse one pool per request (cached on request context) and tear it down exactly at request end via the Worker after-hook — without exposing the pool to call sites for manual closing (createAuth holds it for the instance's lifetime). Needs its own plan + test.
 
 See `context/foundation/lessons.md` → "Request-scoped pg.Pool must be closed at request end, not leaked per invocation" and `context/archive/2026-06-14-setup-github-integration/reviews/impl-review.md` F3. (Path corrected 2026-08-30 — that slice was archived, and the old `context/changes/...` path had stopped resolving.)
+
+## Correction — 2026-08-30, after `/10x-frame`
+
+**Everything above this line is the ORIGINAL framing, and its central claim is
+wrong.** It is kept verbatim because the wrong reading is what steered S-02's F3,
+S-05's cron-only fix and S-24's F2, and deleting it would hide that. Read
+`frame.md` and `plan.md` for what actually shipped; the corrections that matter
+here:
+
+- **There is no leak.** `pg.Pool`'s default 10 s `idleTimeoutMillis` reclaims
+  every pool in Node with no `.end()` at all — measured, 63 → 3 connections in
+  ~14 s — and Hyperdrive documents that it cleans the client up when the request
+  ends, explicitly advising *against* a global pool. Nothing pins a connection
+  "for the isolate's lifetime"; nothing accumulates on either runtime.
+- **The defect is multiplicity, not lifetime.** `getDb` is called from three
+  independent seams per request (`createAuth`, `resolveWorkspace`, the page or
+  action body), none of which exposes the handle it built. Measured at exactly
+  3.00 connections per authenticated `GET` and 4.00 per Server Action, strictly
+  linear in concurrency — `measurements.md`.
+- **The proposed fix is therefore not the fix.** No after-hook, no
+  `ctx.waitUntil(pool.end())`, no manual close on the request path. `getDb`
+  memoizes ONE handle on the adapter's request-context object under a
+  `Symbol.for` key; teardown is not part of the change. The note below about
+  React `cache()` being per-request is right about the symptom and wrong about
+  the mechanism — `cache()` is inert inside a Server Action outright, which the
+  4.00 figure proves arithmetically.
+
+The frontmatter `title` was also corrected on this date: it read *"Close the
+request-scoped pg.Pool at request end (fix per-invocation connection leak)"*,
+naming the fix this slice decided **not** to make. The `lessons.md` entry the
+Notes above cite by title was rewritten in the same phase and is now *"A
+request-scoped resource handle needs one identity per request, not a teardown"*.
 
 ## The leak stopped being theoretical — 2026-08-30, during S-24
 

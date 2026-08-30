@@ -65,7 +65,9 @@ export default async function DashboardPage() {
   //
   // The predicate therefore only ever sees `realOwnerId`, and runs on the
   // request's EXISTING `db` handle — six `SELECT … LIMIT 1` at worst, one for a
-  // brand-new account, and no second `pg.Pool` (`lessons.md` #3).
+  // brand-new account. Since S-21 a second `getDb(env)` would hand back this
+  // same memoized handle rather than a second pool (`lessons.md` #3), so what
+  // reusing `db` saves is a round trip, not a connection.
   if (!isDemo && !(await isOnboardingComplete({ db, ownerId: realOwnerId }))) {
     redirect("/setup");
   }
@@ -81,8 +83,11 @@ export default async function DashboardPage() {
   );
   const yesterdayRange = dayRangeInTimeZone(yesterdayKey, timeZone);
 
-  // ONE Promise.all on the SAME `db` handle — no second pool, no second fan-out
-  // (lessons.md #3). The two S-10 reads and S-08's availability read join the
+  // ONE Promise.all on the SAME `db` handle. A second `getDb` costs no second
+  // pool since S-21 — the handle is memoized per request context — so the reason
+  // to keep ONE fan-out is now purely LATENCY: `POOL_MAX` is a ceiling, not a
+  // licence to spend it, and a second round of reads is a second round trip
+  // (`lessons.md` #3). The two S-10 reads and S-08's availability read join the
   // original three.
   const [
     rows,
@@ -105,7 +110,8 @@ export default async function DashboardPage() {
     // S-08: who is away, plus the capacity number absences reduce.
     getSprintCapacity(db, ownerId),
     // S-23 Phase 5: the lead's own override / correction for this sprint. Joined
-    // to the SAME fan-out on the SAME handle (lessons.md #3); `getSprintMeasurement`
+    // to the SAME fan-out on the SAME handle — one handle per request is
+    // `lessons.md` #3, one fan-out on it is the latency half; `getSprintMeasurement`
     // rather than `getActiveSprintMeasurement` because the active sprint is
     // already resolved above and re-resolving it would be a second query for an
     // answer we hold.
@@ -114,7 +120,8 @@ export default async function DashboardPage() {
       : Promise.resolve(null),
     // S-23 Phase 6: the closed-sprint series FR-024 averages. Joined to the SAME
     // fan-out on the SAME handle — the estimate adds one read, not a second
-    // round of them (`lessons.md` #3).
+    // round of them. The shared handle is free (`lessons.md` #3); the extra
+    // round trip would not have been.
     listSprintMeasurementsForOwner(db, ownerId),
   ]);
 

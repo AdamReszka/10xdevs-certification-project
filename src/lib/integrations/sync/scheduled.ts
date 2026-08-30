@@ -14,8 +14,14 @@ import { sendDailyRecap } from "@/lib/recap/send";
  * iterates onboarded owners and syncs each within one invocation's shared
  * subrequest/CPU budget (MVP — Queues/self-fetch fan-out is deferred). The
  * per-`(owner, integration)` lease + freshness due-check live inside `syncOwner`,
- * so this loop just enumerates, caps, isolates per-owner failures, and — the
- * load-bearing teardown (lesson #3) — closes the pool via `ctx.waitUntil`.
+ * so this loop just enumerates, caps, isolates per-owner failures, and closes
+ * the pool it owns via `ctx.waitUntil`.
+ *
+ * IT OWNS ONE BECAUSE THIS PATH HAS NO REQUEST CONTEXT. `src/worker.ts:43-47`
+ * calls `runScheduledSync` OUTSIDE `runWithCloudflareRequestContext`, so there
+ * is no context object for `getDb` to memoize the shared handle on (lesson #3)
+ * and it would fall back to an unowned per-call pool. Hence `getDbWithPool` plus
+ * the explicit close below — not a leftover from the pre-S-21 teardown story.
  */
 
 /** Env surface both `getDbWithPool` and `syncOwner` accept. */
@@ -199,8 +205,10 @@ export async function runScheduledSync(
 
     return { enumerated: ownerIds.length, synced, failed, recapsSent, recapsPurged };
   } finally {
-    // Close the Hyperdrive-backed pool AFTER the handler returns (lesson #3): the
-    // scheduled path has no request after-hook, so it owns teardown.
+    // Close AFTER the handler returns. Safe — and necessary — because this pool
+    // came from `getDbWithPool` and this path owns it outright: there is no
+    // request context here for `getDb` to hand a shared handle back from
+    // (lesson #3). NEVER do this to a handle that came from `getDb`.
     ctx.waitUntil(pool.end());
   }
 }

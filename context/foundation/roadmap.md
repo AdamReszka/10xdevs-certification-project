@@ -52,7 +52,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
-| S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
+| S-21 | db-pool-teardown          | one authenticated request builds ONE db pool instead of three (a Server Action, one instead of four), so connection count stops scaling with pool multiplicity; a database failure also stops reading as a sign-out | F-02 | — (NFR: graceful degradation) | done     |
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 | S-24 | destructive-action-confirmation | disconnecting GitHub or Jira asks first and says what will be destroyed, on every path that can lose data | S-02, S-03, S-08, S-16 | — (PRD Guardrails: graceful degradation, no silent data loss) | done     |
@@ -565,7 +565,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP. ⚠️ **Scoped against S-23 on 2026-08-28 (plan review F1):** S-23 ships FR-024's estimate over the **active** sprint's capacity ratio, which needs no future sprint. What remains here is projecting an UNSTARTED window — its own working-day config and absence coverage, neither of which Jira exposes before the sprint exists. S-23 does not close S-18 |
 | S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
 | S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
-| S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
+| S-21       | db-pool-teardown          | One `db` handle per request — the 3-4x pool multiplicity, not a teardown | done                  | ✅ Implemented 2026-08-30, five phases — PR #77. **Reframed at `/10x-frame`:** the recorded defect (a pool never closed, holding a connection for as long as the isolate lived) is not what breaks. Measured — `pg.Pool`'s 10 s idle timer reclaims every pool in Node with no `.end()`, and Hyperdrive cleans the client up at request end; but one authenticated `GET` built **3** pools and a Server Action **4**, strictly linear in concurrency, which is what burned Supabase's 100 slots mid-Playwright-run. The fix is three lines in `src/lib/db.ts` (memoize the handle on the adapter's request-context object under a `Symbol.for` key) with **zero call-site churn**: 3.00/4.00 connections per request → a flat 5 (`POOL_MAX`) at K = 8, 12 and 24. `playwright.config.ts` runs parallel workers locally again and the suite got faster. Two by-products: `getOptionalSession` stops answering a database failure with "not signed in" (that conflation is why this read as flake for weeks), and `src/app/error.tsx` gives the app its first error boundary. `lessons.md` #3 rewritten — the wrong version had steered S-02 F3, S-04, S-05 and S-24 F2 |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04, S-07, S-09, S-10 all done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers. **Prerequisites widened 2026-08-30** — S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on; see the S-22 body |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
 | S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | done | ✅ Implemented 2026-08-30, four phases. **Raised by the tester**, framed and planned the same day. Pattern copied is `molecules/confirm-dialog.tsx` (S-15), NOT `jira-project-editor.tsx` — whose copy was wrong in both directions and is now rebuilt from the same source. The load-bearing half is `src/lib/integrations/disconnect-impact.ts`: one declaration of the blast radius that a hermetic test holds equal to the schema's FK graph, so a future slice hanging a cascading child under `sprint` or `monitored_repo` breaks the build instead of silently making the dialog lie. Phase 3 also closed the Connections tab against demo — all nine Server Actions refuse server-side, which delivers one of S-27's three items |
@@ -688,33 +688,62 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ---
 
-### S-21: Request-path DB pool teardown
+### S-21: One `db` handle per request
 
-- **Outcome:** (foundation) a request, Server Action or gated render stops
-  pinning a Hyperdrive-backed Postgres connection for the isolate's lifetime.
-  Today every `getDb(env)` call builds `new Pool({ max: 1 })` and nothing ever
-  closes it, so under sustained traffic the account runs out of connections.
+- **Outcome:** (foundation) an authenticated request builds **one** pool for the
+  app instead of three, and an authenticated Server Action one instead of four,
+  so connection count stops scaling with pool multiplicity and is bounded by a
+  single `POOL_MAX` ceiling. Note the unit: per-request *connections* do not fall
+  to one — the dashboard's 8-way `Promise.all` now draws up to that ceiling from
+  the shared pool where three `max: 1` pools drew three. The win is the ceiling,
+  not the per-request number, and the same change lets the fan-out run 5-wide
+  instead of serialised through one connection.
 - **Change ID:** db-pool-teardown
 - **PRD refs:** — (serves the graceful-degradation guardrail rather than an FR)
 - **Prerequisites:** F-02
-- **Status:** proposed
+- **Status:** done — implemented 2026-08-30, five phases, PR #77
 
 - **Why this exists:** spun out of S-02's impl-review as finding F3 and recorded
-  as `lessons.md` #3, then never given a slice. It is still live: `src/lib/db.ts`
-  says so in its own doc comment — *"The pre-existing request-path leak (lesson
-  #3) is out of scope for S-05 and stays a separate ticket"*. S-05 solved it only
-  for the **cron/sync** path, by adding `getDbWithPool` so that path can call
-  `ctx.waitUntil(pool.end())` itself. Every request-path caller still uses the
-  leaking `getDb`.
-- **The naive fix is wrong, which is why this needs a plan and not a one-liner.**
-  `ctx.waitUntil(pool.end())` inside `getDb` fires immediately and closes the
-  pool before the caller's queries run. The correct shape is one pool per
-  request, cached on request context, torn down by the request's after-hook —
-  without exposing the pool to call sites, because `createAuth` holds its handle
-  for the instance's lifetime.
-- **Not urgent at MVP traffic, and that is the trap:** a connection leak is
-  invisible until it is not, and the symptom (a dashboard that suddenly cannot
-  reach the database) reads as an outage rather than as a resource bug.
+  as `lessons.md` #3, then never given a slice. S-05 addressed only the
+  **cron/sync** path, by adding `getDbWithPool` so that path can call
+  `ctx.waitUntil(pool.end())` itself; every request-path caller kept the unshared
+  `getDb`. What finally forced the slice was S-24: a 15th Playwright spec pushed
+  the local run past Postgres's 100 connection slots and specs started failing
+  with `53300`, surfacing as unrelated-looking UI assertions ("Jira connected"
+  never appears; a save reports "Couldn't save").
+- **Teardown came off the table at `/10x-frame`, and that reframing is the
+  substance of the slice.** The recorded direction — one pool per request, torn
+  down by the request's after-hook — is the convention for a long-lived Node
+  server, and measurement says it solves nothing here. `pg.Pool`'s default 10 s
+  `idleTimeoutMillis` reclaims every pool in Node with no `.end()` at all
+  (measured 63 → 3 connections in ~14 s), and Hyperdrive documents that it
+  "automatically cleans up the client connection when the request ends", with
+  "avoid using a global Pool instance" as its own guidance. Nothing accumulates
+  on either runtime. What broke the suite was **multiplicity**: `getDb` is called
+  from three independent seams per request — `createAuth`, `resolveWorkspace`,
+  and the page or action body — none of which exposes the handle it built.
+  Measured at exactly 3.00 connections per authenticated `GET` and 4.00 per
+  Server Action, strictly linear in concurrency, so ~22 concurrent authenticated
+  actions exhausted the database. React `cache()` cannot be the sharing
+  mechanism: it is inert inside a Server Action, which the 4.00 figure proves
+  arithmetically.
+- **What shipped:** three lines in `src/lib/db.ts` — memoize the handle on the
+  adapter's own request-context object under a `Symbol.for` key. That object is
+  per-invocation on Workers and per-process in `next dev`, so one mechanism
+  satisfies both conventions with no runtime branch and **zero call-site churn**
+  (all 59 `getDb` call sites, 39 `type Db` aliases and 91 `db: Db` signatures
+  byte-for-byte unchanged). After: a flat 5 connections — `POOL_MAX` — at
+  K = 8, 12 and 24, on both targets. `playwright.config.ts` runs parallel workers
+  locally again and the suite got faster (16.9 s / 18.8 s against a 21 s serial
+  baseline). Full numbers: `context/changes/db-pool-teardown/measurements.md`.
+- **Two by-products worth naming.** `getOptionalSession` returned `null` for both
+  "there is no session" and "the lookup failed", so a database error signed a
+  valid user out — which is why this defect read as Playwright flake for weeks
+  rather than as itself. It now returns three outcomes, and `src/app/error.tsx`
+  gives the app its **first** error boundary (there was none anywhere in
+  `src/app`). The three paths that legitimately own a pool — the cron entry,
+  `sync/actions.ts`, the Resend webhook — keep `getDbWithPool` and their explicit
+  close; only their comments changed.
 
 ---
 
@@ -785,8 +814,9 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Watch the cost:** `scheduled.ts:43` already records that
   `isOnboardingComplete` is 6 sequential queries, too expensive to run per owner
   in a loop. On a single request path that is fine; do not let it drift into one.
-  Both call sites thread an existing `db` handle rather than opening a pool
-  (`getDb` IS the pool constructor — see S-21).
+  Both call sites thread an existing `db` handle rather than re-resolving one.
+  Since S-21 a second `getDb` returns the SAME memoized handle rather than a
+  second pool, so what threading saves is the round trip, not the connection.
 
 ---
 
