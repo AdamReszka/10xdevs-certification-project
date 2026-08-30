@@ -161,7 +161,13 @@ describe("the copy lists", () => {
     expect(impact.keeps.length).toBeGreaterThan(0);
     for (const fragment of [...impact.destroys, ...impact.keeps]) {
       // Clause fragments, not bullet labels: they must compose into a sentence.
-      expect(fragment).not.toMatch(/^[A-Z]/);
+      //
+      // `[A-Z][a-z]` rather than a bare `[A-Z]` (impl-review F5): the intent is
+      // to catch a sentence-cased label like "The list of repositories", not to
+      // ban proper nouns. A legitimate fragment may well open with one —
+      // "GitHub's synced history" — and a guard that rejects valid copy gets
+      // deleted by the next author rather than obeyed.
+      expect(fragment).not.toMatch(/^[A-Z][a-z]/);
       expect(fragment).not.toMatch(/\.$/);
     }
   });

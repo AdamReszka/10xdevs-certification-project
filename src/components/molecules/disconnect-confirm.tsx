@@ -2,9 +2,11 @@
 
 import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import {
-  DISCONNECT_IMPACT,
-  joinClauses,
-} from "@/lib/integrations/disconnect-impact";
+  disconnectConfirmLabel,
+  disconnectDescription,
+  disconnectTitle,
+  type DisconnectIntegration,
+} from "@/components/molecules/disconnect-confirm-copy";
 
 /**
  * The confirmation in front of every Disconnect (S-24).
@@ -15,40 +17,15 @@ import {
  * open through the async Server Action, focuses Cancel first, and carries the
  * destructive variant.
  *
- * The copy comes from `DISCONNECT_IMPACT`, which a hermetic test holds equal to
- * the schema's actual foreign-key graph — so this dialog cannot quietly become a
- * lie when a later slice hangs a new cascading child upstream of it.
+ * The words live in the pure sibling `disconnect-confirm-copy.ts`, which is
+ * unit-tested — this repo has no component-test harness, so copy assembled
+ * inside a `.tsx` could not be asserted at all (`CLAUDE.md`). Those words in
+ * turn come from `DISCONNECT_IMPACT`, which a hermetic test holds equal to the
+ * schema's actual foreign-key graph — so this dialog cannot quietly become a lie
+ * when a later slice hangs a new cascading child upstream of it.
  */
 
-const INTEGRATION_LABEL = {
-  github: "GitHub",
-  jira: "Jira",
-} as const;
-
-export type DisconnectIntegration = keyof typeof INTEGRATION_LABEL;
-
-/**
- * The confirm label deliberately differs from the trigger label ("Disconnect"),
- * so the dialog's action and the button behind it are distinguishable — to a
- * screen-reader user and to Playwright alike. E2E locators additionally need
- * `{ exact: true }`, because `getByRole`'s name match is a case-insensitive
- * SUBSTRING: with the dialog open, "Disconnect" matches both nodes and
- * "Connect" matches three.
- */
-export function disconnectConfirmLabel(integration: DisconnectIntegration): string {
-  return `Disconnect ${INTEGRATION_LABEL[integration]}`;
-}
-
-/** The prose the dialog shows. Exported so a test can read it without a DOM. */
-export function disconnectDescription(integration: DisconnectIntegration): string {
-  const impact = DISCONNECT_IMPACT[integration];
-  return (
-    `This deletes ${joinClauses(impact.destroys)}. ` +
-    `It keeps ${joinClauses(impact.keeps)}. ` +
-    `Reconnecting re-syncs what ${INTEGRATION_LABEL[integration]} still holds, ` +
-    `but nothing entered by hand comes back.`
-  );
-}
+export type { DisconnectIntegration };
 
 export default function DisconnectConfirmDialog({
   integration,
@@ -61,13 +38,11 @@ export default function DisconnectConfirmDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => Promise<void>;
 }) {
-  const label = INTEGRATION_LABEL[integration];
-
   return (
     <ConfirmDialog
       open={open}
       onOpenChange={onOpenChange}
-      title={`Disconnect ${label}?`}
+      title={disconnectTitle(integration)}
       // A plain string, like all three existing consumers: the description
       // renders inside `AlertDialogDescription` → Radix `Primitive.p`, so a
       // `<ul>` or `<div>` here would be invalid nesting — React warns and the
