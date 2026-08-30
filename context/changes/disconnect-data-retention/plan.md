@@ -875,7 +875,7 @@ anything a lead kept in between — prefer rolling forward.
 
 #### Manual
 
-- [ ] 1.7 Migration 0021 applied to the production database and confirmed present
+- [x] 1.7 Migration 0021 applied to the production database and confirmed present — 2026-08-31
 
 ### Phase 2: Stores and actions — two outcomes
 

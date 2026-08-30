@@ -2827,7 +2827,7 @@ zgadzasz się stracić nieobecności na tym koncie.
 
 ### Blokujące (te same, co w checkliście slice'a)
 
-- [ ] **22.A** (faza 1, `1.7`) **Gdzie:** terminal, **główny checkout** repo (nie
+- [x] **22.A** (faza 1, `1.7`, ZROBIONE 2026-08-31 — patrz MANUAL-CHECKLIST.md) **Gdzie:** terminal, **główny checkout** repo (nie
       worktree — wszystkie worktree dzielą jedną lokalną bazę). Potrzebny
       connection string do bazy produkcyjnej.
       **Co zrobić:** najpierw sprawdź, co jest **naprawdę** zaaplikowane —

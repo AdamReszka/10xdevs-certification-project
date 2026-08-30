@@ -13,7 +13,7 @@ bazie, dalej je kasuje kaskadą.
 
 ## Faza 1
 
-- [ ] **1.7 — migracja `0021` trafia na bazę produkcyjną** *(faza 1)*
+- [x] **1.7 — migracja `0021` trafia na bazę produkcyjną** *(faza 1)* — ZROBIONE 2026-08-31
 
   **Gdzie:** terminal, główny checkout repo (nie worktree — wszystkie worktree
   dzielą jedną lokalną bazę). Potrzebny connection string do bazy produkcyjnej.
@@ -41,6 +41,44 @@ bazie, dalej je kasuje kaskadą.
   mają `ON DELETE SET NULL` (a nie `CASCADE`), oraz `monitored_repo.credential_id`
   jest `NULL`-owalna. Migracja **niczego nie kasuje** — liczba wierszy w
   `absence` i `monitored_repo` przed i po jest identyczna.
+
+  ---
+
+  **✅ WYNIK (2026-08-31).** Zaaplikowana. Stan przed → po, zmierzony na
+  produkcji (`uzqwuikgbbkpnemcnlwo`):
+
+  | | przed | po |
+  |---|---|---|
+  | `absence` wierszy | 0 | 0 |
+  | `monitored_repo` wierszy | 0 | 0 |
+  | `absence_sprint_id_sprint_id_fk` | `c` (CASCADE) | `n` (SET NULL) |
+  | `monitored_repo_credential_id_…_fk` | `c` (CASCADE) | `n` (SET NULL) |
+  | `monitored_repo.credential_id` | NOT NULL | NULL-owalna |
+  | migracji w `drizzle.__drizzle_migrations` | 21 | 22 |
+
+  `monitored_repo_owner_repo_uq` nietknięty, oba FK odtworzone. Migracja
+  niczego nie skasowała.
+
+  **Sprawdzenie długu wyszło dobrze:** `0019` i `0020` **były** już na
+  produkcji (hash po hashu względem `_journal.json`), więc `0021` była jedyną
+  brakującą. Ostrzeżenie z `lessons.md:56-60` jest nieaktualne dla tej bazy.
+
+  **⚠️ KOMENDA WYŻEJ NIE ZADZIAŁA Z TEJ MASZYNY — i to nie jest kwestia
+  hasła.** `db.uzqwuikgbbkpnemcnlwo.supabase.co` ma wyłącznie rekord **AAAA**
+  (IPv6), żadnego A; ta maszyna nie ma wyjścia na IPv6, więc `drizzle-kit`
+  kończy się `getaddrinfo ENOTFOUND`. Kto będzie aplikował następną migrację,
+  ma dwie drogi: **session-mode pooler** Supabase
+  (`aws-0-<region>.pooler.supabase.com:5432`, user `postgres.<ref>` — string do
+  wzięcia z dashboardu, Connect → Session pooler) w `DATABASE_URL_OVERRIDE`,
+  albo Supabase API/MCP. `0021` poszła tą drugą drogą, a wiersz księgujący
+  w `drizzle.__drizzle_migrations` został dopisany ręcznie z **dokładnie** tym,
+  co zapisałby `drizzle-kit`: `hash` = sha256 pliku `.sql`
+  (`38e8cbea…0332c`), `created_at` = `when` z `_journal.json`
+  (`1788110121631`). Zweryfikowane przez porównanie z wierszem, który
+  `drizzle-kit` zapisał na bazie lokalnej — są identyczne, więc `db:migrate`
+  nie spróbuje jej aplikować drugi raz.
+
+  ---
 
   **Dlaczego to ma znaczenie:** schemat i kod jadą tu dwoma osobnymi torami i
   tylko jeden z nich jest zautomatyzowany — CI migruje własną, tymczasową bazę,
