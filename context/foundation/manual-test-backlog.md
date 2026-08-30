@@ -2012,6 +2012,12 @@ wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
       zdanie do tego, co kod naprawdę trzyma; zamknięcie luki to **S-27**. Jeśli
       kiedyś zobaczysz tu z powrotem mocniejsze zdanie o „nietkniętych
       integracjach", a S-27 nie jest zrobione — to jest błąd, zgłoś go.
+      ⚠️ **Nieaktualne od 2026-08-30: S-27 WESZŁO** (§19). Luka jest zamknięta,
+      więc baner celowo mówi znowu mocniej — teraz ogólnie, że nic zrobione w
+      demie nie zmienia prawdziwego konta ani jego integracji. **Nie zgłaszaj
+      tego jako błędu.** Ten wiersz zastępuje **19.F**, które sprawdza nową
+      treść we wszystkich czterech miejscach naraz; 16.E rób tylko wtedy, gdy
+      chcesz potwierdzić samą historię.
 
 - [ ] **16.F** `MANUAL-CHECKLIST.md` tego slice'a
       (`context/archive/2026-08-30-destructive-action-confirmation/MANUAL-CHECKLIST.md`)
@@ -2264,3 +2270,161 @@ jeszcze podłączony. Nowa treść maila (nazwa sprintu w temacie także w dni b
 anomalii, oraz linia tożsamości w obu wersjach treści) jest pokryta testami
 jednostkowymi w `src/lib/recap/render.test.ts`; 18.E sprawdza jedyną część,
 która ma widoczny skutek w aplikacji.
+
+---
+
+## 19. S-27 `demo-boundary-enforcement` — otwarte w całości (2026-08-30)
+
+Slice zamknięty 2026-08-30, pięć faz. Źródło kanoniczne:
+`context/changes/demo-boundary-enforcement/plan.md` `## Progress`. Wiersze
+blokujące mają pełne opisy w
+`context/changes/demo-boundary-enforcement/MANUAL-CHECKLIST.md` (19.A, 19.C,
+19.D, 19.E, 19.G); 19.B, 19.F i 19.H są tylko tutaj.
+
+**O co chodzi, po ludzku.** Do tej pory tryb demo był umową, nie blokadą.
+Baner obiecywał, że nic prawdziwego się nie zmienia, a z ekranu demo dało się w
+trzech kliknięciach **nadpisać własny, prawdziwy token GitHuba albo Jiry** — a
+przy Jirze zmiana projektu kasuje kaskadowo sprinty, zadania, historię statusów i
+anomalie prawdziwego konta. Ten slice zamyka to po stronie serwera (odmowa w
+pięciu akcjach), po stronie tras (przekierowanie z każdej strony z polem na
+token), naprawia kasowanie świata demo przy ponownym wejściu w demo, i przestaje
+obiecywać listę wyłączonych rzeczy — zamiast tego mówi jedno ogólne zdanie, które
+jest prawdziwe.
+
+**Konto:** 19.A wymaga konta z **prawdziwymi** credentialami GitHuba i Jiry (na
+lokalnej bazie to `demo@sprintflow.test` — nazwy są mylące, patrz §5,
+identyfikuj po `token_last4`). 19.C, 19.D i 19.E najlepiej na **świeżym koncie
+bez integracji** — to jest sytuacja, w której odwiedzający naprawdę ląduje w
+demie.
+
+⚠️ **Nie odpalaj `db:seed:demo` na koncie z prawdziwymi tokenami** — seed je
+kasuje.
+
+⚠️ **19.G kończy się na „Anuluj".** Potwierdzenie kasuje cały świat demo (profil
+demo i wszystko pod nim). To odwracalne tylko przez wczytanie demo od zera —
+stracisz każdą zmianę zrobioną wewnątrz dema. 19.H potwierdza świadomie i jest
+osobnym wierszem właśnie dlatego.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **19.A** (faza 1, `1.5`) **Gdzie:** konto z **prawdziwie podłączonym**
+      GitHubem i Jirą, przełączone w tryb demo (`/settings/demo` → „Wróć do
+      demo" albo „Zobacz demo").
+      **Co zrobić:** na `/settings/connections` zapisz sobie **cztery ostatnie
+      cyfry** tokena GitHuba (`••••XXXX`) i adres przestrzeni Jiry; potem wpisz w
+      pasek adresu kolejno `/setup/github`, `/setup/jira`,
+      `/settings/connections/github`; wróć na `/settings/connections` i porównaj.
+      **Co musi być prawdą:** w żadnym z trzech kroków **nie zobaczysz pola na
+      token** — za każdym razem lądujesz z powrotem na stronie nadrzędnej
+      (`/setup` albo `/settings/connections`), a górny pasek dalej mówi „Jesteś w
+      trybie demonstracyjnym". Na koniec cztery cyfry tokena i adres Jiry są
+      **identyczne** jak na początku.
+      *Dlaczego to łapie:* to cały sens slice'a. Wcześniej lider oglądający demo
+      mógł w trzech kliknięciach nadpisać własny, prawdziwy token — a przy Jirze
+      zmiana projektu kasuje kaskadowo sprinty, zadania i historię statusów.
+
+- [ ] **19.C** (faza 2, `2.5`) **Gdzie:** dowolne konto w trybie demo.
+      **Co zrobić:** będąc w demie, wpisz w pasek adresu
+      `/settings/connections/github` i zatwierdź.
+      **Co musi być prawdą:** adres zmienia się na `/settings/connections`, a na
+      ekranie są **karty integracji, nie formularz**. Żadnego białego ekranu ani
+      komunikatu o błędzie — ma to wyglądać jak zwykłe wejście na Connections.
+      *Dlaczego to łapie:* wyszarzony przycisk to tylko uprzejmość. Jeżeli ręcznie
+      wpisany adres dalej otwiera formularz, blokada nie istnieje — a to
+      najkrótsza droga do nadpisania prawdziwego tokena z ekranu dema.
+
+- [ ] **19.D** (faza 2, `2.6`) **Gdzie:** **świeże konto bez żadnych
+      integracji**, które weszło w demo przyciskiem „Zobacz demo" na `/setup`.
+      **Co zrobić:** będąc w demie wejdź na `/setup` (Wstecz albo wpisany adres),
+      kliknij przycisk na **lewej** karcie („Podłącz GitHuba").
+      **Co musi być prawdą:** lądujesz na **kroku kreatora z polem na token**
+      (`/setup/github`), a paska „Jesteś w trybie demonstracyjnym" **już nie ma**
+      — wyjście z dema wydarzyło się po drodze, samo. Nie wolno wrócić na tę samą
+      stronę `/setup`, na której właśnie byłaś/eś.
+      *Dlaczego to łapie:* blokady z fazy 2 zamykają kreator przed demem, a ta
+      karta jest jedyną drogą DO kreatora dla kogoś, kto zaczął od dema. Jeśli
+      przycisk odbija z powrotem na `/setup`, odwiedzający jest zamknięty w demie
+      bez żadnego komunikatu — dokładnie scenariusz, przed którym ostrzega FR-008.
+
+- [ ] **19.E** (faza 3, `3.4`) **Gdzie:** konto ze świeżo wczytanym demem.
+      **Co zrobić:** w demie wejdź na `/settings/team`, **zmień imię jednej
+      osoby** na rozpoznawalne (np. „TEST TEST") i zapisz; zapamiętaj datę z
+      paska dema („stan na …"); wejdź na `/setup`; kliknij **„Zobacz demo"**;
+      wróć na `/settings/team`.
+      **Co musi być prawdą:** zmienione imię **dalej tam jest**, a pasek dema
+      pokazuje **tę samą datę** co przed wyjściem.
+      *Dlaczego to łapie:* wcześniej ten przycisk budował świat demo od zera przy
+      każdym naciśnięciu — drugie wejście w demo po cichu kasowało wszystko, co
+      odwiedzający w nim poprzestawiał, i przesuwało zamrożoną datę. Utrata danych
+      bez ostrzeżenia, wywołana przyciskiem, który brzmi jak „pokaż".
+
+- [ ] **19.G** (faza 4, `4.4`) **Gdzie:** `/settings/demo`, konto z wczytanym
+      demem.
+      **Co zrobić:** kliknij **„Usuń dane demo"**, przeczytaj okno, kliknij
+      **Anuluj**, potem wejdź na `/dashboard`.
+      **Co musi być prawdą:** po kliknięciu **nic się nie skasowało** — pojawiło
+      się okno, które mówi osobno, co **znika** (cały świat demo: zespół, sprint,
+      zadania, anomalie) i co **zostaje** (prawdziwe konto, jego integracje i
+      tokeny), oraz że demo można wczytać ponownie. Po Anuluj okno znika, a dane
+      demo są nadal na miejscu.
+      *Dlaczego to łapie:* ten przycisk kasuje profil demo i kaskadowo 25
+      powiązanych tabel, a stoi **obok** „Wyjdź z demo", które nie kasuje nic.
+      Wcześniej odpalał się z jednego kliknięcia, bez pytania — okno jest też tym,
+      co odróżnia te dwa przyciski od siebie.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **19.B** (faza 2, `2.4`) **Gdzie:** `/settings/connections`, konto w trybie
+      demo. Zrób to na **dwóch** kontach: raz z obiema integracjami podłączonymi,
+      raz na świeżym koncie bez żadnej.
+      **Co zrobić:** popatrz na obie karty integracji i spróbuj kliknąć każdy
+      przycisk na nich.
+      **Co musi być prawdą:** na koncie podłączonym **„Reconnect" jest wyszarzony
+      i nieklikalny** na obu kartach — tak samo jak „Test connection", „Sync now"
+      i „Disconnect". Na koncie bez integracji wyszarzony jest **„Connect"**.
+      Żaden z tych przycisków nie otwiera formularza.
+      *Dlaczego to łapie:* S-24 wyszarzył Test/Disconnect, ale **przeoczył
+      Connect i Reconnect** — a to właśnie one prowadzą prosto do pola na token.
+      Ten wiersz pilnuje obu stanów karty, bo każdy pokazuje inny przycisk i
+      wystarczy zabezpieczyć jeden z nich, żeby drugi został otwarty.
+
+- [ ] **19.F** (faza 4, `4.6`) **Gdzie:** cztery miejsca, w demie: pasek na górze
+      `/dashboard`, panel na `/settings/demo`, karty na
+      `/settings/connections`, prawa karta na `/setup`.
+      **Co zrobić:** przeczytaj **całe** zdanie o demie w każdym z tych czterech
+      miejsc.
+      **Co musi być prawdą:** wszystkie cztery mówią **to samo, ogólnie** — że
+      nic zrobione w demie nie zmienia prawdziwego konta ani jego integracji.
+      **Nigdzie nie ma listy** typu „wyłączone są: test połączenia, odłączenie,
+      zmiana projektu…". Nie ma też starego, zawężonego zdania o „ustawieniach
+      integracji zablokowanych w demie".
+      *Dlaczego to łapie:* enumeracja zdezaktualizowała się **trzy razy** — za
+      każdym razem obietnica na ekranie mówiła coś innego niż kod. Jedno ogólne
+      zdanie jest jedynym, które da się utrzymać; jeśli lista wróci, wróci też ten
+      błąd.
+
+- [ ] **19.H** (faza 4, `4.5`) ⚠️ **KASUJE ŚWIAT DEMO — rób jako ostatni z tej
+      sekcji.** **Gdzie:** `/settings/demo`, konto z wczytanym demem, na którym
+      nie masz już nic do sprawdzenia.
+      **Co zrobić:** kliknij **„Usuń dane demo"** i tym razem **potwierdź**.
+      Potem popatrz na panel i wejdź na `/dashboard`.
+      **Co musi być prawdą:** panel wraca do stanu „nie ma danych demo" — jedyna
+      oferta to **wczytanie dema od nowa**, nie „wróć do demo". Baner dema
+      zniknął, `/dashboard` zachowuje się jak na koncie bez dema. Kliknięcie
+      „wczytaj" buduje świat demo od zera.
+      *Dlaczego to łapie:* to druga połowa 19.G — potwierdzenie musi naprawdę
+      kasować, a panel musi to zauważyć. Panel, który po skasowaniu dalej oferuje
+      „wróć do demo", zostawia konto w stanie, którego nie da się otworzyć.
+
+- [ ] **19.I** `MANUAL-CHECKLIST.md` tego slice'a
+      (`context/changes/demo-boundary-enforcement/MANUAL-CHECKLIST.md`) jest
+      podpisana w całości (19.A, 19.C, 19.D, 19.E, 19.G).
+      *Dlaczego to łapie:* pilnuje, że wiersze zostały naprawdę wykonane, a nie
+      odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29 wziął się dokładnie
+      stąd.
+
+**Faza 5 nie ma własnych wierszy manualnych** — to test
+`src/lib/demo/boundary-inventory.test.ts`, który przechodzi po całym kodzie i
+przewraca build, gdy jakaś akcja serwerowa celuje w prawdziwe konto bez
+sprawdzenia trybu demo, albo gdy strona z polem na token przestaje przekierowywać.
+Zastępuje komentarze, które trzy razy wymieniły za mało miejsc.

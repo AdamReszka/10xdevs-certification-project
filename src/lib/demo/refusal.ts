@@ -10,6 +10,12 @@
  *
  * PURE and dependency-free so it can sit in a `"use server"` module's type union
  * without dragging anything into the client bundle.
+ *
+ * WHICH ACTIONS OWE A REFUSAL IS CHECKED, NOT LISTED. The rule was written in
+ * prose three times and enumerated short every time, so it now lives as
+ * `boundary-inventory.test.ts` beside this file — it fails the build when an
+ * action pins the real owner without an `isDemo` guard, and when a page in the
+ * two credential-form trees does not redirect out of demo.
  */
 
 /** The discriminant added to each action's own `error` union. */

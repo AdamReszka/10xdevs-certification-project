@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   allStepsDone,
   configureDoor,
+  demoDoorLabel,
   type DoorstepSteps,
 } from "@/components/organisms/setup/setup-doorstep-view";
+import { DEMO_TRANSITION_LABEL } from "@/components/organisms/demo/demo-panel-view";
 
 /**
  * The doorstep's configure door (`onboarding-routing` Phase 1, plan review F7).
@@ -91,6 +93,38 @@ describe("allStepsDone", () => {
     for (const steps of [NONE, GITHUB_DONE, GITHUB_AND_JIRA_DONE]) {
       expect(allStepsDone(steps)).toBe(false);
       expect(configureDoor(steps).href.startsWith("/setup/")).toBe(true);
+    }
+  });
+});
+
+/**
+ * The demo door's label (S-27 Phase 4, after D1).
+ *
+ * Worth asserting rather than eyeballing in JSX because the label is the only
+ * thing telling the visitor which of two different acts the button performs.
+ * Before D1 the door always rebuilt the world, so "Zobacz demo" was honest
+ * everywhere; now it re-enters an existing one, and a revisit offering "Zobacz
+ * demo" would promise exactly the destruction D1 removed.
+ */
+describe("demoDoorLabel", () => {
+  it("offers to show the demo only when there is none to return to", () => {
+    expect(demoDoorLabel("no_demo")).toBe(DEMO_TRANSITION_LABEL.load);
+  });
+
+  it("offers to return once a demo world exists, in either mode", () => {
+    expect(demoDoorLabel("demo_idle")).toBe(DEMO_TRANSITION_LABEL.enter);
+    // Reachable: `/setup` is deliberately the one wizard page not guarded in
+    // demo, so a visitor looking at demo data can be standing on it.
+    expect(demoDoorLabel("demo_active")).toBe(DEMO_TRANSITION_LABEL.enter);
+  });
+
+  it("reuses the panel's own words rather than a second set", () => {
+    // Two entrances to the same demo world that word it differently is how the
+    // doorstep and `/settings/demo` drifted apart in the first place.
+    for (const state of ["no_demo", "demo_idle", "demo_active"] as const) {
+      expect(Object.values(DEMO_TRANSITION_LABEL)).toContain(
+        demoDoorLabel(state),
+      );
     }
   });
 });

@@ -10,9 +10,9 @@ import { loadDemo, resetDemo } from "@/lib/demo/load";
 import { requireRealWorkspace, findDemoOwner } from "@/lib/workspace";
 
 /**
- * The FR-008 surface's mutations (S-09 Phase 4).
+ * The FR-008 surface's mutations (S-09 Phase 4; `openDemoAction` added in S-27).
  *
- * ALL FOUR PIN THE REAL OWNER (`requireRealWorkspace`), including the ones that
+ * ALL OF THEM PIN THE REAL OWNER (`requireRealWorkspace`), including the ones that
  * run while the account is already viewing demo: `demo_of` is a column on the
  * REAL user row's child, and `active_workspace` a column on the real row itself.
  * Resolving the active workspace here would, in demo, aim every one of these at
@@ -104,6 +104,43 @@ export async function enterDemoAction(): Promise<DemoActionResult> {
   } catch (err) {
     return unavailable(err, "[settings/demo] enterDemo");
   }
+}
+
+/**
+ * "Show me the demo" — the DOORSTEP's entrance, and a dispatcher over the two
+ * above rather than a third implementation (S-27 / D1).
+ *
+ * The doorstep used to call {@link loadDemoAction} unconditionally, and
+ * `loadDemo` resets first by design so that "give me a fresh demo" stays
+ * idempotent. So entering demo, pressing Back to `/setup`, and taking the demo
+ * door again silently rebuilt the world and threw away everything the visitor
+ * had edited in it. The `/settings/demo` panel never had that bug: its
+ * `allowedTransitions` offers `load` only from `no_demo` and `enter` otherwise
+ * (`demo-panel-view.ts`). This action is that same state machine, for the one
+ * entrance that was given the action without the guard.
+ *
+ * IT CALLS THE TWO EXPORTED ACTIONS rather than copying their bodies. They are
+ * plain async functions in the same `"use server"` module, so a direct call is
+ * ordinary, and the repeated `requireRealWorkspace()` / `getDb` are memoized per
+ * request context. Copying would give a third entrance semantics of its own —
+ * which is precisely the drift that produced the defect this closes.
+ *
+ * `loadDemoAction` and `enterDemoAction` keep their current meaning for the
+ * panel, where "wczytaj od nowa" and "wróć do demo" are two different offers.
+ */
+export async function openDemoAction(): Promise<DemoActionResult> {
+  const { ownerId } = await requireRealWorkspace();
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  let demoOwner: Awaited<ReturnType<typeof findDemoOwner>>;
+  try {
+    demoOwner = await findDemoOwner(db, ownerId);
+  } catch (err) {
+    return unavailable(err, "[settings/demo] openDemo");
+  }
+
+  return demoOwner ? enterDemoAction() : loadDemoAction();
 }
 
 /** Return to the real account. The demo world is KEPT so the lead can return. */

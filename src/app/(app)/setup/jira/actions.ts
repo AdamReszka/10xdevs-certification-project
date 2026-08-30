@@ -74,7 +74,12 @@ export type StatusMappingInput = {
 /** Shared token-free failure shape. The client reads `message` regardless. */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_credentials" | "unavailable" | "bad_format" | "incomplete_mapping";
+  error:
+    | "invalid_credentials"
+    | "unavailable"
+    | "bad_format"
+    | "incomplete_mapping"
+    | typeof DEMO_REFUSAL_ERROR;
   message: string;
 };
 
@@ -122,13 +127,21 @@ function effectiveBase(workspaceUrl: string): { baseUrl: string; workspaceUrl: s
  * Validate the pasted credentials and return the account's projects for the
  * picker. No DB write, no credentials in the return — FR-003 "validate before
  * store".
+ *
+ * REFUSES IN DEMO (S-27), for the same reason as `validateGithubToken`: it
+ * writes nothing but spends the real session against a live Jira with pasted
+ * credentials, and demo does not reach outside.
  */
 export async function validateJiraCredentials(
   workspaceUrl: string,
   email: string,
   token: string,
 ): Promise<ValidateResult> {
-  await requireRealWorkspace();
+  const [, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<ActionFailure["error"]>();
 
   const parsed = jiraCredentialSchema.safeParse({ workspaceUrl, email, token });
   if (!parsed.success) {
@@ -160,6 +173,10 @@ export async function validateJiraCredentials(
 /**
  * Fetch the chosen project's statuses with an auto-suggested category per status.
  * No DB write, no credentials in the return.
+ *
+ * REFUSES IN DEMO (S-27) — the third outbound call in the wizard's credential
+ * path, and the one that would otherwise still fire after the two around it
+ * started refusing.
  */
 export async function fetchProjectStatuses(
   workspaceUrl: string,
@@ -167,7 +184,11 @@ export async function fetchProjectStatuses(
   token: string,
   jiraProjectId: string,
 ): Promise<StatusesResult> {
-  await requireRealWorkspace();
+  const [, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<ActionFailure["error"]>();
 
   const credParsed = jiraCredentialSchema.safeParse({ workspaceUrl, email, token });
   const projParsed = projectSelectionSchema.safeParse({ jiraProjectId });
@@ -206,13 +227,22 @@ export async function fetchProjectStatuses(
  * Persist the credential + project + full status-mapping set. Re-validates the
  * credentials server-side and re-checks mapping completeness via the service
  * core, which encrypts before any DB write.
+ *
+ * REFUSES IN DEMO (S-27) — the widest blast radius in the slice. Changing the
+ * monitored project for the REAL owner cascades into its sprints, tickets,
+ * status history and anomalies; it is the same radius `updateJiraProject` and
+ * `disconnectJira` are already guarded against.
  */
 export async function storeJiraIntegration(
   credentials: JiraCredentialsInput,
   jiraProjectId: string,
   mappings: StatusMappingInput[],
 ): Promise<StoreResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const [{ ownerId }, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<ActionFailure["error"]>();
 
   const credParsed = jiraCredentialSchema.safeParse(credentials);
   const projParsed = projectSelectionSchema.safeParse({ jiraProjectId });

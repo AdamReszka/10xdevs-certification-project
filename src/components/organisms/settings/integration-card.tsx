@@ -34,13 +34,24 @@ import type { ConnectionTestResult } from "@/lib/settings/connection-service";
  * configuration is not a thing to simulate, and a lead who loaded demo still
  * needs to see whether their own token is healthy.
  *
- * WHICH CONTROLS DEMO DISABLES — corrected in S-24. The S-09 rule was "only the
- * control that would reach the live API", framed around OUTBOUND CALLS, which
- * let *Disconnect* through by construction: it destroys the real account's data
- * locally and calls nothing. The rule is now "anything that mutates or spends
- * the REAL account", so Disconnect is disabled and the selection editors are not
- * offered at all. In every case the disabled attribute is the courtesy and the
- * Server Action's `demoRefusal` is the boundary (`src/lib/demo/refusal.ts`).
+ * WHICH CONTROLS DEMO DISABLES — corrected in S-24, completed in S-27. The S-09
+ * rule was "only the control that would reach the live API", framed around
+ * OUTBOUND CALLS, which let *Disconnect* through by construction: it destroys the
+ * real account's data locally and calls nothing. The rule is now "anything that
+ * mutates or spends the REAL account". S-24 applied it to Disconnect and the
+ * selection editors; S-27 applies it to Connect / Reconnect, which route to a
+ * form that writes a real credential. In every case the disabled attribute is the
+ * courtesy and the Server Action's `demoRefusal` is the boundary
+ * (`src/lib/demo/refusal.ts`), with the connect ROUTES redirecting on top of it.
+ *
+ * CONNECT AND RECONNECT ARE THE SAME CONTROL in two branches. The card returns
+ * early when `!connected`, and that branch renders its own "Connect {name}"
+ * button — the likelier of the two for this slice's persona, since a visitor who
+ * took the demo door off the doorstep holds zero credentials and sees two
+ * not-connected cards. Guarding only Reconnect would leave that one live, so both
+ * branches go through `connectControl` below and the demo note is rendered in
+ * both. A `<Button asChild><a>` ignores `disabled`, so in demo the trigger is
+ * rendered as a real disabled `<button>` rather than as a styled link.
  */
 
 const STATUS_BADGE: Record<SyncStatus, { label: string; variant: "default" | "secondary" | "destructive" }> = {
@@ -69,6 +80,28 @@ const TEST_FAILURE_COPY: Record<
   // copy on this page is Polish while the card itself is English.
   demo_mode: DEMO_REFUSAL_MESSAGE,
 };
+
+/**
+ * What demo disables, said once and shown in BOTH branches.
+ *
+ * Deliberately NOT a list of the individual controls: that sentence has been
+ * written three times and gone stale three times — most recently here, where
+ * S-27 added Connect / Reconnect to the disabled set without the enumeration
+ * noticing. The general claim is the one the server actually keeps.
+ *
+ * Polish inside the English card, per the decision recorded at the top of
+ * `TEST_FAILURE_COPY`.
+ */
+function DemoNote({ name }: { name: "GitHub" | "Jira" }) {
+  return (
+    <p className="text-sm text-muted-foreground">
+      W trybie demonstracyjnym nic, co robisz, nie zmienia Twojego prawdziwego
+      konta — dlatego sterowanie integracją jest tu wyłączone. Powyżej widzisz
+      stan swojej prawdziwej integracji z {name === "GitHub" ? "GitHubem" : "Jirą"};
+      wyjdź z demo, aby cokolwiek w niej zmienić.
+    </p>
+  );
+}
 
 export default function IntegrationCard({
   name,
@@ -149,10 +182,15 @@ export default function IntegrationCard({
         {/* Same bottom-pinning as the connected card, so a not-connected
             integration still lines its action up with its sibling. */}
         <CardContent className="flex flex-1 flex-col">
-          <div className="mt-auto">
-            <Button asChild>
-              <a href={reconnectHref}>Connect {name}</a>
-            </Button>
+          <div className="mt-auto flex flex-col gap-4">
+            {isDemo ? (
+              <Button disabled>Connect {name}</Button>
+            ) : (
+              <Button asChild>
+                <a href={reconnectHref}>Connect {name}</a>
+              </Button>
+            )}
+            {isDemo ? <DemoNote name={name} /> : null}
           </div>
         </CardContent>
       </Card>
@@ -227,9 +265,15 @@ export default function IntegrationCard({
               {testing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               {testing ? "Testing…" : "Test connection"}
             </Button>
-            <Button variant="outline" asChild>
-              <a href={reconnectHref}>Reconnect</a>
-            </Button>
+            {isDemo ? (
+              <Button variant="outline" disabled>
+                Reconnect
+              </Button>
+            ) : (
+              <Button variant="outline" asChild>
+                <a href={reconnectHref}>Reconnect</a>
+              </Button>
+            )}
             {/* Stays `ghost` deliberately (owner's decision): the dialog is
                 the gate, not the button's weight. */}
             <Button
@@ -247,14 +291,7 @@ export default function IntegrationCard({
             />
           </div>
 
-          {isDemo ? (
-            <p className="text-sm text-muted-foreground">
-              W trybie demonstracyjnym wyłączone są: test połączenia, odłączenie
-              integracji oraz zmiana monitorowanego projektu i repozytoriów.
-              Powyżej widzisz stan swojej prawdziwej integracji — wyjdź z demo,
-              aby cokolwiek w niej zmienić.
-            </p>
-          ) : null}
+          {isDemo ? <DemoNote name={name} /> : null}
 
           {/* Not rendered in demo: it holds the two destructive selection
               editors, both of which mutate the REAL account. */}

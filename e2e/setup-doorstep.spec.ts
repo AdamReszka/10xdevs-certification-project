@@ -60,8 +60,10 @@ test.describe("first run — the doorstep is where a new account lands", () => {
     await page.waitForURL("**/setup");
     await expect(page.getByRole("heading", { name: "Zaczynamy" })).toBeVisible();
 
-    // Both doors, and nothing else to click: configure, or look around.
-    await expect(page.getByRole("link", { name: "Podłącz GitHuba" })).toBeVisible();
+    // Both doors, and nothing else to click: configure, or look around. Both are
+    // BUTTONS since S-27 — the configure door leaves demo before it navigates,
+    // so it can no longer be a bare `<a href>`.
+    await expect(page.getByRole("button", { name: "Podłącz GitHuba" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Zobacz demo" })).toBeVisible();
 
     // No navigation out. Asserted per link rather than on the <nav> element, so

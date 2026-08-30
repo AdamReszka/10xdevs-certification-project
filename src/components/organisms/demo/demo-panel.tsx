@@ -13,7 +13,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import {
+  DEMO_RESET_CONFIRM,
   DEMO_STATE_COPY,
   DEMO_TRANSITION_LABEL,
   allowedTransitions,
@@ -32,6 +34,11 @@ import type { DemoActionResult } from "@/app/(app)/settings/demo/actions";
  * The actions arrive as props rather than being imported: that keeps the mapping
  * from transition to server action visible in one place (the page), and keeps
  * this organism free of a `"use server"` import chain.
+ *
+ * ONE of the four transitions is confirmed (S-27): `reset` deletes the demo owner
+ * row and 25 cascading children, and it sits beside "Wyjdź z demo", which deletes
+ * nothing — the dialog is also what tells the two apart. Its words live in the
+ * pure sibling, like every other piece of copy this repo can actually assert.
  */
 export default function DemoPanel({
   state,
@@ -47,23 +54,32 @@ export default function DemoPanel({
   const [pending, startTransition] = useTransition();
   const [running, setRunning] = useState<DemoTransition | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   const transitions = allowedTransitions(state);
+  // `running` outlives `pending` on the reset path: the dialog awaits `execute`
+  // directly rather than going through `startTransition`, so it is what keeps the
+  // other controls disabled while the deletion is in flight.
+  const busy = pending || running !== null;
 
-  function run(transition: DemoTransition) {
+  async function execute(transition: DemoTransition) {
     setRunning(transition);
     setFailure(null);
+    const result = await actions[transition]();
+    setRunning(null);
+    if (!result.ok) {
+      setFailure(result.message);
+      return;
+    }
+    // The mode lives in the DB, so nothing in the URL changes — without an
+    // explicit refresh the lead would press "Zobacz demo" and watch the page
+    // stay exactly as it was.
+    router.refresh();
+  }
+
+  function run(transition: DemoTransition) {
     startTransition(async () => {
-      const result = await actions[transition]();
-      setRunning(null);
-      if (!result.ok) {
-        setFailure(result.message);
-        return;
-      }
-      // The mode lives in the DB, so nothing in the URL changes — without an
-      // explicit refresh the lead would press "Zobacz demo" and watch the page
-      // stay exactly as it was.
-      router.refresh();
+      await execute(transition);
     });
   }
 
@@ -82,12 +98,17 @@ export default function DemoPanel({
           </p>
         ) : null}
 
+        {/* Only `reset` is wrapped in a confirmation. `load`, `enter` and `exit`
+            flip a column and delete nothing, so a dialog in front of them would
+            teach the lead to click through the one that matters. */}
         <div className="flex flex-wrap gap-2">
           {transitions.map((transition) => (
             <Button
               key={transition}
-              onClick={() => run(transition)}
-              disabled={pending}
+              onClick={() =>
+                transition === "reset" ? setConfirmingReset(true) : run(transition)
+              }
+              disabled={busy}
               variant={transition === "reset" ? "outline" : "default"}
             >
               {running === transition ? (
@@ -98,6 +119,21 @@ export default function DemoPanel({
           ))}
         </div>
 
+        {transitions.includes("reset") ? (
+          <ConfirmDialog
+            open={confirmingReset}
+            onOpenChange={setConfirmingReset}
+            title={DEMO_RESET_CONFIRM.title}
+            description={DEMO_RESET_CONFIRM.description}
+            confirmLabel={DEMO_RESET_CONFIRM.confirmLabel}
+            variant="destructive"
+            // Awaited by the dialog, which holds itself open and disabled for the
+            // duration — so a slow delete cannot be double-submitted, and a
+            // refusal still lands in the `failure` alert below.
+            onConfirm={() => execute("reset")}
+          />
+        ) : null}
+
         {failure ? (
           <Alert variant="destructive">
             <AlertTitle>Nie udało się</AlertTitle>
@@ -105,16 +141,19 @@ export default function DemoPanel({
           </Alert>
         ) : null}
 
-        {/* The list is exhaustive on purpose (S-24): it used to omit the two
-            most destructive things demo could reach — odłączenie integracji and
-            zmiana monitorowanego projektu — which were live at the time. Both
-            now refuse server-side, so this sentence is a description of the
-            code rather than a promise the code did not keep. */}
+        {/* NO LIST HERE, deliberately (S-27). This paragraph used to enumerate
+            what demo disables, and the enumeration went stale twice: S-09 wrote
+            it short, S-24 corrected it and wrote it short again, and Phase 2 of
+            S-27 would have broken it a third time by adding Connect/Reconnect to
+            the disabled set. The general claim is the one the server actually
+            keeps, and `src/lib/demo/boundary-inventory.test.ts` is what holds it:
+            a new action that reaches the real account without a demo guard fails
+            the build rather than quietly falsifying this sentence. */}
         <p className="text-sm text-muted-foreground">
-          Demo nie dotyka Twoich integracji: zakładka Connections zawsze pokazuje
-          prawdziwe konto, a synchronizacja, import zespołu, refinement, wysyłka
-          maili, odłączenie integracji oraz zmiana monitorowanego projektu i
-          repozytoriów są w demo wyłączone.
+          Nic, co robisz w trybie demonstracyjnym, nie zmienia Twojego prawdziwego
+          konta — jego integracje, zespół i historia zostają dokładnie takie, jakie
+          są. Zakładka Connections zawsze pokazuje prawdziwe konto, ale w demie
+          jest tylko do odczytu.
         </p>
       </CardContent>
     </Card>
