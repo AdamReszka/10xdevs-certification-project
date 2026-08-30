@@ -733,10 +733,10 @@ the sprint name and anomaly count on every recap already sent. No backfill.
 
 #### Automated
 
-- [x] 5.1 Unit tests pass, including the new render assertions: `npm test`
-- [x] 5.2 Type checking passes: `npm run typecheck`
-- [x] 5.3 Linting passes: `npm run lint`
-- [x] 5.4 Production build passes: `npm run build`
+- [x] 5.1 Unit tests pass, including the new render assertions: `npm test` — fe4ed20
+- [x] 5.2 Type checking passes: `npm run typecheck` — fe4ed20
+- [x] 5.3 Linting passes: `npm run lint` — fe4ed20
+- [x] 5.4 Production build passes: `npm run build` — fe4ed20
 
 #### Manual
 
