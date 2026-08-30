@@ -20,6 +20,8 @@
  * silently, and in exactly the case the notice was written for.
  */
 
+import { labelFor } from "@/lib/sprint-identity";
+
 /** A `sprint` row, narrowed to what this decision reads. */
 export type SprintRowRef = {
   id: string;
@@ -166,10 +168,9 @@ export function toSprintOptions({
   ];
 }
 
-/** Jira lets a sprint be nameless; the id is then the only thing to call it. */
-function labelFor(name: string | null, jiraSprintId: string): string {
-  return name ?? `Sprint ${jiraSprintId}`;
-}
+// `labelFor` used to live here. It moved to `@/lib/sprint-identity` (S-25
+// Phase 1) because the identity bar names the same nameless sprint two elements
+// away from the switcher entry, and one spelling has to serve both.
 
 /**
  * Whether the lead's manual entries are offered for the sprint on screen

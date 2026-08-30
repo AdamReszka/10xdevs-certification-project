@@ -1,7 +1,7 @@
 ---
 change_id: sprint-identity-visibility
 title: Name the sprint, with its dates, on every surface that shows its data
-status: preparing
+status: implementing
 created: 2026-08-30
 updated: 2026-08-30
 archived_at: null
