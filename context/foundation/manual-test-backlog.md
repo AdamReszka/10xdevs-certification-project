@@ -8,6 +8,14 @@ pokryte automatyką. Zebrane 2026-08-23 przez przeskanowanie każdej sekcji
 odhacz też w źródłowym `plan.md`, inaczej `## Progress` skłamie. Kolumna
 „źródło" wskazuje, gdzie.
 
+> **Zmiana adresów 2026-08-31 (S-19).** Roster i nieobecności wyprowadziły się z
+> Settings do własnej sekcji **Team** w górnym menu. Jeśli trzymasz starszy
+> wydruk tego pliku: `/settings/team` → **`/team/roster`**, `/settings/absences`
+> → **`/team/absences`**, a dni wolne całego zespołu mają teraz własną, trzecią
+> zakładkę **`/team/days-off`** (wcześniej dolna połowa strony nieobecności).
+> Stare adresy nadal działają — przekierowują — więc jeśli wpiszesz je z
+> przyzwyczajenia i wylądujesz gdzie indziej, **to nie jest błąd**.
+
 > ## 🔁 Zasada zrównania — przeczytaj, zanim dopiszesz cokolwiek do tego pliku
 >
 > **Ten plik musi zawierać KAŻDY otwarty wiersz manualny, jaki istnieje w
@@ -649,7 +657,7 @@ każdy zweryfikowany na ekranie plus kontrola w `psql`. Wcześniej dowodowo:
 ### 7.1 — 4.6 Trwałe usunięcie ostatniego członka
 
 *Źródło:* `context/changes/team-management-surface/plan.md` faza 4, wiersz 4.6
-*Jak:* `/settings/team` na koncie z **jednym** członkiem → kosz → przeczytaj
+*Jak:* `/team/roster` na koncie z **jednym** członkiem → kosz → przeczytaj
 dialog → **Cancel**.
 *Co musi być prawdą:* brak przycisku *Delete permanently*; opis mówi, że roster
 nie może zostać opróżniony.
@@ -703,7 +711,7 @@ dotykający kreatora, a nie zakładki Settings.
 ### 7.5 — 5.7 Szerokość tabletu (NFR, podłoga 10 cali)
 
 *Źródło:* `plan.md` faza 5, wiersz 5.7 — **zamyka zaparkowany wiersz 4.6 z S-04**
-*Jak:* DevTools → 1024 px → `/settings/team`.
+*Jak:* DevTools → 1024 px → `/team/roster`.
 *Co musi być prawdą:* grid scrolluje się poziomo, każda kontrolka osiągalna,
 `body` nie scrolluje się w poziomie.
 *Dlaczego odłożone:* czysto wizualne, zero ryzyka dla danych.
@@ -727,7 +735,7 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 ### 7.7 — 4.7 🔴 Merge dwóch wierszy rosteru
 
 - [x] **7.7** Scalenie dwóch członków zespołu w jeden wiersz. **Zaliczone 2026-08-30** (sesja manualna).
-      *Gdzie:* `/settings/team`, konto z prawdziwymi tokenami (identyfikuj po
+      *Gdzie:* `/team/roster`, konto z prawdziwymi tokenami (identyfikuj po
       `token_last4`, nie po nazwie — §5).
       *Co zrobić:* dodaj dwa nowe wiersze — jeden z samym **GitHub username**
       (np. `merge-a`), drugi z samym **Jira account ID** (np. `acc-merge-b`),
@@ -761,7 +769,7 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
       poprawny stan wyjściowy. Rozstrzygające jest `source`, nie liczba wierszy
       ani słowo „Testowy" w nazwisku (Liseusz i Rocky to prawdziwe konta Jiry,
       `712020:…`).
-      *Gdzie:* `/settings/team` (albo `psql`).
+      *Gdzie:* `/team/roster` (albo `psql`).
       *Co zrobić:* po zakończeniu wierszy S-15 przejrzyj roster.
       *Co musi być prawdą:* zostają **`Adam Reszka`** i **`FoxyMind`**, oboje
       **aktywni**; żadnych wierszy testowych (`merge-a`, `acc-merge-b` itp.).
@@ -792,7 +800,7 @@ Kolejność niżej to kolejność, w jakiej warto to nadrobić: 8.4 → 8.5 → 
 ### 8.4 — 6.4 🔴 Bramka trwałego usunięcia uzbraja się po raz pierwszy
 
 *Źródło:* `context/changes/absence-calendar/MANUAL-CHECKLIST.md`, faza 6
-*Gdzie:* `/settings/absences`, potem `/settings/team`.
+*Gdzie:* `/team/absences`, potem `/team/roster`.
 *Jak:* zapisz absencję dla dowolnej osoby → zakładka **Team** → kosz przy **tej
 samej** osobie.
 *Co musi być prawdą:*
@@ -810,7 +818,7 @@ a żaden test automatyczny nie złapie tego jako widocznego dla użytkownika.
 ### 8.5 — 4.5 Absencja gasi `DEVELOPER_INACTIVE` bez czekania na sync
 
 *Źródło:* `MANUAL-CHECKLIST.md`, faza 4
-*Gdzie:* `/dashboard` (zakładka **Anomaly Inbox**), potem `/settings/absences`.
+*Gdzie:* `/dashboard` (zakładka **Anomaly Inbox**), potem `/team/absences`.
 *Jak:* znajdź w inboxie wiersz `DEVELOPER_INACTIVE`, zapisz absencję dla tej
 osoby na zakres obejmujący **dzisiaj**, wróć na `/dashboard` i odśwież.
 *Co musi być prawdą:* wiersz zniknął **od razu**, bez czekania na cykl cron
@@ -822,7 +830,7 @@ zapisuje urlop i patrzy na anomalię, którą właśnie wyjaśnił.
 ### 8.6 — 2.3 Zapis absencji przeżywa odświeżenie, z właściwymi dniami
 
 *Źródło:* `MANUAL-CHECKLIST.md`, faza 2
-*Gdzie:* `/settings/absences`.
+*Gdzie:* `/team/absences`.
 *Jak:* *Record an absence* → osoba → **dwa** kliknięcia w kalendarzu → rodzaj →
 *Record absence* → **F5**.
 *Co musi być prawdą:* wiersz jest po odświeżeniu, a kolumna **Dates** pokazuje
@@ -837,7 +845,7 @@ testy, ale to jedyne miejsce, gdzie realna przeglądarka to potwierdza.
 ### 8.7 — 2.4 + 2.5 Edycja i usuwanie trafiają we właściwy wiersz
 
 *Źródło:* `MANUAL-CHECKLIST.md`, faza 2
-*Gdzie:* `/settings/absences`, mając **co najmniej dwie** absencje.
+*Gdzie:* `/team/absences`, mając **co najmniej dwie** absencje.
 *Jak:* ołówek przy pierwszej → zmień zakres → *Save changes*; potem kosz przy drugiej.
 *Co musi być prawdą:*
   - po edycji wierszy jest **tyle samo** co przed;
@@ -876,7 +884,7 @@ checklisty do pięciu pozycji — nie są niepotrzebne, są odłożone.
 
 *Źródło:* `context/changes/absence-calendar/plan.md` faza 5, wiersz 5.5
 *Jak:* `/dashboard` → zakładka **Availability**; porównaj zaznaczone komórki z
-wierszami na `/settings/absences`.
+wierszami na `/team/absences`.
 *Co musi być prawdą:* każda absencja jest zaznaczona na **dokładnie** tych dniach,
 które pokazuje kolumna **Dates**, w obu sekcjach („This sprint" i „Next window").
 *Dlaczego odłożone:* logika budowania siatki jest w całości pokryta przez
@@ -903,7 +911,7 @@ sprintu, weekend kosztujący zero). Wiersz 6.5 sprawdza kierunek zmiany
 
 *Źródło:* `plan.md` faza 5, wiersz 5.7
 *Jak:* na koncie testowym wyczyść `sp_capacity` **wszystkim** aktywnym członkom
-(`/settings/team`, pole Capacity na puste, zapisz) → `/dashboard` → Availability.
+(`/team/roster`, pole Capacity na puste, zapisz) → `/dashboard` → Availability.
 *Co musi być prawdą:* widać zdanie „No story-point capacity set for anyone on
 the team yet…", a **nie** liczba „0 SP".
 *Dlaczego odłożone:* `NULL` jest tu jawnie wykluczony i policzony osobno
@@ -1295,8 +1303,8 @@ reszta. **2.8, 3.8, 4.8, 7.5, 7.9 mają twarde zależności** — opisane przy n
 
 ### Faza 1 — etat zamiast SP w rosterze
 
-- [ ] **11.1** (1.7) Banner migracji na `/settings/team` znika na dobre.
-      *Co zrobić:* wejdź na `/settings/team`, policz członków, kliknij
+- [ ] **11.1** (1.7) Banner migracji na `/team/roster` znika na dobre.
+      *Co zrobić:* wejdź na `/team/roster`, policz członków, kliknij
       **„Confirm availability"**, F5, przejdź na `/dashboard` i wróć.
       *Co musi być prawdą:* przed kliknięciem banner mówi „Check N people's
       availability", gdzie **N = liczba członków**; po kliknięciu znika
@@ -1329,8 +1337,9 @@ reszta. **2.8, 3.8, 4.8, 7.5, 7.9 mają twarde zależności** — opisane przy n
 ### Faza 2 — dni wolne całego zespołu
 
 - [ ] **11.4** (2.7) Dzień wolny obniża capacity i liczbę dni roboczych.
-      *Gdzie:* `/settings/absences` → **Team days off**, potem `/dashboard` →
-      **Availability**.
+      *Gdzie:* `/team/days-off` (od S-19 osobna zakładka **Team days off** w
+      sekcji Team — wcześniej dolna połowa `/settings/absences`), potem
+      `/dashboard` → **Availability**.
       *Co zrobić:* zapisz obecne MD i „over N working days". Dodaj **dzień
       roboczy (pon–pt) leżący WEWNĄTRZ aktywnego sprintu**, z etykietą. Wróć na
       dashboard.
@@ -1350,7 +1359,7 @@ reszta. **2.8, 3.8, 4.8, 7.5, 7.9 mają twarde zależności** — opisane przy n
       wolny zatrzymuje zegar **wszystkich** kubełków, a „brak reakcji" na 3 SP
       jest teraz **błędem**. Wiersz jest przez to łatwiejszy: nie trzeba szukać
       ticketa 21 SP.
-      *Gdzie:* `/settings/absences` (dni wolne zespołu), potem `/dashboard`.
+      *Gdzie:* `/team/days-off` (dni wolne zespołu), potem `/dashboard`.
       *Co zrobić:* znajdź ticket **3 SP** w **In Progress**, który stoi bez ruchu
       niewiele ponad **16 godzin roboczych** (dwa dni pracy) i jest w inboxie
       jako `TICKET_STATUS_AGING`. Dodaj dzień wolny całego zespołu **w środku
@@ -1577,10 +1586,10 @@ pierwszy, zanim zaczniesz cokolwiek innego w demie.
 
 - [ ] **12.3** (4.10) Baner jest wszędzie, a „Wyjdź z demo" wraca na prawdziwe konto.
       *Co zrobić:* przejdź kolejno `/dashboard`, `/dashboard/sprint-detail`,
-      `/settings/team`, `/settings/absences`, `/refinement` → na ostatnim kliknij
+      `/team/roster`, `/team/absences`, `/refinement` → na ostatnim kliknij
       **„Wyjdź z demo"**.
       *Co musi być prawdą:* baner na **każdym** z tych ekranów; po kliknięciu
-      baner znika, a `/settings/team` pokazuje **Twój** roster, nie sześcioosobowy
+      baner znika, a `/team/roster` pokazuje **Twój** roster, nie sześcioosobowy
       zespół demo; Ustawienia → Demo oferuje teraz **„Wróć do demo"** (dane
       zachowane), a nie ponowne „Zobacz demo".
       *Dlaczego:* tryb siedzi w kolumnie bazy, nie w URL-u — `/dashboard` wygląda
@@ -1655,7 +1664,7 @@ zostało już pokryte gdzie indziej.
   osobno: scalanie to **§7.7**, różnicowy zapis i re-import to zamknięte wiersze
   S-15 z sesji 2026-08-25.
 - **4.6** (shadcn/ui, szerokość 10 cali) → **§7.5** pokrywa tę samą kontrolę na
-  `/settings/team`, a `/setup/team` używa **tego samego organizmu**.
+  `/team/roster`, a `/setup/team` używa **tego samego organizmu**.
 - **4.4** (kadencja pre-fill + `cadenceOverridden`) → **§1a**, wiersze 2.7 i
   „Nadpisana kadencja przeżywa cykl _i rollover_", które testują to na
   reconcilerze, czyli w kształcie, jaki kod ma dziś.
@@ -1986,7 +1995,7 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
 - [ ] **15.D** (faza 4, `4.6` + `4.9`) **Gdzie:** to samo świeże konto co w
       **15.A**, zaraz po nim.
       **Co zrobić:** na progu kliknij „Zobacz demo"; obejrzyj kolejno
-      `/dashboard`, `/dashboard/sprint-detail` i `/settings/team`, patrząc za
+      `/dashboard`, `/dashboard/sprint-detail` i `/team/roster`, patrząc za
       każdym razem na baner demo; kliknij w banerze **„Dokończ konfigurację"**;
       przejdź cały kreator (GitHub → Jira → Zespół) i kliknij **„Save & finish"**.
       **Co musi być prawdą:** baner na **każdym z trzech** ekranów niesie przycisk
@@ -2132,9 +2141,9 @@ wiedział, dlaczego jej treść i ekran się rozjeżdżają.
 - [ ] **16.B** (faza 2, `2.6`; warunek zaliczenia **przepisany** przez S-26 —
       okno oferuje dwa wyjścia, a domyślnym jest zachowanie danych)
       **Gdzie:** `/settings/connections`, karta **Jira**, konto z podłączoną Jirą
-      i co najmniej jedną nieobecnością w `/settings/absences`.
+      i co najmniej jedną nieobecnością w `/team/absences`.
       **Co zrobić:** kliknij **Disconnect** na karcie Jira, przeczytaj **całe**
-      okno, kliknij **Cancel**, potem wejdź na `/settings/absences`.
+      okno, kliknij **Cancel**, potem wejdź na `/team/absences`.
       **Co musi być prawdą:** w stopce są **trzy** kontrolki: `Cancel`,
       `Delete my Jira data` (czerwony) i `Keep my Jira data` (zwykły, domyślny —
       to on jest wyróżniony, nie czerwony). Nieobecności **nie** stoją po stronie
@@ -2173,9 +2182,9 @@ wiedział, dlaczego jej treść i ekran się rozjeżdżają.
       integracje są nietknięte", a kod tego nie dotrzymywał.
 
 - [ ] **16.D** (faza 3, `3.7`) **Gdzie:** baner demo → `/settings/demo` →
-      `/settings/team` i `/dashboard`.
+      `/team/roster` i `/dashboard`.
       **Co zrobić:** w demo zmień imię jednego członka zespołu i zapisz; wyjdź z
-      demo; wejdź w demo ponownie; wróć na `/settings/team` i `/dashboard`.
+      demo; wejdź w demo ponownie; wróć na `/team/roster` i `/dashboard`.
       **Co musi być prawdą:** widzisz **ten sam** sprint demo i **tę samą**
       zmianę. Wyjście z demo niczego nie skasowało — kasuje wyłącznie osobny
       przycisk „Resetuj dane demo".
@@ -2536,10 +2545,10 @@ osobnym wierszem właśnie dlatego.
       bez żadnego komunikatu — dokładnie scenariusz, przed którym ostrzega FR-008.
 
 - [ ] **19.E** (faza 3, `3.4`) **Gdzie:** konto ze świeżo wczytanym demem.
-      **Co zrobić:** w demie wejdź na `/settings/team`, **zmień imię jednej
+      **Co zrobić:** w demie wejdź na `/team/roster`, **zmień imię jednej
       osoby** na rozpoznawalne (np. „TEST TEST") i zapisz; zapamiętaj datę z
       paska dema („stan na …"); wejdź na `/setup`; kliknij **„Zobacz demo"**;
-      wróć na `/settings/team`.
+      wróć na `/team/roster`.
       **Co musi być prawdą:** zmienione imię **dalej tam jest**, a pasek dema
       pokazuje **tę samą datę** co przed wyjściem.
       *Dlaczego to łapie:* wcześniej ten przycisk budował świat demo od zera przy
@@ -2649,7 +2658,7 @@ klikaniem.** Oba są pokryte testami integracyjnymi na prawdziwym Postgresie
 
 ### Blokujące (te same, co w checkliście slice'a)
 
-- [ ] **20.A** (faza 1, `1.8`) **Gdzie:** `/settings/absences`, potem
+- [ ] **20.A** (faza 1, `1.8`) **Gdzie:** `/team/absences`, potem
       `/dashboard`.
       **Co zrobić:** policz na `/dashboard` wiersze „sprint at risk" ze zdaniem
       **„unexpectedly away"**; dodaj **nieplanowaną** nieobecność od dzisiaj do
@@ -2742,7 +2751,7 @@ dzień wolny i „to nie jest błąd". Od dziś reaguje, a brak reakcji jest bł
       przesuwa się o tydzień.
 
 - [ ] **21.C** (faza 3, `3.6`) Nieobecność dalej wycisza `DEVELOPER_INACTIVE`.
-      *Gdzie:* `/settings/absences`, potem `/dashboard`.
+      *Gdzie:* `/team/absences`, potem `/dashboard`.
       *Co zrobić:* znajdź w inboxie wiersz **„… has an In Progress ticket but no
       commits in the last 2 working days"**. Zapisz tej osobie nieobecność
       obejmującą **ostatnie dwa dni robocze**. Wróć na `/dashboard`.
@@ -2868,16 +2877,16 @@ zgadzasz się stracić nieobecności na tym koncie.
       słowa „Disconnect" — inaczej ani Playwright, ani czytnik ekranu nie
       odróżni ich od przycisku, który to okno otworzył.
 
-- [ ] **22.C** (faza 3, `3.7`) **Gdzie:** `/settings/absences`, potem
+- [ ] **22.C** (faza 3, `3.7`) **Gdzie:** `/team/absences`, potem
       `/settings/connections`, prawdziwe konto. **Wymaga 22.A.**
-      **Co zrobić:** na `/settings/absences` zapisz sobie (zrzut ekranu), ile
+      **Co zrobić:** na `/team/absences` zapisz sobie (zrzut ekranu), ile
       nieobecności widzisz i dla kogo; jeśli nie ma żadnej — dodaj jedną. Potem
       `/settings/connections` → karta Jira → **Disconnect** → **Keep my Jira
-      data**. Wróć na `/settings/absences`.
+      data**. Wróć na `/team/absences`.
       **Co musi być prawdą:** wszystkie nieobecności z pierwszego kroku są nadal
       na liście, z tymi samymi osobami i datami. Karta Jira pokazuje teraz „Not
-      connected". Roster (`/settings/team`) i dni wolne całego zespołu też są
-      nietknięte.
+      connected". Roster (`/team/roster`) i dni wolne całego zespołu
+      (`/team/days-off`) też są nietknięte.
       *Dlaczego to łapie:* to jest defekt, dla którego powstał S-26. Do tej pory
       rozłączenie Jiry kasowało **każdą** nieobecność wpisaną ręcznie przez leada
       — dane, których żaden sync nie odtworzy — i nikt o tym nie był
@@ -2885,15 +2894,15 @@ zgadzasz się stracić nieobecności na tym koncie.
       na bazie (patrz 22.A) albo kaskada nie została zwężona.
 
 - [ ] **22.D** (faza 3, `3.8`) 🔴 **KASUJE DANE NIEODWRACALNIE.** **Gdzie:**
-      `/settings/connections` → `/settings/absences`, prawdziwe konto. **Wymaga
+      `/settings/connections` → `/team/absences`, prawdziwe konto. **Wymaga
       22.A i 22.C.**
       **Co zrobić:** podłącz Jirę z powrotem (**Connect** / kreator), żeby
-      Disconnect znów był dostępny; upewnij się na `/settings/absences`, że
+      Disconnect znów był dostępny; upewnij się na `/team/absences`, że
       jakaś nieobecność istnieje; potem karta Jira → **Disconnect** → **Delete my
-      Jira data**; wróć na `/settings/absences`.
+      Jira data**; wróć na `/team/absences`.
       **Co musi być prawdą:** lista nieobecności jest **pusta**. Roster
-      (`/settings/team`) jest **nienaruszony** — ludzie zostają, znikają wyłącznie
-      ich nieobecności. Dni wolne całego zespołu też zostają.
+      (`/team/roster`) jest **nienaruszony** — ludzie zostają, znikają wyłącznie
+      ich nieobecności. Dni wolne całego zespołu (`/team/days-off`) też zostają.
       *Dlaczego to łapie:* bez tego kroku „wybór" jest pozorny — obie ścieżki
       robiłyby to samo i lead, który świadomie czyści konto przed oddaniem go
       komuś innemu, zostawiłby dane w bazie. Sprawdzenie rosteru pilnuje drugiej
@@ -2904,7 +2913,7 @@ zgadzasz się stracić nieobecności na tym koncie.
       **Co zrobić:** zrób 16.B (czytasz okno, kończysz na `Cancel`), potem 22.C
       (ścieżka zachowująca) i 22.D (ścieżka kasująca).
       **Co musi być prawdą:** obie ścieżki dają się **doprowadzić do końca** z
-      tego samego okna i dają **różne** wyniki na `/settings/absences` — po 22.C
+      tego samego okna i dają **różne** wyniki na `/team/absences` — po 22.C
       nieobecności są, po 22.D ich nie ma. Treść okna zapowiadała dokładnie to,
       co się stało w obu przypadkach.
       *Dlaczego to łapie:* dwa przyciski, które robią to samo, są gorsze niż
@@ -2936,3 +2945,134 @@ zgadzasz się stracić nieobecności na tym koncie.
       prędkości (FR-023/FR-024) zostaje na zawsze zatruty wartością wyglądającą
       na poprawną. Objęte testem integracyjnym, ale wyłącznie ta droga pokazuje
       to na prawdziwej Jirze.
+
+---
+
+## 23. S-19 `team-navigation-section` — otwarte (2026-08-31)
+
+Slice zamknięty 2026-08-31, trzy fazy. Źródło kanoniczne:
+`context/changes/team-navigation-section/plan.md` `## Progress`. Pełne opisy
+wierszy: `context/changes/team-navigation-section/MANUAL-CHECKLIST.md`.
+
+**O co chodzi, po ludzku.** Settings miało sześć zakładek, które odpowiadały na
+**dwa różne pytania**: cztery na „skąd SprintFlow bierze dane" (Connections,
+Daily recap, Anomaly rules, Demo) i dwie na „kim jest twój zespół" (Team,
+Absences). S-19 wyprowadza tę drugą parę do własnej sekcji **Team** w górnym
+menu. Przy okazji rozdziela dwie rzeczy, które dotąd stały na jednej stronie i
+się myliły: **nieobecność** należy do konkretnej osoby i do sprintu, a **dzień
+wolny całego zespołu** jest własnością kalendarza i dotyczy każdego sprintu,
+który go obejmuje. Każda z nich ma teraz własną zakładkę.
+
+**Stare adresy nadal działają.** `/settings/team` i `/settings/absences`
+przekierowują na nowe miejsca, więc żaden zapisany link ani starszy wiersz z
+tego pliku nie kończy się błędem 404.
+
+**Zastępuje dwa wiersze S-15.** 5.3 („Settings → Team dostępne z nawigacji") i
+5.4 („aktywna zakładka jest wyróżniona") były odhaczone 2026-08-25, ale
+sprawdzały ścieżkę nawigacyjną, która przestała istnieć. Zostały oznaczone jako
+`SUPERSEDED` w `context/archive/2026-08-23-team-management-surface/plan.md` i
+zastępują je poniższe **23.A** i **23.B**.
+
+**Konto:** wiersze 23.A–23.D robisz na **swoim zwykłym koncie** (dowolnym — nie
+wymagają prawdziwych tokenów, poza 23.D, które potrzebuje aktywnego sprintu i
+ludzi w rosterze). Wiersz 23.E wymaga wejścia w tryb demo.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **23.A** (faza 1, `1.8`) **Gdzie:** dowolny ekran aplikacji po zalogowaniu.
+      **Co zrobić:** popatrz na górne menu. Kliknij **Team**.
+      **Co musi być prawdą:** w menu jest **pięć** pozycji w tej kolejności:
+      Dashboard, Sprint Detail, **Team**, Settings, Refinement. Kliknięcie
+      **Team** ląduje pod adresem `/team/roster` (sprawdź pasek adresu),
+      wyświetla listę członków zespołu, a w pasku zakładek pod nagłówkiem
+      **Roster** jest wyróżniony jako aktywny.
+      *Dlaczego to łapie:* to jest cały sens slice'a widziany oczami leada —
+      zastępuje wiersz S-15 5.3. Jeśli menu prowadzi w puste miejsce albo roster
+      się nie renderuje, sekcja istnieje tylko w kodzie. Kolejność też jest
+      celowa: Team to **dane o zespole**, więc stoi przy innych ekranach z
+      danymi, przed konfiguracją.
+
+- [ ] **23.B** (faza 2, `2.7`) **Gdzie:** `/team/roster`, `/team/absences`,
+      `/team/days-off`.
+      **Co zrobić:** dwa przejścia. Najpierw **klikaj** kolejno wszystkie trzy
+      zakładki. Potem każdy z tych trzech adresów **wpisz ręcznie w pasek
+      adresu** i wejdź na niego bezpośrednio (albo przeładuj `Cmd+R`).
+      **Co musi być prawdą:** za każdym razem — i po kliknięciu, i po wejściu z
+      paska adresu — dokładnie **jedna** zakładka jest wyróżniona (ciemniejszy
+      tekst, podkreślenie) i jest to ta, na której faktycznie jesteś. Nigdy zero,
+      nigdy dwie.
+      *Dlaczego to łapie:* zastępuje wiersz S-15 5.4, rozszerzony z dwóch
+      zakładek na trzy. Wyróżnienie liczy się po **prefiksie adresu**, więc nowa
+      zakładka o dłuższej nazwie to dokładnie ten przypadek, w którym taka
+      logika potrafi zapalić dwie naraz albo żadnej. Wejście z paska adresu jest
+      osobnym krokiem, bo klikanie działa nawet wtedy, gdy stan po odświeżeniu
+      jest zepsuty.
+
+- [ ] **23.C** (faza 1, `1.9`) **Gdzie:** pasek adresu, potem `/settings`.
+      **Co zrobić:** wpisz ręcznie `/settings/team` i zatwierdź. Potem wpisz
+      `/settings/absences`. Na koniec wejdź na `/settings`.
+      **Co musi być prawdą:** pierwszy adres ląduje na `/team/roster`, drugi na
+      `/team/absences` — pasek adresu ma **zmienić się sam**. Żaden nie pokazuje
+      błędu 404 ani pustej strony. Zakładka **Settings** ma teraz **cztery**
+      pozycje: Connections, Daily recap, Anomaly rules, Demo — bez Team i bez
+      Absences.
+      *Dlaczego to łapie:* przeprowadzka jest zrobiona w połowie, jeśli stare
+      adresy przestają działać. Wskazuje na nie mnóstwo rzeczy poza aplikacją:
+      zakładki w przeglądarce, starsze wiersze w tym pliku, zarchiwizowane
+      dokumenty. 404 w takim miejscu czyta się jak zepsuta aplikacja, a nie jak
+      przeniesiona strona.
+
+- [ ] **23.D** (faza 1 i 2, `1.10` + `2.5`) 🔴 **Wiersz o zapisie — sprawdza, czy
+      podział stron nie zerwał drogi zapisu.** **Gdzie:** `/team/absences`,
+      `/team/days-off`, potem `/dashboard`. Potrzebny **aktywny sprint** i ludzie
+      w rosterze.
+      **Co zrobić:** dwa niezależne zapisy. **(1)** Na `/dashboard` znajdź w
+      inboxie anomalię `DEVELOPER_INACTIVE` dla konkretnej osoby. Wejdź na
+      `/team/absences` i zapisz jej nieobecność obejmującą dzisiaj. Wróć na
+      `/dashboard` i **przeładuj stronę — nie klikaj „Sync now"**. **(2)** Na
+      `/dashboard` → **Availability** zapisz sobie obecne MD i liczbę dni
+      roboczych. Wejdź na `/team/days-off` i dodaj **dzień roboczy (pon–pt)
+      leżący wewnątrz aktywnego sprintu**. Wróć na `/dashboard`.
+      **Co musi być prawdą:** **(1)** anomalia `DEVELOPER_INACTIVE` dla tej osoby
+      **zniknęła** z inboxa, bez czekania na cykl crona. **(2)** liczba dni
+      roboczych spadła **dokładnie o 1**, a MD o **sumę etatów** zespołu.
+      *Dlaczego to łapie:* to jedyne realne ryzyko regresji w tym slice'ie. Oba
+      edytory stały wcześniej na jednej stronie i dzieliły **jeden** odczyt
+      danych sprintu; teraz każdy robi swój własny. Jeśli któryś dostał zły
+      sprint albo zgubił ponowne przeliczenie anomalii po zapisie, ekran wygląda
+      normalnie — po prostu nic się nie dzieje, a lead uzna, że zapis nie
+      przeszedł, i zapisze drugi raz.
+
+- [ ] **23.E** (faza 1 i 2, `1.11` + `2.8`) **Gdzie:** `/settings/demo`, potem
+      `/team/roster` i `/team/days-off`. **Wymaga trybu demo.**
+      **Co zrobić:** wejdź na `/settings/demo` i załaduj demo. **Bez klikania po
+      innych ekranach** przejdź prosto na `/team/roster`, popatrz, potem prosto
+      na `/team/days-off`.
+      **Co musi być prawdą:** roster pokazuje **sześcioosobowy zespół demo**, nie
+      twoich prawdziwych ludzi. Dni wolne pokazują dni wolne **konta demo**, nie
+      twoje. Oba **za pierwszym wejściem** — bez odświeżania i bez drugiej
+      nawigacji.
+      *Dlaczego to łapie:* przy wejściu w demo aplikacja czyści z pamięci
+      podręcznej listę adresów, które zależą od tego, czyje dane pokazują. Trasy
+      się przeprowadziły, a `/team/days-off` w ogóle wcześniej nie istniała —
+      jeśli którejś zabrakło na tej liście, **nie widać żadnego błędu**: strona
+      renderuje się poprawnie, tylko z danymi **poprzedniego** konta. To jest
+      dokładnie ten rodzaj awarii, którego nie da się zauważyć bez celowego
+      sprawdzenia, a w demie prezentowanym komuś z zewnątrz wygląda jak wyciek
+      cudzych danych.
+
+### Nieblokujące
+
+- [ ] **23.F** (faza 2, `2.6`) **Gdzie:** `/team/absences`.
+      **Co zrobić:** przeczytaj sam ekran — nagłówek, akapit pod nim i to, co
+      jest niżej.
+      **Co musi być prawdą:** na stronie jest **wyłącznie** edytor nieobecności
+      pojedynczych osób — nie ma już drugiej sekcji „Team days off" ani jej
+      kalendarza. Akapit pod nagłówkiem kończy się zdaniem kierującym do
+      zakładki **Team days off** dla dnia, w którym wolne ma cały zespół.
+      *Dlaczego to łapie:* to jedyne, co zostało z podziału po stronie tekstu.
+      Lead, który wiedział, gdzie wpisuje się święta, wchodzi tu z
+      przyzwyczajenia i musi dostać wskazówkę, dokąd poszły — inaczej uzna, że
+      funkcja zniknęła. **Nieblokujące:** zły albo brakujący tekst nikogo nie
+      zatrzymuje i niczego nie psuje, dlatego nie ma tego wiersza w checkliście
+      slice'a.

@@ -750,11 +750,11 @@ every tester who had visited an old path once.
 
 #### Automated
 
-- [ ] 3.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs`
-- [ ] 3.2 No stale path strings remain in `manual-test-backlog.md`
-- [ ] 3.3 Linting passes: `npm run lint`
-- [ ] 3.4 Unit tests pass: `npm test`
-- [ ] 3.5 Production build succeeds: `npm run build`
+- [x] 3.1 Manual-test sweep passes: `node scripts/manual-test-sweep.mjs`
+- [x] 3.2 No stale path strings remain in `manual-test-backlog.md`
+- [x] 3.3 Linting passes: `npm run lint`
+- [x] 3.4 Unit tests pass: `npm test`
+- [x] 3.5 Production build succeeds: `npm run build`
 
 #### Manual
 
