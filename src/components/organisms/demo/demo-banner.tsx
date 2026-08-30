@@ -87,10 +87,22 @@ export default function DemoBanner({
         <FlaskConical aria-hidden />
         <AlertTitle>Jesteś w trybie demonstracyjnym</AlertTitle>
         <AlertDescription className="flex flex-col gap-3">
+          {/* NARROWED 2026-08-30 (S-24 impl-review F1). This used to promise
+              that "Twoje prawdziwe dane i integracje są nietknięte" — flatly,
+              about integrations too. S-24 made that true on `/settings/connections`
+              (all nine Server Actions there refuse in demo), but NOT in the
+              wizard: `/setup/**` has no demo guard and `storeGithubIntegration` /
+              `storeJiraIntegration` carry no refusal, so a lead in demo can still
+              walk to `/setup/github` and write a real credential. Gating that
+              route is roadmap **S-27**. Until it lands, the banner claims only
+              what the code actually keeps — demo never SHOWS real data, and the
+              Connections tab cannot change it. Widen this sentence again when
+              S-27 closes; do not widen it before. */}
           <span>
             To fikcyjny zespół i fikcyjny sprint
-            {anchorLabel ? ` — stan na ${anchorLabel}` : ""}. Twoje prawdziwe
-            dane i integracje są nietknięte.{" "}
+            {anchorLabel ? ` — stan na ${anchorLabel}` : ""}. Nie widzisz tu
+            żadnych swoich prawdziwych danych, a ustawienia integracji są w demo
+            zablokowane.{" "}
             <Link href="/settings/demo" className="underline underline-offset-4">
               Ustawienia demo
             </Link>

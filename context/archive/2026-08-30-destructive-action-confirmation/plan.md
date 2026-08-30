@@ -191,6 +191,21 @@ the manual rows cover cancel-leaves-data-intact and the demo lockout.
   are gated here, because they are two of this slice's four paths.
 - **No schema change and no migration.** The `lessons.md` rule about a migration
   needing a named route to production does not apply to this slice.
+- **ADDENDUM 2026-08-30 (impl-review F4) — `playwright.config.ts` was changed,
+  and the plan did not foresee it.** `workers` went from `process.env.CI ? 1 :
+  undefined` to a flat `1`. Criterion 2.4 could not otherwise be met: this
+  slice's 15th E2E test pushed the suite past Postgres's 100 connection slots
+  mid-run, because the request path still leaks its `pg.Pool` per invocation
+  (`lessons.md` #3 / roadmap **S-21**), and specs failed with *"remaining
+  connection slots are reserved for roles with the SUPERUSER attribute"* — a
+  failure that reads like a product bug and is not one. The pre-change baseline
+  was measured first and `e2e/setup-doorstep.spec.ts:133` was **already**
+  failing that way on `main`, so the change retires an existing flake rather
+  than masking a new one. CI had always run at one worker; only local was
+  unbounded. Recorded here so a later reader finds it from the plan rather than
+  only from git history; the config carries the same reasoning inline, naming
+  S-21 as the condition to revisit it.
+
 - **No `lessons.md` entry.** Considered and declined this round; the defect class
   ("a non-destructive action becomes destructive when a later slice hangs a
   cascading child beneath it") is instead enforced mechanically by Phase 1's
@@ -768,9 +783,26 @@ epilogue commit.
 The guard test walks every table in the schema once per run — tens of tables, no
 I/O. The dialog reads a frozen constant, so opening it costs nothing; this is the
 direct consequence of declining live counts. Phase 3 adds one `resolveWorkspace()`
-per disconnect action and per wizard page, and it is `cache()`d per render, so it
-costs at most one extra query on pages that did not already resolve the
-workspace.
+per gated action and per wizard page.
+
+**CORRECTED 2026-08-30 (impl-review F2).** This paragraph originally read *"it is
+`cache()`d per render, so it costs at most one extra query on pages that did not
+already resolve the workspace"*. That holds for the two wizard **pages**, whose
+`(app)` layout has already resolved the workspace in the same render. It does
+**not** hold for the nine **Server Actions**: a Server Action is its own request,
+React `cache()` is per-request, and nothing shares the page render's cache. So on
+the action path the added call is not a cached no-op and not merely an extra
+query — `resolveWorkspace` calls `getDb(env)` (`src/lib/workspace.ts:117`) and
+`getDb` **is** the pool constructor (`src/lib/db.ts:26-28`), so each gated action
+opens one additional `pg.Pool` that is never closed.
+
+That is `lessons.md` #3 / roadmap **S-21**, still open, and it is not academic
+here: Phase 2 had to pin `workers: 1` in `playwright.config.ts` because the same
+leak exhausts Postgres's 100 connection slots mid-run. The guard is still worth
+its cost — an unguarded action lets a demo screen delete the real account — and
+the code follows the established house pattern at `setup/team/actions.ts:181-187`
+exactly. What was wrong was this note, not the implementation. S-21 is where the
+cost actually goes away.
 
 ## Migration Notes
 
