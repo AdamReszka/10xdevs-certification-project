@@ -450,7 +450,7 @@ manual rows, and they are not the same kind of work:
   `context/foundation/manual-test-backlog.md` as a NEW per-slice section, the way
   every slice list since S-15 is filed (**§7–§17**) — **not §1**, which is closed
   ("✅ ZAMKNIĘTA 2026-08-29 … nie dopisuj tu nowych wierszy"). Corrected here
-  after impl-review F3; it landed as **§18**.
+  after impl-review F3; it landed as **§20** (renumbered when S-25 and S-27 landed on main first).
 - **2.6 and 2.7 — documentation obligations, not app tests.** Both are "read a
   Markdown file and confirm it no longer says X" (`roadmap.md` S-20 / S-26,
   `sprint-reconciliation/research.md:271`). They belong in backlog **§3

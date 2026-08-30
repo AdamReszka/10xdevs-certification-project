@@ -65,7 +65,10 @@ export async function buildRecapPayload({
   // "Yesterday" in the TEAM's zone, matching Today's "Yesterday's Activity"
   // panel exactly — the email and the dashboard must not disagree about which
   // day they are describing.
-  const yesterdayKey = dayKeyInTimeZone(new Date(now.getTime() - MS_PER_DAY), timeZone);
+  const yesterdayKey = dayKeyInTimeZone(
+    new Date(now.getTime() - MS_PER_DAY),
+    timeZone,
+  );
   const yesterdayRange = dayRangeInTimeZone(yesterdayKey, timeZone);
 
   const [rows, roster, burndown, grid, ticketsMovedToDone, syncStateRaw] =
@@ -82,18 +85,20 @@ export async function buildRecapPayload({
   // mid-sprint must still resolve to a name rather than going blank in the email.
   const memberNameById = new Map(roster.map((m) => [m.id, m.name]));
 
-  const anomalies: RecapAnomaly[] = toInboxAnomalies(rows, memberNameById).map((a) => ({
-    id: a.id,
-    type: a.type,
-    severity: a.severity,
-    description: a.description,
-    // Copied, never recomputed. See the module header.
-    suggestedAction: a.suggestedAction,
-    sourceUrl: a.sourceUrl,
-    identityLabel: a.identityLabel ?? "",
-    memberName: a.memberName,
-    riskScore: a.riskScore,
-  }));
+  const anomalies: RecapAnomaly[] = toInboxAnomalies(rows, memberNameById).map(
+    (a) => ({
+      id: a.id,
+      type: a.type,
+      severity: a.severity,
+      description: a.description,
+      // Copied, never recomputed. See the module header.
+      suggestedAction: a.suggestedAction,
+      sourceUrl: a.sourceUrl,
+      identityLabel: a.identityLabel ?? "",
+      memberName: a.memberName,
+      riskScore: a.riskScore,
+    }),
+  );
 
   const days =
     sprint.startDate && sprint.endDate
@@ -103,6 +108,10 @@ export async function buildRecapPayload({
 
   const sprintSummary: RecapSprint = {
     name: sprint.name ?? null,
+    // The same two dates the day-axis above is built from, kept so the email can
+    // state WHICH sprint it is about and not only how far into it we are (S-25).
+    startDate: sprint.startDate?.toISOString() ?? null,
+    endDate: sprint.endDate?.toISOString() ?? null,
     // 1-based, and null when today falls outside the sprint's own axis rather
     // than reporting a misleading 0 or a clamped last day.
     dayNumber: dayIndex >= 0 ? dayIndex + 1 : null,
@@ -112,7 +121,10 @@ export async function buildRecapPayload({
     byCategory: burndown.byCategory,
   };
 
-  const activity: RecapActivity = { ...foldTeamActivity(grid), ticketsMovedToDone };
+  const activity: RecapActivity = {
+    ...foldTeamActivity(grid),
+    ticketsMovedToDone,
+  };
 
   return {
     schemaVersion: RECAP_SCHEMA_VERSION,
@@ -185,8 +197,10 @@ export function foldTeamActivity(grid: {
       prsOpened += cell.prsOpened;
       prsMerged += cell.prsMerged;
       reviews += cell.reviews;
-      if (cell.additions !== null) additions = (additions ?? 0) + cell.additions;
-      if (cell.deletions !== null) deletions = (deletions ?? 0) + cell.deletions;
+      if (cell.additions !== null)
+        additions = (additions ?? 0) + cell.additions;
+      if (cell.deletions !== null)
+        deletions = (deletions ?? 0) + cell.deletions;
     }
   }
 

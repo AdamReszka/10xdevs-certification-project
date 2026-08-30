@@ -64,6 +64,23 @@ export type RecapAnomaly = {
 /** Sprint progress as of `generatedAt`. */
 export type RecapSprint = {
   name: string | null;
+  /**
+   * The sprint's window, as ISO instants (S-25) — what makes the name in the
+   * email checkable against Jira rather than merely stated.
+   *
+   * OPTIONAL, AND DELIBERATELY SO. `RECAP_SCHEMA_VERSION` stays `1`: every
+   * payload read is gated on exact version equality
+   * (`organisms/settings/recap-history-view.ts`), so a bump would turn every
+   * recap already stored into `payloadReadable: false` and blank its sprint name
+   * and anomaly count — a visible regression caused by a change that takes
+   * nothing away from any existing reader. Not bumping is only honest if the
+   * fields are optional: `daily_recap.payload` is `.$type<RecapPayload>()`, so
+   * declaring them required would make the compiler believe every stored row
+   * carries them, and an older payload hands `undefined` — not `null` — to the
+   * renderer. Optional puts that case back where a test can reach it.
+   */
+  startDate?: string | null;
+  endDate?: string | null;
   /** 1-based day within the sprint, or null when the sprint has no dates. */
   dayNumber: number | null;
   totalDays: number | null;

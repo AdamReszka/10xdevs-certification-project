@@ -234,7 +234,9 @@ export async function previewRosterImport({
     existing.map((m) => m.jiraAccountId).filter((v): v is string => !!v),
   );
 
-  const upstreamGithub = new Set(githubMembers.map((g) => g.login.toLowerCase()));
+  const upstreamGithub = new Set(
+    githubMembers.map((g) => g.login.toLowerCase()),
+  );
   const upstreamJira = new Set(jiraMembers.map((j) => j.accountId));
 
   const members: PreviewMember[] = existing.map((m) => {
@@ -252,7 +254,9 @@ export async function previewRosterImport({
 
     // Only a source that was READ can testify that somebody is gone.
     const githubGone =
-      !githubDegraded && !!m.githubUsername && !upstreamGithub.has(m.githubUsername.toLowerCase());
+      !githubDegraded &&
+      !!m.githubUsername &&
+      !upstreamGithub.has(m.githubUsername.toLowerCase());
     const jiraGone = !!m.jiraAccountId && !upstreamJira.has(m.jiraAccountId);
 
     switch (m.source) {
@@ -265,7 +269,8 @@ export async function previewRosterImport({
       case "BOTH":
         // A mapped member is gone only when BOTH of their identities are, and
         // only when both sides could be checked.
-        if (!githubDegraded && githubGone && jiraGone) row.upstreamMissing = true;
+        if (!githubDegraded && githubGone && jiraGone)
+          row.upstreamMissing = true;
         break;
       case "MANUAL":
         // No upstream to be missing from.
@@ -334,7 +339,9 @@ export type RosterMemberInput = {
  * clone, another account's member. Mapped to `invalid_input` by the action layer.
  */
 export class UnknownMemberError extends Error {
-  constructor(message = "A submitted roster row does not belong to this account.") {
+  constructor(
+    message = "A submitted roster row does not belong to this account.",
+  ) {
     super(message);
     this.name = "UnknownMemberError";
   }
@@ -402,7 +409,8 @@ export async function saveRoster({
       .where(eq(teamMember.ownerId, ownerId));
     const byId = new Map(existing.map((m) => [m.id, m]));
 
-    const updates: { id: string; values: MemberFields; fteTouched: boolean }[] = [];
+    const updates: { id: string; values: MemberFields; fteTouched: boolean }[] =
+      [];
     const inserts: (typeof teamMember.$inferInsert)[] = [];
     // Positional, so the caller can zip it back onto its own submitted array.
     const ids: string[] = [];
@@ -499,7 +507,10 @@ function blankToNull(v: string | null | undefined): string | null {
 /** Normalize a submitted row to its persisted shape. `fallbackActive` is the
  *  stored value on an update (or `true` on an insert): an omitted `isActive`
  *  means "leave it as it is", never "activate". */
-function toMemberFields(m: RosterMemberInput, fallbackActive: boolean): MemberFields {
+function toMemberFields(
+  m: RosterMemberInput,
+  fallbackActive: boolean,
+): MemberFields {
   return {
     name: m.name,
     githubUsername: blankToNull(m.githubUsername),
@@ -552,7 +563,9 @@ export class MemberHasHistoryError extends Error {
 
 /** Refuses deleting the owner's only member — `isOnboardingComplete` counts rows. */
 export class LastMemberError extends Error {
-  constructor(message = "This is the only member on the team; the roster cannot be emptied.") {
+  constructor(
+    message = "This is the only member on the team; the roster cannot be emptied.",
+  ) {
     super(message);
     this.name = "LastMemberError";
   }
@@ -592,13 +605,18 @@ export async function getMemberHistory({
   const [absences] = await db
     .select({ count: count() })
     .from(absence)
-    .where(and(eq(absence.teamMemberId, memberId), eq(absence.ownerId, ownerId)));
+    .where(
+      and(eq(absence.teamMemberId, memberId), eq(absence.ownerId, ownerId)),
+    );
 
   const [anomalies] = await db
     .select({ count: count() })
     .from(anomaly)
     .where(
-      and(eq(anomaly.relatedTeamMemberId, memberId), eq(anomaly.ownerId, ownerId)),
+      and(
+        eq(anomaly.relatedTeamMemberId, memberId),
+        eq(anomaly.ownerId, ownerId),
+      ),
     );
 
   const [total] = await db
@@ -700,7 +718,8 @@ export async function mergeMembers({
   dropId: string;
   merged: RosterMemberInput;
 }): Promise<{ id: string }> {
-  if (keepId === dropId) throw new UnknownMemberError("A member cannot be merged into itself.");
+  if (keepId === dropId)
+    throw new UnknownMemberError("A member cannot be merged into itself.");
 
   return db.transaction(async (tx) => {
     const owned = await tx
@@ -712,7 +731,11 @@ export async function mergeMembers({
     const drop = owned.find((m) => m.id === dropId);
     if (!keep || !drop) throw new UnknownMemberError();
 
-    const history = await getMemberHistory({ db: tx, ownerId, memberId: dropId });
+    const history = await getMemberHistory({
+      db: tx,
+      ownerId,
+      memberId: dropId,
+    });
     if (history.absences > 0 || history.anomalies > 0) {
       throw new MemberHasHistoryError(history.absences, history.anomalies);
     }
@@ -759,7 +782,9 @@ export async function confirmAllFte({
   const rows = await db
     .update(teamMember)
     .set({ fteConfirmedAt: now })
-    .where(and(eq(teamMember.ownerId, ownerId), isNull(teamMember.fteConfirmedAt)))
+    .where(
+      and(eq(teamMember.ownerId, ownerId), isNull(teamMember.fteConfirmedAt)),
+    )
     .returning({ id: teamMember.id });
 
   return { confirmed: rows.length };
@@ -776,6 +801,17 @@ export type ImportCadenceResult = {
   /** The active sprint's Jira id (string) when one exists. */
   jiraSprintId: string | null;
   sprintName: string | null;
+  /**
+   * The sprint's window and the zone to read it in (S-25).
+   *
+   * A name on its own is not something the lead can check against Jira; the
+   * dates are what make it checkable, and they only mean the right day when
+   * read in the team's zone — the same zone `deriveCadence` already uses to
+   * decide which weekday the sprint starts on.
+   */
+  startDate: Date | null;
+  endDate: Date | null;
+  timeZone: string | null;
   /** Populated only when MULTIPLE scrum boards exist and none was chosen — the
    *  UI must show a board chooser before cadence can be derived. */
   boardCandidates: JiraBoard[];
@@ -865,6 +901,12 @@ export async function importCadence({
         boardId: result.boardId,
         jiraSprintId: result.sprint.jiraSprintId,
         sprintName: result.sprint.name,
+        startDate: result.sprint.startDate,
+        endDate: result.sprint.endDate,
+        // Jira does not always report one; `safeZone` degrades an absent zone
+        // to UTC downstream rather than throwing, so `null` is a legitimate
+        // answer and not a gap to paper over here.
+        timeZone: identity.timeZone ?? null,
         boardCandidates: [],
         noActiveSprint: false,
       };
@@ -875,6 +917,9 @@ export async function importCadence({
         boardId: null,
         jiraSprintId: null,
         sprintName: null,
+        startDate: null,
+        endDate: null,
+        timeZone: null,
         boardCandidates: result.candidates,
         noActiveSprint: false,
       };
@@ -885,6 +930,9 @@ export async function importCadence({
         boardId: null,
         jiraSprintId: null,
         sprintName: null,
+        startDate: null,
+        endDate: null,
+        timeZone: null,
         boardCandidates: [],
         noActiveSprint: true,
       };
@@ -898,6 +946,9 @@ export async function importCadence({
         boardId: result.boardId,
         jiraSprintId: null,
         sprintName: null,
+        startDate: null,
+        endDate: null,
+        timeZone: null,
         boardCandidates: [],
         noActiveSprint: true,
       };
@@ -913,8 +964,9 @@ function cadenceFromRow(row: SelectSprint): DerivedCadence {
   return {
     lengthDays: row.lengthDays ?? DEFAULT_CADENCE.lengthDays,
     startDay: (row.startDay as WeekdayCode | null) ?? DEFAULT_CADENCE.startDay,
-    workingDays:
-      (row.workingDays as WeekdayCode[] | null) ?? [...DEFAULT_CADENCE.workingDays],
+    workingDays: (row.workingDays as WeekdayCode[] | null) ?? [
+      ...DEFAULT_CADENCE.workingDays,
+    ],
   };
 }
 
@@ -934,7 +986,11 @@ export async function saveCadence({
 }: {
   db: Db;
   ownerId: string;
-  cadence: { lengthDays: number; startDay: WeekdayCode; workingDays: WeekdayCode[] };
+  cadence: {
+    lengthDays: number;
+    startDay: WeekdayCode;
+    workingDays: WeekdayCode[];
+  };
 }): Promise<{ updated: number }> {
   const rows = await db
     .update(sprint)

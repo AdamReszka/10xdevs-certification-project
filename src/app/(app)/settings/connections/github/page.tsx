@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
@@ -6,7 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import GithubConnectForm from "@/components/organisms/setup/github-connect-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { githubCredential } from "@/db/schema";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -27,9 +28,18 @@ import { getDb } from "@/lib/db";
  *
  * Nests under `settings/layout.tsx`, so the Settings heading and tab bar stay
  * visible. Inherits `requireSession()` + `force-dynamic` from `(app)/layout.tsx`.
+ *
+ * CLOSED IN DEMO (S-27). This is the shortest route to overwriting a real
+ * credential from a demo screen — nav → Settings → Connections → Reconnect is
+ * three clicks — and the page renders the connect form unconditionally by
+ * design. `storeGithubIntegration` refuses server-side, so the redirect is the
+ * courtesy layer; it lands on `/settings/connections`, whose cards already carry
+ * the explanation, rather than inventing a second one here.
  */
 export default async function SettingsConnectGithubPage() {
   const { ownerId } = await requireRealWorkspace();
+  const { isDemo } = await resolveWorkspace();
+  if (isDemo) redirect("/settings/connections");
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

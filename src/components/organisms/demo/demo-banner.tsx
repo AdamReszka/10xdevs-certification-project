@@ -87,22 +87,22 @@ export default function DemoBanner({
         <FlaskConical aria-hidden />
         <AlertTitle>Jesteś w trybie demonstracyjnym</AlertTitle>
         <AlertDescription className="flex flex-col gap-3">
-          {/* NARROWED 2026-08-30 (S-24 impl-review F1). This used to promise
-              that "Twoje prawdziwe dane i integracje są nietknięte" — flatly,
-              about integrations too. S-24 made that true on `/settings/connections`
-              (all nine Server Actions there refuse in demo), but NOT in the
-              wizard: `/setup/**` has no demo guard and `storeGithubIntegration` /
-              `storeJiraIntegration` carry no refusal, so a lead in demo can still
-              walk to `/setup/github` and write a real credential. Gating that
-              route is roadmap **S-27**. Until it lands, the banner claims only
-              what the code actually keeps — demo never SHOWS real data, and the
-              Connections tab cannot change it. Widen this sentence again when
-              S-27 closes; do not widen it before. */}
+          {/* WIDENED AGAIN 2026-08-30, by S-27 — the closure this sentence was
+              waiting for. S-24 had to narrow it: it promised "Twoje prawdziwe
+              dane i integracje są nietknięte" while `/setup/**` had no demo guard
+              and the two store actions carried no refusal, so a lead in demo
+              could still walk to `/setup/github` and write a real credential.
+              S-27 landed those refusals, the route guards above them, and
+              `src/lib/demo/boundary-inventory.test.ts`, which fails the build for
+              the next action that reaches the real account unguarded. So the
+              banner states the general guarantee rather than enumerating what
+              happens to be disabled today — the enumeration is what went stale
+              three times. */}
           <span>
             To fikcyjny zespół i fikcyjny sprint
             {anchorLabel ? ` — stan na ${anchorLabel}` : ""}. Nie widzisz tu
-            żadnych swoich prawdziwych danych, a ustawienia integracji są w demo
-            zablokowane.{" "}
+            żadnych swoich prawdziwych danych, a nic, co tu zrobisz, nie zmienia
+            Twojego prawdziwego konta.{" "}
             <Link href="/settings/demo" className="underline underline-offset-4">
               Ustawienia demo
             </Link>

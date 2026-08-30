@@ -7,7 +7,11 @@ import { useEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 
 import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
-import { importCadenceAction, saveCadenceAction } from "@/app/(app)/setup/team/actions";
+import {
+  importCadenceAction,
+  saveCadenceAction,
+} from "@/app/(app)/setup/team/actions";
+import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +41,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { JiraBoard } from "@/lib/jira";
-import { cadenceSchema, type CadenceValues, type Weekday } from "@/lib/validations/roster";
+import type { SprintIdentityView } from "@/lib/sprint-identity";
+import {
+  cadenceSchema,
+  type CadenceValues,
+  type Weekday,
+} from "@/lib/validations/roster";
 
 /**
  * Cadence form (S-04, FR-007). Pre-filled from the monitored Jira project's
@@ -68,7 +77,8 @@ type InitialCadence = {
   startDay: Weekday;
   workingDays: Weekday[];
   cadenceOverridden: boolean;
-  sprintName: string | null;
+  /** Already formatted server-side — this component does no `Intl` work. */
+  sprintIdentity: SprintIdentityView;
 };
 
 export default function CadenceForm({
@@ -88,8 +98,10 @@ export default function CadenceForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [isPulling, setIsPulling] = useState(false);
   const [noActiveSprint, setNoActiveSprint] = useState(false);
-  const [sprintName, setSprintName] = useState<string | null>(
-    initialCadence?.sprintName ?? null,
+  // Seeded from the server render so the sprint is named at first paint, and
+  // replaced by whatever a "Pull from Jira" comes back with.
+  const [sprintIdentity, setSprintIdentity] = useState<SprintIdentityView>(
+    initialCadence?.sprintIdentity ?? { kind: "none" },
   );
   const [boardCandidates, setBoardCandidates] = useState<JiraBoard[]>([]);
 
@@ -114,7 +126,7 @@ export default function CadenceForm({
         return;
       }
       setNoActiveSprint(result.noActiveSprint);
-      setSprintName(result.sprintName);
+      setSprintIdentity(result.sprintIdentity);
       setBoardCandidates(result.boardCandidates);
       form.reset({
         lengthDays: result.cadence.lengthDays,
@@ -166,7 +178,9 @@ export default function CadenceForm({
       }
       router.push("/dashboard");
     } catch {
-      setFormError("Something went wrong saving your cadence. Please try again.");
+      setFormError(
+        "Something went wrong saving your cadence. Please try again.",
+      );
     }
   });
 
@@ -175,10 +189,18 @@ export default function CadenceForm({
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-1.5">
-            <CardTitle>Sprint cadence</CardTitle>
+            {/* The identity is its OWN element beside the title, not a clause in
+                the middle of the description below (S-25). The same component
+                the two dashboards use, so the lead meets one shape rather than
+                three that nearly agree — which is what this screen, Today and
+                Sprint Detail used to be. */}
+            <div className="flex flex-wrap items-center gap-3">
+              <CardTitle>Sprint cadence</CardTitle>
+              <SprintIdentityBar view={sprintIdentity} />
+            </div>
             <CardDescription>
-              {sprintName
-                ? `Pulled from your active sprint “${sprintName}”. Override anything that doesn’t match your real cadence.`
+              {sprintIdentity.kind === "identified"
+                ? "Pulled from your active sprint. Override anything that doesn’t match your real cadence."
                 : "Confirm your sprint cadence. SprintFlow keeps your overrides across future syncs."}
             </CardDescription>
           </div>
@@ -213,8 +235,8 @@ export default function CadenceForm({
                 <AlertTitle>No active sprint</AlertTitle>
                 <AlertDescription>
                   Your Jira board has no active sprint right now, so we&apos;ve
-                  filled in sensible defaults. SprintFlow will re-derive the real
-                  cadence automatically when your next sprint starts.
+                  filled in sensible defaults. SprintFlow will re-derive the
+                  real cadence automatically when your next sprint starts.
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -227,7 +249,9 @@ export default function CadenceForm({
                   <FormItem>
                     <FormLabel>Scrum board</FormLabel>
                     <Select
-                      value={field.value != null ? String(field.value) : undefined}
+                      value={
+                        field.value != null ? String(field.value) : undefined
+                      }
                       onValueChange={(v) => {
                         const id = Number(v);
                         field.onChange(id);
@@ -341,8 +365,13 @@ export default function CadenceForm({
           </CardContent>
 
           <CardFooter className="justify-end">
-            <Button type="submit" disabled={form.formState.isSubmitting || isPulling}>
-              {form.formState.isSubmitting ? "Finishing…" : "Save & finish setup"}
+            <Button
+              type="submit"
+              disabled={form.formState.isSubmitting || isPulling}
+            >
+              {form.formState.isSubmitting
+                ? "Finishing…"
+                : "Save & finish setup"}
             </Button>
           </CardFooter>
         </form>

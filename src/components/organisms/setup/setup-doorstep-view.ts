@@ -15,6 +15,13 @@
 // Type-only: erased at compile time, so this module stays runtime-pure (no DB,
 // no React) and its unit test needs no harness.
 import type { OnboardingSteps } from "@/lib/onboarding";
+// `demo-panel-view.ts` is pure too, so importing its VALUES keeps this module
+// harness-free. The strings are shared rather than re-typed on purpose — see
+// `demoDoorLabel`.
+import {
+  DEMO_TRANSITION_LABEL,
+  type DemoState,
+} from "@/components/organisms/demo/demo-panel-view";
 
 /**
  * The wizard conditions, as `getOnboardingSteps` reports them.
@@ -93,4 +100,27 @@ export function configureDoor(steps: DoorstepSteps): ConfigureDoor {
       "Konfiguracja jest kompletna. Zmiany w integracjach i zespole zrobisz " +
       "później w Ustawieniach.",
   };
+}
+
+/**
+ * The demo door's label, which depends on whether a demo world already exists.
+ *
+ * "Zobacz demo" describes BUILDING one. Since S-27 the door calls
+ * `openDemoAction`, which re-enters an existing world and builds one only when
+ * none exists (D1) — so on a revisit that label names an act the button no longer
+ * performs, and names it as the one thing the visitor would not want it to do.
+ *
+ * The two strings are `DEMO_TRANSITION_LABEL`'s, not new ones. `/settings/demo`
+ * has drawn exactly this distinction since S-09; two entrances to the same demo
+ * world that word it differently is how they drift apart, which is the shape of
+ * defect this whole slice is about.
+ *
+ * `demo_active` — the visitor is looking at demo and typed `/setup` — takes the
+ * same label as `demo_idle`: the world exists either way, and pressing the door
+ * puts them back in front of it.
+ */
+export function demoDoorLabel(state: DemoState): string {
+  return state === "no_demo"
+    ? DEMO_TRANSITION_LABEL.load
+    : DEMO_TRANSITION_LABEL.enter;
 }

@@ -13,6 +13,12 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
  * data (so the lead can return to a demo they have been editing) while RESET
  * removes it. A reset that only flipped the mode, or an exit that deleted, would
  * both "work" on screen and be wrong.
+ *
+ * S-27 adds `openDemoAction` — the doorstep's entrance — and the two properties
+ * the slice exists to guarantee, both asserted here against real Postgres rather
+ * than as comments: D1, the demo world is built once and survives every exit and
+ * re-entry; and the safety property, that a full demo lifecycle leaves the REAL
+ * account's credentials byte-identical.
  */
 
 let currentOwnerId = "";
@@ -30,12 +36,14 @@ vi.mock("@opennextjs/cloudflare", () => ({
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 // Imported AFTER the mocks (vi.mock is hoisted).
-import { anomaly, user } from "@/db/schema";
+import { anomaly, githubCredential, jiraCredential, teamMember, user } from "@/db/schema";
+import { encryptToken } from "@/lib/crypto";
 import { findDemoOwner } from "@/lib/workspace";
 import {
   enterDemoAction,
   exitDemoAction,
   loadDemoAction,
+  openDemoAction,
   resetDemoAction,
 } from "./actions";
 
@@ -158,3 +166,117 @@ describe("the demo settings actions", () => {
     expect(await activeWorkspaceOf(ownerId)).toBe("DEMO");
   });
 });
+
+/**
+ * S-27 / D1 — the doorstep's entrance, which used to rebuild the world.
+ *
+ * `openDemoAction` is the same state machine `/settings/demo` has had since
+ * S-09, given to the one entrance that was handed `loadDemoAction` without it.
+ * The unit sibling (`actions.test.ts`) asserts the dispatch; this asserts what
+ * the visitor actually feels — that their demo edits are still there.
+ */
+describe("openDemoAction", () => {
+  it("builds the demo world when there is none", async () => {
+    const ownerId = await newOwner();
+
+    expect(await openDemoAction()).toEqual({ ok: true });
+
+    expect(await activeWorkspaceOf(ownerId)).toBe("DEMO");
+    expect(await findDemoOwner(db, ownerId)).not.toBeNull();
+  });
+
+  it("re-enters the SAME world after an exit, with a demo-side edit intact", async () => {
+    const ownerId = await newOwner();
+    await openDemoAction();
+    const first = await findDemoOwner(db, ownerId);
+
+    // The visitor edits something in demo. A roster name is the cheapest stand-in
+    // for "everything they did while looking around": it is demo-owned, it is
+    // one of the surfaces demo invites them to touch, and a rebuild would take
+    // it with the rest of the world.
+    const [member] = await db
+      .select({ id: teamMember.id })
+      .from(teamMember)
+      .where(eq(teamMember.ownerId, first!.id))
+      .limit(1);
+    expect(member).toBeDefined();
+    await db
+      .update(teamMember)
+      .set({ name: "Renamed In Demo" })
+      .where(eq(teamMember.id, member.id));
+
+    await exitDemoAction();
+    expect(await activeWorkspaceOf(ownerId)).toBe("REAL");
+
+    expect(await openDemoAction()).toEqual({ ok: true });
+
+    expect(await activeWorkspaceOf(ownerId)).toBe("DEMO");
+    // Same owner id ⇒ nothing was reset. Before S-27 this door rebuilt the
+    // world, so the id changed and the rename below was gone.
+    const second = await findDemoOwner(db, ownerId);
+    expect(second!.id).toBe(first!.id);
+    // And the anchor is the same frozen moment, so "yesterday's activity" does
+    // not silently shift under the visitor.
+    expect(second!.demoAnchorAt).toEqual(first!.demoAnchorAt);
+
+    const [after] = await db
+      .select({ name: teamMember.name })
+      .from(teamMember)
+      .where(eq(teamMember.id, member.id));
+    expect(after.name).toBe("Renamed In Demo");
+  });
+
+  /**
+   * THE SAFETY PROPERTY, over the WHOLE lifecycle rather than over one call.
+   * `load.integration.test.ts` asserts it across load → reset; the settled scope
+   * is that any account may load demo, including one holding real Jira + GitHub
+   * tokens, so the round trip a visitor actually takes has to be provably unable
+   * to touch them either.
+   */
+  it("leaves the real account's credentials byte-identical across load → exit → open → reset", async () => {
+    const ownerId = await newOwner();
+
+    await db.insert(githubCredential).values({
+      id: randomUUID(),
+      ownerId,
+      encryptedToken: encryptToken("gh_RealPat9876", { ownerId, provider: "GITHUB" }),
+      tokenLast4: "9876",
+      githubLogin: "real-lead",
+    });
+    await db.insert(jiraCredential).values({
+      id: randomUUID(),
+      ownerId,
+      encryptedToken: encryptToken("jira_RealToken5432", { ownerId, provider: "JIRA" }),
+      tokenLast4: "5432",
+      workspaceUrl: "https://real.atlassian.net",
+      jiraEmail: "real@example.test",
+    });
+
+    const before = await readCredentials(ownerId);
+
+    await openDemoAction();
+    expect(await readCredentials(ownerId)).toEqual(before);
+
+    await exitDemoAction();
+    expect(await readCredentials(ownerId)).toEqual(before);
+
+    await openDemoAction();
+    expect(await readCredentials(ownerId)).toEqual(before);
+
+    await resetDemoAction();
+    expect(await readCredentials(ownerId)).toEqual(before);
+    expect(await findDemoOwner(db, ownerId)).toBeNull();
+  });
+});
+
+async function readCredentials(ownerId: string) {
+  const gh = await db
+    .select()
+    .from(githubCredential)
+    .where(eq(githubCredential.ownerId, ownerId));
+  const jira = await db
+    .select()
+    .from(jiraCredential)
+    .where(eq(jiraCredential.ownerId, ownerId));
+  return { gh, jira };
+}

@@ -2,6 +2,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { redirect } from "next/navigation";
 
 import AnomalyInbox from "@/components/organisms/anomaly/anomaly-inbox";
+import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
 import Availability from "@/components/organisms/dashboard/availability";
 import DashboardTodayTabs from "@/components/organisms/dashboard/today-tabs";
 import ReliabilityKpi from "@/components/organisms/dashboard/reliability-kpi";
@@ -16,13 +17,17 @@ import { toInboxAnomalies } from "@/lib/anomaly/inbox-view";
 import { getActivityRollup } from "@/lib/dashboard/activity";
 import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
-import { dayKeyInTimeZone, dayRangeInTimeZone } from "@/lib/dashboard/day-bucket";
+import {
+  dayKeyInTimeZone,
+  dayRangeInTimeZone,
+} from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { toVelocityEstimateView } from "@/lib/measurement/estimate";
 import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
 import { isOnboardingComplete } from "@/lib/onboarding";
 import { getActiveSprintRow } from "@/lib/sprint";
+import { toSprintIdentity } from "@/lib/sprint-identity";
 import { getSyncState } from "@/lib/sync-state";
 import { resolveWorkspace } from "@/lib/workspace";
 import { listRoster } from "@/lib/roster";
@@ -99,7 +104,9 @@ export default async function DashboardPage() {
     measurement,
     history,
   ] = await Promise.all([
-    sprint ? listAnomaliesForSprint(db, ownerId, sprint.id) : Promise.resolve([]),
+    sprint
+      ? listAnomaliesForSprint(db, ownerId, sprint.id)
+      : Promise.resolve([]),
     getSyncState(db, ownerId),
     listRoster(db, ownerId),
     sprint
@@ -144,7 +151,9 @@ export default async function DashboardPage() {
   // can leave a sprint ACTIVE past its end date, and averaging a window still in
   // flight would fold a part-delivered figure into the history it is compared
   // against.
-  const closedSprints = history.filter((r) => r.jiraSprintId !== sprint?.jiraSprintId);
+  const closedSprints = history.filter(
+    (r) => r.jiraSprintId !== sprint?.jiraSprintId,
+  );
   // The reducer resolves the estimate AND why there isn't one — the panel used
   // to re-derive that from loose props and could contradict itself on screen
   // (impl-review phase-6 F2).
@@ -180,13 +189,34 @@ export default async function DashboardPage() {
     .filter((m) => m.isActive)
     .map((m) => ({ id: m.id, name: m.name }));
 
+  // WHICH sprint every number below belongs to (S-25). Before this, Today was
+  // the one sprint-scoped surface that never said — `sprint.name` reached
+  // exactly one panel, in a tab that is not the default.
+  const sprintIdentity = toSprintIdentity({
+    name: sprint?.name ?? null,
+    jiraSprintId: sprint?.jiraSprintId ?? null,
+    startDate: sprint?.startDate ?? null,
+    endDate: sprint?.endDate ?? null,
+    timeZone,
+    now,
+  });
+
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-12 sm:px-6">
       <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard — Today</h1>
+        {/* The identity is a SIBLING of the heading, not part of it: the E2E
+            suite matches these headings by accessible name, and the same row
+            shape is what makes Today and Sprint Detail read as one product
+            rather than two screens that nearly agree. */}
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Dashboard — Today
+          </h1>
+          <SprintIdentityBar view={sprintIdentity} />
+        </div>
         <p className="text-muted-foreground">
-          Your sprint&apos;s anomalies, ranked by severity — the 3–5 things to act
-          on today.
+          Your sprint&apos;s anomalies, ranked by severity — the 3–5 things to
+          act on today.
         </p>
       </div>
       {/* Outside the tabs on purpose: freshness and the error banner must stay
@@ -201,7 +231,9 @@ export default async function DashboardPage() {
           />
         }
         pulse={<SprintPulse series={burndown} />}
-        yesterday={<YesterdayActivity grid={yesterdayGrid} dayKey={yesterdayKey} />}
+        yesterday={
+          <YesterdayActivity grid={yesterdayGrid} dayKey={yesterdayKey} />
+        }
         reliability={
           <div className="flex flex-col gap-6">
             <ReliabilityKpi

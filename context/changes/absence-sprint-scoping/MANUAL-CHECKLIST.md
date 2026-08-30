@@ -1,7 +1,7 @@
 # S-20 absence-sprint-scoping — checklista testów manualnych
 
 Krótka lista: tylko to, co realnie blokuje slice. Reszta idzie do
-`context/foundation/manual-test-backlog.md` (§18). Odhaczając cokolwiek tutaj,
+`context/foundation/manual-test-backlog.md` (§20). Odhaczając cokolwiek tutaj,
 odhacz też odpowiedni wiersz w `plan.md` `## Progress` — **plan jest kanoniczny**.
 
 **Konto:** dowolne konto z rosterem i aktywnym sprintem, na którym potrafisz się

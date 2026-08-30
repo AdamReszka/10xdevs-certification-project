@@ -110,7 +110,7 @@ that did not follow.
   - Blind spot: None significant.
 - **Decision**: FIXED — backlog §3 rows ticked with date + sha; Progress rows carry 14338d8 / d8b2eeb
 
-### F3 — Plan sends row 1.8 to backlog §1; the implementation opened §18 instead
+### F3 — Plan sends row 1.8 to backlog §1; the implementation opened its own section instead
 
 - **Severity**: 📝 OBSERVATION
 - **Impact**: 🏃 LOW — quick decision; fix is obvious and narrowly scoped
@@ -121,12 +121,12 @@ that did not follow.
   the second person works from". §1 is a **closed** section — "✅ ZAMKNIĘTA
   2026-08-29 … nie dopisuj tu nowych wierszy" — and every per-slice list since
   S-15 lives in its own numbered section (§7–§17). The implementation opened
-  §18 and put `18.A` there, which is the right call and matches the file. The
+  §20 and put `20.A` there, which is the right call and matches the file. The
   drift is in the plan's text, which now describes a placement the repo
   contradicts and would send the next reader to the wrong section.
 - **Fix**: Correct the plan's Phase 2 §5 pointer from "§1" to "a new per-slice
   section, per §7–§17", noting it was resolved during implementation.
-- **Decision**: FIXED — plan Phase 2 §5 now points at a new per-slice section (§7–§17), naming §18
+- **Decision**: FIXED — plan Phase 2 §5 now points at a new per-slice section (§7–§17), naming §20
 
 ### F4 — `change.md` title still promises the three-way reconciliation the slice dropped
 
