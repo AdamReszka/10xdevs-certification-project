@@ -795,11 +795,11 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [x] 2.1 Type checking passes
-- [x] 2.2 Linting passes
-- [x] 2.3 Unit tests pass
-- [x] 2.4 Mutation gate holds on the rule files
-- [x] 2.5 `grep -rn "8_WORKING_DAYS" src/` returns only the validator's compatibility path
+- [x] 2.1 Type checking passes — 4992bfe
+- [x] 2.2 Linting passes — 4992bfe
+- [x] 2.3 Unit tests pass — 4992bfe
+- [x] 2.4 Mutation gate holds on the rule files — 4992bfe
+- [x] 2.5 `grep -rn "8_WORKING_DAYS" src/` returns only the validator's compatibility path — 4992bfe
 
 #### Manual
 
@@ -810,11 +810,11 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [ ] 3.1 Type checking passes
-- [ ] 3.2 Linting passes
-- [ ] 3.3 Unit tests pass
-- [ ] 3.4 Mutation gate holds
-- [ ] 3.5 `grep -rn "MS_PER_DAY" src/lib/anomaly/rules/` shows no window arithmetic in these two files
+- [x] 3.1 Type checking passes
+- [x] 3.2 Linting passes
+- [x] 3.3 Unit tests pass
+- [x] 3.4 Mutation gate holds
+- [x] 3.5 `grep -rn "MS_PER_DAY" src/lib/anomaly/rules/` shows no window arithmetic in these two files
 
 #### Manual
 
