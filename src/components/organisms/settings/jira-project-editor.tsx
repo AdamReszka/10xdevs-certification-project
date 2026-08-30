@@ -17,9 +17,13 @@ import {
   type ClientStatus,
 } from "@/app/(app)/settings/connections/actions";
 import {
-  DISCONNECT_IMPACT,
-  joinClauses,
-} from "@/lib/integrations/disconnect-impact";
+  PROJECT_SWITCH_TRIGGER_LABEL,
+  projectSwitchClearLabel,
+  projectSwitchDiscardedDescription,
+  projectSwitchKeepLabel,
+  projectSwitchWarning,
+} from "@/components/organisms/settings/jira-project-editor-copy";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * Change the monitored Jira project without re-entering the API token
@@ -43,22 +47,36 @@ import {
  * mappings from the form (`connection-service.ts`), so neither is destroyed and
  * the token and workspace are untouched — a subtraction from the Jira disconnect
  * entry would have wrongly listed both.
+ *
+ * S-26 PHASE 4: the third path into the same loss stops behaving differently
+ * from the other two. `absence` no longer cascades off `sprint`, so this flow
+ * offers the same keep-or-clear choice the disconnect dialog does — chosen at
+ * the warning step and carried through the picker and the mapper to the save.
+ * The words moved to the pure sibling `jira-project-editor-copy.ts`, where they
+ * can be asserted; this file keeps only the flow.
  */
-
-/** The blast radius of a PROJECT SWITCH, not of a disconnect — see the note in
- *  the docstring above. */
-const PROJECT_SWITCH = DISCONNECT_IMPACT.projectSwitch;
 
 type Stage =
   | { kind: "closed" }
   | { kind: "warning" }
-  | { kind: "project"; email: string; projects: ClientProject[] }
-  | { kind: "mapping"; projectId: string; projectKey: string; statuses: ClientStatus[] }
+  // `mode` is chosen at the WARNING step and carried, unchanged, all the way to
+  // the save — the lead answers "what happens to my absences?" before they see
+  // the picker, exactly as the dialog asks it before the disconnect runs. It
+  // rides in the stage rather than in a separate `useState` so it cannot
+  // outlive the flow that set it: cancelling back to `closed` discards it.
+  | { kind: "project"; mode: DisconnectMode; email: string; projects: ClientProject[] }
+  | {
+      kind: "mapping";
+      mode: DisconnectMode;
+      projectId: string;
+      projectKey: string;
+      statuses: ClientStatus[];
+    }
   // Only reached when the project actually changed and its sprints were
   // discarded. The account now has NO sprint, and nothing re-imports one on its
   // own (roadmap S-16), so closing straight back to the card would leave the
   // owner with blank dashboards and no explanation.
-  | { kind: "discarded"; summary: string };
+  | { kind: "discarded"; mode: DisconnectMode; summary: string };
 
 export default function JiraProjectEditor({ currentProjectKey }: { currentProjectKey: string | null }) {
   const router = useRouter();
@@ -66,13 +84,13 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function openPicker() {
+  async function openPicker(mode: DisconnectMode) {
     setBusy(true);
     setError(null);
     try {
       const result = await loadAvailableProjects();
       if (result.ok) {
-        setStage({ kind: "project", email: result.email, projects: result.projects });
+        setStage({ kind: "project", mode, email: result.email, projects: result.projects });
       } else {
         setError(result.message);
       }
@@ -84,7 +102,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
   if (stage.kind === "closed") {
     return (
       <Button variant="outline" onClick={() => setStage({ kind: "warning" })}>
-        Change monitored project
+        {PROJECT_SWITCH_TRIGGER_LABEL}
       </Button>
     );
   }
@@ -95,22 +113,28 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
         <Alert variant="destructive">
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>This discards synced sprint data</AlertTitle>
-          <AlertDescription>
-            Pointing the account at
-            {currentProjectKey ? ` a project other than ${currentProjectKey}` : " a different project"}{" "}
-            deletes {joinClauses(PROJECT_SWITCH.destroys)}. It keeps{" "}
-            {joinClauses(PROJECT_SWITCH.keeps)}. Re-syncing rebuilds only what
-            the new project&apos;s Jira history contains.
-          </AlertDescription>
+          <AlertDescription>{projectSwitchWarning(currentProjectKey)}</AlertDescription>
         </Alert>
         {error ? (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
+        {/* TWO OUTCOMES, the same pair the disconnect dialog offers (S-26).
+            The default is the non-destructive one and is NOT the destructive
+            variant — until S-26 the single control here was red, which taught
+            the lead that red is simply how this flow ends. The absences are
+            the whole difference between them: the sprints go either way. */}
         <div className="flex gap-2">
-          <Button variant="destructive" onClick={openPicker} disabled={busy}>
-            {busy ? "Loading projects…" : "I understand — choose a project"}
+          <Button onClick={() => openPicker("keep")} disabled={busy}>
+            {busy ? "Loading projects…" : projectSwitchKeepLabel()}
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => openPicker("clear")}
+            disabled={busy}
+          >
+            {busy ? "Loading projects…" : projectSwitchClearLabel()}
           </Button>
           <Button variant="ghost" onClick={() => setStage({ kind: "closed" })}>
             Cancel
@@ -127,10 +151,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>{stage.summary}</AlertTitle>
           <AlertDescription>
-            As warned, this discarded {joinClauses(PROJECT_SWITCH.destroys)}.
-            Your past daily recaps were kept, but are no longer linked to a
-            sprint. Nothing has imported a sprint for the new project yet, so
-            both dashboards will stay empty until you re-run the cadence import.
+            {projectSwitchDiscardedDescription(stage.mode)}
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">
@@ -168,6 +189,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
             if (!result.ok) return { ok: false, message: result.message };
             setStage({
               kind: "mapping",
+              mode: stage.mode,
               projectId: jiraProjectId,
               projectKey: picked?.key ?? jiraProjectId,
               statuses: result.statuses,
@@ -193,12 +215,13 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
               jiraStatusName: m.jiraStatusName,
               category: m.category,
             })),
+            stage.mode,
           );
           if (!result.ok) return { ok: false, message: result.message };
           router.refresh();
           setStage(
             result.sprintsDiscarded
-              ? { kind: "discarded", summary: result.summary }
+              ? { kind: "discarded", mode: stage.mode, summary: result.summary }
               : { kind: "closed" },
           );
           return { ok: true };

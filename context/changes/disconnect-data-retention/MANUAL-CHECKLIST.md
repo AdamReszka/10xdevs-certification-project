@@ -130,3 +130,72 @@ bazie, dalej je kasuje kaskadą.
   oddaniem go komuś innemu, zostawiłby dane w bazie. Sprawdzenie rostera pilnuje
   drugiej strony: `clear` ma usuwać wiersze FR-010, a nie osoby, do których
   należą.
+
+---
+
+## Faza 4
+
+> **Kolejność:** wiersz 1.7 (migracja `0021`) musi być zrobiony **przed** tymi
+> dwoma — na niezmigrowanej bazie kaskada `sprint → absence` dalej działa i
+> przycisk „Keep my absences" skasuje nieobecności mimo swojej nazwy.
+>
+> ⚠️ Oba wiersze **kasują zsynchronizowane sprinty** tego konta (tickety,
+> historię statusów, anomalie) — tak działa zmiana projektu i tak było przed
+> S-26. Odzyskuje się je ponownym syncem z nowego projektu; nieobecności nie.
+
+- [x] **4.6 — zmiana monitorowanego projektu Jira z „keep" zostawia nieobecności** *(faza 4)*
+
+  **Gdzie:** `/settings/absences`, potem `/settings/connections`, zalogowany na
+  **prawdziwe** konto (w demo cała zakładka Connections odmawia). Potrzebne
+  konto Jira, w którym widać **co najmniej dwa** projekty — inaczej nie da się
+  przełączyć na inny.
+
+  **Co zrobić:**
+  1. Wejdź na `/settings/absences` i **zapisz sobie**, ile nieobecności widzisz
+     i dla kogo (wystarczy zrzut ekranu). Jeśli nie ma żadnej — dodaj jedną.
+  2. `/settings/connections` → karta Jira → **Change monitored project**.
+  3. Kliknij **Keep my absences and choose a project** (przycisk zwykły, nie
+     czerwony).
+  4. Wybierz **inny** projekt niż obecny, zmapuj statusy i zapisz.
+  5. Wróć na `/settings/absences`.
+
+  **Co musi być prawdą:** wszystkie nieobecności z kroku 1 są nadal na liście, z
+  tymi samymi osobami i datami. Ekran po zapisie mówi „Your recorded absences
+  were kept — they stay with the team rather than with the project" (a **nie**
+  „cannot be synced back"). Roster (`/settings/team`) i dni wolne zespołu też są
+  nienaruszone.
+
+  **Dlaczego to ma znaczenie:** to trzecia — i do S-26 jedyna nieopisana —
+  droga do tej samej straty. Rozłączenie Jiry i zmiana projektu kasowały
+  nieobecności tym samym mechanizmem (`delete(sprint)` → kaskada), ale tylko
+  jedna z nich miała jakiekolwiek ostrzeżenie. Jeśli po tym kroku lista jest
+  pusta, migracja `0021` nie jest na bazie (patrz 1.7) albo `mode` nie dojechał
+  z ekranu ostrzeżenia do zapisu przez trzy kroki kreatora.
+
+- [x] **4.7 — ostrzeżenie zapowiada dokładnie to, co robią przyciski** *(faza 4)*
+
+  **Gdzie:** `/settings/connections`, prawdziwe konto. **Ten wiersz niczego nie
+  zapisuje** — kończy się na `Cancel`, więc można go zrobić przed 4.6.
+
+  **Co zrobić:**
+  1. Karta Jira → **Change monitored project**.
+  2. Przeczytaj całe ostrzeżenie i **nie klikaj** żadnego z dwóch przycisków
+     akcji.
+  3. Zamknij **Cancel**.
+
+  **Co musi być prawdą:** w ostrzeżeniu są **trzy** kontrolki: `Keep my absences
+  and choose a project` (zwykła), `Delete my absences and choose a project`
+  (czerwona) i `Cancel`. Tekst wymienia po stronie strat sprinty, ich tickety,
+  historię statusów i anomalie — **bez** nieobecności; po stronie zachowanych
+  m.in. „the recorded absences, which stay with the team rather than with the
+  project"; i osobne zdanie „Choosing „Delete my absences and choose a project"
+  also removes the recorded absences, which were entered by hand and cannot be
+  synced back" — cytujące **dokładnie** nazwę czerwonego przycisku. Po `Cancel`
+  monitorowany projekt jest ten sam co przed.
+
+  **Dlaczego to ma znaczenie:** ostrzeżenie, które niedomawia, co kasuje, jest
+  defektem — i ten ekran już raz go miał (S-24: wymieniał `daily_recap`, które
+  przeżywa, a pomijał `absence`, które ginęło). Zdanie cytujące nazwę przycisku
+  jest tu jedynym miejscem, w którym lead dowiaduje się, **który** klik powoduje
+  nieodwracalną stratę; jeśli nazwa w zdaniu i napis na przycisku się rozjadą,
+  lead kliknie, żeby się dowiedzieć.
