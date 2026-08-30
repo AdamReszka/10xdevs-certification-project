@@ -856,12 +856,12 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 1.1 Migration generates and applies cleanly against local Supabase
-- [x] 1.2 Guard test agrees with the schema graph
-- [x] 1.3 Unit suite passes
-- [x] 1.4 Integration suite passes, including the new survival cases
-- [x] 1.5 Type checking passes
-- [x] 1.6 Linting passes
+- [x] 1.1 Migration generates and applies cleanly against local Supabase — 3658a81
+- [x] 1.2 Guard test agrees with the schema graph — 3658a81
+- [x] 1.3 Unit suite passes — 3658a81
+- [x] 1.4 Integration suite passes, including the new survival cases — 3658a81
+- [x] 1.5 Type checking passes — 3658a81
+- [x] 1.6 Linting passes — 3658a81
 
 #### Manual
 
@@ -871,12 +871,12 @@ prefer rolling forward.
 
 #### Automated
 
-- [ ] 2.1 Demo boundary guard still matches both actions
-- [ ] 2.2 Unit suite passes
-- [ ] 2.3 Integration suite passes with both modes covered
-- [ ] 2.4 Type checking passes
-- [ ] 2.5 Linting passes
-- [ ] 2.6 A repo's synced history survives disconnect-with-keep and the reconnect that follows
+- [x] 2.1 Demo boundary guard still matches both actions
+- [x] 2.2 Unit suite passes
+- [x] 2.3 Integration suite passes with both modes covered
+- [x] 2.4 Type checking passes
+- [x] 2.5 Linting passes
+- [x] 2.6 A repo's synced history survives disconnect-with-keep and the reconnect that follows
 
 ### Phase 3: The dialog — two buttons
 

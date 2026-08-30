@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq } from "drizzle-orm";
 
-import { jiraCredential, jiraProject, sprint, statusMapping } from "@/db/schema";
+import { absence, jiraCredential, jiraProject, sprint, statusMapping } from "@/db/schema";
 import { encryptToken, redactToken } from "@/lib/crypto";
 import type { getDb } from "@/lib/db";
 import {
@@ -14,6 +14,7 @@ import {
   listProjectStatuses,
   validateCredentials,
 } from "@/lib/jira";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * Jira integration service core (S-03). The token-touching + DB logic as PURE,
@@ -296,15 +297,34 @@ export async function storeJiraIntegration({
  * here, because a restated list is a second copy that drifts (it already did,
  * in four places, before S-24).
  *
- * Ownership is the ONLY guard — exactly what the #4 IDOR test exercises.
+ * Two outcomes since S-26, and `mode` is the whole difference. `keep` relies on
+ * the narrowed cascade above. `clear` additionally deletes the recorded
+ * absences — the one thing the narrowed edge spared, and the sharp edge this
+ * slice exists for: hand-entered FR-010 data no sync can rebuild, which now goes
+ * only when the lead asks for it by name. The tables `clear` reaches MUST equal
+ * `DISCONNECT_IMPACT.jira.clearedTables`, which the guard test derives from the
+ * schema graph rather than trusting this comment.
+ *
+ * One transaction, so a wipe the lead asked for is never half-done.
+ *
+ * Ownership is the ONLY guard — exactly what the #4 IDOR test exercises, and
+ * every statement below carries `owner_id` for that reason.
  */
 export async function disconnectJira({
   db,
   ownerId,
+  mode,
 }: {
   db: Db;
   ownerId: string;
+  mode: DisconnectMode;
 }): Promise<{ ok: true }> {
-  await db.delete(jiraCredential).where(eq(jiraCredential.ownerId, ownerId));
+  await db.transaction(async (tx) => {
+    await tx.delete(jiraCredential).where(eq(jiraCredential.ownerId, ownerId));
+
+    if (mode === "clear") {
+      await tx.delete(absence).where(eq(absence.ownerId, ownerId));
+    }
+  });
   return { ok: true };
 }

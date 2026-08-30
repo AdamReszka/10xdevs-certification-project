@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import { githubCredential, monitoredRepo } from "@/db/schema";
 import { encryptToken, redactToken } from "@/lib/crypto";
@@ -10,6 +10,7 @@ import {
   listRepos,
   validatePat,
 } from "@/lib/github";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * GitHub integration service core (S-02). The token-touching + DB logic as
@@ -153,17 +154,52 @@ export async function storeGithubIntegration({
 
     const credentialId = cred.id;
 
-    // Replace the monitored-repo set for this owner.
-    await tx.delete(monitoredRepo).where(eq(monitoredRepo.ownerId, ownerId));
-    await tx.insert(monitoredRepo).values(
-      selected.map((r) => ({
-        id: randomUUID(),
-        ownerId,
-        credentialId,
-        githubRepoId: r.githubRepoId,
-        fullName: r.fullName,
-      })),
-    );
+    // Upsert on (ownerId, githubRepoId), then delete only what was DESELECTED.
+    //
+    // Deliberately NOT delete-then-insert, which is what this line was until
+    // S-26: that mints fresh `monitoredRepo.id`s, and `github_commit.repo_id` /
+    // `github_pull_request.repo_id` cascade off that id (with reviews cascading
+    // off the PR), so re-inserting a repo the owner KEPT discarded its entire
+    // synced history. The sibling path reached the same verdict first
+    // (`settings/connection-service.ts:297-304`, impl-review F1) and
+    // `lessons.md:35-40` states the rule: a full-set delete-then-insert is safe
+    // only for a table with no children, and the inbound referential actions
+    // must be read before reaching for the idiom.
+    //
+    // Since S-26 this is also the RECONNECT path, which is what makes it
+    // load-bearing rather than tidy: a keep-disconnect leaves the repos alive
+    // with `credential_id` null, and the wizard is the only way back. The upsert
+    // re-points `credential_id` — re-linking exactly what the keep preserved —
+    // where a delete-then-insert would have undone the keep on the very next
+    // screen. Deselecting a repo still removes it and its history, as the
+    // settings editor does; that is a choice, not a side effect.
+    const keptRepoIds = selected.map((r) => r.githubRepoId);
+    await tx
+      .insert(monitoredRepo)
+      .values(
+        selected.map((r) => ({
+          id: randomUUID(),
+          ownerId,
+          credentialId,
+          githubRepoId: r.githubRepoId,
+          fullName: r.fullName,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [monitoredRepo.ownerId, monitoredRepo.githubRepoId],
+        // `id` intentionally omitted — keeping the existing row's id stable is
+        // the entire point of this branch.
+        set: { credentialId, fullName: sql`excluded.full_name` },
+      });
+
+    await tx
+      .delete(monitoredRepo)
+      .where(
+        and(
+          eq(monitoredRepo.ownerId, ownerId),
+          notInArray(monitoredRepo.githubRepoId, keptRepoIds),
+        ),
+      );
 
     return selected.length;
   });
@@ -182,18 +218,37 @@ export async function storeGithubIntegration({
  * here, because a restated list is a second copy that drifts (it already did,
  * in four places, before S-24).
  *
+ * Two outcomes since S-26, and `mode` is the whole difference. `keep` relies on
+ * the narrowed cascade above. `clear` additionally deletes what that cascade no
+ * longer removes — the monitored repos, whose commits, PRs and reviews follow by
+ * cascade off `monitored_repo.id`. The tables `clear` reaches MUST equal
+ * `DISCONNECT_IMPACT.github.clearedTables`, which the guard test derives from
+ * the schema graph rather than trusting this comment.
+ *
+ * One transaction, so a wipe the lead asked for is never half-done: a failed
+ * repo delete must not leave the credential gone with the data still there.
+ *
  * Ownership is the ONLY guard — this is exactly what the #4 IDOR test
  * exercises: calling with account B's ownerId must not touch account A's rows.
+ * Every statement below carries `owner_id` for that reason.
  */
 export async function disconnectGithub({
   db,
   ownerId,
+  mode,
 }: {
   db: Db;
   ownerId: string;
+  mode: DisconnectMode;
 }): Promise<{ ok: true }> {
-  await db
-    .delete(githubCredential)
-    .where(eq(githubCredential.ownerId, ownerId));
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(githubCredential)
+      .where(eq(githubCredential.ownerId, ownerId));
+
+    if (mode === "clear") {
+      await tx.delete(monitoredRepo).where(eq(monitoredRepo.ownerId, ownerId));
+    }
+  });
   return { ok: true };
 }

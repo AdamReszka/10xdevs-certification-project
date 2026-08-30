@@ -11,6 +11,9 @@ import {
   githubPullRequest,
   githubReview,
   monitoredRepo,
+  sprintMeasurement,
+  teamDayOff,
+  teamMember,
   user,
 } from "@/db/schema";
 import { GithubAuthError } from "@/lib/github";
@@ -19,6 +22,7 @@ import {
   storeGithubIntegration,
   validateAndListRepos,
 } from "@/lib/integrations/github-store";
+import { parseDisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * S-02 Phase 3 — credential-security integration tests against REAL Postgres
@@ -291,7 +295,11 @@ describe("github-store service — credential security (integration)", () => {
       expect(bRows).toHaveLength(0);
 
       // B disconnects — must NOT touch A's rows (ownerId is the only guard).
-      await disconnectGithub({ db, ownerId: ownerB });
+      // Deliberately the DESTRUCTIVE mode (S-26): `clear` adds an owner-scoped
+      // `delete(monitoredRepo)` that the old single-statement disconnect never
+      // ran, so it is the branch where a missing `owner_id` predicate would
+      // reach across accounts.
+      await disconnectGithub({ db, ownerId: ownerB, mode: "clear" });
 
       const aCredAfter = await db
         .select()
@@ -308,25 +316,180 @@ describe("github-store service — credential security (integration)", () => {
 });
 
 /**
- * S-26 — the GitHub subtree survives a disconnect.
+ * S-26 — the GitHub subtree survives a disconnect, and survives the reconnect.
  *
  * `monitored_repo.credential_id` moved from CASCADE to SET NULL, so the repo
  * rows and everything hanging off their internal ids stay put with no
- * credential. This is what makes the dialog's default outcome real rather than
- * copy: the ids are what a reconnect re-links through
- * `monitored_repo_owner_repo_uq`.
+ * credential. That alone is not enough to call it kept: after a disconnect the
+ * credential row is gone, so the WIZARD is the reconnect path, and until S-26
+ * Phase 2 it re-wrote the repo set as delete-then-insert with fresh
+ * `randomUUID()`s — a keep the very next screen undid. The round-trip case
+ * below is the one that pins that, because a test stopping at the delete passed
+ * before the fix.
+ *
+ * `clear` is the other half: the outcome the old cascade produced without
+ * asking, now reachable only by explicit request.
  */
-describe("S-26: disconnecting GitHub keeps the repos and their synced history", () => {
+describe("S-26: disconnecting GitHub, keep and clear", () => {
   const owners: string[] = [];
 
   afterEach(async () => {
     await cleanupUsers(owners.splice(0));
   });
 
-  it("leaves monitored_repo, commits, PRs and reviews in place with credential_id null", async () => {
+  /** Hang one commit, one PR and one review off `repoId`. Returns their ids. */
+  async function seedRepoChildren(ownerId: string, repoId: string, seq: number) {
+    const commitId = randomUUID();
+    const prId = randomUUID();
+    const reviewId = randomUUID();
+
+    await db.insert(githubCommit).values({
+      id: commitId,
+      ownerId,
+      repoId,
+      sha: `abc${seq}234`,
+      authorGithubUsername: "octocat",
+      authoredAt: new Date("2026-08-20T10:00:00.000Z"),
+    });
+    await db.insert(githubPullRequest).values({
+      id: prId,
+      ownerId,
+      repoId,
+      githubPrId: 987650 + seq,
+      number: 40 + seq,
+      title: "Add the thing",
+    });
+    await db.insert(githubReview).values({
+      id: reviewId,
+      ownerId,
+      pullRequestId: prId,
+      reviewerGithubUsername: "hubot",
+    });
+
+    return { commitId, prId, reviewId };
+  }
+
+  /**
+   * The three tables NEITHER branch may touch. `sprint_measurement` is the
+   * FR-023 history the PRD amended its own retention non-goal to keep; the
+   * roster and the team-wide days off are hand-entered and belong to no
+   * integration. Seeded so "nothing else went" is an assertion rather than an
+   * absence of one.
+   */
+  async function seedUntouchables(ownerId: string) {
+    await db.insert(teamMember).values({
+      id: randomUUID(),
+      ownerId,
+      name: "Ada Dev",
+      source: "MANUAL",
+    });
+    await db.insert(teamDayOff).values({
+      id: randomUUID(),
+      ownerId,
+      day: "2026-08-15",
+      label: "Assumption of Mary",
+    });
+    await db.insert(sprintMeasurement).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "1001",
+      sprintName: "Sprint 24",
+      committedSp: 40,
+      deliveredSp: 34,
+    });
+  }
+
+  async function expectUntouchablesIntact(ownerId: string) {
+    expect(
+      await db.select().from(teamMember).where(eq(teamMember.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(teamDayOff).where(eq(teamDayOff.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(sprintMeasurement)
+        .where(eq(sprintMeasurement.ownerId, ownerId)),
+    ).toHaveLength(1);
+  }
+
+  /** Connect one repo and hang a commit/PR/review off it. */
+  async function connectWithHistory(ownerId: string, repoIds: number[]) {
+    await storeGithubIntegration({
+      db,
+      ownerId,
+      token: TOKEN,
+      selectedRepoIds: repoIds.map(String),
+      opts: { fetchImpl: makeFetch() },
+    });
+
+    const repos = await db
+      .select()
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+
+    for (const [i, repo] of repos.entries()) {
+      await seedRepoChildren(ownerId, repo.id, i + 1);
+    }
+
+    return repos;
+  }
+
+  it("keep leaves monitored_repo, commits, PRs and reviews in place with credential_id null", async () => {
     const ownerId = await seedUser();
     owners.push(ownerId);
 
+    const [repo] = await connectWithHistory(ownerId, [REPOS[0].id]);
+    await seedUntouchables(ownerId);
+
+    await disconnectGithub({ db, ownerId, mode: "keep" });
+
+    // The credential really is gone — otherwise this passes vacuously.
+    expect(
+      await db
+        .select()
+        .from(githubCredential)
+        .where(eq(githubCredential.ownerId, ownerId)),
+    ).toHaveLength(0);
+
+    const reposAfter = await db
+      .select()
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+    expect(reposAfter).toHaveLength(1);
+    expect(reposAfter[0].id).toBe(repo.id);
+    expect(reposAfter[0].credentialId).toBeNull();
+    // The durable GitHub-side key a reconnect re-links on.
+    expect(reposAfter[0].githubRepoId).toBe(REPOS[0].id);
+
+    expect(
+      await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(githubPullRequest)
+        .where(eq(githubPullRequest.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(githubReview).where(eq(githubReview.ownerId, ownerId)),
+    ).toHaveLength(1);
+
+    await expectUntouchablesIntact(ownerId);
+  });
+
+  it("keep survives the reconnect: the repo row keeps its id and its whole history", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    const [repo] = await connectWithHistory(ownerId, [REPOS[0].id]);
+    const repoIdBefore = repo.id;
+
+    await disconnectGithub({ db, ownerId, mode: "keep" });
+
+    // The reconnect the lead actually takes: the wizard, same repo selected.
     await storeGithubIntegration({
       db,
       ownerId,
@@ -335,69 +498,133 @@ describe("S-26: disconnecting GitHub keeps the repos and their synced history", 
       opts: { fetchImpl: makeFetch() },
     });
 
-    const [repo] = await db
+    const reposAfter = await db
       .select()
       .from(monitoredRepo)
       .where(eq(monitoredRepo.ownerId, ownerId));
-    const repoId = repo.id;
+    expect(reposAfter).toHaveLength(1);
+    // The whole point: a fresh id here means every child cascaded away.
+    expect(reposAfter[0].id).toBe(repoIdBefore);
+    expect(reposAfter[0].credentialId).not.toBeNull();
 
-    const prId = randomUUID();
-    await db.insert(githubCommit).values({
-      id: randomUUID(),
-      ownerId,
-      repoId,
-      sha: "abc1234",
-      authorGithubUsername: "octocat",
-      authoredAt: new Date("2026-08-20T10:00:00.000Z"),
-    });
-    await db.insert(githubPullRequest).values({
-      id: prId,
-      ownerId,
-      repoId,
-      githubPrId: 987654,
-      number: 42,
-      title: "Add the thing",
-    });
-    await db.insert(githubReview).values({
-      id: randomUUID(),
-      ownerId,
-      pullRequestId: prId,
-      reviewerGithubUsername: "hubot",
-    });
+    expect(
+      await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(githubPullRequest)
+        .where(eq(githubPullRequest.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(githubReview).where(eq(githubReview.ownerId, ownerId)),
+    ).toHaveLength(1);
+  });
 
-    await disconnectGithub({ db, ownerId });
+  it("a repo left OUT of the reconnect selection goes, with its children", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
 
-    // The credential really is gone — otherwise this passes vacuously.
-    const creds = await db
-      .select()
-      .from(githubCredential)
-      .where(eq(githubCredential.ownerId, ownerId));
-    expect(creds).toHaveLength(0);
+    const repos = await connectWithHistory(ownerId, [REPOS[0].id, REPOS[1].id]);
+    expect(repos).toHaveLength(2);
+    const kept = repos.find((r) => r.githubRepoId === REPOS[0].id)!;
+    const dropped = repos.find((r) => r.githubRepoId === REPOS[1].id)!;
+
+    await disconnectGithub({ db, ownerId, mode: "keep" });
+
+    // Reconnect selecting only the first repo — deselection is still a real
+    // removal, exactly as the settings editor treats it.
+    await storeGithubIntegration({
+      db,
+      ownerId,
+      token: TOKEN,
+      selectedRepoIds: [String(REPOS[0].id)],
+      opts: { fetchImpl: makeFetch() },
+    });
 
     const reposAfter = await db
       .select()
       .from(monitoredRepo)
       .where(eq(monitoredRepo.ownerId, ownerId));
     expect(reposAfter).toHaveLength(1);
-    expect(reposAfter[0].id).toBe(repoId);
-    expect(reposAfter[0].credentialId).toBeNull();
-    // The durable GitHub-side key a reconnect re-links on.
-    expect(reposAfter[0].githubRepoId).toBe(REPOS[0].id);
+    expect(reposAfter[0].id).toBe(kept.id);
 
-    const commits = await db
+    const commitsAfter = await db
       .select()
       .from(githubCommit)
       .where(eq(githubCommit.ownerId, ownerId));
-    const prs = await db
-      .select()
-      .from(githubPullRequest)
-      .where(eq(githubPullRequest.ownerId, ownerId));
-    const reviews = await db
-      .select()
-      .from(githubReview)
-      .where(eq(githubReview.ownerId, ownerId));
-    expect(commits).toHaveLength(1);
-    expect(prs).toHaveLength(1);
-    expect(reviews).toHaveLength(1);
+    expect(commitsAfter).toHaveLength(1);
+    expect(commitsAfter[0].repoId).toBe(kept.id);
+    expect(
+      commitsAfter.some((c) => c.repoId === dropped.id),
+    ).toBe(false);
+    expect(
+      await db.select().from(githubReview).where(eq(githubReview.ownerId, ownerId)),
+    ).toHaveLength(1);
+  });
+
+  it("clear removes exactly the repos and their children, and nothing else", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    await connectWithHistory(ownerId, [REPOS[0].id]);
+    await seedUntouchables(ownerId);
+
+    await disconnectGithub({ db, ownerId, mode: "clear" });
+
+    expect(
+      await db
+        .select()
+        .from(monitoredRepo)
+        .where(eq(monitoredRepo.ownerId, ownerId)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId)),
+    ).toHaveLength(0);
+    expect(
+      await db
+        .select()
+        .from(githubPullRequest)
+        .where(eq(githubPullRequest.ownerId, ownerId)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(githubReview).where(eq(githubReview.ownerId, ownerId)),
+    ).toHaveLength(0);
+
+    await expectUntouchablesIntact(ownerId);
+  });
+
+  /**
+   * The fail-safe, asserted end-to-end rather than as a sentence in a plan.
+   * `mode` reaches the Server Action as a PUBLIC HTTP parameter and the
+   * `"keep" | "clear"` union is erased at runtime, so what actually decides the
+   * branch is `parseDisconnectMode` — composed here with the real store against
+   * real Postgres, which is where "it resolves to keep" stops being a type claim.
+   */
+  it.each([
+    ["undefined", undefined],
+    ["a garbage string", "everything"],
+    ["an object", { mode: "clear" }],
+  ])("%s resolves to keep, so the repos survive", async (_label, value) => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    await connectWithHistory(ownerId, [REPOS[0].id]);
+
+    await disconnectGithub({
+      db,
+      ownerId,
+      mode: parseDisconnectMode(value),
+    });
+
+    expect(
+      await db
+        .select()
+        .from(monitoredRepo)
+        .where(eq(monitoredRepo.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db.select().from(githubCommit).where(eq(githubCommit.ownerId, ownerId)),
+    ).toHaveLength(1);
   });
 });

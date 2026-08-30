@@ -10,7 +10,9 @@ import {
   jiraCredential,
   jiraProject,
   sprint,
+  sprintMeasurement,
   statusMapping,
+  teamDayOff,
   teamMember,
   user,
 } from "@/db/schema";
@@ -22,6 +24,7 @@ import {
   validateAndListProjects,
   type StatusMappingEntry,
 } from "@/lib/integrations/jira-store";
+import { parseDisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * S-03 Phase 3 — credential-security integration tests against REAL Postgres
@@ -462,8 +465,30 @@ describe("jira-store service — credential security (integration)", () => {
       expect(aRows).toHaveLength(1);
       expect(bRows).toHaveLength(0);
 
+      // A has recorded an absence by hand — the row S-26's `clear` deletes for
+      // the owner who asked, and must never delete for anyone else.
+      const aMemberId = randomUUID();
+      await db.insert(teamMember).values({
+        id: aMemberId,
+        ownerId: ownerA,
+        name: "Ada Dev",
+        source: "MANUAL",
+      });
+      await db.insert(absence).values({
+        id: randomUUID(),
+        ownerId: ownerA,
+        teamMemberId: aMemberId,
+        type: "VACATION",
+        startDate: new Date("2026-08-20T00:00:00.000Z"),
+        endDate: new Date("2026-08-22T23:59:59.999Z"),
+      });
+
       // B disconnects — must NOT touch A's rows (ownerId is the only guard).
-      await disconnectJira({ db, ownerId: ownerB });
+      // Deliberately the DESTRUCTIVE mode (S-26): `clear` adds an owner-scoped
+      // `delete(absence)` that the old single-statement disconnect never ran, so
+      // it is the branch where a missing `owner_id` predicate would reach across
+      // accounts — and it would take the one thing no sync can rebuild.
+      await disconnectJira({ db, ownerId: ownerB, mode: "clear" });
 
       const aCredAfter = await db
         .select()
@@ -479,31 +504,51 @@ describe("jira-store service — credential security (integration)", () => {
         .where(eq(statusMapping.jiraProjectId, aProjAfter.id));
       expect(aCredAfter).toHaveLength(1);
       expect(aMappingsAfter).toHaveLength(3);
+      expect(
+        await db.select().from(absence).where(eq(absence.ownerId, ownerA)),
+      ).toHaveLength(1);
     });
   });
 });
 
 /**
- * S-26 — a Jira disconnect stops destroying the lead's hand-entered absences.
+ * S-26 — a Jira disconnect stops destroying the lead's hand-entered absences,
+ * unless the lead asks for it by name.
  *
  * The cascade `jira_credential → jira_project → sprint` is unchanged; the fourth
  * hop to `absence` is now SET NULL. `absence-store.integration.test.ts` proves
  * the same thing one level down (deleting the sprint directly); this pins it at
- * the store function the Server Action actually calls.
+ * the store function the Server Action actually calls, in both modes.
  */
-describe("S-26: disconnecting Jira keeps the recorded absences", () => {
+describe("S-26: disconnecting Jira, keep and clear", () => {
   const owners: string[] = [];
 
   afterEach(async () => {
     await cleanupUsers(owners.splice(0));
   });
 
-  async function seedAbsenceFor(ownerId: string, projectRowId: string) {
+  /** Connect, then hang a sprint + roster member + absence off the project. */
+  async function connectWithAbsence(ownerId: string) {
+    await storeJiraIntegration({
+      db,
+      ownerId,
+      baseUrl: BASE,
+      workspaceUrl: BASE,
+      creds: CREDS,
+      jiraProjectId: "10000",
+      mappings: FULL_MAPPINGS,
+      opts: { fetchImpl: makeFetch() },
+    });
+    const [proj] = await db
+      .select()
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+
     const sprintId = randomUUID();
     await db.insert(sprint).values({
       id: sprintId,
       ownerId,
-      jiraProjectId: projectRowId,
+      jiraProjectId: proj.id,
       jiraSprintId: "1001",
       name: "Sprint 24",
       state: "ACTIVE",
@@ -530,30 +575,53 @@ describe("S-26: disconnecting Jira keeps the recorded absences", () => {
       endDate: new Date("2026-08-22T23:59:59.999Z"),
     });
 
-    return { absenceId, memberId };
+    return { absenceId, memberId, sprintId, projectRowId: proj.id };
   }
 
-  it("leaves the absence row with sprint_id nulled after disconnectJira", async () => {
+  /**
+   * The rows NEITHER branch may touch. `sprint_measurement` is the FR-023
+   * history the PRD amended its own retention non-goal to keep; the team-wide
+   * days off are hand-entered and belong to no integration. The roster is
+   * asserted inline, since `absence` hangs off it.
+   */
+  async function seedUntouchables(ownerId: string) {
+    await db.insert(teamDayOff).values({
+      id: randomUUID(),
+      ownerId,
+      day: "2026-08-15",
+      label: "Assumption of Mary",
+    });
+    await db.insert(sprintMeasurement).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "1001",
+      sprintName: "Sprint 24",
+      committedSp: 40,
+      deliveredSp: 34,
+    });
+  }
+
+  async function expectUntouchablesIntact(ownerId: string) {
+    expect(
+      await db.select().from(teamDayOff).where(eq(teamDayOff.ownerId, ownerId)),
+    ).toHaveLength(1);
+    expect(
+      await db
+        .select()
+        .from(sprintMeasurement)
+        .where(eq(sprintMeasurement.ownerId, ownerId)),
+    ).toHaveLength(1);
+  }
+
+  it("keep leaves the absence row with sprint_id nulled", async () => {
     const ownerId = await seedUser();
     owners.push(ownerId);
 
-    await storeJiraIntegration({
-      db,
-      ownerId,
-      baseUrl: BASE,
-      workspaceUrl: BASE,
-      creds: CREDS,
-      jiraProjectId: "10000",
-      mappings: FULL_MAPPINGS,
-      opts: { fetchImpl: makeFetch() },
-    });
-    const [proj] = await db
-      .select()
-      .from(jiraProject)
-      .where(eq(jiraProject.ownerId, ownerId));
-    const { absenceId, memberId } = await seedAbsenceFor(ownerId, proj.id);
+    const { absenceId, memberId } = await connectWithAbsence(ownerId);
+    await seedUntouchables(ownerId);
 
-    await disconnectJira({ db, ownerId });
+    await disconnectJira({ db, ownerId, mode: "keep" });
 
     // The cascade above `absence` really did fire — otherwise this is vacuous.
     expect(
@@ -571,6 +639,54 @@ describe("S-26: disconnecting Jira keeps the recorded absences", () => {
     expect(rows[0].teamMemberId).toBe(memberId);
     expect(
       await db.select().from(teamMember).where(eq(teamMember.id, memberId)),
+    ).toHaveLength(1);
+
+    await expectUntouchablesIntact(ownerId);
+  });
+
+  it("clear removes exactly the absences, and nothing else", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    const { memberId } = await connectWithAbsence(ownerId);
+    await seedUntouchables(ownerId);
+
+    await disconnectJira({ db, ownerId, mode: "clear" });
+
+    expect(
+      await db.select().from(absence).where(eq(absence.ownerId, ownerId)),
+    ).toHaveLength(0);
+    // The roster survives a wipe of the absences — `clear` deletes the FR-010
+    // rows the cascade spared, not the people they belong to.
+    expect(
+      await db.select().from(teamMember).where(eq(teamMember.id, memberId)),
+    ).toHaveLength(1);
+
+    await expectUntouchablesIntact(ownerId);
+  });
+
+  /**
+   * The fail-safe, asserted end-to-end rather than as a sentence in a plan.
+   * `mode` reaches the Server Action as a PUBLIC HTTP parameter and the
+   * `"keep" | "clear"` union is erased at runtime, so what actually decides the
+   * branch is `parseDisconnectMode` — composed here with the real store against
+   * real Postgres. The branch a malformed payload must never reach is this one:
+   * it destroys FR-010 data no sync can rebuild.
+   */
+  it.each([
+    ["undefined", undefined],
+    ["a garbage string", "everything"],
+    ["an object", { mode: "clear" }],
+  ])("%s resolves to keep, so the absences survive", async (_label, value) => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    const { absenceId } = await connectWithAbsence(ownerId);
+
+    await disconnectJira({ db, ownerId, mode: parseDisconnectMode(value) });
+
+    expect(
+      await db.select().from(absence).where(eq(absence.id, absenceId)),
     ).toHaveLength(1);
   });
 });

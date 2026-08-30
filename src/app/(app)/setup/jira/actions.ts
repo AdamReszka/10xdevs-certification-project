@@ -24,6 +24,10 @@ import {
   suggestCategory,
 } from "@/lib/jira";
 import {
+  type DisconnectMode,
+  parseDisconnectMode,
+} from "@/lib/validations/disconnect";
+import {
   jiraCredentialSchema,
   projectSelectionSchema,
   statusMappingSchema,
@@ -288,16 +292,26 @@ export async function storeJiraIntegration(
 }
 
 /**
- * Disconnect Jira for the signed-in account. DESTRUCTIVE five levels deep — the
- * project, its status mapping, every sprint/ticket/status-history row, the
- * detected anomalies AND the lead's hand-entered absences go with the
- * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
- * blast radius; every caller must confirm first (S-24).
+ * Disconnect Jira for the signed-in account, in one of two modes (S-26).
  *
- * REFUSES IN DEMO, for the same reason as `disconnectGithub` — and with more at
- * stake here, since the Jira cascade takes the lead's hand-entered absences.
+ * `keep` (the default, and what an absent or malformed argument resolves to)
+ * removes the credential and everything a reconnect re-syncs — the project, its
+ * status mapping, every sprint/ticket/status-history row and the detected
+ * anomalies — but NOT the lead's hand-entered absences, which survive with
+ * `sprint_id` nulled. `clear` deletes those too, by explicit request. See
+ * `src/lib/integrations/disconnect-impact.ts` for the maintained blast radius;
+ * every caller must confirm first (S-24).
+ *
+ * THE ARGUMENT IS RE-PARSED HERE for the reason spelled out on
+ * `disconnectGithub`, and it matters more on this side: the branch a crafted
+ * POST would be reaching for is the one that destroys FR-010 data no sync can
+ * rebuild.
+ *
+ * REFUSES IN DEMO, for the same reason as `disconnectGithub`.
  */
-export async function disconnectJira(): Promise<DisconnectResult> {
+export async function disconnectJira(
+  mode?: DisconnectMode,
+): Promise<DisconnectResult> {
   const [{ ownerId }, { isDemo }] = await Promise.all([
     requireRealWorkspace(),
     resolveWorkspace(),
@@ -307,7 +321,11 @@ export async function disconnectJira(): Promise<DisconnectResult> {
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  await disconnectJiraService({ db, ownerId: ownerId });
+  await disconnectJiraService({
+    db,
+    ownerId: ownerId,
+    mode: parseDisconnectMode(mode),
+  });
   return { ok: true };
 }
 
