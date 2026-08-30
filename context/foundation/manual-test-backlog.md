@@ -1087,10 +1087,12 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       **osiem kart** (PR review stalled, Ticket ageing in a status, Developer
       inactive, Ticket with no commits, Sprint at risk, Pull request too big,
       Scope creep, PR / ticket desync); *Pull request too big* pokazuje **500**;
-      *Ticket ageing in a status* pokazuje **siedem** kubełków SP (1/2/3/5/8/13
-      jako pola liczbowe + 21 SP jako lista z dwiema pozycjami); *PR / ticket
-      desync* pokazuje **tylko** Severity, bez pola liczbowego; **żadna** karta
-      nie ma odznaki „Modified".
+      *Ticket ageing in a status* pokazuje **siedem** kubełków SP — od S-28
+      (2026-08-30) **wszystkie siedem to pola liczbowe**, także 21 SP, które
+      pokazuje **64**; lista dwupozycyjna zniknęła razem z sentinelem
+      `"8_WORKING_DAYS"`. Każde pole czasu nazywa jednostkę **„working hours"**
+      / **„working days"**. *PR / ticket desync* pokazuje **tylko** Severity, bez
+      pola liczbowego; **żadna** karta nie ma odznaki „Modified".
       *Dlaczego to łapie:* bez wpisu w zakładkach strona istnieje pod adresem,
       ale nikt jej nie znajdzie — a to powierzchnia, którą FR-009 obiecał,
       przenosząc strojenie progów **poza** kreator setupu. Osiem kart dowodzi, że
@@ -1137,6 +1139,9 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       zapisie — dopiero przy detekcji: albo reguła trafia w **każdy** wiersz
       (zalew fałszywych alarmów), albo `NaN` w `risk_score` (kolumna `integer`)
       przerywa **całą** transakcję detekcji.
+      ➕ **Dopisane 2026-08-30 (S-28):** powtórz to samo na kubełku **21 SP**
+      karty *Ticket ageing in a status*, który przestał być listą i jest polem
+      liczbowym — czyli nową powierzchnią dla dokładnie tej samej awarii.
 
 ### Odłożone
 
@@ -1163,16 +1168,25 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       braku wiersza to cicha operacja pusta udająca sukces.
 
 - [ ] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
-      `DEFAULT_THRESHOLDS`: PR review stalled → 24 h; Developer inactive i Ticket
-      with no commits → 2 dni; Sprint at risk → 2 / 2 / 3 równolegle + 48 h;
-      Scope creep → 20 %; PR / ticket desync → samo Severity.
+      `DEFAULT_THRESHOLDS`. ⚠️ **Wartości przeliczone przez S-28 (2026-08-30)** —
+      poprzednia wersja tego wiersza pinowała liczby sprzed zmiany jednostki i
+      oblałaby się na poprawnym kodzie: PR review stalled → **8 working hours**;
+      Developer inactive i Ticket with no commits → **2 working days**; Ticket
+      ageing in a status → **8 / 8 / 16 / 24 / 40 / 40 / 64 working hours** dla
+      1/2/3/5/8/13/21 SP, Code review **8**, Testing **16**; Sprint at risk →
+      2 / 2 / 3 równolegle + **16 working hours** przed końcem sprintu; Scope
+      creep → 20 %; PR / ticket desync → samo Severity.
       *Dlaczego:* pole przemianowane po jednej stronie daje detektorowi
-      `undefined`, a to jest właśnie ścieżka `NaN` → `risk_score`.
+      `undefined`, a to jest właśnie ścieżka `NaN` → `risk_score`. Jednostka jest
+      częścią tego wiersza, bo od S-28 „8" znaczy jeden dzień pracy zespołu, a
+      nie osiem godzin zegarowych — karta bez słowa „working" opisuje produkt,
+      który już nie istnieje.
 
 - [ ] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
       zostawia w bazie **wszystkie siedem**.
-      *Co zrobić:* zmień 3 SP na `96`, zapisz, odśwież — sprawdź, że 1, 2, 5, 8,
-      13 i 21 SP mają nadal swoje wartości (21 SP dalej „8 working days").
+      *Co zrobić:* zmień 3 SP na `32`, zapisz, odśwież — sprawdź, że 1, 2, 5, 8,
+      13 i 21 SP mają nadal swoje wartości (**21 SP dalej `64`**; do S-28 stała
+      tam dwupozycyjna lista z „8 working days").
       *Dlaczego:* scalanie nadpisania jest **jednopoziomowe**, więc częściowa mapa
       **zastępuje** domyślną i kasuje resztę kubełków. `inProgressBudget` spada
       wtedy do najbliższego niższego progu albo — dla pustej mapy — zwraca `null`
@@ -1180,12 +1194,23 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       sprint. To dokładnie lekcja „zawężający predykat zamienia złą wartość w
       pusty wynik" z `lessons.md`.
 
-- [ ] **10.5** Kontrolka 21 SP działa w **obie** strony: przełącz na
-      „120 hours (5 days)", zapisz, odśwież, przełącz z powrotem na
-      „8 working days", zapisz, odśwież.
-      *Dlaczego:* `"8_WORKING_DAYS"` to sentinel, który detektor rozwiązuje
-      względem kalendarza dni roboczych sprintu; zapisanie go jako tekstu tam,
-      gdzie kod oczekuje liczby (albo odwrotnie), psuje regułę po cichu.
+- [ ] **10.5** Kubełek 21 SP jest zwykłym polem liczbowym i przeżywa
+      przeładowanie (**przepisane 2026-08-30 przez S-28** — do tego dnia była to
+      lista dwupozycyjna „120 hours (5 days)" / „8 working days", a ten wiersz
+      kazał ją przełączać w obie strony; taka kontrolka już nie istnieje).
+      *Gdzie:* `/settings/anomalies`, karta *Ticket ageing in a status*.
+      *Co zrobić:* zmień 21 SP z `64` na `72`, **Save**, F5; potem **Reset to
+      defaults**, F5.
+      *Co musi być prawdą:* po pierwszym F5 w polu **72** i odznaka „Modified" na
+      tej jednej karcie; po resecie **64** i brak odznaki. W żadnym momencie nie
+      pojawia się na wejściu na stronę komunikat „Unsaved changes.".
+      *Dlaczego:* sentinel `"8_WORKING_DAYS"` istniał tylko dlatego, że pole było
+      denominowane w godzinach zegarowych i „osiem dni roboczych" było w nim
+      niewyrażalne. Od S-28 jednostką są godziny robocze, więc to po prostu 64.
+      Sam literał **nadal jest akceptowany przy odczycie** (konta, które zapisały
+      go przed zmianą), a walidacja `.strict()` w `mergeRule` odrzuca CAŁE
+      nadpisanie razem z severity, gdy kształt się nie zgadza — dlatego brak
+      „Unsaved changes." jest tu równie ważny jak sama liczba.
 
 - [ ] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
       cofany przez **„Zresetuj dane demo"**.
@@ -1203,13 +1228,22 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       się, że reguły są na domyślnych (brak odznak „Modified" na
       `/settings/anomalies`) — inaczej porównujesz inbox z innym progiem niż ten,
       pod który wiersze S-07 były pisane.
+      ⚠️ **Od S-28 (2026-08-30) „domyślne" to inne liczby i inna jednostka.**
+      Same domyślne zostały przeliczone (patrz 10.3), a każdy wiek w inboxie jest
+      teraz liczony w godzinach roboczych — więc wiersze S-07, które pinują
+      konkretny wiek albo liczbę anomalii, trzeba czytać przeciw §21, a nie
+      przeciw pamięci sprzed tej zmiany.
 
 ### Świadomie NIE zrobione w tym slice'ie
 
-**Sentinel `"8_WORKING_DAYS"` nie stał się danymi.** Kubełek 21 SP pozostaje
+**Sentinel `"8_WORKING_DAYS"` nie stał się danymi.** ~~Kubełek 21 SP pozostaje
 wyborem dwupozycyjnym (`120 h` albo `8 dni roboczych`); „10 dni roboczych" jest
-niewyrażalne. Zmiana wymagałaby ruszenia `src/db/defaults.ts`,
-`ticket-status-aging.ts` **i** założeń fixture'a demo naraz.
+niewyrażalne.~~ **NIEAKTUALNE od 2026-08-30 (S-28).** Ten akapit sam wskazał
+cenę: „zmiana wymagałaby ruszenia `src/db/defaults.ts`, `ticket-status-aging.ts`
+**i** założeń fixture'a demo naraz" — i dokładnie to zrobił S-28, bo jednostką
+całego silnika stały się godziny robocze. „Osiem dni roboczych" to teraz 64,
+„dziesięć" to 80; sentinel zniknął z detektora, a literał jest utrzymywany
+wyłącznie po stronie odczytu, dla kont, które zapisały go wcześniej.
 
 **Severity nie ma poziomu ponad `HIGH`.** `SPRINT_AT_RISK` startuje z `HIGH`, a
 `riskScore` nie ma wyższego stopnia — więc tę jedną regułę da się przesunąć
@@ -1288,17 +1322,23 @@ reszta. **2.8, 3.8, 4.8, 7.5, 7.9 mają twarde zależności** — opisane przy n
       fałszywe na zawsze.
 
 - [ ] **11.5** (2.8) Ten sam dzień wolny zatrzymuje zegar starzenia ticketa.
-      ⚠️ **Tylko kubełek 21 SP.** To jedyny budżet z FR-009 wyrażony w dniach
-      roboczych (`8_WORKING_DAYS`); 1/2 SP = 24h, 3 SP = 48h, 5 SP = 72h,
-      8/13 SP = 120h liczą **czas zegarowy** i święto ich nie zatrzymuje. Test na
-      3 SP pokaże „brak reakcji" — **to nie jest błąd**.
-      *Co zrobić:* znajdź ticket **21 SP** w **In Progress** stojący bez ruchu od
-      ośmiu dni roboczych; potwierdź, że jest w inboxie. Dodaj dzień wolny
-      **w środku tego okna** i przeładuj dashboard.
-      *Co musi być prawdą:* anomalia `TICKET_STATUS_AGING` dla tego ticketa
-      **znika** bez czekania na cykl crona.
-      *Zależność:* wymaga ticketa 21 SP — jeśli go nie ma, przenieś ten wiersz na
-      później zamiast go pomijać.
+      ⚠️ **ODWRÓCONE 2026-08-30 przez S-28.** Ten wiersz mówił: „⚠️ tylko kubełek
+      21 SP … test na 3 SP pokaże «brak reakcji» — **to nie jest błąd**". Od S-28
+      **każdy** budżet czasowy jest liczony w godzinach roboczych, więc dzień
+      wolny zatrzymuje zegar **wszystkich** kubełków, a „brak reakcji" na 3 SP
+      jest teraz **błędem**. Wiersz jest przez to łatwiejszy: nie trzeba szukać
+      ticketa 21 SP.
+      *Gdzie:* `/settings/absences` (dni wolne zespołu), potem `/dashboard`.
+      *Co zrobić:* znajdź ticket **3 SP** w **In Progress**, który stoi bez ruchu
+      niewiele ponad **16 godzin roboczych** (dwa dni pracy) i jest w inboxie
+      jako `TICKET_STATUS_AGING`. Dodaj dzień wolny całego zespołu **w środku
+      tego okna** i przeładuj `/dashboard`.
+      *Co musi być prawdą:* anomalia dla tego ticketa **znika** bez czekania na
+      cykl crona — dzień wolny odjął zespołowi osiem godzin roboczych, więc
+      ticket wrócił pod budżet. Usunięcie dnia wolnego przywraca anomalię.
+      *Dlaczego to łapie:* to jedyny ręczny dowód, że kalendarz dni wolnych wchodzi
+      do **zegara reguł**, a nie tylko do liczby capacity — i że oba liczniki
+      czytają ten sam kalendarz.
 
 - [ ] **11.6** (2.9) Usunięcie dnia wolnego przywraca **obie** liczby.
       *Co zrobić:* usuń dzień dodany w 11.4, potwierdź, wróć na **Availability**.
@@ -2574,3 +2614,123 @@ klikaniem.** Oba są pokryte testami integracyjnymi na prawdziwym Postgresie
       wpisany miesiąc wcześniej". Zła liczba **M** albo **N** znaczy z kolei, że
       przy okazji ruszono arytmetykę dni roboczych, która miała zostać
       nietknięta.
+      ⚠️ **Dopisane 2026-08-30 (S-28).** Ta jedna arytmetyka — „N of the M
+      working day(s)" — jest **celowo nietknięta** przez S-28: liczy całe dni
+      roboczych utraconego czasu, co jest właściwą jednostką dla kosztu w
+      man-days, i dalej idzie przez `countWorkingDaysInclusive`. Wszystko INNE na
+      dashboardzie zmieniło jednostkę na godziny robocze. Jeśli **M** albo **N**
+      wygląda tu inaczej niż przed S-28, to jest regresja, a nie skutek zmiany.
+
+
+---
+
+## 21. S-28 `working-day-aging` — otwarte (2026-08-30)
+
+**Co ten slice zmienił, w jednym zdaniu:** każdy budżet czasowy w silniku
+anomalii przestał być czasem zegarowym i stał się **czasem roboczym** — zegar
+idzie tylko między **08:00 a 16:00** w strefie zespołu, tylko w dniach roboczych
+sprintu i **nigdy** w dniu wolnym całego zespołu. Osiem godzin roboczych to jeden
+dzień pracy.
+
+Powód, słowami właściciela: *„mechanizm niepotrzebnie liczy soboty i niedziele
+jako dni robocze"*. Konkretnie: ticket 3 SP przesunięty do In Progress w piątek o
+16:00 miał budżet 48 h i odpalał w **niedzielę** o 16:00 — prosto do
+poniedziałkowego inboxu, czyli na powierzchnię, którą FR-016 nazywa główną.
+
+**Czego ten slice świadomie NIE robi.** Nieobecność **jednej osoby** nie
+zatrzymuje zegara — sprint jest zespołu, a inbox jest alertem dla leada o pracy,
+która stoi, a nie urządzeniem wycelowanym w człowieka (to też wymóg gwarancji
+„żadnego kadrowania per-developer" z PRD). Osobna obietnica FR-010 stoi
+nietknięta: nieobecność dalej **całkowicie wycisza** `DEVELOPER_INACTIVE` dla tej
+osoby. Okno 08:00–16:00 jest **stałą w kodzie**, nie ustawieniem — Jira nie
+wystawia pola godzin pracy, a przy tych budżetach godzina w tę czy w tę nie
+zmienia dnia, w którym anomalia się pojawi.
+
+**Wiersze, które ten slice unieważnił w innych sekcjach** (już poprawione tam, w
+miejscu): **10.3**, **10.4**, **10.5**, **10.D**, **10.7**, **11.5** i przypis
+przy **20.A**. Najważniejszy jest **11.5** — mówił, że ticket 3 SP nie reaguje na
+dzień wolny i „to nie jest błąd". Od dziś reaguje, a brak reakcji jest błędem.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **21.A** (faza 2, `2.6`) 🔴 Konto, które **przed** tą zmianą miało własny
+      próg, dalej widzi swoją liczbę.
+      *Gdzie:* `/settings/anomalies`, karta **Ticket ageing in a status**, na
+      koncie, które kiedykolwiek klikało **Save** na tej karcie. Jeśli takiego nie
+      masz — zrób je teraz: zmień 5 SP na `30`, **Save**, i wróć tu po pierwszym
+      przeładowaniu.
+      *Co zrobić:* otwórz `/settings/anomalies` i **nic nie klikaj**. Przeczytaj
+      wszystkie siedem kubełków SP, Code review i Testing. Potem F5 i przeczytaj
+      jeszcze raz.
+      *Co musi być prawdą:* karta pokazuje **własne** wartości konta, a nie
+      domyślne; odznaka **„Modified"** stoi; **nie ma** komunikatu „Unsaved
+      changes." zaraz po wejściu na stronę, zanim cokolwiek zostało dotknięte.
+      *Dlaczego to łapie:* `mergeRule` waliduje zapisane nadpisanie
+      `.strict()`-em przy **każdym odczycie** i przy niepowodzeniu **wyrzuca całe
+      nadpisanie razem z severity**, zostawiając tylko `console.error`. Widać to
+      wyłącznie tak: domyślne liczby pod odznaką „Modified" i „Unsaved changes."
+      na wejściu. To jest największe pojedyncze ryzyko tego slice'a i zielone
+      testy go nie widzą.
+
+- [ ] **21.B** (faza 2/3, `2.7` + `3.6`) 🔴 Ticket przestawiony w **piątek po
+      południu** nie pojawia się w inboxie przez weekend, a pojawia się w
+      poniedziałek.
+      *Gdzie:* prawdziwe konto z aktywnym sprintem (nie demo), Jira + `/dashboard`.
+      *Co zrobić:* w piątek po 14:00 przestaw w Jirze ticket **3 SP** do **In
+      Progress** (budżet 16 godzin roboczych). W sobotę i w niedzielę otwórz
+      `/dashboard` i policz wiersze `TICKET_STATUS_AGING` dla tego klucza. Otwórz
+      jeszcze raz we wtorek po południu.
+      *Co musi być prawdą:* przez cały weekend **zero** wierszy dla tego ticketa;
+      we wtorek — jeden. (Poniedziałek jest granicą: budżet domyka się w
+      poniedziałek po południu, więc nie licz go jako dowodu w żadną stronę.)
+      *Dlaczego to łapie:* to jest cały slice w jednym kliknięciu. Przed zmianą
+      ten sam ticket odpalał w niedzielę.
+      *Zależność:* trwa trzy dni kalendarzowe — zacznij go **w piątek**, inaczej
+      przesuwa się o tydzień.
+
+- [ ] **21.C** (faza 3, `3.6`) Nieobecność dalej wycisza `DEVELOPER_INACTIVE`.
+      *Gdzie:* `/settings/absences`, potem `/dashboard`.
+      *Co zrobić:* znajdź w inboxie wiersz **„… has an In Progress ticket but no
+      commits in the last 2 working days"**. Zapisz tej osobie nieobecność
+      obejmującą **ostatnie dwa dni robocze**. Wróć na `/dashboard`.
+      *Co musi być prawdą:* wiersz `DEVELOPER_INACTIVE` dla tej osoby **znika**
+      od razu, bez „Sync now". Wiersze `TICKET_STATUS_AGING` dla **jej** ticketów
+      **zostają** — nieobecność jednej osoby nie zatrzymuje zegara ticketa.
+      *Dlaczego to łapie:* okno tej reguły zmieniło jednostkę, a wyciszenie z
+      FR-010 czyta **to samo** okno. Gdyby zlały się w jedno, nieobecność
+      skracałaby okno zamiast tłumaczyć ciszę — i połowicznie pokryty urlop dawałby
+      alarm zamiast spokoju.
+
+- [ ] **21.D** (faza 4, `4.5` + `4.6`) Ustawienia nazywają jednostkę, a 21 SP jest
+      polem liczbowym.
+      *Gdzie:* `/settings/anomalies`.
+      *Co zrobić:* przeczytaj wszystkie osiem kart. Zmień **21 SP** z `64` na
+      `72`, **Save**, F5.
+      *Co musi być prawdą:* każde pole czasu mówi **„working hours"** albo
+      **„working days"** (nie samo „hours" / „days"); *Sprint at risk* mówi
+      „working hours before sprint end"; gdzieś na stronie stoi zdanie o tym, w
+      jakim oknie idzie zegar (08:00–16:00, dni robocze zespołu, bez dni wolnych)
+      i że nieobecność jednej osoby go nie zatrzymuje; kubełek 21 SP to **pole
+      liczbowe**, nie lista; po F5 stoi w nim `72` i **nie ma** „Unsaved changes."
+      na wejściu.
+      *Dlaczego to łapie:* liczba bez jednostki na tej stronie kłamie — „8" czyta
+      się jako osiem godzin zegarowych, a znaczy cały dzień pracy zespołu. A pole
+      21 SP jest jedyną kontrolką, która zmieniła **typ**, więc jedyną, która może
+      się rozjechać z tym, co przyjmuje walidacja.
+
+- [ ] **21.E** (faza 5, `5.8` + `5.9`) Demo załadowane **w poniedziałek** pokazuje
+      co najmniej **cztery różne** typy anomalii.
+      *Gdzie:* `/setup` (próg pierwszego uruchomienia) albo `/settings/demo`.
+      *Co zrobić:* w **poniedziałek rano** kliknij „Zobacz demo", otwórz
+      `/dashboard` i policz, ile **różnych** typów anomalii jest w inboxie (nie
+      ile wierszy — ile typów). Potem „Zresetuj dane demo", załaduj demo jeszcze
+      raz i policz ponownie.
+      *Co musi być prawdą:* za każdym razem **co najmniej cztery różne** typy.
+      *Dlaczego to łapie:* to jest kryterium akceptacji **US-02** i jedyne miejsce,
+      gdzie ten slice mógł je po cichu zepsuć: kotwica demo to prawdziwy zegar w
+      momencie ładowania, więc odkąd budżety liczą się w czasie roboczym, dzień
+      tygodnia stał się wejściem do każdego przekroczenia progu w fixturze.
+      Poniedziałek jest najgorszym przypadkiem — za kotwicą leży weekend.
+      *Uwaga:* automat pokrywa tę samą własność dla **wszystkich siedmiu** dni
+      tygodnia (`src/lib/demo/fixture.test.ts`); ten wiersz sprawdza, że to samo
+      widać na prawdziwym ekranie, a nie tylko w silniku.

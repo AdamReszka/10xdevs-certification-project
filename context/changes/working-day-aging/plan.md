@@ -824,10 +824,10 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [x] 4.1 Type checking passes
-- [x] 4.2 Linting passes
-- [x] 4.3 Unit tests pass
-- [x] 4.4 `grep -rn "SP21_CHOICES" src/` returns nothing
+- [x] 4.1 Type checking passes — acb6468
+- [x] 4.2 Linting passes — acb6468
+- [x] 4.3 Unit tests pass — acb6468
+- [x] 4.4 `grep -rn "SP21_CHOICES" src/` returns nothing — acb6468
 
 #### Manual
 
@@ -839,13 +839,13 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [ ] 5.1 Type checking passes
-- [ ] 5.2 Linting passes
-- [ ] 5.3 Unit tests pass
-- [ ] 5.4 Fixture test passes on all seven anchor weekdays
-- [ ] 5.5 Integration suite passes (other session idle)
-- [ ] 5.6 E2E suite passes (other session idle, port 3000 free)
-- [ ] 5.7 Manual-test sweep exits zero
+- [x] 5.1 Type checking passes
+- [x] 5.2 Linting passes
+- [x] 5.3 Unit tests pass
+- [x] 5.4 Fixture test passes on all seven anchor weekdays
+- [x] 5.5 Integration suite passes (other session idle)
+- [x] 5.6 E2E suite passes (other session idle, port 3000 free)
+- [x] 5.7 Manual-test sweep exits zero
 
 #### Manual
 
