@@ -242,9 +242,10 @@ export async function storeJiraIntegration({
       // one delete discards the whole previous project's synced history.
       //
       // REACHABILITY, established 2026-08-26 (S-16 plan-review F6): this is a
-      // DEFENSIVE invariant, not a live data-loss path, and that is why it
-      // carries no destructive confirmation where the settings path does
-      // (`jira-project-editor.tsx:24`). `/setup/jira` renders `JiraConnectForm`
+      // DEFENSIVE invariant, not a live data-loss path, which is why it carries
+      // no destructive confirmation of its own. (Since S-24 both the wizard and
+      // the settings path confirm before Disconnect, so the asymmetry this
+      // comment used to note is gone.) `/setup/jira` renders `JiraConnectForm`
       // only when the owner has NO `jira_credential` row
       // (`setup/jira/page.tsx:64-66`); reaching it therefore requires
       // `disconnectJira`, which deletes that row — and `jira_project` cascades
@@ -286,9 +287,16 @@ export async function storeJiraIntegration({
 }
 
 /**
- * Remove the Jira integration for `ownerId`: delete the credential (the project +
- * status-mapping rows cascade via the FK chain). Ownership is the ONLY guard —
- * exactly what the #4 IDOR test exercises.
+ * Remove the Jira integration for `ownerId`: delete the credential, which
+ * cascades FIVE levels deep — not one. Seven tables go, including `sprint`,
+ * `anomaly` and — the sharp edge — `absence`, the lead's hand-entered FR-010
+ * data that no sync can rebuild; `daily_recap` survives with `sprint_id` nulled.
+ * `src/lib/integrations/disconnect-impact.ts` holds the maintained answer and a
+ * test keeps it equal to the schema's foreign-key graph; do not restate the list
+ * here, because a restated list is a second copy that drifts (it already did,
+ * in four places, before S-24).
+ *
+ * Ownership is the ONLY guard — exactly what the #4 IDOR test exercises.
  */
 export async function disconnectJira({
   db,

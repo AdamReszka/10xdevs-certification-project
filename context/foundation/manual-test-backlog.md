@@ -291,11 +291,13 @@ automatycznych zielone. Instrukcje krok po kroku:
       strony wystarcza, nic nie jest jeszcze zapisane). Testerka trafiła na to,
       dokładając w Jirze kolumnę „In Tests" już po wybraniu PT.
 
-      🔴 **Znalezisko poboczne, zgłoszone przez testerkę:**
-      `context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md` — żadna z
-      czterech ścieżek **Disconnect** (kreator ×2, ustawienia ×2) nie pyta o
-      potwierdzenie, mimo że kasuje sprint, ticket'y, anomalie, ręcznie wpisane
-      nieobecności, a po stronie GitHuba całą historię commitów, PR-ów i recenzji.
+      ✅ **Znalezisko poboczne, zgłoszone przez testerkę — NAPRAWIONE 2026-08-30
+      (S-24).** Żadna z czterech ścieżek **Disconnect** (kreator ×2, ustawienia
+      ×2) nie pytała o potwierdzenie, mimo że kasuje sprint, ticket'y, anomalie,
+      ręcznie wpisane nieobecności, a po stronie GitHuba całą historię commitów,
+      PR-ów i recenzji. Wszystkie cztery mają teraz wspólny `ConfirmDialog`;
+      opis znaleziska żyje w pozycji **S-24** w `context/foundation/roadmap.md`
+      (notatka źródłowa skasowana razem z naprawą, zgodnie z `CLAUDE.md`).
       Argument z checklisty („odpowiednik jest w `/settings/connections`")
       wskazuje na ostrzeżenie, które faktycznie istnieje, ale zabezpiecza
       **zmianę projektu**, nie odłączenie. Decyzja właściciela, nie defekt do
@@ -1805,7 +1807,9 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
       prawdziwymi credentialami.
       ⚠️ **Ten wiersz odłącza prawdziwą integrację i zaraz ją podłącza z powrotem
       — miej ten sam PAT GitHuba pod ręką, zanim zaczniesz.**
-      **Co zrobić:** kliknij **Disconnect**, potwierdź, popatrz na pasek adresu
+      **Co zrobić:** kliknij **Disconnect**, w oknie potwierdzenia kliknij
+      **Disconnect GitHub** (od S-24 to okno pojawia się na każdej ścieżce;
+      **Cancel** nic nie kasuje), popatrz na pasek adresu
       **zanim** klikniesz cokolwiek innego; potem podłącz GitHuba z powrotem tym
       samym PAT-em i tymi samymi repozytoriami i wejdź na `/dashboard`.
       **Co musi być prawdą:** po odłączeniu nadal jesteś na
@@ -1903,3 +1907,94 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
       wykonane, a nie odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29
       (68 otwartych wierszy w planach kontra 27 znanych backlogowi) wziął się
       dokładnie stąd.
+
+---
+
+## 16. S-24 `destructive-action-confirmation` — otwarte (2026-08-30)
+
+Slice zamknięty 2026-08-30, cztery fazy. Pełne opisy:
+`context/changes/destructive-action-confirmation/MANUAL-CHECKLIST.md`.
+Źródło kanoniczne: `context/changes/destructive-action-confirmation/plan.md`
+`## Progress`.
+
+**Konto:** wiersze 16.A i 16.B wymagają konta z **prawdziwymi** credentialami
+(na lokalnej bazie `demo@sprintflow.test` — patrz §5, identyfikuj po
+`token_last4`). 16.B najlepiej na koncie, które ma wpisaną co najmniej jedną
+nieobecność.
+
+⚠️ **Żaden wiersz poniżej nie każe klikać „Disconnect …" do końca.** Cały sens
+slice'a to możliwość wycofania się. Potwierdzone odłączenie Jiry kasuje ręcznie
+wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
+
+- [ ] **16.A** (faza 2, `2.5`) **Gdzie:** `/setup/github`, konto z podłączonym
+      GitHubem.
+      **Co zrobić:** kliknij **Disconnect**, przeczytaj okno, kliknij **Cancel**.
+      **Co musi być prawdą:** po kliknięciu **nic się nie odłączyło** — pojawia
+      się okno „Disconnect GitHub?", które wymienia *monitorowane repozytoria*
+      oraz *commity, pull requesty i recenzje* jako kasowane, i osobno mówi, co
+      zostaje (zespół, dni wolne, pomiary zamkniętych sprintów, połączenie z
+      Jirą). Przyciski to **Cancel** i **Disconnect GitHub** — nie dwa razy
+      „Disconnect". Po Cancel karta „GitHub connected" jest dokładnie taka jak
+      była: ten sam login, ta sama liczba repozytoriów, żadnego formularza
+      „Connect".
+      *Dlaczego to łapie:* to była ścieżka, na której jeden klik kasował
+      bezpowrotnie całą historię commitów, PR-ów i recenzji bez pytania. Jeśli
+      Cancel jednak coś skasował, dialog jest gorszy niż jego brak — daje
+      fałszywe poczucie bezpieczeństwa.
+
+- [ ] **16.B** (faza 2, `2.6`) **Gdzie:** `/settings/connections`, karta **Jira**,
+      konto z podłączoną Jirą i co najmniej jedną nieobecnością w
+      `/settings/absences`.
+      **Co zrobić:** kliknij **Disconnect** na karcie Jira, przeczytaj okno,
+      kliknij **Cancel**, potem wejdź na `/settings/absences`.
+      **Co musi być prawdą:** okno mówi wprost, że kasowane są **wpisane ręcznie
+      nieobecności i że nie da się ich zsynchronizować z powrotem** — nie samo
+      „dane Jiry". Wymienia też sprinty, ticket'y, historię statusów i anomalie;
+      po stronie „zostaje" wymienia zespół, dni wolne całego zespołu, pomiary
+      zamkniętych sprintów, połączenie z GitHubem oraz to, że dotychczasowe
+      raporty dzienne **zostają**, tylko przestają być powiązane ze sprintem. Po
+      Cancel nieobecność nadal jest na liście.
+      *Dlaczego to łapie:* nieobecności to jedyna pozycja na tej liście, której
+      żaden sync nie odtworzy — a jedyne wcześniejsze ostrzeżenie w aplikacji
+      pomijało je i w zamian wymieniało raporty dzienne, które w rzeczywistości
+      przeżywają. Pominięcie ich znaczy, że lead zgadza się na utratę czegoś, o
+      czym nie został poinformowany.
+
+- [ ] **16.C** (faza 3, `3.6`) **Gdzie:** `/settings/connections`, konto z
+      **załadowanym demo** (baner na górze) i z prawdziwie podłączonymi
+      integracjami.
+      **Co zrobić:** załaduj demo, wejdź na `/settings/connections`, popatrz na
+      obie karty.
+      **Co musi być prawdą:** **Disconnect** jest wyszarzony i nieklikalny na obu
+      kartach (tak jak „Test connection"). Pod przyciskami jest polskie zdanie
+      wymieniające, co jest wyłączone — w tym *odłączenie integracji* oraz
+      *zmiana monitorowanego projektu i repozytoriów*. Sekcje do zmiany projektu
+      Jiry i wyboru repozytoriów **w ogóle się nie renderują**.
+      *Dlaczego to łapie:* karta Connections celowo pokazuje prawdziwe konto
+      nawet w demo. Do tej pory znaczyło to, że z ekranu demo dało się jednym
+      klikiem skasować prawdziwe dane — baner obiecywał „Twoje prawdziwe dane i
+      integracje są nietknięte", a kod tego nie dotrzymywał.
+
+- [ ] **16.D** (faza 3, `3.7`) **Gdzie:** baner demo → `/settings/demo` →
+      `/settings/team` i `/dashboard`.
+      **Co zrobić:** w demo zmień imię jednego członka zespołu i zapisz; wyjdź z
+      demo; wejdź w demo ponownie; wróć na `/settings/team` i `/dashboard`.
+      **Co musi być prawdą:** widzisz **ten sam** sprint demo i **tę samą**
+      zmianę. Wyjście z demo niczego nie skasowało — kasuje wyłącznie osobny
+      przycisk „Resetuj dane demo".
+      *Dlaczego to łapie:* faza 3 dokłada sprawdzenie trybu demo do dziewięciu
+      akcji serwerowych. Gdyby przy okazji zepsuła cykl życia demo, dane demo
+      znikałyby przy każdym wyjściu — a właściciel wprost chce, żeby demo
+      zostawało dostępne w każdej chwili.
+
+- [ ] **16.E** `MANUAL-CHECKLIST.md` tego slice'a
+      (`context/changes/destructive-action-confirmation/MANUAL-CHECKLIST.md`) jest
+      podpisana w całości (16.A–16.D).
+      *Dlaczego to łapie:* pilnuje, że pozostałe zostały naprawdę wykonane, a nie
+      odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29 wziął się
+      dokładnie stąd.
+
+**Fazy 1 i 4 nie mają własnych wierszy manualnych.** Faza 1 to moduł
+`disconnect-impact.ts` plus test wyprowadzający kaskadę ze schematu — bez
+ekranu. Faza 4 poprawia teksty i dokumenty; zmienione zdania widać w 16.A, 16.B
+i 16.C.

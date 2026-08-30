@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { disconnectIfConnected } from "./disconnect";
+
 /**
  * S-02 setup wizard — GitHub connect happy path (FR-002, FR-004).
  *
@@ -20,17 +22,17 @@ import { expect, test } from "@playwright/test";
 const FIXTURE_TOKEN = "ghp_e2efixturetoken0123456789ABCDEFGH";
 
 test.describe("setup — GitHub connect (authenticated)", () => {
+  // Both tests drive the ONE GitHub credential of the suite's shared
+  // `storageState` account, so they are not independent of each other: under
+  // `fullyParallel: true` each would see the other's connect/disconnect. Serial
+  // is the honest declaration of that shared resource.
+  test.describe.configure({ mode: "serial" });
+
   // Test independence: leave the account with no GitHub credential, whatever
   // state this test left it in, so a re-run starts from the connect form.
   test.afterEach(async ({ page }) => {
     await page.goto("/setup/github");
-    const disconnect = page.getByRole("button", { name: "Disconnect" });
-    if (await disconnect.isVisible().catch(() => false)) {
-      await disconnect.click();
-      await expect(
-        page.getByRole("button", { name: "Connect" }),
-      ).toBeVisible();
-    }
+    await disconnectIfConnected(page, "GitHub");
   });
 
   /**
@@ -46,17 +48,11 @@ test.describe("setup — GitHub connect (authenticated)", () => {
 
     // Ensure a clean starting point (a prior run on this account may have left a
     // credential; disconnect first so we exercise the connect form).
-    const existingDisconnect = page.getByRole("button", { name: "Disconnect" });
-    if (await existingDisconnect.isVisible().catch(() => false)) {
-      await existingDisconnect.click();
-      await expect(
-        page.getByRole("button", { name: "Connect" }),
-      ).toBeVisible();
-    }
+    await disconnectIfConnected(page, "GitHub");
 
     // Stage 1 — validate the token (no write yet, FR-002).
     await page.getByLabel("Personal access token").fill(FIXTURE_TOKEN);
-    await page.getByRole("button", { name: "Connect" }).click();
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
 
     // Stage 2 — the repo picker appears with the fixture's paginated repos.
     await expect(
@@ -82,5 +78,50 @@ test.describe("setup — GitHub connect (authenticated)", () => {
     ).toBeVisible();
     await expect(page.getByText(/ghp_••••/)).toBeVisible();
     await expect(page.getByText(/Monitoring/)).toBeVisible();
+  });
+
+  /**
+   * Risk-tied (S-24): **Cancel actually cancels.** This is the one thing the
+   * manual rows cannot cheaply re-prove on every run — a regression that wired
+   * the dialog's Cancel to the Server Action would pass every other check in
+   * this suite, and the cost of missing it is an account's whole synced history.
+   */
+  test("Disconnect asks first, and Cancel leaves the connection intact", async ({
+    page,
+  }) => {
+    await page.goto("/setup/github");
+
+    // Reach the connected state this test is about.
+    await disconnectIfConnected(page, "GitHub");
+    await page.getByLabel("Personal access token").fill(FIXTURE_TOKEN);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByText("Choose repositories to monitor")).toBeVisible();
+    await page.getByRole("checkbox", { name: "sprintflow-e2e/frontend" }).check();
+    await page.getByRole("button", { name: /^Save/ }).click();
+    await expect(page.getByText("GitHub connected")).toBeVisible();
+
+    // The click no longer destroys anything on its own — it asks.
+    await page.getByRole("button", { name: "Disconnect", exact: true }).click();
+
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+    // It NAMES what it is about to destroy (the house convention), so the lead
+    // is not consenting to an unspecified deletion.
+    await expect(dialog).toContainText("monitored repositories");
+    await expect(dialog).toContainText("commit, pull request and code review");
+
+    await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+
+    // Still connected: the card is there and the connect form is NOT.
+    await expect(page.getByText("GitHub connected")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Disconnect", exact: true }),
+    ).toBeVisible();
+    // The assertion that fails without `exact: true` — the visible *Disconnect*
+    // trigger substring-matches "Connect".
+    await expect(
+      page.getByRole("button", { name: "Connect", exact: true }),
+    ).toHaveCount(0);
   });
 });

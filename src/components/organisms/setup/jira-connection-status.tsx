@@ -7,6 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { disconnectJira } from "@/app/(app)/setup/jira/actions";
+import DisconnectConfirmDialog from "@/components/molecules/disconnect-confirm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,8 +21,15 @@ import {
 /**
  * Connected-status card (S-03). Renders "Connected to {workspace} as {email}"
  * from the stored NON-secret columns — no token decryption — plus the monitored
- * project key and the mapped-status count, and a Disconnect action that clears
- * the credential (project + mappings cascade) and refreshes back to the form.
+ * project key and the mapped-status count, and a Disconnect action that
+ * refreshes back to the connect form.
+ *
+ * Disconnect is DESTRUCTIVE five levels deep, not one: the credential takes the
+ * project, its status mapping, every sprint, ticket and status-change history,
+ * the detected anomalies, and — the sharp edge — the lead's hand-entered
+ * absences, which no sync rebuilds. `src/lib/integrations/disconnect-impact.ts`
+ * is the maintained answer, held equal to the schema by a test; do not restate
+ * the list here. Since S-24 the button opens a confirmation first.
  */
 export default function JiraConnectionStatus({
   workspaceUrl,
@@ -29,20 +37,30 @@ export default function JiraConnectionStatus({
   tokenLast4,
   projectKey,
   mappedCount,
+  isDemo = false,
 }: {
   workspaceUrl: string;
   email: string;
   tokenLast4: string | null;
   projectKey: string | null;
   mappedCount: number;
+  /** S-24: see `github-connection-status.tsx`. */
+  isDemo?: boolean;
 }) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleDisconnect() {
     setIsDisconnecting(true);
     try {
-      await disconnectJira();
+      // The refusal is RETURNED, not thrown — see `github-connection-status.tsx`.
+      const result = await disconnectJira();
+      if (!result.ok) {
+        toast.error(result.message);
+        setIsDisconnecting(false);
+        return;
+      }
       toast.success("Jira disconnected.");
       router.refresh();
     } catch {
@@ -82,11 +100,19 @@ export default function JiraConnectionStatus({
         <Button
           type="button"
           variant="outline"
-          onClick={handleDisconnect}
-          disabled={isDisconnecting}
+          onClick={() => setConfirmOpen(true)}
+          disabled={isDisconnecting || isDemo}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
+        {/* The dialog owns its own pending state while the action runs;
+            `isDisconnecting` is the trigger's post-confirm feedback. */}
+        <DisconnectConfirmDialog
+          integration="jira"
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={handleDisconnect}
+        />
         {/* Forward to step 4 (S-04 roster/cadence), the final wizard step. The
             first-run routing that sends an un-onboarded account into the wizard
             at all is `onboarding-routing`'s gate on `/dashboard`. */}

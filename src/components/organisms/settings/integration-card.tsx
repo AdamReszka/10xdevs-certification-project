@@ -3,6 +3,8 @@
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
+import DisconnectConfirmDialog from "@/components/molecules/disconnect-confirm";
+import { DEMO_REFUSAL_MESSAGE } from "@/lib/demo/refusal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,8 +32,15 @@ import type { ConnectionTestResult } from "@/lib/settings/connection-service";
  *
  * ALWAYS SHOWS THE REAL ACCOUNT, in demo mode too (S-09): integration
  * configuration is not a thing to simulate, and a lead who loaded demo still
- * needs to see whether their own token is healthy. Only the control that would
- * reach the live API is disabled.
+ * needs to see whether their own token is healthy.
+ *
+ * WHICH CONTROLS DEMO DISABLES — corrected in S-24. The S-09 rule was "only the
+ * control that would reach the live API", framed around OUTBOUND CALLS, which
+ * let *Disconnect* through by construction: it destroys the real account's data
+ * locally and calls nothing. The rule is now "anything that mutates or spends
+ * the REAL account", so Disconnect is disabled and the selection editors are not
+ * offered at all. In every case the disabled attribute is the courtesy and the
+ * Server Action's `demoRefusal` is the boundary (`src/lib/demo/refusal.ts`).
  */
 
 const STATUS_BADGE: Record<SyncStatus, { label: string; variant: "default" | "secondary" | "destructive" }> = {
@@ -48,7 +57,7 @@ function formatAt(iso: string | null): string {
 }
 
 const TEST_FAILURE_COPY: Record<
-  "not_connected" | "credential_unreadable" | "auth" | "unavailable",
+  Extract<ConnectionTestResult, { ok: false }>["reason"],
   string
 > = {
   not_connected: "Nothing is connected yet.",
@@ -56,6 +65,9 @@ const TEST_FAILURE_COPY: Record<
     "The stored credential could not be decrypted, so we never reached the API. This happens after an encryption-key change or a database restored from another environment — reconnect to store a fresh one.",
   auth: "The stored credential was rejected just now — it needs reconnecting.",
   unavailable: "The API did not respond. That is their side, not your token.",
+  // Polish, matching `DEMO_REFUSAL_MESSAGE` and the demo note below — the demo
+  // copy on this page is Polish while the card itself is English.
+  demo_mode: DEMO_REFUSAL_MESSAGE,
 };
 
 export default function IntegrationCard({
@@ -76,7 +88,9 @@ export default function IntegrationCard({
   lastSuccessfulSyncAt: string | null;
   onTest: () => Promise<ConnectionTestResult>;
   reconnectHref: string;
-  onDisconnect: () => Promise<{ ok: true }>;
+  /** Widened in S-24: the action can now REFUSE (demo), and a refusal is
+   *  returned rather than thrown — so this card must render it. */
+  onDisconnect: () => Promise<{ ok: true } | { ok: false; message: string }>;
   /** The selection editor, rendered inline when connected. */
   editSlot?: ReactNode;
   /**
@@ -92,6 +106,10 @@ export default function IntegrationCard({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  // The card had NO disconnect error surface at all — `failure` is about the
+  // last sync and `testResult` about the probe, neither about this action.
+  const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
   const failure = classifyFailure(
     status,
@@ -110,8 +128,10 @@ export default function IntegrationCard({
 
   async function handleDisconnect() {
     setDisconnecting(true);
+    setDisconnectError(null);
     try {
-      await onDisconnect();
+      const result = await onDisconnect();
+      if (!result.ok) setDisconnectError(result.message);
     } finally {
       setDisconnecting(false);
     }
@@ -186,6 +206,14 @@ export default function IntegrationCard({
           </Alert>
         ) : null}
 
+        {disconnectError ? (
+          <Alert variant="destructive">
+            <XCircle className="size-4" aria-hidden />
+            <AlertTitle>Disconnect refused</AlertTitle>
+            <AlertDescription>{disconnectError}</AlertDescription>
+          </Alert>
+        ) : null}
+
         {/* Pinned to the bottom via `mt-auto`. The two cards sit in a grid, so
             they already share a row height — without this, an alert on one card
             pushes only ITS actions down and the pair reads as misaligned. */}
@@ -202,20 +230,35 @@ export default function IntegrationCard({
             <Button variant="outline" asChild>
               <a href={reconnectHref}>Reconnect</a>
             </Button>
-            <Button variant="ghost" onClick={handleDisconnect} disabled={disconnecting}>
+            {/* Stays `ghost` deliberately (owner's decision): the dialog is
+                the gate, not the button's weight. */}
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmOpen(true)}
+              disabled={disconnecting || isDemo}
+            >
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </Button>
+            <DisconnectConfirmDialog
+              integration={name === "GitHub" ? "github" : "jira"}
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              onConfirm={handleDisconnect}
+            />
           </div>
 
           {isDemo ? (
             <p className="text-sm text-muted-foreground">
-              Test połączenia jest wyłączony w trybie demonstracyjnym. Powyżej
-              widzisz stan swojej prawdziwej integracji — wyjdź z demo, aby go
-              sprawdzić.
+              W trybie demonstracyjnym wyłączone są: test połączenia, odłączenie
+              integracji oraz zmiana monitorowanego projektu i repozytoriów.
+              Powyżej widzisz stan swojej prawdziwej integracji — wyjdź z demo,
+              aby cokolwiek w niej zmienić.
             </p>
           ) : null}
 
-          {editSlot}
+          {/* Not rendered in demo: it holds the two destructive selection
+              editors, both of which mutate the REAL account. */}
+          {isDemo ? null : editSlot}
         </div>
       </CardContent>
     </Card>

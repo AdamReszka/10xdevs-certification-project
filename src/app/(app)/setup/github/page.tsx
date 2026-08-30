@@ -5,7 +5,7 @@ import GithubConnectForm from "@/components/organisms/setup/github-connect-form"
 import GithubConnectionStatus from "@/components/organisms/setup/github-connection-status";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { githubCredential, monitoredRepo } from "@/db/schema";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -16,6 +16,13 @@ import { getDb } from "@/lib/db";
  */
 export default async function GithubSetupPage() {
   const { ownerId } = await requireRealWorkspace();
+  // The wizard is always the REAL account (`requireRealWorkspace` above); this
+  // reads only WHICH workspace is active, so Disconnect can be disabled while
+  // the lead is viewing demo — it would destroy real data from a demo screen.
+  // `resolveWorkspace` is `cache()`d and the `(app)` layout already called it
+  // this render, so it costs no extra query and no extra pool. Precedent:
+  // `setup/team/page.tsx:22-27`.
+  const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -45,6 +52,7 @@ export default async function GithubSetupPage() {
     >
       {credential ? (
         <GithubConnectionStatus
+          isDemo={isDemo}
           login={credential.githubLogin}
           tokenLast4={credential.tokenLast4}
           repoCount={repoCount}

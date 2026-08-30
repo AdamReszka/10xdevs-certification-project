@@ -30,8 +30,18 @@ import {
  */
 export default async function ConnectionsSettingsPage() {
   // The OWNER is always the real account here — Connections never shows demo
-  // data. The demo FLAG is read separately, only to disable the two controls
-  // that would reach a live API with a fake token (the server refuses them too).
+  // data. The demo FLAG is read separately, to disable every control that would
+  // mutate or spend the real account from a demo screen.
+  //
+  // "The server refuses them too" is TRUE as of S-24, and was not when this
+  // comment was first written. All nine actions on this tab now return
+  // `demoRefusal()` / `DEMO_REFUSAL_MESSAGE` before touching anything:
+  // `disconnectGithub` and `disconnectJira` (`setup/{github,jira}/actions.ts`),
+  // and `testGithubConnection`, `testJiraConnection`, `loadAvailableRepos`,
+  // `loadAvailableProjects`, `loadProjectStatuses`, `updateMonitoredRepos` and
+  // `updateJiraProject` (`settings/connections/actions.ts`). Each is asserted by
+  // a `*.demo.test.ts` sibling — the disabled attribute is the courtesy, those
+  // are the boundary.
   const { ownerId } = await requireRealWorkspace();
   const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();

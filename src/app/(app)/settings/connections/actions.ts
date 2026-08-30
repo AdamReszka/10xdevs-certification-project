@@ -2,7 +2,8 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
+import { DEMO_REFUSAL_MESSAGE } from "@/lib/demo/refusal";
 import { getDb } from "@/lib/db";
 import type { GithubClientOpts } from "@/lib/github";
 import { suggestCategory, type JiraClientOpts } from "@/lib/jira";
@@ -28,7 +29,30 @@ import {
  *
  * SECURITY: no return type below carries a token, and none carries a stored
  * error string. Failures are bounded verdicts.
+ *
+ * EVERY action here REFUSES IN DEMO (S-24). They all keep
+ * `requireRealWorkspace()` — Connections is never simulated — which is precisely
+ * why each also needs the demo check beside it: without one, a screen showing
+ * demo data mutates or spends the REAL account. `updateJiraProject` destroys its
+ * sprints, tickets, status history and anomalies; `updateMonitoredRepos`
+ * cascades a dropped repo's commits, PRs and reviews. The three `load*` readers
+ * and the two `test*` probes destroy nothing but each decrypts the real token
+ * and calls the live API, so a demo screen would spend the real account's rate
+ * limit. Exempting the readers because "their editor is disabled" would be the
+ * same `disabled`-as-a-boundary argument `src/lib/demo/refusal.ts:5-9` rejects —
+ * a Server Action is its own entry point.
  */
+
+/** Resolve the real owner AND whether the account is currently viewing demo.
+ *  Both resolvers are `cache()`d, so this costs at most one extra query per
+ *  render. Mirrors `setup/team/actions.ts:181-187`. */
+async function realOwnerAndDemoFlag(): Promise<{ ownerId: string; isDemo: boolean }> {
+  const [real, active] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  return { ownerId: real.ownerId, isDemo: active.isDemo };
+}
 
 /**
  * Test-only base overrides, mirroring `setup/github/actions.ts:68` and
@@ -55,7 +79,9 @@ const NO_JIRA_OPTS: JiraClientOpts | undefined = undefined;
 
 /** Re-validate the STORED GitHub credential against GitHub, right now. */
 export async function testGithubConnection(): Promise<ConnectionTestResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, reason: "demo_mode" };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -69,7 +95,9 @@ export async function testGithubConnection(): Promise<ConnectionTestResult> {
 
 /** Re-validate the STORED Jira credential against Jira, right now. */
 export async function testJiraConnection(): Promise<ConnectionTestResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, reason: "demo_mode" };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -108,7 +136,9 @@ export type LoadReposResult =
 
 /** List what the stored GitHub credential can see, to seed the edit picker. */
 export async function loadAvailableRepos(): Promise<LoadReposResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -140,7 +170,9 @@ export type LoadProjectsResult =
 
 /** List what the stored Jira credential can see, to seed the project picker. */
 export async function loadAvailableProjects(): Promise<LoadProjectsResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -177,7 +209,9 @@ export type LoadStatusesResult =
 export async function loadProjectStatuses(
   projectIdOrKey: string,
 ): Promise<LoadStatusesResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -215,7 +249,9 @@ export async function loadProjectStatuses(
 export async function updateMonitoredRepos(
   selectedRepoIds: string[],
 ): Promise<UpdateSelectionResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -256,7 +292,9 @@ export async function updateJiraProject(
   jiraProjectId: string,
   mappings: StatusMappingEntry[],
 ): Promise<UpdateSelectionResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const { ownerId, isDemo } = await realOwnerAndDemoFlag();
+  if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

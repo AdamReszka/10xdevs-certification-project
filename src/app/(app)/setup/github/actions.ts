@@ -2,7 +2,12 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
+import {
+  demoRefusal,
+  DEMO_REFUSAL_ERROR,
+  type DemoRefusal,
+} from "@/lib/demo/refusal";
 import { getDb } from "@/lib/db";
 import {
   GithubAuthError,
@@ -30,6 +35,14 @@ import {
  * validate action returns repos + scopes but NEVER the token, and the store
  * action returns only non-secret meta (Phase 3 assertion #3).
  */
+
+/**
+ * What `disconnectGithub` returns. It was `{ ok: true }` — a shape that could
+ * only succeed — and widening it is what forces every call site to grow the
+ * `if (!result.ok)` branch the demo refusal needs (the components' `toast.error`
+ * sits in a `catch`, and a returned failure does not throw).
+ */
+export type DisconnectResult = { ok: true } | DemoRefusal;
 
 /** Repo shape handed to the client repo-picker (ids as strings for the DOM). */
 export type ClientRepo = { id: string; fullName: string };
@@ -159,9 +172,26 @@ export async function storeGithubIntegration(
   }
 }
 
-/** Clear the credential + its repos for the signed-in account. */
-export async function disconnectGithub(): Promise<{ ok: true }> {
-  const { ownerId } = await requireRealWorkspace();
+/**
+ * Disconnect GitHub for the signed-in account. DESTRUCTIVE four levels deep —
+ * the monitored repos and all their synced commits, PRs and reviews go with the
+ * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
+ * blast radius; every caller must confirm first (S-24).
+ *
+ * REFUSES IN DEMO. It keeps `requireRealWorkspace()` — the target owner is
+ * deliberately the real one, integration config is never simulated — and that is
+ * exactly why the demo check has to sit beside it: without one, a screen showing
+ * demo data deletes the real account's synced history. Same rule as
+ * `setup/team/actions.ts:51-61`; the disabled button is a courtesy, this is the
+ * boundary (`src/lib/demo/refusal.ts`).
+ */
+export async function disconnectGithub(): Promise<DisconnectResult> {
+  const [{ ownerId }, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<typeof DEMO_REFUSAL_ERROR>();
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

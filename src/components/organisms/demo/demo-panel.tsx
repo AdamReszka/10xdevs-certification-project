@@ -105,10 +105,16 @@ export default function DemoPanel({
           </Alert>
         ) : null}
 
+        {/* The list is exhaustive on purpose (S-24): it used to omit the two
+            most destructive things demo could reach — odłączenie integracji and
+            zmiana monitorowanego projektu — which were live at the time. Both
+            now refuse server-side, so this sentence is a description of the
+            code rather than a promise the code did not keep. */}
         <p className="text-sm text-muted-foreground">
           Demo nie dotyka Twoich integracji: zakładka Connections zawsze pokazuje
-          prawdziwe konto, a synchronizacja, import zespołu, refinement i wysyłka
-          maili są w demo wyłączone.
+          prawdziwe konto, a synchronizacja, import zespołu, refinement, wysyłka
+          maili, odłączenie integracji oraz zmiana monitorowanego projektu i
+          repozytoriów są w demo wyłączone.
         </p>
       </CardContent>
     </Card>

@@ -130,6 +130,16 @@ Jiry. Na lokalnej bazie to `demo@sprintflow.test` — nazwy kont są mylące, pa
   utraty danych — i dlatego celowo nie ma confirmation dialogu, który ma
   odpowiednik w `/settings/connections`.
 
+  > **SPROSTOWANIE 2026-08-30 (S-24).** Ostatnie zdanie było nieprawdziwe w
+  > chwili pisania: `/settings/connections` miało confirmation tylko przed
+  > **zmianą projektu** (`jira-project-editor.tsx`), nigdy przed **Disconnect**.
+  > Żadna z czterech ścieżek Disconnect nie pytała o potwierdzenie — założenie
+  > przyjęto bez weryfikacji, a znalazła je testerka. S-24 dodał wspólny
+  > `ConfirmDialog` na wszystkich czterech ścieżkach (kreator ×2, ustawienia ×2),
+  > więc od teraz równoważnik faktycznie istnieje — po obu stronach. Reszta
+  > akapitu (delete z fazy 4 jest zabezpieczeniem, nie ścieżką utraty danych)
+  > pozostaje aktualna.
+
   **Co zrobić:**
   1. Ustaw projekt A, dojedź kreator do końca tak, żeby powstał wiersz `sprint`.
      Potwierdź: `select count(*) from sprint where owner_id = '<id>';` → 1.

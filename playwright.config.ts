@@ -39,7 +39,15 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // ONE WORKER EVERYWHERE, not just in CI. Every spec drives the real app
+  // against local Postgres, and the request path still leaks its `pg.Pool` per
+  // invocation (`lessons.md` #3 / roadmap S-21): under concurrent workers the
+  // suite burns through Supabase's 100 connection slots mid-run and specs fail
+  // with "remaining connection slots are reserved for roles with the SUPERUSER
+  // attribute" — a failure that looks like a product bug and is not one. CI has
+  // always run at 1; local was the only place seeing the flake. Serial costs a
+  // few seconds here and buys a deterministic suite. Revisit when S-21 lands.
+  workers: 1,
   reporter: process.env.CI ? [["github"], ["html"]] : "list",
 
   use: {
