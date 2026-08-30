@@ -841,8 +841,8 @@ commit.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass: `npm test`
-- [x] 4.2 Type checking passes: `npm run typecheck`
-- [x] 4.3 Linting passes: `npm run lint`
-- [x] 4.4 Backlog reconciliation is clean: `node scripts/manual-test-sweep.mjs`
-- [x] 4.5 The deleted note is gone and no live document points at it
+- [x] 4.1 Unit tests pass: `npm test` — 05b043e
+- [x] 4.2 Type checking passes: `npm run typecheck` — 05b043e
+- [x] 4.3 Linting passes: `npm run lint` — 05b043e
+- [x] 4.4 Backlog reconciliation is clean: `node scripts/manual-test-sweep.mjs` — 05b043e
+- [x] 4.5 The deleted note is gone and no live document points at it — 05b043e
