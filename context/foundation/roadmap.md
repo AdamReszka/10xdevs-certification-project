@@ -51,7 +51,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-17 | working-days-calendar     | public holidays are DERIVED automatically from the team's country (per-sprint team-wide days off ship in S-23, entered by hand) | S-08, S-23 | FR-007, FR-009, FR-010                          | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
-| S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
+| S-20 | absence-sprint-scoping    | `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every other absence reader — a carried-over absence stops being invisible to the risk score | S-08, S-16         | FR-010                                          | done     |
 | S-21 | db-pool-teardown          | one authenticated request builds ONE db pool instead of three (a Server Action, one instead of four), so connection count stops scaling with pool multiplicity; a database failure also stops reading as a sign-out | F-02 | — (NFR: graceful degradation) | done     |
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
@@ -564,13 +564,13 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-17       | working-days-calendar     | Public holidays derived automatically from the team's country          | no                     | ⚠️ **The "no unshipped FR depends on it" note was retired 2026-08-27.** S-23 makes the working-day count *be* the capacity, so a holiday now moves a headline number. S-23 covers the need by letting the lead record team-wide days off per sprint (FR-007); what remains here is deriving those dates from a country the account still does not store. Now downstream of S-23, not parallel to it |
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP. ⚠️ **Scoped against S-23 on 2026-08-28 (plan review F1):** S-23 ships FR-024's estimate over the **active** sprint's capacity ratio, which needs no future sprint. What remains here is projecting an UNSTARTED window — its own working-day config and absence coverage, neither of which Jira exposes before the sprint exists. S-23 does not close S-18 |
 | S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
-| S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
+| S-20       | absence-sprint-scoping    | `SPRINT_AT_RISK` matches an absence by date, like every other reader     | done                   | ✅ Implemented 2026-08-30, two phases. It **was** a decision slice — and the decision made the change small: the owner ruled that risk follows the absence's dates, so one predicate (`sprint-at-risk.ts:146`) was deleted and seven sibling readers stayed as they were. Capacity and `DEVELOPER_INACTIVE` were already correct and **must** stay date-based — `getSprintCapacityFor` computes a CLOSED sprint's capacity for S-23's frozen measurement record, which has no active sprint to compare a stamp against. No migration and no schema edit: `absence.sprint_id` keeps its writer and its `ON DELETE CASCADE`, both left to **S-26**. Impl-review F10 (a NULL stamp can never raise risk) is dissolved rather than documented a third time. The centre of gravity was Phase 2 — the superseded rule was still stated as an instruction in six places |
 | S-21       | db-pool-teardown          | One `db` handle per request — the 3-4x pool multiplicity, not a teardown | done                  | ✅ Implemented 2026-08-30, five phases — PR #77. **Reframed at `/10x-frame`:** the recorded defect (a pool never closed, holding a connection for as long as the isolate lived) is not what breaks. Measured — `pg.Pool`'s 10 s idle timer reclaims every pool in Node with no `.end()`, and Hyperdrive cleans the client up at request end; but one authenticated `GET` built **3** pools and a Server Action **4**, strictly linear in concurrency, which is what burned Supabase's 100 slots mid-Playwright-run. The fix is three lines in `src/lib/db.ts` (memoize the handle on the adapter's request-context object under a `Symbol.for` key) with **zero call-site churn**: 3.00/4.00 connections per request → a flat 5 (`POOL_MAX`) at K = 8, 12 and 24. `playwright.config.ts` runs parallel workers locally again and the suite got faster. Two by-products: `getOptionalSession` stops answering a database failure with "not signed in" (that conflation is why this read as flake for weeks), and `src/app/error.tsx` gives the app its first error boundary. `lessons.md` #3 rewritten — the wrong version had steered S-02 F3, S-04, S-05 and S-24 F2 |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | done                   | ✅ Implemented & merged — PR #68 (2026-08-30), five phases; archived 2026-08-30 (PR #73). Shipped as a **doorstep**, not a redirect: `/setup` is a first screen offering two doors — configure real data, or see the demo — which is what let FR-008 and the Access Control promise ("lands in the setup wizard") both hold as written. Prerequisites were widened during the slice to S-01, S-04, S-07, S-09, S-10: S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on. `isOnboardingComplete` went from zero production callers to gating `/dashboard`. **Status corrected 2026-08-30** — this row still read `yes` (ready to start) after the slice shipped and was archived; the at-a-glance table, the S-22 body and `change.md` all said done |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
 | S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | done | ✅ Implemented 2026-08-30, four phases. **Raised by the tester**, framed and planned the same day. Pattern copied is `molecules/confirm-dialog.tsx` (S-15), NOT `jira-project-editor.tsx` — whose copy was wrong in both directions and is now rebuilt from the same source. The load-bearing half is `src/lib/integrations/disconnect-impact.ts`: one declaration of the blast radius that a hermetic test holds equal to the schema's FK graph, so a future slice hanging a cascading child under `sprint` or `monitored_repo` breaks the build instead of silently making the dialog lie. Phase 3 also closed the Connections tab against demo — all nine Server Actions refuse server-side, which delivers one of S-27's three items |
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | done                   | ✅ Implemented 2026-08-30, five phases. **Raised by the tester** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`) and **reframed at `/10x-frame`:** the finding is not prominence — the three surfaces were in three different states of absence, and Today had no identity element to restyle at all. What ships is one fact (`PT Sprint 1 · 30.08 – 12.09`) computed once in a pure `src/lib/sprint-identity.ts` and rendered by one shared `molecules/sprint-identity-bar.tsx` on the cadence step, both dashboards and the Daily Recap. Two identity-fabricating fallbacks are gone (`?? "the active sprint"`, `?? "your sprint"`). Dates render in the team's Jira zone, correcting this entry's own UTC instruction (see the S-25 detail block). The wizard also stops hand-rolling its own `state = 'ACTIVE'` query, so it and Today can no longer disagree about which sprint exists |
-| S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | **blocked on S-20** | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Sequence behind S-20** — both settle the meaning of `absence.sprint_id` and it must not be decided twice. Scope may shrink or grow with Open Roadmap Question 4 |
+| S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | yes | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Unblocked 2026-08-30 by S-20**, which settled `absence.sprint_id` as write-only provenance with no reader — so the referential action is now S-26's to choose on its own merits. Scope may shrink or grow with Open Roadmap Question 4 |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
 
 ## Open Roadmap Questions
@@ -645,38 +645,61 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-20: Absence sprint scoping
 
-- **Outcome:** a recorded absence means the same thing to all three of its
-  consumers. Today `SPRINT_AT_RISK` filters absences by `sprint_id` while sprint
-  capacity and `DEVELOPER_INACTIVE` filter the same rows by date overlap, so one
-  absence can simultaneously reduce a sprint's capacity, suppress an inactivity
-  anomaly in it, and be invisible to its risk score.
+- **Outcome:** `SPRINT_AT_RISK` matches a recorded absence by its DATES, like
+  every one of its seven sibling readers. Sprint capacity and
+  `DEVELOPER_INACTIVE` were already date-based and correct; only the risk rule
+  disagreed. An absence whose window crosses a sprint boundary now raises risk in
+  whichever sprint its dates fall in — including one it was not recorded in, and
+  including one recorded when the owner had no sprint row at all.
 - **Change ID:** absence-sprint-scoping
 - **PRD refs:** FR-010
 - **Prerequisites:** S-08, S-16
-- **Status:** proposed
+- **Status:** done
 
-- **Why this exists (S-16 research, 2026-08-26):** `absence.sprint_id` is stamped
+- **Why this existed (S-16 research, 2026-08-26):** `absence.sprint_id` is stamped
   once at record time (`src/lib/absence-store.ts:157`) and `updateAbsence`
-  deliberately never re-stamps it (`:169-173`). Three consumers then disagree:
-  `src/lib/anomaly/rules/sprint-at-risk.ts:141` skips any absence whose
-  `sprint_id` differs from the snapshot's sprint, while
+  deliberately never re-stamps it (`:169-173`). Three consumers then disagreed:
+  `src/lib/anomaly/rules/sprint-at-risk.ts:141` skipped any absence whose stored
+  stamp was not the sprint being evaluated, while
   `src/lib/dashboard/capacity.ts:170-176` and
   `src/lib/anomaly/rules/developer-inactive.ts:47-51` never look at `sprint_id`
   at all and match on date overlap alone. An absence recorded in sprint N whose
-  range extends into N+1 therefore lowers N+1's capacity and suppresses
-  `DEVELOPER_INACTIVE` there, but cannot raise `SPRINT_AT_RISK` there.
-- **This is not simply a bug to fix.** The `sprint-at-risk` behaviour is the
-  *recorded intent* of S-08's D2 definition of planned-ness — an absence carried
-  into a later sprint is "planned there" and should stop raising risk
-  (`context/archive/2026-08-25-absence-calendar/plan.md:154-163`). The defect is
-  that the other two consumers were never brought in line with that rule, and
-  that nothing states which reading is canonical. The slice is the *decision*
-  plus its consistent application, not a one-line filter change.
-- **Related, deliberately excluded from S-16:** impl-review F10's narrower
-  complaint (an absence recorded with no active sprint stores NULL and can never
-  raise risk — `sprint-at-risk.ts:135-140`) is largely dissolved by S-16's
-  between-sprints fix, which makes a sprint row exist from the first cycle after
-  a sprint goes active. What survives F10 is the disagreement above.
+  range extended into N+1 therefore lowered N+1's capacity and suppressed
+  `DEVELOPER_INACTIVE` there, but could not raise `SPRINT_AT_RISK` there.
+- **The ruling (owner, 2026-08-30): risk follows the absence's DATES.** The
+  question was real — the `sprint-at-risk` behaviour was the *recorded intent* of
+  S-08's D2 definition of planned-ness, which held that an absence carried into a
+  later sprint is "planned there" and should stop raising risk
+  (`context/archive/2026-08-25-absence-calendar/plan.md:154-163`). Two findings
+  decided it against D2. **First, `sprint_id` records provenance, not
+  membership:** `createAbsence` stamps it from whichever sprint was active when
+  the lead typed the row, never from the row's own dates, so comparing it
+  answered a different question from the one the rule asks. **Second, D2's fear
+  was already bounded:** it worried about an absence that keeps raising risk
+  "after the rollover, forever", but `overlaps(absence, now, endDate)` stops
+  firing the moment the absence ends — the exposure is the one rollover the
+  absence actually spans. So D2's *definition* of planned-ness survives (it still
+  justifies `is_planned`'s default in `schema.ts`); what was reversed is only the
+  inference that risk should therefore be scoped by the recording sprint.
+- **What it cost, in the end:** one deleted predicate and four tests. The
+  decision is what made the change small — the two other consumers turned out to
+  be right and were left alone, and `getSprintCapacityFor` in particular **must**
+  stay date-based, because S-23 calls it to compute a CLOSED sprint's capacity for
+  the FR-023 measurement record, where there is no active sprint to compare a
+  stamp against.
+- **Impl-review F10 is CLOSED by this slice — dissolved, not documented a third
+  time.** F10's complaint was that an absence recorded with no active sprint
+  stores NULL and can therefore never raise risk. A NULL is unequal to every
+  sprint id, so the old predicate dropped that absence in EVERY sprint, forever,
+  and reported nothing — `context/foundation/lessons.md`, "a narrowing predicate
+  turns 'wrong value' into 'empty result', which reads as success". Deleting the
+  predicate removes the case rather than patching it; a `sprintId: null` unit case
+  and an end-to-end integration case now cover what F10 said nothing covered.
+- **Deliberately NOT done:** no migration and no schema edit.
+  `absence.sprint_id` keeps its writer, its `ON DELETE CASCADE` and its relation.
+  Stopping the writer would deliver half of **S-26** without S-26's consent
+  decision, and would destroy provenance S-26 may want. After this slice the
+  column has one writer and **no reader**.
 - **Also in range — CLOSED 2026-08-26 by S-16 Phase 4.**
   `src/app/(app)/settings/absences/page.tsx:24` used to tell the reader that
   retention already bounds the list to current + 2 previous sprints. It does not:
@@ -1098,11 +1121,15 @@ Foundations below assume these are present and do NOT re-scaffold them.
   reaching for the idiom". The lesson's `Applies to` names store functions; the
   FK that fires here was never re-examined when S-16 attached `sprint` beneath
   `jira_project`.
-- **Scope note for planning:** the decision is what an orphaned absence means —
-  `SET NULL` on `absence.sprint_id` collides with **S-20**, which is already the
-  slice that decides what `sprint_id` is *for* and finds three consumers
-  disagreeing about it. Sequence S-20 first or fold the decision into it; do not
-  settle the same column twice. Also in range and not yet weighed: `status_mapping`
+- **Scope note for planning — S-20 answered the half that blocked this
+  (2026-08-30).** The open question was what an orphaned absence means, because
+  `SET NULL` on `absence.sprint_id` collided with **S-20**, the slice that decides
+  what `sprint_id` is *for*. S-20 ruled that the column is **write-time
+  provenance with no reader**: `SPRINT_AT_RISK` now matches absences by date, so
+  nothing downstream changes behaviour if the stamp is nulled. S-26 is therefore
+  free to choose the referential action on its own merits — and the column is not
+  being settled twice, because S-20 deliberately left the writer, the FK and the
+  cascade exactly as they were. Also in range and not yet weighed: `status_mapping`
   (the lead's status→category judgement, hand-entered, nowhere else), the frozen
   `sprint.committed_sp` / `committed_frozen_at` and the hand-imported cadence
   columns (`schema.ts:419-436`), and `anomaly.status` — the triaged/dismissed

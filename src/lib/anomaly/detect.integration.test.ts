@@ -84,6 +84,18 @@ async function seedScenario(withSprint = true): Promise<Seeded> {
     .values({ id: randomUUID(), ownerId, credentialId: jCred.id, jiraProjectId: "10000", projectKey: "SF" })
     .returning({ id: jiraProject.id });
 
+  // Above the early return on purpose (S-20): the roster does not depend on the
+  // sprint row, and the NULL-stamp case needs an owner who has a team member but
+  // no sprint — the only state `createAbsence` can stamp NULL from.
+  await db.insert(teamMember).values({
+    id: randomUUID(),
+    ownerId,
+    name: "Alex Dev",
+    githubUsername: "alexdev",
+    jiraAccountId: "jira-alex",
+    source: "BOTH",
+  });
+
   if (!withSprint) return { ownerId, sprintId: "", stalledPrRowId: "" };
 
   const [spr] = await db
@@ -100,15 +112,6 @@ async function seedScenario(withSprint = true): Promise<Seeded> {
       committedSp: 40,
     })
     .returning({ id: sprint.id });
-
-  await db.insert(teamMember).values({
-    id: randomUUID(),
-    ownerId,
-    name: "Alex Dev",
-    githubUsername: "alexdev",
-    jiraAccountId: "jira-alex",
-    source: "BOTH",
-  });
 
   // SF-1: aging In-Progress ticket, assigned, no linked commit → 3 anomalies.
   await db.insert(jiraTicket).values({
@@ -339,6 +342,15 @@ describe("detectAnomalies — absences (S-08, FR-010)", () => {
     return row.id;
   }
 
+  /** The owner's Jira project — `seedScenario` creates it but does not return it. */
+  async function projectIdOf(ownerId: string) {
+    const [row] = await db
+      .select({ id: jiraProject.id })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+    return row.id;
+  }
+
   function absencesOf(ownerId: string, condition: string) {
     return db
       .select()
@@ -456,6 +468,123 @@ describe("detectAnomalies — absences (S-08, FR-010)", () => {
       .from(anomaly)
       .where(eq(anomaly.dedupKey, `SPRINT_AT_RISK:absence:${absenceId}`));
     expect(resolved.status).toBe("RESOLVED");
+  });
+
+  /**
+   * S-20 — the two cases D2's `sprint_id` predicate made unreachable. Both go
+   * through the real store and the real reconcile loop rather than the pure
+   * rule: impl-review F10's own complaint was that "the store test asserts the
+   * NULL is stored; nothing covers the downstream consequence".
+   */
+  it("raises risk for an absence recorded with NO sprint, once a sprint appears", async () => {
+    // The first-run window: the owner signed up, entered an absence, and the
+    // first sync has not ingested a sprint yet — so `getActiveSprintRow` finds
+    // nothing and `createAbsence` stamps NULL. NULL is unequal to every sprint
+    // id, so the old predicate dropped this row in every sprint, forever.
+    const { ownerId } = await newScenario(false);
+    const memberId = await onlyMemberId(ownerId);
+
+    const { id: absenceId } = await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "SICKNESS",
+        startDate: "2026-08-11",
+        endDate: "2026-08-14",
+        isPlanned: false,
+      },
+    });
+
+    const [stored] = await db.select().from(absence).where(eq(absence.id, absenceId));
+    expect(stored.sprintId).toBeNull();
+
+    // The first sync lands and the owner finally has a sprint.
+    await db.insert(sprint).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: await projectIdOf(ownerId),
+      jiraSprintId: "42",
+      name: "Sprint 7",
+      state: "ACTIVE",
+      startDate: SPRINT_START,
+      endDate: SPRINT_END,
+      committedSp: 40,
+    });
+
+    await detectAnomalies({ db, ownerId, now: NOW1 });
+
+    const raised = await absencesOf(ownerId, "absence");
+    expect(raised).toHaveLength(1);
+    expect(raised[0].type).toBe("SPRINT_AT_RISK");
+    expect(raised[0].dedupKey).toBe(`SPRINT_AT_RISK:absence:${absenceId}`);
+    // Hand-derived, not lifted from engine output: NOW1 is Mon 10 Aug 12:00Z and
+    // the sprint runs to Thu 20 Aug, so the working days left are
+    // 10,11,12,13,14,17,18,19,20 = 9, of which the absence (Tue 11 → Fri 14)
+    // takes 11,12,13,14 = 4.
+    expect(raised[0].context).toMatchObject({
+      condition: "absence",
+      workingDaysLost: 4,
+      workingDaysLeft: 9,
+    });
+  });
+
+  it("raises risk in sprint N+1 for an absence stamped with sprint N", async () => {
+    // The D2 reversal itself. The absence is typed during sprint N — so it is
+    // stamped N — but its window runs past N's end into N+1, where it is still
+    // an unexpected loss of working days.
+    const { ownerId, sprintId: sprintN } = await newScenario();
+    const memberId = await onlyMemberId(ownerId);
+
+    const { id: absenceId } = await createAbsence({
+      db,
+      ownerId,
+      input: {
+        teamMemberId: memberId,
+        type: "SICKNESS",
+        startDate: "2026-08-18",
+        endDate: "2026-08-26",
+        isPlanned: false,
+      },
+    });
+
+    const [stored] = await db.select().from(absence).where(eq(absence.id, absenceId));
+    expect(stored.sprintId).toBe(sprintN);
+
+    // The rollover. N is CLOSED rather than deleted on purpose:
+    // `absence.sprint_id` is ON DELETE CASCADE, so deleting N would take the
+    // absence with it and the test would prove nothing.
+    await db.update(sprint).set({ state: "CLOSED" }).where(eq(sprint.id, sprintN));
+    const nextSprintId = randomUUID();
+    await db.insert(sprint).values({
+      id: nextSprintId,
+      ownerId,
+      jiraProjectId: await projectIdOf(ownerId),
+      jiraSprintId: "43",
+      name: "Sprint 8",
+      state: "ACTIVE",
+      startDate: new Date("2026-08-21T08:00:00.000Z"),
+      endDate: new Date("2026-09-04T08:00:00.000Z"),
+      committedSp: 40,
+    });
+
+    const nowInNext = new Date("2026-08-24T12:00:00.000Z");
+    await detectAnomalies({ db, ownerId, now: nowInNext });
+
+    const raised = await absencesOf(ownerId, "absence");
+    expect(raised).toHaveLength(1);
+    expect(raised[0].dedupKey).toBe(`SPRINT_AT_RISK:absence:${absenceId}`);
+    // Attributed to N+1, the sprint being detected against — not to the sprint
+    // the row happens to be stamped with.
+    expect(raised[0].sprintId).toBe(nextSprintId);
+    // Hand-derived: `nowInNext` is Mon 24 Aug and N+1 runs to Fri 4 Sep, so the
+    // working days left are 24,25,26,27,28,31 + 1,2,3,4 Sep = 10, of which the
+    // absence (Tue 18 Aug → Wed 26 Aug, clipped at `now`) takes 24,25,26 = 3.
+    expect(raised[0].context).toMatchObject({
+      condition: "absence",
+      workingDaysLost: 3,
+      workingDaysLeft: 10,
+    });
   });
 
   it("never writes the absence type into the persisted anomaly row", async () => {

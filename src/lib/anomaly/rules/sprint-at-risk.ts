@@ -118,9 +118,22 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
 
   // --- 3. Unplanned mid-sprint absences (S-08, FR-010) ----------------------
   //
-  // Scoped to absences stamped with THIS sprint: one carried over from an earlier
-  // sprint was unplanned *there*, and by D2's definition is planned here — it
-  // must stop raising risk at the rollover rather than forever.
+  // Matched by DATES, like every other absence reader in this codebase
+  // (capacity.ts:164-176, developer-inactive.ts:47, absence-store.ts:103,263,
+  // load-snapshot.ts:90-99). It used to be scoped to `absence.sprint_id`
+  // instead — S-08's D2 rule, REVERSED 2026-08-30 (S-20) by the owner: risk
+  // follows the absence's dates into whichever sprint they fall in.
+  //
+  // D2 feared an absence that "keeps raising risk after the rollover, forever".
+  // It cannot: `overlaps(absence, now, endDate)` below stops firing the moment
+  // the absence ends, so the exposure is the one rollover the absence actually
+  // spans. `sprint_id` also records write-time provenance — which sprint was
+  // active when the lead typed the row — not membership, so comparing it
+  // answered a different question from the one asked here. A NULL stamp is
+  // unequal to every sprint id, which is why the old predicate silently
+  // dropped between-sprints absences in EVERY sprint (impl-review F10) —
+  // lessons.md, "a narrowing predicate turns 'wrong value' into 'empty
+  // result'". `is_planned` remains the surprise flag; only the scoping changed.
   if (endDate) {
     // The team-wide day-off calendar is passed here and below (S-23, FR-007): a
     // sprint ending across a public holiday has one fewer working day left, and
@@ -138,12 +151,6 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
       // Strict `false`, per the `scope-creep.ts` precedent — never a truthiness
       // check on a column that used to be nullable.
       if (absence.isPlanned !== false) continue;
-      // KNOWN GAP (impl-review F10): `createAbsence` stamps NULL when the owner
-      // has no active sprint, and nothing re-stamps it later — so an unplanned
-      // absence recorded BETWEEN sprints can never raise risk, not even once the
-      // sprint it falls inside starts. Re-stamping belongs with S-16 (sprint
-      // reconciliation), which is what would notice the rollover.
-      if (absence.sprintId !== snapshot.sprint.id) continue;
       if (!overlaps(absence, now, endDate)) continue;
 
       const member = snapshot.teamMembers.find((m) => m.id === absence.teamMemberId);
@@ -174,7 +181,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
         // Magnitude 0 still emits: a Sat–Sun sickness costs no working days, but
         // the lead still needs to know somebody is unexpectedly away. The risk
         // score simply reads 0. This is the deliberate opposite of suppressing.
-        description: `${name} is unexpectedly away for ${workingDaysLost} of the ${workingDaysLeft} working day(s) left in the sprint — the commitment did not account for it.`,
+        description: `${name} is unexpectedly away for ${workingDaysLost} of the ${workingDaysLeft} working day(s) left in the sprint.`,
         suggestedAction: suggestedAction.sprintAtRiskAbsence({
           name,
           lost: workingDaysLost,

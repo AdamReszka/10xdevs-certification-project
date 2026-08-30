@@ -246,9 +246,14 @@ describe("detectSprintAtRisk — unplanned absence (FR-010)", () => {
     expect(out).toEqual([]);
   });
 
-  it("stays silent for an absence stamped with an EARLIER sprint", () => {
-    // It was unplanned THERE, not here: by D2's own definition it is planned in
-    // this sprint, and would otherwise keep raising risk forever after rollover.
+  it("fires for an absence stamped with an EARLIER sprint", () => {
+    // The D2 reversal (S-20, 2026-08-30): `sprint_id` records which sprint was
+    // ACTIVE when the lead typed the row — provenance, not membership — so
+    // comparing it answered a different question. Risk now follows the
+    // absence's dates into whichever sprint they fall in. D2's "raises risk
+    // forever after the rollover" worry does not hold: `overlaps` stops firing
+    // the moment the absence ends, so the exposure is bounded by its own dates.
+    // Same window as the covering case above → the same 5 of 5 working days.
     const out = absenceOnly(
       detectSprintAtRisk(
         makeSnapshot({
@@ -260,7 +265,46 @@ describe("detectSprintAtRisk — unplanned absence (FR-010)", () => {
       ),
     );
 
-    expect(out).toEqual([]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      dedupKey: "SPRINT_AT_RISK:absence:absence-1",
+      relatedTeamMemberId: "member-1",
+      magnitude: 1,
+    });
+    expect(out[0].context).toMatchObject({
+      condition: "absence",
+      workingDaysLost: 5,
+      workingDaysLeft: 5,
+    });
+  });
+
+  it("fires for an absence with a NULL sprint stamp", () => {
+    // Closes impl-review F10. `createAbsence` stamps NULL when the owner has no
+    // active sprint — the first-run window before the first sync ingests one —
+    // and NULL is unequal to every sprint id, so the old predicate dropped such
+    // an absence in EVERY sprint, forever, and reported nothing.
+    const out = absenceOnly(
+      detectSprintAtRisk(
+        makeSnapshot({
+          teamMembers: [member],
+          absences: [makeAbsence({ isPlanned: false, sprintId: null })],
+        }),
+        effective,
+        NOW,
+      ),
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      dedupKey: "SPRINT_AT_RISK:absence:absence-1",
+      relatedTeamMemberId: "member-1",
+      magnitude: 1,
+    });
+    expect(out[0].context).toMatchObject({
+      condition: "absence",
+      workingDaysLost: 5,
+      workingDaysLeft: 5,
+    });
   });
 
   it("stays silent for an absence that ended before now", () => {
