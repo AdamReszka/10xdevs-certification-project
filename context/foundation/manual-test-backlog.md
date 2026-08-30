@@ -884,6 +884,15 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
 > przechodzą** (lokalny dev używa transportu konsolowego), ale żaden mail nie
 > wychodzi.
 
+> ⚠️ **Obserwacja produktowa 2026-08-30 — dni wolne.**
+> `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`. Wysyłka nie patrzy
+> w kalendarz (`due.ts` zna tylko `enabled` + godzinę), „wczorajsza aktywność" to
+> poprzedni dzień **kalendarzowy** (`build.ts:66`), więc poniedziałkowy mail
+> opisuje niedzielę i gubi piątek; a `DEVELOPER_INACTIVE` nie czyta
+> `nonWorkingDays`, choć `SPRINT_AT_RISK` i kubełek 21 SP już tak. **To nie jest
+> nieudany wiersz** — nikt tego nie uruchomił, hipoteza pochodzi z kodu. Do
+> potwierdzenia przy 5.15/5.16. Decyzja: właściciel.
+
 ### Osiągalne od razu — nie wymagają Resenda
 
 - [x] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
