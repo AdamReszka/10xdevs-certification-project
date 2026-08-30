@@ -768,14 +768,14 @@ fires.
 
 #### Automated
 
-- [ ] 1.1 The scratchpad snippet runs and prints a report; nothing new under `scripts/`
-- [ ] 1.2 The snippet refuses a non-local DSN
+- [x] 1.1 The scratchpad snippet runs and prints a report; nothing new under `scripts/`
+- [x] 1.2 The snippet refuses a non-local DSN
 
 #### Manual
 
-- [ ] 1.3 Baseline recorded for authenticated `GET /dashboard`
-- [ ] 1.4 Baseline recorded for an authenticated Server Action
-- [ ] 1.5 Both numbers written into the phase notes with concurrency and idle baseline
+- [x] 1.3 Baseline recorded for authenticated `GET /dashboard`
+- [x] 1.4 Baseline recorded for an authenticated Server Action
+- [x] 1.5 Both numbers written into the phase notes with concurrency and idle baseline
 
 ### Phase 2: Request-scoped identity for the `db` handle
 
