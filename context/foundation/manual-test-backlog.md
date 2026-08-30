@@ -1724,7 +1724,9 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
       przejdź cały kreator (GitHub → Jira → Zespół) i kliknij **„Save & finish"**.
       **Co musi być prawdą:** baner na **każdym z trzech** ekranów niesie przycisk
       „Dokończ konfigurację" obok „Wyjdź z demo"; przycisk prowadzi na `/setup`,
-      nie do Ustawień; po „Save & finish" jesteś na `/dashboard`, **banera demo
+      nie do Ustawień, i po drodze **wychodzi z trybu demo — baner znika, i tak ma
+      być** (kreator konfiguruje prawdziwe konto; demo zostaje i wrócisz do niego
+      z Ustawień → Demo); po „Save & finish" jesteś na `/dashboard`, **banera demo
       nie ma**, a dane pochodzą z właśnie podłączonej Jiry/GitHuba.
       *Dlaczego to łapie:* bez tego przycisku osoba, która wybrała demo, nie ma
       **żadnej** drogi z powrotem na próg. A bez wyjścia z demo na końcu kreatora

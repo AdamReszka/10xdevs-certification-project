@@ -121,6 +121,9 @@ z pętli, z której nie ma wyjścia.
 - W kroku 2 baner demo na **każdym z trzech** ekranów niesie przycisk
   „Dokończ konfigurację" obok „Wyjdź z demo".
 - Krok 3 przenosi na `/setup` (próg), a nie do Ustawień.
+- Krok 3 wychodzi z trybu demo i dopiero potem otwiera próg, więc **baner demo
+  znika** — to jest zamierzone, nie usterka. Kreator konfiguruje prawdziwe konto,
+  a demo zostaje zachowane (wrócisz do niego z Ustawień → Demo).
 - Po kroku 5 jesteś na `/dashboard`, **banera demo nie ma**, a dane na ekranie
   pochodzą z prawdziwej Jiry/GitHuba, które właśnie podłączyłeś — nie z demo.
 
