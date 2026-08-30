@@ -14,6 +14,29 @@ npm run build   # production build
 npm run lint    # ESLint flat config (eslint.config.mjs); no --fix flag exposed
 ```
 
+## Parallel worktrees (a second Claude session on this repo)
+
+**Before starting, or choosing work for, a session in a git worktree, read
+@context/foundation/parallel-worktrees.md.** A worktree isolates files; it does
+NOT isolate the things that actually break — all worktrees share ONE local
+Postgres (`supabase/config.toml` pins `project_id`), port 3000, and the
+Playwright fixture ports 3098/3099.
+
+The three rules that cost the most if broken, in a parallel worktree:
+
+- **No migrations** (`db:migrate` writes to the shared database).
+- **No `test:integration` and no `test:e2e`** in two worktrees at once —
+  `reuseExistingServer` will silently attach the suite to the other worktree's
+  dev server, and `playwright.config.ts` pins `workers: 1` for the S-21
+  connection leak.
+- **`npm ci` first.** `node_modules` is gitignored and 1.2 GB; the `PostToolUse`
+  hooks run `npx eslint` and `npx vitest` after every edit and stall without it.
+
+`.worktreeinclude` carries `.env`, `.env.local` and the gitignored
+`.claude/skills/10x-*` (without which `/10x-plan`, `/10x-implement` etc. do not
+exist in the worktree). `.claude/settings.local.json` is read from the MAIN
+checkout — do not copy it.
+
 ## Architecture
 
 - **Next.js 16.2.6 App Router** — use server components by default; do not use Pages Router
