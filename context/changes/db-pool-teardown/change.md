@@ -1,7 +1,7 @@
 ---
 change_id: db-pool-teardown
 title: Close the request-scoped pg.Pool at request end (fix per-invocation connection leak)
-status: new
+status: preparing
 created: 2026-08-19
 updated: 2026-08-30
 archived_at: null
