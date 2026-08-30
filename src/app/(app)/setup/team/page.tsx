@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { and, eq } from "drizzle-orm";
 
@@ -20,11 +21,19 @@ import type { Weekday } from "@/lib/validations/roster";
  */
 export default async function TeamSetupPage() {
   const { ownerId } = await requireRealWorkspace();
-  // The wizard itself stays real (`requireRealWorkspace` above); this reads only
-  // WHICH workspace is active, so the last step can leave demo behind when it
-  // finishes. `resolveWorkspace` is `cache()`d and the `(app)` layout has
-  // already called it this render, so it costs no extra query and no extra pool.
+  // CLOSED IN DEMO (S-27). The wizard configures the REAL account, so no screen
+  // rendered while the lead is viewing demo may host a connect form. The five
+  // `/setup` and `/settings/connections` actions behind these pages refuse
+  // server-side; this redirect is what stops the form from being offered.
+  // `/setup` itself is deliberately NOT guarded — its demo door is how a visitor
+  // re-enters, and the banner sends the un-onboarded lead there — which is why
+  // this is a per-page guard and not a `setup/layout.tsx`.
+  //
+  // `isDemo` is therefore always false below; it is still threaded to the child
+  // rather than hard-coded, so the child keeps one contract with its
+  // demo-aware siblings and the guard stays the single place demo is decided.
   const { isDemo } = await resolveWorkspace();
+  if (isDemo) redirect("/setup");
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { eq } from "drizzle-orm";
 import { ArrowLeft } from "lucide-react";
@@ -6,7 +7,7 @@ import { ArrowLeft } from "lucide-react";
 import JiraConnectForm from "@/components/organisms/setup/jira-connect-form";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { jiraCredential } from "@/db/schema";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
@@ -18,9 +19,15 @@ import { getDb } from "@/lib/db";
  *
  * The form's own three stages (credentials → project → status mapping) are
  * intact; those are Jira's connect flow, not the wizard's step sequence.
+ *
+ * CLOSED IN DEMO (S-27), for the same reason as its GitHub sibling — see that
+ * file's header. The store action refuses server-side; this redirect is what
+ * stops the form from being offered at all.
  */
 export default async function SettingsConnectJiraPage() {
   const { ownerId } = await requireRealWorkspace();
+  const { isDemo } = await resolveWorkspace();
+  if (isDemo) redirect("/settings/connections");
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { ConfigureDoor } from "@/components/organisms/setup/setup-doorstep-view";
-import { loadDemoAction } from "@/app/(app)/settings/demo/actions";
+import { exitDemoAction, loadDemoAction } from "@/app/(app)/settings/demo/actions";
 
 /**
  * The first-run doorstep (`onboarding-routing` Phase 1, FR-008 / US-02).
@@ -26,7 +26,7 @@ import { loadDemoAction } from "@/app/(app)/settings/demo/actions";
  * wizard's PAT + token wall. So the wizard's first screen is a doorstep with two
  * doors, and both promises hold.
  *
- * `loadDemoAction` is IMPORTED rather than threaded as a prop. The house has two
+ * The demo actions are IMPORTED rather than threaded as props. The house has two
  * conventions: `demo-panel.tsx` takes its actions as props because the settings
  * page already threads other state through it, while `demo-banner.tsx` imports
  * directly because a server layout renders it bare. This is the second shape —
@@ -35,11 +35,47 @@ import { loadDemoAction } from "@/app/(app)/settings/demo/actions";
  * Which doors are offered, and where the configure door points, is decided by
  * `setup-doorstep-view.ts`; there is no component-test harness here, so that
  * decision is asserted as a pure function and this file only renders it.
+ *
+ * BOTH DOORS ARE BUTTONS, not links (S-27). The configure door used to be a bare
+ * `<a href>`, which stopped working the moment the three wizard step pages began
+ * redirecting in demo: a visitor who took the demo door and came back would press
+ * "Podłącz GitHuba" and land straight back here with no explanation. It now
+ * leaves demo first and navigates second — see `handleConfigure`.
  */
 export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [configuring, startConfiguring] = useTransition();
   const [failure, setFailure] = useState<string | null>(null);
+
+  /**
+   * Leave demo, THEN open the wizard — never the other way round.
+   *
+   * Verbatim the ordering `demo-banner.tsx`'s "Dokończ konfigurację" uses, and
+   * for the same two reasons. `/setup/team`'s save actions resolve their owner
+   * with `resolveWorkspace()` on purpose (the same organisms are mounted by
+   * `/settings/team`), so walking into the wizard while still in DEMO would save
+   * the roster under the demo owner. And since S-27 the three step pages
+   * redirect back to `/setup` in demo, so without the exit this door is a silent
+   * loop — which is exactly the return path FR-008's Socratic note requires to
+   * keep working ("otherwise the doorstep is a screen the visitor can never
+   * return to").
+   *
+   * In REAL the exit is a no-op `UPDATE`, so one path serves both modes and the
+   * door needs no `isDemo` prop.
+   */
+  function handleConfigure() {
+    setFailure(null);
+    startConfiguring(async () => {
+      const result = await exitDemoAction();
+      if (!result.ok) {
+        setFailure(result.message);
+        return;
+      }
+      router.push(door.href);
+      router.refresh();
+    });
+  }
 
   function handleLoadDemo() {
     setFailure(null);
@@ -77,8 +113,11 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
             </ul>
             <p className="text-sm text-muted-foreground">{door.detail}</p>
             <div className="mt-auto">
-              <Button asChild>
-                <a href={door.href}>{door.label}</a>
+              <Button onClick={handleConfigure} disabled={configuring || pending}>
+                {configuring ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : null}
+                {door.label}
               </Button>
             </div>
           </CardContent>
@@ -99,7 +138,11 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
               każdej chwili.
             </p>
             <div className="mt-auto">
-              <Button variant="outline" onClick={handleLoadDemo} disabled={pending}>
+              <Button
+                variant="outline"
+                onClick={handleLoadDemo}
+                disabled={pending || configuring}
+              >
                 {pending ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : null}
@@ -112,7 +155,7 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
 
       {failure ? (
         <Alert variant="destructive">
-          <AlertTitle>Nie udało się wczytać demo</AlertTitle>
+          <AlertTitle>Nie udało się otworzyć tej drogi</AlertTitle>
           <AlertDescription>{failure}</AlertDescription>
         </Alert>
       ) : null}

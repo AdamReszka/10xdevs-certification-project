@@ -696,10 +696,10 @@ main checkout.
 
 #### Automated
 
-- [x] 1.1 Lint passes
-- [x] 1.2 Type checking passes
-- [x] 1.3 Unit tests pass, including the extended demo suites
-- [x] 1.4 Each of the five actions refuses in demo and reaches the service when not in demo
+- [x] 1.1 Lint passes — 338ae0d
+- [x] 1.2 Type checking passes — 338ae0d
+- [x] 1.3 Unit tests pass, including the extended demo suites — 338ae0d
+- [x] 1.4 Each of the five actions refuses in demo and reaches the service when not in demo — 338ae0d
 
 #### Manual
 
@@ -709,9 +709,9 @@ main checkout.
 
 #### Automated
 
-- [ ] 2.1 Lint + typecheck pass
-- [ ] 2.2 Unit tests pass
-- [ ] 2.3 E2E passes
+- [x] 2.1 Lint + typecheck pass
+- [x] 2.2 Unit tests pass
+- [x] 2.3 E2E passes
 
 #### Manual
 

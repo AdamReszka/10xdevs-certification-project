@@ -34,7 +34,7 @@ export default async function ConnectionsSettingsPage() {
   // mutate or spend the real account from a demo screen.
   //
   // "The server refuses them too" is TRUE as of S-24, and was not when this
-  // comment was first written. All nine actions on this tab now return
+  // comment was first written. All nine actions on this tab return
   // `demoRefusal()` / `DEMO_REFUSAL_MESSAGE` before touching anything:
   // `disconnectGithub` and `disconnectJira` (`setup/{github,jira}/actions.ts`),
   // and `testGithubConnection`, `testJiraConnection`, `loadAvailableRepos`,
@@ -42,6 +42,13 @@ export default async function ConnectionsSettingsPage() {
   // `updateJiraProject` (`settings/connections/actions.ts`). Each is asserted by
   // a `*.demo.test.ts` sibling — the disabled attribute is the courtesy, those
   // are the boundary.
+  //
+  // S-27 closes the tenth and eleventh: the CONNECT and RECONNECT controls on
+  // both cards, which are links into `/settings/connections/{github,jira}`.
+  // Those routes now redirect back here in demo, and the two store actions
+  // behind them (`storeGithubIntegration`, `storeJiraIntegration`) refuse like
+  // the rest. The card renders both triggers as disabled buttons rather than as
+  // links, because an `<a>` ignores `disabled`.
   const { ownerId } = await requireRealWorkspace();
   const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
