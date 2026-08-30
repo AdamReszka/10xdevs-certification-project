@@ -715,13 +715,13 @@ every tester who had visited an old path once.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `npm run typecheck` — f2e78a6
-- [x] 1.2 Linting passes: `npm run lint` — f2e78a6
-- [x] 1.3 Unit tests pass: `npm test` — f2e78a6
-- [x] 1.4 Production build succeeds: `npm run build` — f2e78a6
-- [x] 1.5 No live href, import or log tag names the old paths (the two precise greps return nothing) — f2e78a6
-- [x] 1.6 Integration tests pass: `npm run test:integration` (coordinate with the S-26 session first) — f2e78a6
-- [x] 1.7 Doorstep spec passes with Team in its nav list: `npx playwright test e2e/setup-doorstep.spec.ts` — f2e78a6
+- [x] 1.1 Type checking passes: `npm run typecheck` — 60079c3
+- [x] 1.2 Linting passes: `npm run lint` — 60079c3
+- [x] 1.3 Unit tests pass: `npm test` — 60079c3
+- [x] 1.4 Production build succeeds: `npm run build` — 60079c3
+- [x] 1.5 No live href, import or log tag names the old paths (the two precise greps return nothing) — 60079c3
+- [x] 1.6 Integration tests pass: `npm run test:integration` (coordinate with the S-26 session first) — 60079c3
+- [x] 1.7 Doorstep spec passes with Team in its nav list: `npx playwright test e2e/setup-doorstep.spec.ts` — 60079c3
 
 #### Manual
 
@@ -734,10 +734,10 @@ every tester who had visited an old path once.
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npm run typecheck` — 6c88749
-- [x] 2.2 Linting passes: `npm run lint` — 6c88749
-- [x] 2.3 Unit tests pass: `npm test`, including the two untouched pure-view tests — 6c88749
-- [x] 2.4 Production build succeeds: `npm run build` — 6c88749
+- [x] 2.1 Type checking passes: `npm run typecheck` — a0dbd63
+- [x] 2.2 Linting passes: `npm run lint` — a0dbd63
+- [x] 2.3 Unit tests pass: `npm test`, including the two untouched pure-view tests — a0dbd63
+- [x] 2.4 Production build succeeds: `npm run build` — a0dbd63
 
 #### Manual
 
