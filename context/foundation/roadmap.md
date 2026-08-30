@@ -53,7 +53,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
-| S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04         | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | proposed |
+| S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | proposed |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 
 ## Streams
@@ -562,7 +562,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
 | S-20       | absence-sprint-scoping    | The three consumers of an absence agree which sprint it belongs to      | yes                    | Prereqs S-08, S-16 done. Decision slice, not a filter fix |
 | S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
-| S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04 done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers |
+| S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04, S-07, S-09, S-10 all done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers. **Prerequisites widened 2026-08-30** — S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on; see the S-22 body |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
 
 ## Open Roadmap Questions
@@ -720,8 +720,27 @@ Foundations below assume these are present and do NOT re-scaffold them.
   reachable only by typing the URL.
 - **Change ID:** onboarding-routing
 - **PRD refs:** Access Control — *"Sign-up: on success, the user lands in the setup wizard."*; FR-008 / US-02 (the demo door)
-- **Prerequisites:** S-01, S-04
+- **Prerequisites:** S-01, S-04, S-07, S-09, S-10
 - **Status:** proposed
+
+- **Why the prerequisite list is five, not two (widened 2026-08-30, after the
+  slice was built).** It read `S-01, S-04` from the day the folder was opened —
+  2026-08-19, when `/dashboard` was a 22-line placeholder and demo mode did not
+  exist. Three slices landed underneath it in the ten days that followed, and each
+  one is load-bearing rather than incidental:
+  - **S-01** account-auth-flow — there is no first run without sign-up.
+  - **S-04** setup-team-roster-cadence — defines `isOnboardingComplete`, the
+    predicate this slice is the first to consume.
+  - **S-07** dashboard-today / **S-10** dashboard-sprint-detail — they own the
+    surface the gate protects. The original note said "empty dashboard"; against
+    the real 254-line surface the symptom is a dashboard full of ZEROS, which is
+    what turns this slice from a nicety into a first-impression fix. Nothing to
+    gate before S-07.
+  - **S-09** demo-mode — the whole "must not fire in demo" rule exists only
+    because of it, and the rule is not defensive: demo is modelled as tenancy, and
+    the demo fixture satisfies **all six** of the predicate's conditions under the
+    DEMO owner. Without S-09 there is no second door for the doorstep to offer
+    either — the slice would collapse back into the redirect the frame rejected.
 
 - **Two doors, not a redirect — this is the shape decision.** The original
   prescription here was "post-sign-up routing plus a prompt on the dashboard
