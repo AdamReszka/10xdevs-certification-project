@@ -59,7 +59,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
-| S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | proposed |
+| S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | active |
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
 
 ## Streams
@@ -574,7 +574,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | done                   | ✅ Implemented 2026-08-30, five phases. **Raised by the tester** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`) and **reframed at `/10x-frame`:** the finding is not prominence — the three surfaces were in three different states of absence, and Today had no identity element to restyle at all. What ships is one fact (`PT Sprint 1 · 30.08 – 12.09`) computed once in a pure `src/lib/sprint-identity.ts` and rendered by one shared `molecules/sprint-identity-bar.tsx` on the cadence step, both dashboards and the Daily Recap. Two identity-fabricating fallbacks are gone (`?? "the active sprint"`, `?? "your sprint"`). Dates render in the team's Jira zone, correcting this entry's own UTC instruction (see the S-25 detail block). The wizard also stops hand-rolling its own `state = 'ACTIVE'` query, so it and Today can no longer disagree about which sprint exists |
 | S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | yes | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Unblocked 2026-08-30 by S-20**, which settled `absence.sprint_id` as write-only provenance with no reader — so the referential action is now S-26's to choose on its own merits. Scope may shrink or grow with Open Roadmap Question 4 |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
-| S-28       | working-day-aging         | Anomaly aging respects the team's working-day calendar | yes | **Raised by the owner, confirmed at `/10x-frame team-navigation-section` (2026-08-30)** with file:line evidence in that slice's `frame.md`. `countWorkingDays`/`countWorkingDaysInclusive` (`helpers.ts:96-117`) already exist, are tested, and take `workingDays` + time zone + `nonWorkingDays` — and are read by **3 of ~9** elapsed-time measurements. Wall-clock everywhere else: `ticket-status-aging.ts:77,83`, `pr-review-stalled.ts:31`, `developer-inactive.ts:31`, `ticket-no-commit-link.ts:28,36`, `sprint-at-risk.ts:88`. A 3 SP ticket moved to In Progress Friday 16:00 fires on Sunday 16:00 — into the Monday morning-sync inbox FR-016 calls the headline surface. The principle is already written in the codebase and applied to one of five branches of the same function (`ticket-status-aging.ts:62-66`). **No prior decision exists** that wall-clock aging is deliberate; the only recorded working-day discussion is the frozen 21-SP sentinel (`anomaly-settings-page/research.md:152-154`). Neighbouring open report: `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`. Not settled here and left to planning: WHICH rules become working-day-aware, and whether thresholds need recalibrating once they are. Watch three things a plan can trip on — the threshold model in `src/db/defaults.ts` and `/settings/anomalies` (a bucket is hours OR a sentinel, and "10 working days" is currently inexpressible), the demo fixture's **frozen clock**, and `stryker.conf.json` (`break: 70`, scoped to these rules) |
+| S-28       | working-day-aging         | Anomaly aging respects the team's working-day calendar | yes | **Raised by the owner, confirmed at `/10x-frame team-navigation-section` (2026-08-30)** with file:line evidence in that slice's `frame.md`. `countWorkingDays`/`countWorkingDaysInclusive` (`helpers.ts:96-117`) already exist, are tested, and take `workingDays` + time zone + `nonWorkingDays` — and are read by **3 of ~9** elapsed-time measurements. Wall-clock everywhere else: `ticket-status-aging.ts:77,83`, `pr-review-stalled.ts:31`, `developer-inactive.ts:31`, `ticket-no-commit-link.ts:28,36`, `sprint-at-risk.ts:88`. A 3 SP ticket moved to In Progress Friday 16:00 fires on Sunday 16:00 — into the Monday morning-sync inbox FR-016 calls the headline surface. The principle is already written in the codebase and applied to one of five branches of the same function (`ticket-status-aging.ts:62-66`). **No prior decision exists** that wall-clock aging is deliberate; the only recorded working-day discussion is the frozen 21-SP sentinel (`anomaly-settings-page/research.md:152-154`). Neighbouring open report: `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`. **Settled at planning (2026-08-30):** ALL five elapsed-time rules become working-time-aware, denominated in WORKING HOURS (08:00–16:00 in the team's zone, only on the sprint's working days, never on a company day off; an individual absence does not pause the clock). Every threshold keeps its unit name and is recalibrated to the intent it shipped with (24 h meant "a day", and a day is 8 working hours), so the `"8_WORKING_DAYS"` sentinel dissolves into the ordinary number 64 and S-14's parked "10 working days is inexpressible" problem stops existing; PRD FR-009 is amended in the same slice. One correction to the watch-list above: the demo fixture has **no frozen clock** — `buildDemoFixture` is anchor-relative (`fixture.ts:135-139`) and the anchor is real wall-clock time at load (`load.ts:71,91,130`), so the actual hazard is that US-02's four-anomaly-types criterion now depends on which weekday the demo was loaded on. `stryker.conf.json` (`break: 70`, scoped to these rules) still applies |
 | S-29       | post-setup-cadence-surface | Sprint cadence editable after setup, outside the wizard | yes | The leftover deferred three times, each time as substantive scope: owner at S-15 (`plan-brief.md:55` "Cadence on the tab \| Roster only"), declined at S-22 (`onboarding-routing/plan.md:387-390` "a separate slice"), parked at S-16 as out-of-scope item F (`change.md:127-128` → "S-19 / S-15"). Split out of S-19 on 2026-08-30 because S-19's own text never described it. FR-007 promises the override with **no surface condition** — so it is met formally (in the wizard) and not practically. The write path is safe (`reconcile-sprint.ts:259-261` preserves an override; `:216-225` carries it across rollover, pinned by three integration tests), and re-entering `/setup/team` is neutral for an onboarded lead (no auto-write, no Jira call). Carries one defect found at frame time: between sprints `saveCadence`'s UPDATE is scoped to `state = 'ACTIVE'` (`roster-store.ts:1003`) while the form pre-fills from a CLOSED row via `sprint.ts:34-42` — 0 rows update and the action still returns `{ok:true}`. Worth more **after S-28**, which makes `working_days` matter far beyond capacity |
 
 ## Open Roadmap Questions
@@ -1237,7 +1237,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** working-day-aging
 - **PRD refs:** FR-009, FR-013, FR-016
 - **Prerequisites:** S-06, S-14, S-23
-- **Status:** proposed
+- **Status:** active
 
 - **Why this exists (owner, 2026-08-30, confirmed at `/10x-frame team-navigation-section`):**
   the owner reported that the mechanism counts Saturdays and Sundays as working
@@ -1264,13 +1264,30 @@ Foundations below assume these are present and do NOT re-scaffold them.
   is the frozen 21-SP sentinel (`anomaly-settings-page/research.md:152-154`).
   PRD FR-009 itself mixes units ("1/2 SP=24h … 21 SP=8 working days") without
   ever saying how a weekend is treated — expect the FR to need an amendment.
-- **Left to planning, deliberately:** WHICH rules become working-day-aware, and
-  whether their thresholds need recalibrating once they are (a 24 h budget that
-  skips weekends is a different promise from the one the defaults were tuned
-  against). Three places a plan can trip: the threshold model in
-  `src/db/defaults.ts` + `/settings/anomalies`, where a bucket is hours OR a
-  sentinel and "10 working days" is inexpressible; the demo fixture's **frozen
-  clock**; and `stryker.conf.json` (`break: 70`), scoped to exactly these rules.
+- **Settled at planning (2026-08-30, `context/changes/working-day-aging/plan.md`):**
+  ALL five elapsed-time rules become working-time-aware — `PR_REVIEW_STALLED`,
+  all five branches of `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`,
+  `TICKET_NO_COMMIT_LINK` and `SPRINT_AT_RISK`'s ToDo-near-end condition. The
+  unit is the **working hour**, not the working day: the clock runs 08:00–16:00
+  in the team's zone, only on the sprint's working days, and never on a company
+  day off; an individual absence does NOT pause it, because the sprint is the
+  team's and the inbox is an alert for the lead rather than a device pointed at a
+  person. 08:00–16:00 is a hard-coded average and not a config surface — Jira
+  exposes no working-hours field, and at these budget sizes an hour either side
+  cannot change which day an anomaly lands on. Every threshold keeps its unit
+  name and is recalibrated to the intent it shipped with (24 h meant "a day", and
+  a day is 8 working hours), so the `"8_WORKING_DAYS"` sentinel dissolves into
+  the ordinary number 64 and S-14's parked "10 working days is inexpressible"
+  problem stops existing. PRD FR-009 is amended in the same slice.
+- **One correction to the watch-list.** The demo fixture has **no frozen clock**
+  — research (2026-08-30) found `buildDemoFixture` anchor-relative
+  (`fixture.ts:135-139`), with the anchor set to real wall-clock time at load and
+  stored as `user.demo_anchor_at` (`load.ts:71,91,130`). The real hazard is the
+  opposite one: under working-hour math, whether the demo still shows four
+  distinct anomaly types — US-02's acceptance criterion — starts depending on
+  which weekday the visitor pressed the button, and `fixture.ts` has no test.
+  `stryker.conf.json` (`break: 70`), scoped to exactly these rules, still
+  applies.
 - **Neighbouring open report:** `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`
   — the Daily Recap knows neither weekends nor company days off. Same class, a
   different layer; worth reading before scoping.

@@ -35,6 +35,7 @@ import {
   RULE_DESCRIPTORS,
   SAVE_HINT,
   SEVERITY_HINT,
+  WORKING_TIME_HINT,
   defaultFormValues,
   equalsDefaults,
   readField,
@@ -69,6 +70,7 @@ export default function AnomalyRulesEditor({ rules }: { rules: AnomalyRuleState[
 
   return (
     <div className="flex flex-col gap-4">
+      <p className="text-sm text-muted-foreground">{WORKING_TIME_HINT}</p>
       <p className="text-sm text-muted-foreground">{SAVE_HINT}</p>
 
       {RULE_DESCRIPTORS.map((descriptor) => {
@@ -272,8 +274,9 @@ function StoryPointBudgets({
       <div className="flex flex-col gap-1">
         <p className="text-sm font-medium">In Progress budget by story points</p>
         <p className="text-sm text-muted-foreground">
-          How long a ticket of each size may sit In Progress before it counts as
-          ageing. A ticket with no estimate is skipped entirely.
+          How many working hours a ticket of each size may sit In Progress before
+          it counts as ageing — eight to the working day. A ticket with no
+          estimate is skipped entirely.
         </p>
       </div>
 
@@ -293,7 +296,9 @@ function StoryPointBudgets({
                   valueAsNumber: true,
                 })}
               />
-              <span className="text-sm text-muted-foreground whitespace-nowrap">h</span>
+              <span className="text-sm text-muted-foreground whitespace-nowrap">
+                working hours
+              </span>
             </div>
           </div>
         ))}

@@ -20,10 +20,10 @@ export const suggestedAction = {
     `Unblock ${p.key} — it has sat in ${p.label ?? CATEGORY_LABEL[p.category] ?? p.category} past the team's aging threshold.`,
 
   developerInactive: (p: { name: string; days: number }) =>
-    `Check in with ${p.name} — an active ticket with no commits in ${p.days}d.`,
+    `Check in with ${p.name} — an active ticket with no commits in ${p.days} working days.`,
 
   ticketNoCommitLink: (p: { key: string; days: number }) =>
-    `Confirm work on ${p.key} — In Progress ${p.days}d with no linked commit.`,
+    `Confirm work on ${p.key} — In Progress ${p.days} working days with no linked commit.`,
 
   sprintAtRiskParallel: (p: { name: string; count: number; label: string; limit: number }) =>
     `Rebalance ${p.label} work — ${p.name} holds ${p.count} in parallel (guideline ${p.limit}).`,

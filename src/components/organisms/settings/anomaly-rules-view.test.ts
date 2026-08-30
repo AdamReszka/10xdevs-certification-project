@@ -9,6 +9,7 @@ import {
 
 import {
   RULE_DESCRIPTORS,
+  WORKING_TIME_HINT,
   defaultFormValues,
   equalsDefaults,
   readField,
@@ -61,6 +62,37 @@ describe("RULE_DESCRIPTORS", () => {
         expect(declared.has(key), `${descriptor.anomalyType}.${key}`).toBe(true);
       }
     }
+  });
+
+  it("names WORKING time on every elapsed-time unit (S-28)", () => {
+    // The only thing pinning this copy. Since S-28 no budget on this page is a
+    // wall-clock span, so a unit reading "hours" or "days" would not fail — it
+    // would quietly tell the lead the number means something it does not.
+    const elapsed = [
+      ["PR_REVIEW_STALLED", "hours"],
+      ["TICKET_STATUS_AGING", "codeReviewHours"],
+      ["TICKET_STATUS_AGING", "testingHours"],
+      ["DEVELOPER_INACTIVE", "noCommitDays"],
+      ["TICKET_NO_COMMIT_LINK", "noCommitDays"],
+      ["SPRINT_AT_RISK", "toDoBeforeSprintEndLeadTimeHours"],
+    ] as const;
+
+    for (const [type, path] of elapsed) {
+      const field = RULE_DESCRIPTORS.find((d) => d.anomalyType === type)?.fields.find(
+        (f) => f.path === path,
+      );
+      expect(field, `${type}.${path}`).toBeDefined();
+      expect(field?.unit, `${type}.${path}`).toMatch(/^working (hours|days)\b/);
+    }
+  });
+
+  it("states where the clock runs, since nothing on screen otherwise would", () => {
+    // The three things that stop it, and the one that deliberately does not.
+    expect(WORKING_TIME_HINT).toContain("08:00");
+    expect(WORKING_TIME_HINT).toContain("16:00");
+    expect(WORKING_TIME_HINT).toContain("working days");
+    expect(WORKING_TIME_HINT).toContain("company day off");
+    expect(WORKING_TIME_HINT).toMatch(/absence does not pause/);
   });
 
   it("gives PR_TICKET_DESYNC no numeric fields", () => {

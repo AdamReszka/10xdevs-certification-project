@@ -810,11 +810,11 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [x] 3.1 Type checking passes
-- [x] 3.2 Linting passes
-- [x] 3.3 Unit tests pass
-- [x] 3.4 Mutation gate holds
-- [x] 3.5 `grep -rn "MS_PER_DAY" src/lib/anomaly/rules/` shows no window arithmetic in these two files
+- [x] 3.1 Type checking passes — 09104dc
+- [x] 3.2 Linting passes — 09104dc
+- [x] 3.3 Unit tests pass — 09104dc
+- [x] 3.4 Mutation gate holds — 09104dc
+- [x] 3.5 `grep -rn "MS_PER_DAY" src/lib/anomaly/rules/` shows no window arithmetic in these two files — 09104dc
 
 #### Manual
 
@@ -824,10 +824,10 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [ ] 4.1 Type checking passes
-- [ ] 4.2 Linting passes
-- [ ] 4.3 Unit tests pass
-- [ ] 4.4 `grep -rn "SP21_CHOICES" src/` returns nothing
+- [x] 4.1 Type checking passes
+- [x] 4.2 Linting passes
+- [x] 4.3 Unit tests pass
+- [x] 4.4 `grep -rn "SP21_CHOICES" src/` returns nothing
 
 #### Manual
 
