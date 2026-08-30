@@ -812,10 +812,10 @@ commit.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass: `npm test`
-- [x] 2.2 Type checking passes: `npm run typecheck`
-- [x] 2.3 Linting passes: `npm run lint`
-- [x] 2.4 E2E passes, including the four repaired hooks and the new cancel test: `npm run test:e2e`
+- [x] 2.1 Unit tests pass: `npm test` — b2f750c
+- [x] 2.2 Type checking passes: `npm run typecheck` — b2f750c
+- [x] 2.3 Linting passes: `npm run lint` — b2f750c
+- [x] 2.4 E2E passes, including the four repaired hooks and the new cancel test: `npm run test:e2e` — b2f750c
 
 #### Manual
 
@@ -826,11 +826,11 @@ commit.
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass, including the new demo refusals: `npm test`
-- [ ] 3.2 Type checking passes: `npm run typecheck`
-- [ ] 3.3 Linting passes: `npm run lint`
-- [ ] 3.4 Integration tests pass: `npm run test:integration`
-- [ ] 3.5 E2E passes: `npm run test:e2e`
+- [x] 3.1 Unit tests pass, including the new demo refusals: `npm test`
+- [x] 3.2 Type checking passes: `npm run typecheck`
+- [x] 3.3 Linting passes: `npm run lint`
+- [x] 3.4 Integration tests pass: `npm run test:integration`
+- [x] 3.5 E2E passes: `npm run test:e2e`
 
 #### Manual
 

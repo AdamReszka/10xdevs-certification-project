@@ -74,7 +74,18 @@ type StoreEnv = {
  */
 export type ConnectionTestResult =
   | { ok: true; identity: string }
-  | { ok: false; reason: "not_connected" | "credential_unreadable" | "auth" | "unavailable" };
+  | {
+      ok: false;
+      reason:
+        | "not_connected"
+        | "credential_unreadable"
+        | "auth"
+        | "unavailable"
+        // S-24: refused before the credential was ever decrypted, because the
+        // account is viewing demo. A demo screen must not spend the real
+        // account's rate limit; the action never reaches this service.
+        | "demo_mode";
+    };
 
 export async function testGithubConnection({
   db,

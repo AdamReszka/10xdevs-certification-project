@@ -2,7 +2,12 @@
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
+import {
+  demoRefusal,
+  DEMO_REFUSAL_ERROR,
+  type DemoRefusal,
+} from "@/lib/demo/refusal";
 import { getDb } from "@/lib/db";
 import {
   disconnectJira as disconnectJiraService,
@@ -37,6 +42,12 @@ import {
  */
 
 /** Project shape handed to the client project-picker. */
+/**
+ * What `disconnectJira` returns. Widened from `{ ok: true }` for the same reason
+ * as the GitHub side — see `setup/github/actions.ts`.
+ */
+export type DisconnectResult = { ok: true } | DemoRefusal;
+
 export type ClientProject = { id: string; key: string; name: string };
 
 /** Status shape handed to the client status-mapper, with the auto-suggest seed. */
@@ -252,9 +263,17 @@ export async function storeJiraIntegration(
  * detected anomalies AND the lead's hand-entered absences go with the
  * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
  * blast radius; every caller must confirm first (S-24).
+ *
+ * REFUSES IN DEMO, for the same reason as `disconnectGithub` — and with more at
+ * stake here, since the Jira cascade takes the lead's hand-entered absences.
  */
-export async function disconnectJira(): Promise<{ ok: true }> {
-  const { ownerId } = await requireRealWorkspace();
+export async function disconnectJira(): Promise<DisconnectResult> {
+  const [{ ownerId }, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<typeof DEMO_REFUSAL_ERROR>();
+
   const { env } = getCloudflareContext();
   const db = getDb(env);
 

@@ -20,6 +20,18 @@ export const DEMO_REFUSAL_MESSAGE =
   "To działanie jest wyłączone w trybie demonstracyjnym — dane demo nie łączą " +
   "się z Jirą, GitHubem ani pocztą. Wyjdź z demo, aby użyć swojego konta.";
 
+/**
+ * The refusal as a TYPE, for actions whose success branch carries no `error`
+ * discriminant of its own and therefore has nothing to widen (S-24's two
+ * disconnect actions). Actions with an existing failure union keep using
+ * `demoRefusal<TheirErrorType>()` and add `"demo_mode"` to it instead.
+ */
+export type DemoRefusal = {
+  ok: false;
+  error: typeof DEMO_REFUSAL_ERROR;
+  message: string;
+};
+
 /** The refusal, shaped to whatever failure type the calling action declares. */
 export function demoRefusal<E extends string>(): {
   ok: false;

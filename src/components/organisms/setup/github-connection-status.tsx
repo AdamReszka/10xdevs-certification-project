@@ -33,10 +33,15 @@ export default function GithubConnectionStatus({
   login,
   tokenLast4,
   repoCount,
+  isDemo = false,
 }: {
   login: string | null;
   tokenLast4: string | null;
   repoCount: number;
+  /** S-24: the account is viewing demo. The card still shows the REAL
+   *  integration, but Disconnect would destroy real data from a demo screen, so
+   *  it is disabled with a reason — and the Server Action refuses regardless. */
+  isDemo?: boolean;
 }) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -45,7 +50,14 @@ export default function GithubConnectionStatus({
   async function handleDisconnect() {
     setIsDisconnecting(true);
     try {
-      await disconnectGithub();
+      // The refusal is RETURNED, not thrown, so without this branch a demo
+      // refusal would render as `toast.success` below.
+      const result = await disconnectGithub();
+      if (!result.ok) {
+        toast.error(result.message);
+        setIsDisconnecting(false);
+        return;
+      }
       toast.success("GitHub disconnected.");
       router.refresh();
     } catch {
@@ -83,7 +95,7 @@ export default function GithubConnectionStatus({
           type="button"
           variant="outline"
           onClick={() => setConfirmOpen(true)}
-          disabled={isDisconnecting}
+          disabled={isDisconnecting || isDemo}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>

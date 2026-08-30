@@ -37,12 +37,15 @@ export default function JiraConnectionStatus({
   tokenLast4,
   projectKey,
   mappedCount,
+  isDemo = false,
 }: {
   workspaceUrl: string;
   email: string;
   tokenLast4: string | null;
   projectKey: string | null;
   mappedCount: number;
+  /** S-24: see `github-connection-status.tsx`. */
+  isDemo?: boolean;
 }) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -51,7 +54,13 @@ export default function JiraConnectionStatus({
   async function handleDisconnect() {
     setIsDisconnecting(true);
     try {
-      await disconnectJira();
+      // The refusal is RETURNED, not thrown — see `github-connection-status.tsx`.
+      const result = await disconnectJira();
+      if (!result.ok) {
+        toast.error(result.message);
+        setIsDisconnecting(false);
+        return;
+      }
       toast.success("Jira disconnected.");
       router.refresh();
     } catch {
@@ -92,7 +101,7 @@ export default function JiraConnectionStatus({
           type="button"
           variant="outline"
           onClick={() => setConfirmOpen(true)}
-          disabled={isDisconnecting}
+          disabled={isDisconnecting || isDemo}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
