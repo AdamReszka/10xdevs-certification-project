@@ -886,16 +886,18 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
 
 ### Osiągalne od razu — nie wymagają Resenda
 
-- [ ] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
+- [x] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
       pokazują zamierzony kształt.
       *Źródło:* `context/changes/daily-recap-email/plan.md` faza 1
       *Co musi być prawdą:* brak kolumny `recap_date`; `recap_day text NOT NULL`;
       `daily_recap_owner_day_uq UNIQUE (owner_id, recap_day)`; `send_status NOT
       NULL DEFAULT 'PENDING'`; kolumny `attempt_count`, `last_attempt_at`,
       `rendered_message`; `recap_settings` z `recap_settings_owner_uq`.
-      *Status:* **zweryfikowane w sesji** przez `psql` przeciwko `:54322` —
-      wyszło zgodnie z planem. Zostawione nieodhaczone, bo checklisty manualne
-      zamyka użytkownik, nie agent.
+      *Status:* **Zaliczone 2026-08-30** (sesja manualna) — wszystkie siedem
+      warunków potwierdzone odczytem `information_schema` / `pg_constraint`
+      przeciwko `:54322`. Wcześniejsze sprawdzenie z sesji 2026-08-26 dało ten
+      sam wynik; odhaczone dopiero teraz, bo checklisty manualne zamyka
+      użytkownik, nie agent.
       *Dlaczego to ma znaczenie:* cała gwarancja exactly-once opiera się na tym
       unique key. Nullowalny człon klucza nie kolidowałby nigdy (lessons.md #1).
 

@@ -1180,7 +1180,7 @@ is exercised by the very first email.
 
 #### Manual
 
-- [ ] 1.9 `\d daily_recap` and `recap_settings` show the intended shape on local Supabase
+- [x] 1.9 `\d daily_recap` and `recap_settings` show the intended shape on local Supabase — manual 2026-08-30
 
 ### Phase 2: Email transport
 
