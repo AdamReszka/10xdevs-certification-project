@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { ConfigureDoor } from "@/components/organisms/setup/setup-doorstep-view";
-import { exitDemoAction, loadDemoAction } from "@/app/(app)/settings/demo/actions";
+import { exitDemoAction, openDemoAction } from "@/app/(app)/settings/demo/actions";
 
 /**
  * The first-run doorstep (`onboarding-routing` Phase 1, FR-008 / US-02).
@@ -31,6 +31,14 @@ import { exitDemoAction, loadDemoAction } from "@/app/(app)/settings/demo/action
  * page already threads other state through it, while `demo-banner.tsx` imports
  * directly because a server layout renders it bare. This is the second shape —
  * the page hands it only door state.
+ *
+ * THE DEMO DOOR MUST NOT RESET (S-27 / D1). It calls `openDemoAction`, not
+ * `loadDemoAction`: `loadDemo` resets first so that the panel's "give me a fresh
+ * demo" stays idempotent, so an unconditional call here meant that entering
+ * demo, pressing Back to `/setup` and taking this door again rebuilt the world
+ * and discarded the visitor's demo edits. `openDemoAction` re-enters an existing
+ * world and builds one only when none exists — the guard `/settings/demo` has
+ * had since S-09.
  *
  * Which doors are offered, and where the configure door points, is decided by
  * `setup-doorstep-view.ts`; there is no component-test harness here, so that
@@ -77,15 +85,15 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
     });
   }
 
-  function handleLoadDemo() {
+  function handleOpenDemo() {
     setFailure(null);
     startTransition(async () => {
-      const result = await loadDemoAction();
+      const result = await openDemoAction();
       if (!result.ok) {
         setFailure(result.message);
         return;
       }
-      // `loadDemoAction` flips a database column and navigates nowhere, so
+      // `openDemoAction` flips a database column and navigates nowhere, so
       // without both of these the visitor presses the button and watches the
       // doorstep stay exactly as it was.
       router.push("/dashboard");
@@ -140,7 +148,7 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
             <div className="mt-auto">
               <Button
                 variant="outline"
-                onClick={handleLoadDemo}
+                onClick={handleOpenDemo}
                 disabled={pending || configuring}
               >
                 {pending ? (

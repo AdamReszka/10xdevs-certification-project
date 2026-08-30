@@ -709,9 +709,9 @@ main checkout.
 
 #### Automated
 
-- [x] 2.1 Lint + typecheck pass
-- [x] 2.2 Unit tests pass
-- [x] 2.3 E2E passes
+- [x] 2.1 Lint + typecheck pass — 4524f94
+- [x] 2.2 Unit tests pass — 4524f94
+- [x] 2.3 E2E passes — 4524f94
 
 #### Manual
 
@@ -723,9 +723,9 @@ main checkout.
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass
-- [ ] 3.2 Integration tests pass
-- [ ] 3.3 Demo owner id stable across exit → re-enter; demo-side edit survives
+- [x] 3.1 Unit tests pass
+- [x] 3.2 Integration tests pass
+- [x] 3.3 Demo owner id stable across exit → re-enter; demo-side edit survives
 
 #### Manual
 

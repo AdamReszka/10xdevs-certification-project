@@ -32,6 +32,10 @@ Seeds carried over from the roadmap entry, to be verified during research/framin
   delete anything — but `resetDemo` (`src/lib/demo/load.ts:150-164`) deletes the
   demo user row and `demo-panel.tsx:83-96` fires it with no confirmation.
 
-Parallel session: S-25 (`sprint-identity-visibility`) runs in a worktree. Shared
-Postgres, port 3000 and the Playwright fixture ports — no migrations here without
-checking, and integration/e2e runs are owned by this main checkout.
+Parallel sessions: S-25 (`sprint-identity-visibility`) and, as of 2026-08-30,
+S-20 both run in worktrees. Shared Postgres, port 3000 and the Playwright fixture
+ports — no migrations here without checking, and integration/e2e runs are owned
+by this main checkout. With two concurrent worktrees rather than one, confirm
+nothing else is mid-suite before `test:integration` / `test:e2e`: since S-21
+`playwright.config.ts` runs parallel workers locally, so a second suite competes
+for the same Postgres harder than before.
