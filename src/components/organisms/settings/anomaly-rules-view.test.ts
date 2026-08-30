@@ -9,7 +9,6 @@ import {
 
 import {
   RULE_DESCRIPTORS,
-  SP21_CHOICES,
   defaultFormValues,
   equalsDefaults,
   readField,
@@ -101,7 +100,8 @@ describe("toPayload — always the COMPLETE body", () => {
 
     expect(Object.keys(map).sort()).toEqual([...SP_BUCKET_KEYS].sort());
     expect(map["3"]).toBe(96);
-    expect(map["21"]).toBe("8_WORKING_DAYS");
+    // 64 working hours — the 21-SP bucket is an ordinary number since S-28.
+    expect(map["21"]).toBe(64);
   });
 
   it("rebuilds a bucket the form somehow dropped from the defaults", () => {
@@ -112,7 +112,7 @@ describe("toPayload — always the COMPLETE body", () => {
     const map = payload.thresholds.inProgressHoursBySp as Record<string, unknown>;
 
     expect(Object.keys(map)).toHaveLength(7);
-    expect(map["8"]).toBe(120);
+    expect(map["8"]).toBe(40);
   });
 
   it("drops a bucket the form somehow invented", () => {
@@ -137,7 +137,7 @@ describe("toPayload — always the COMPLETE body", () => {
     const sparse: unknown[] = [];
     sparse[1] = 12;
     sparse[3] = 48;
-    sparse[21] = "8_WORKING_DAYS";
+    sparse[21] = 64;
     values.thresholds.inProgressHoursBySp = sparse;
 
     const map = toPayload(values).thresholds.inProgressHoursBySp as Record<string, unknown>;
@@ -145,7 +145,7 @@ describe("toPayload — always the COMPLETE body", () => {
     expect(Object.keys(map).sort()).toEqual([...SP_BUCKET_KEYS].sort());
     expect(map["1"]).toBe(12);
     // A hole falls back to the shipped value rather than going missing.
-    expect(map["2"]).toBe(24);
+    expect(map["2"]).toBe(8);
   });
 
   it("keeps all three parallel categories when only one changed", () => {
@@ -174,13 +174,12 @@ describe("toPayload — always the COMPLETE body", () => {
   });
 });
 
-describe("the 21-SP two-position control", () => {
-  it("offers exactly the two values the detector can mean", () => {
-    expect(SP21_CHOICES.map((c) => c.value)).toEqual(["120", "8_WORKING_DAYS"]);
-  });
-
-  it("maps both positions through toPayload into a body the schema accepts", () => {
-    for (const raw of [120, "8_WORKING_DAYS"] as const) {
+describe("the 21-SP bucket, now an ordinary number (S-28)", () => {
+  it("carries a freely typed working-hour count through to an accepted body", () => {
+    // The two-position select is gone: with the unit in working hours, "10
+    // working days" is 80 and the lead may simply type it. That inexpressibility
+    // was the whole reason the control existed.
+    for (const raw of [64, 80, 1, 2000]) {
       const values = defaultFormValues("TICKET_STATUS_AGING");
       (values.thresholds.inProgressHoursBySp as Record<string, unknown>)["21"] = raw;
 
@@ -190,6 +189,20 @@ describe("the 21-SP two-position control", () => {
       expect(map["21"]).toBe(raw);
       expect(RULE_SAVE_SCHEMAS.TICKET_STATUS_AGING.safeParse(payload).success).toBe(true);
     }
+  });
+
+  it("still accepts a body stored with the retired sentinel, normalised to 64", () => {
+    // A pre-S-28 account's row. It MUST keep parsing: `mergeRule` discards the
+    // whole override — severity included — on a parse failure.
+    const values = defaultFormValues("TICKET_STATUS_AGING");
+    (values.thresholds.inProgressHoursBySp as Record<string, unknown>)["21"] =
+      "8_WORKING_DAYS";
+
+    const parsed = RULE_SAVE_SCHEMAS.TICKET_STATUS_AGING.safeParse(toPayload(values));
+    expect(parsed.success).toBe(true);
+    expect(
+      (parsed.data!.thresholds.inProgressHoursBySp as Record<string, unknown>)["21"],
+    ).toBe(64);
   });
 });
 
@@ -209,7 +222,7 @@ describe("toFormValues", () => {
     expect(
       (DEFAULT_THRESHOLDS.TICKET_STATUS_AGING.thresholds
         .inProgressHoursBySp as Record<string, unknown>)["1"],
-    ).toBe(24);
+    ).toBe(8);
   });
 });
 
@@ -241,7 +254,7 @@ describe("equalsDefaults — the one predicate behind the badge and the row", ()
     const reordered = {
       severity: DEFAULT_THRESHOLDS.SPRINT_AT_RISK.severity,
       thresholds: {
-        toDoBeforeSprintEndLeadTimeHours: 48,
+        toDoBeforeSprintEndLeadTimeHours: 16,
         maxParallelByCategory: { TESTING: 3, IN_PROGRESS: 2, CODE_REVIEW: 2 },
       },
     };

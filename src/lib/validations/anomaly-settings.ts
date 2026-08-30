@@ -27,9 +27,14 @@ import { z } from "zod";
  * cross-row or database question (uniqueness belongs to
  * `anomaly_settings_owner_type_uq`).
  *
- * WHAT DOES **NOT** LIVE HERE: the `"8_WORKING_DAYS"` sentinel's meaning. The
- * schema permits it as a value; resolving it against the sprint's working-day
- * calendar is the detector's job (`ticket-status-aging.ts:63-74`).
+ * WHAT **DOES** LIVE HERE, SINCE S-28: the retirement of the `"8_WORKING_DAYS"`
+ * sentinel. Every budget is now denominated in WORKING hours, so "8 working
+ * days" is 64 — an ordinary number — and the detector has no branch left to
+ * resolve it with. The literal is still ACCEPTED, because rejecting it would
+ * make `mergeRule` discard the whole stored rule (severity included) for every
+ * account that saved it before the slice; it is normalised to 64 here, at the
+ * one place both `resolveEffectiveThresholds` and the settings page pass
+ * through. See {@link LEGACY_8_WORKING_DAYS_HOURS}.
  */
 
 const severitySchema = z.enum(["HIGH", "MEDIUM", "LOW"]);
@@ -61,16 +66,49 @@ export const PARALLEL_CATEGORY_KEYS = [
 ] as const;
 
 /**
- * One In-Progress budget: hours, or the working-day sentinel.
+ * What the retired `"8_WORKING_DAYS"` sentinel is worth in working hours.
  *
- * The sentinel is accepted on ANY bucket, not only 21 SP, because the detector
- * branches on the VALUE and never on the key (`ticket-status-aging.ts:63`).
- * Constraining it to one key here would be a rule the code does not have.
+ * Eight working days at `WORK_HOURS_PER_DAY` (`anomaly/rules/working-time.ts`).
+ * Spelled as a literal rather than imported so this module — which the CLIENT
+ * settings form pulls — keeps its "no import that drags the engine along"
+ * property; the two are pinned together by a test, not by a reference.
  */
-const inProgressBudgetSchema = z.union([
-  positiveInt(2000, "The In-Progress budget"),
-  z.literal("8_WORKING_DAYS"),
-]);
+export const LEGACY_8_WORKING_DAYS_HOURS = 64;
+
+/**
+ * One In-Progress budget: working hours.
+ *
+ * A LEGACY VALUE RETAINED FOR COMPATIBILITY, not a live sentinel. Before S-28
+ * the 21-SP bucket held `"8_WORKING_DAYS"`, which the detector resolved against
+ * the sprint calendar while every other bucket was wall-clock hours. Now that
+ * the unit IS working hours, that string has nothing left to say and no detector
+ * branch reads it — but it may still sit in `anomaly_settings.thresholds` for
+ * any account that customised the rule before the slice.
+ *
+ * DROPPING IT FROM THE UNION WOULD BE SILENTLY DESTRUCTIVE. `mergeRule` parses
+ * the STORED body on every read and, on failure, discards the override
+ * WHOLESALE — severity included — with only a `console.error`. That account
+ * would find its whole `TICKET_STATUS_AGING` rule reverted, the card showing
+ * "Modified" over shipped values and an unprompted "Unsaved changes." on load,
+ * and nothing on screen saying why.
+ *
+ * So it is accepted and TRANSFORMED to {@link LEGACY_8_WORKING_DAYS_HOURS}. The
+ * transform sits on the schema rather than in either caller because `mergeRule`
+ * and `saveAnomalyRule` both pass through here — that is what guarantees the
+ * detector never sees the string, and that a legacy account re-saving an
+ * otherwise untouched rule normalises to the defaults and has its row deleted
+ * rather than rewritten.
+ *
+ * It is still accepted on ANY bucket, not only 21 SP: the pre-S-28 detector
+ * branched on the VALUE and never on the key, so a stored body may legitimately
+ * carry it anywhere, and narrowing it here would reject a row the old code wrote.
+ */
+const inProgressBudgetSchema = z
+  .union([
+    positiveInt(2000, "The In-Progress budget"),
+    z.literal("8_WORKING_DAYS"),
+  ])
+  .transform((v) => (v === "8_WORKING_DAYS" ? LEGACY_8_WORKING_DAYS_HOURS : v));
 
 /**
  * `inProgressHoursBySp` must carry EXACTLY the seven default keys.

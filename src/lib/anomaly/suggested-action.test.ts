@@ -5,7 +5,7 @@ import { suggestedAction } from "@/lib/anomaly/suggested-action";
 describe("suggestedAction templates", () => {
   it("grounds the PR-review action in the PR number and age", () => {
     expect(suggestedAction.prReviewStalled({ number: 42, hours: 30 })).toBe(
-      "Ping a reviewer for PR #42 — 30h with no review yet.",
+      "Ping a reviewer for PR #42 — 30 working hours with no review yet.",
     );
   });
 

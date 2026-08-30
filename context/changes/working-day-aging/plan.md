@@ -785,21 +785,21 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [x] 1.1 Type checking passes
-- [x] 1.2 Linting passes
-- [x] 1.3 Unit tests pass
-- [x] 1.4 New primitive's mutation score clears the gate
-- [x] 1.5 No behaviour change: every pre-existing anomaly test still passes untouched
+- [x] 1.1 Type checking passes — 1bbea5b
+- [x] 1.2 Linting passes — 1bbea5b
+- [x] 1.3 Unit tests pass — 1bbea5b
+- [x] 1.4 New primitive's mutation score clears the gate — 1bbea5b
+- [x] 1.5 No behaviour change: every pre-existing anomaly test still passes untouched — 1bbea5b
 
 ### Phase 2: The hour-denominated rules and their recalibrated defaults
 
 #### Automated
 
-- [ ] 2.1 Type checking passes
-- [ ] 2.2 Linting passes
-- [ ] 2.3 Unit tests pass
-- [ ] 2.4 Mutation gate holds on the rule files
-- [ ] 2.5 `grep -rn "8_WORKING_DAYS" src/` returns only the validator's compatibility path
+- [x] 2.1 Type checking passes
+- [x] 2.2 Linting passes
+- [x] 2.3 Unit tests pass
+- [x] 2.4 Mutation gate holds on the rule files
+- [x] 2.5 `grep -rn "8_WORKING_DAYS" src/` returns only the validator's compatibility path
 
 #### Manual
 

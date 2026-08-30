@@ -35,7 +35,6 @@ import {
   RULE_DESCRIPTORS,
   SAVE_HINT,
   SEVERITY_HINT,
-  SP21_CHOICES,
   defaultFormValues,
   equalsDefaults,
   readField,
@@ -252,10 +251,12 @@ function AnomalyRuleCard({
 /**
  * The seven story-point In-Progress budgets.
  *
- * The 21-SP row is a two-position control rather than a free number: its stored
- * value is the `"8_WORKING_DAYS"` sentinel the detector resolves against the
- * sprint calendar, and "10 working days" is not expressible without changing
- * `defaults.ts` and the detector too.
+ * ALL SEVEN ARE PLAIN NUMBERS since S-28. The 21-SP row used to be a
+ * two-position select because its stored value was the `"8_WORKING_DAYS"`
+ * sentinel and "10 working days" could not be expressed as a count of
+ * wall-clock hours. Now that every budget is denominated in WORKING hours the
+ * sentinel is just 64, so the reason for the special control is gone and the
+ * lead can type any number of working days they like.
  */
 function StoryPointBudgets({
   form,
@@ -277,7 +278,7 @@ function StoryPointBudgets({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {SP_BUCKET_KEYS.filter((key) => key !== "21").map((key) => (
+        {SP_BUCKET_KEYS.map((key) => (
           <div key={key} className="flex flex-col gap-2">
             <Label htmlFor={`${anomalyType}-sp-${key}`}>{key} SP</Label>
             <div className="flex items-center gap-2">
@@ -296,34 +297,6 @@ function StoryPointBudgets({
             </div>
           </div>
         ))}
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor={`${anomalyType}-sp-21`}>21 SP</Label>
-          <Controller
-            control={form.control}
-            name="thresholds.inProgressHoursBySp.21"
-            render={({ field }) => (
-              <Select
-                value={String(field.value ?? "8_WORKING_DAYS")}
-                onValueChange={(v) =>
-                  field.onChange(v === "8_WORKING_DAYS" ? v : Number(v))
-                }
-                disabled={disabled}
-              >
-                <SelectTrigger id={`${anomalyType}-sp-21`} aria-label="21 SP budget">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SP21_CHOICES.map((choice) => (
-                    <SelectItem key={choice.value} value={choice.value}>
-                      {choice.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </div>
       </div>
 
       {fieldErrorMessage(form.formState.errors, "thresholds.inProgressHoursBySp") ? (

@@ -61,7 +61,9 @@ describe("detectSprintAtRisk", () => {
 
   it("fires a ToDo-near-end condition within the lead-time window", () => {
     const snap = makeSnapshot({
-      sprint: makeSprint({ endDate: new Date("2026-08-11T12:00:00.000Z") }), // 24h left
+      // Tue noon. From Mon noon that is Mon 4 + Tue 4 = 8 WORKING hours left
+      // (S-28), inside the 16-working-hour lead time.
+      sprint: makeSprint({ endDate: new Date("2026-08-11T12:00:00.000Z") }),
       tickets: [makeTicket({ currentCategory: "TODO", storyPoints: 5 })],
     });
     const out = detectSprintAtRisk(snap, effective, NOW);
@@ -74,13 +76,15 @@ describe("detectSprintAtRisk", () => {
       condition: "todo_near_end",
       todoCount: 1,
       todoSp: 5,
-      hoursLeft: 24,
+      hoursLeft: 8,
     });
     expect(todo!.magnitude).toBeCloseTo(5 / 40, 5); // todoSp / committedSp
   });
 
   it("does not fire ToDo-near-end far from sprint end", () => {
     const snap = makeSnapshot({
+      // Sat. Mon 4 + Tue/Wed/Thu/Fri 8 each = 36 working hours left, well past
+      // the 16-working-hour lead time.
       sprint: makeSprint({ endDate: new Date("2026-08-15T00:00:00.000Z") }),
       tickets: [makeTicket({ currentCategory: "TODO" })],
     });
@@ -89,6 +93,26 @@ describe("detectSprintAtRisk", () => {
         a.dedupKey.includes(":todo_near_end:"),
       ),
     ).toHaveLength(0);
+  });
+
+  it("counts the lead time in WORKING hours, not calendar hours", () => {
+    // The one place in S-28 where the change makes a number LESS like the
+    // calendar. Wed noon is 48 calendar hours away and would always have fired
+    // under the old 48h lead time; it is 16 WORKING hours away, the boundary.
+    // Wed close is 20 working hours away and must not fire, even though it is
+    // still only two-and-a-bit calendar days.
+    const at = (endIso: string) =>
+      detectSprintAtRisk(
+        makeSnapshot({
+          sprint: makeSprint({ endDate: new Date(endIso) }),
+          tickets: [makeTicket({ currentCategory: "TODO", storyPoints: 5 })],
+        }),
+        effective,
+        NOW,
+      ).filter((a) => a.dedupKey.includes(":todo_near_end:"));
+
+    expect(at("2026-08-12T12:00:00.000Z")).toHaveLength(1); // 16 — the boundary
+    expect(at("2026-08-12T16:00:00.000Z")).toHaveLength(0); // 20
   });
 
   it("fires max-parallel for the CODE_REVIEW category above its limit", () => {

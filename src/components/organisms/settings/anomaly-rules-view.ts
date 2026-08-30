@@ -212,19 +212,6 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
   },
 ];
 
-/**
- * The 21-SP bucket is a TWO-POSITION choice, not a free number.
- *
- * `"8_WORKING_DAYS"` is a sentinel the detector resolves against the sprint's
- * working-day calendar (`ticket-status-aging.ts:63-74`); "10 working days" is
- * not expressible without changing `defaults.ts` and the detector, so offering a
- * free number here would let the lead type something the system cannot mean.
- */
-export const SP21_CHOICES = [
-  { value: "120", label: "120 hours (5 days)" },
-  { value: "8_WORKING_DAYS", label: "8 working days" },
-] as const;
-
 /*
  * ---------------------------------------------------------------------------
  * Copy the lead cannot get anywhere else. LOAD-BEARING in the sense

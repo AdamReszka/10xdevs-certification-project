@@ -6,7 +6,15 @@ import type { DetectedAnomaly, SprintSnapshot } from "@/lib/anomaly/types";
 /**
  * Shared pure utilities for the 8 detectors (S-06). No DB, no I/O. Kept in one
  * place so time math, roster lookups, category labels, and the working-day
- * calendar (the `8_WORKING_DAYS` sentinel) are consistent across rules.
+ * calendar are consistent across rules.
+ *
+ * ELAPSED-TIME MEASUREMENT NO LONGER LIVES HERE (S-28). Every budget in the
+ * engine is now denominated in WORKING hours and is measured by
+ * `working-time.ts`, which imports this file's calendar (`workingDaySet`,
+ * `weekdayOf`) rather than keeping a second copy. `hoursBetween` and
+ * `daysBetween` below are raw wall-clock spans and remain correct for what
+ * still wants one — a `detectedAt` delta, a display age — but a rule reaching
+ * for one to check a threshold is the defect S-28 closed.
  */
 
 /** Every detector has this shape: pure over the snapshot + effective config + an
