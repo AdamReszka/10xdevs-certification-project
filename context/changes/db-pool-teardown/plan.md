@@ -798,9 +798,9 @@ fires.
 
 #### Automated
 
-- [x] 3.1 Full E2E suite passes with parallel workers
-- [x] 3.2 Type checking passes
-- [x] 3.3 Linting passes
+- [x] 3.1 Full E2E suite passes with parallel workers — 46f24a7
+- [x] 3.2 Type checking passes — 46f24a7
+- [x] 3.3 Linting passes — 46f24a7
 
 #### Manual
 
@@ -813,11 +813,11 @@ fires.
 
 #### Automated
 
-- [ ] 4.1 Unit suite passes
-- [ ] 4.2 Type checking passes
-- [ ] 4.3 Linting passes
-- [ ] 4.4 Integration tests pass
-- [ ] 4.5 E2E suite still passes
+- [x] 4.1 Unit suite passes
+- [x] 4.2 Type checking passes
+- [x] 4.3 Linting passes
+- [x] 4.4 Integration tests pass
+- [x] 4.5 E2E suite still passes
 
 #### Manual
 
