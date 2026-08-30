@@ -447,8 +447,10 @@ manual rows, and they are not the same kind of work:
 
 - **1.8 — the only tester row.** It is an app check at `/settings/absences` +
   `/dashboard`, and it is what the two checklist rows above cover. Appended to
-  `context/foundation/manual-test-backlog.md` **§1**, the list the second person
-  works from.
+  `context/foundation/manual-test-backlog.md` as a NEW per-slice section, the way
+  every slice list since S-15 is filed (**§7–§17**) — **not §1**, which is closed
+  ("✅ ZAMKNIĘTA 2026-08-29 … nie dopisuj tu nowych wierszy"). Corrected here
+  after impl-review F3; it landed as **§18**.
 - **2.6 and 2.7 — documentation obligations, not app tests.** Both are "read a
   Markdown file and confirm it no longer says X" (`roadmap.md` S-20 / S-26,
   `sprint-reconciliation/research.md:271`). They belong in backlog **§3
@@ -570,5 +572,5 @@ Reverting is a one-line restore of the predicate; no state would need unwinding.
 
 #### Manual
 
-- [x] 2.6 `roadmap.md` S-20 no longer reads as an open reconciliation, and S-26 no longer reads as blocked
-- [x] 2.7 `sprint-reconciliation/research.md:271` reaches the reversal marker before the recommendation it superseded
+- [x] 2.6 `roadmap.md` S-20 no longer reads as an open reconciliation, and S-26 no longer reads as blocked — 14338d8
+- [x] 2.7 `sprint-reconciliation/research.md:271` reaches the reversal marker before the recommendation it superseded — d8b2eeb

@@ -1,7 +1,7 @@
 ---
 change_id: absence-sprint-scoping
-title: The three consumers of a recorded absence agree which sprint it belongs to
-status: implementing
+title: SPRINT_AT_RISK matches a recorded absence by its dates, like every other reader
+status: impl_reviewed
 created: 2026-08-30
 updated: 2026-08-30
 archived_at: null
@@ -9,4 +9,4 @@ archived_at: null
 
 ## Notes
 
-S-20: trzej konsumenci zapisanej nieobecności zgadzają się, do którego sprintu ona należy
+S-20: SPRINT_AT_RISK dopasowuje zapisaną nieobecność po DATACH, jak każdy inny czytelnik jej w tym kodzie

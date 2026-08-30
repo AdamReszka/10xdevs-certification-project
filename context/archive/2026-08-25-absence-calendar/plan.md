@@ -514,7 +514,8 @@ earlier sprint was unplanned *there*, not here) and whose window overlaps
 > `isPlanned === false` plus date overlap alone. The strict-`false` check and the
 > whole magnitude specification below are unchanged. See the marker under Phase 1
 > item 1 for why.
- `dedupKey` keyed on the absence id so two
+
+`dedupKey` keyed on the absence id so two
 absences for one member produce two anomalies and a deleted absence resolves cleanly.
 `relatedTeamMemberId` set to the absent member. `magnitude` is spelled out the way both
 existing conditions spell theirs (`:70`, `:84-85`), not left to the implementer:

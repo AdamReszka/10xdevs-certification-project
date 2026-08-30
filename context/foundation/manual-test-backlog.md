@@ -426,7 +426,7 @@ doda test z §6.1 bez dopytywania). Do zrobienia czytając, nie klikając.
 testującej**: to czytanie dokumentów, nie klikanie w aplikacji, i wymaga
 znajomości historii decyzji. Zamyka je implementujący na końcu fazy 2.
 
-- [ ] **2.6** Przeczytaj sekcję **S-20** w `context/foundation/roadmap.md` od
+- [x] **2.6** **ZALICZONE 2026-08-30 (14338d8).** Przeczytaj sekcję **S-20** w `context/foundation/roadmap.md` od
       początku do końca oraz wiersz **S-26** w tabeli szczegółowej.
       **Co musi być prawdą:** sekcja S-20 nie zostawia wrażenia, że pogodzenie
       trzech konsumentów jest wciąż otwarte (jest rozstrzygnięte: liczą się
@@ -435,7 +435,7 @@ znajomości historii decyzji. Zamyka je implementujący na końcu fazy 2.
       która interpretacja jest kanoniczna"). Zostawiona tak, każe następnej
       osobie rozstrzygać po raz drugi coś, co właściciel już rozstrzygnął.
 
-- [ ] **2.7** Przeczytaj rekomendację **A** w
+- [x] **2.7** **ZALICZONE 2026-08-30 (d8b2eeb).** Przeczytaj rekomendację **A** w
       `context/archive/2026-08-26-sprint-reconciliation/research.md` (tabela
       „Separable — recommendation, owner decides").
       **Co musi być prawdą:** czytelnik trafia na datowany znacznik odwrócenia
