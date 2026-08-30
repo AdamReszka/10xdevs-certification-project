@@ -562,13 +562,13 @@ Reverting is a one-line restore of the predicate; no state would need unwinding.
 
 #### Automated
 
-- [x] 2.1 Linting passes: `npm run lint`
-- [x] 2.2 Type checking passes: `npx tsc --noEmit`
-- [x] 2.3 Unit tests still pass after the comment edits: `npm test`
-- [x] 2.4 The manual backlog covers this slice's open rows: `node scripts/manual-test-sweep.mjs` exits 0
-- [x] 2.5 No instruction to scope absence risk by `sprint_id` survives outside a dated reversal marker
+- [x] 2.1 Linting passes: `npm run lint` — 14338d8
+- [x] 2.2 Type checking passes: `npx tsc --noEmit` — 14338d8
+- [x] 2.3 Unit tests still pass after the comment edits: `npm test` — 14338d8
+- [x] 2.4 The manual backlog covers this slice's open rows: `node scripts/manual-test-sweep.mjs` exits 0 — 14338d8
+- [x] 2.5 No instruction to scope absence risk by `sprint_id` survives outside a dated reversal marker — 14338d8
 
 #### Manual
 
-- [ ] 2.6 `roadmap.md` S-20 no longer reads as an open reconciliation, and S-26 no longer reads as blocked
-- [ ] 2.7 `sprint-reconciliation/research.md:271` reaches the reversal marker before the recommendation it superseded
+- [x] 2.6 `roadmap.md` S-20 no longer reads as an open reconciliation, and S-26 no longer reads as blocked
+- [x] 2.7 `sprint-reconciliation/research.md:271` reaches the reversal marker before the recommendation it superseded
