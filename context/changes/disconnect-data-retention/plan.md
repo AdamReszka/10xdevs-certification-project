@@ -898,25 +898,25 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 4.1 Guard test agrees for all three roots
-- [x] 4.2 Unit suite passes
-- [x] 4.3 Integration suite passes with a project-switch keep case
-- [x] 4.4 Type checking passes
-- [x] 4.5 Linting passes
+- [x] 4.1 Guard test agrees for all three roots — 92ef756
+- [x] 4.2 Unit suite passes — 92ef756
+- [x] 4.3 Integration suite passes with a project-switch keep case — 92ef756
+- [x] 4.4 Type checking passes — 92ef756
+- [x] 4.5 Linting passes — 92ef756
 
 #### Manual
 
-- [x] 4.6 Switching the monitored Jira project with keep leaves absences intact
-- [x] 4.7 The warning names the same outcomes the buttons deliver
+- [x] 4.6 Switching the monitored Jira project with keep leaves absences intact — 92ef756
+- [x] 4.7 The warning names the same outcomes the buttons deliver — 92ef756
 
 ### Phase 5: The measurement is the authority for the frozen commitment
 
 #### Automated
 
-- [ ] 5.1 The disconnect→reconnect regression passes
-- [ ] 5.2 Unit suite passes
-- [ ] 5.3 Type checking passes
-- [ ] 5.4 Linting passes
+- [x] 5.1 The disconnect→reconnect regression passes
+- [x] 5.2 Unit suite passes
+- [x] 5.3 Type checking passes
+- [x] 5.4 Linting passes
 
 ### Phase 6: Documents, E2E and the stale claims
 

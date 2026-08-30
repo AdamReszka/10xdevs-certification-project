@@ -16,6 +16,7 @@ import {
   jiraTicket,
   monitoredRepo,
   sprint,
+  sprintMeasurement,
   statusMapping,
   syncAttempt,
   syncState,
@@ -759,6 +760,114 @@ describe("syncOwner — sprint commitment scalars (S-10, reshaped by S-23)", () 
 
     const [afterClose] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
     expect(afterClose.completedSp).toBe(5);
+  });
+
+  /**
+   * S-26 Phase 5 — the whole round trip, because a test that stops at the
+   * disconnect passes without the fix.
+   *
+   * The corruption needs all four steps: freeze mid-sprint, lose the `sprint`
+   * row to a disconnect, reconnect, and let the next FULL pull run. The pull is
+   * forced rather than incidental — `jiraCursorSprintId` still points at the
+   * DELETED row's id, so `cursorMatchesSprint` is false and the delta clause is
+   * dropped. That is precisely the cycle allowed to stamp `committed_frozen_at`.
+   */
+  it("recovers the frozen commitment across a disconnect and reconnect", async () => {
+    const { ownerId, sprintId, jiraProjectId } = await newOwner();
+
+    await seedTicket({
+      ownerId,
+      jiraProjectId,
+      sprintId,
+      jiraKey: "SF-90",
+      storyPoints: 3,
+      currentCategory: "TODO",
+      addedAfterSprintStart: false,
+    });
+
+    await syncOwner(baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl));
+    const [beforeDisconnect] = await db.select().from(sprint).where(eq(sprint.id, sprintId));
+    expect(beforeDisconnect.committedSp).toBe(3);
+    expect(beforeDisconnect.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
+
+    // What the FR-023 sweep leaves behind for a sprint still in flight. It is
+    // the ONLY copy that outlives the disconnect: `sprint_measurement` has no
+    // foreign key, by design.
+    await db.insert(sprintMeasurement).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "42",
+      sprintName: "Sprint 7",
+      committedSp: beforeDisconnect.committedSp,
+      committedFrozenAt: beforeDisconnect.committedFrozenAt,
+      finalizedAt: null,
+    });
+
+    // --- Disconnect: the real cascade, not a targeted delete ----------------
+    await db.delete(jiraCredential).where(eq(jiraCredential.ownerId, ownerId));
+    expect(await db.select().from(sprint).where(eq(sprint.ownerId, ownerId))).toEqual([]);
+    expect(
+      await db.select().from(sprintMeasurement).where(eq(sprintMeasurement.ownerId, ownerId)),
+    ).toHaveLength(1);
+
+    // --- Reconnect: same workspace, same project, same status mapping -------
+    const [newCred] = await db
+      .insert(jiraCredential)
+      .values({
+        id: randomUUID(),
+        ownerId,
+        encryptedToken: encryptToken("jira_SyncTokenABCDEFGH1234", { ownerId, provider: "JIRA" }),
+        tokenLast4: "1234",
+        workspaceUrl: "https://acme.atlassian.net",
+        jiraEmail: "lead@example.com",
+      })
+      .returning({ id: jiraCredential.id });
+    const [newProj] = await db
+      .insert(jiraProject)
+      .values({
+        id: randomUUID(),
+        ownerId,
+        credentialId: newCred.id,
+        jiraProjectId: "10000",
+        projectKey: "SF",
+        boardId: String(JIRA_BOARD.id),
+      })
+      .returning({ id: jiraProject.id });
+    await db.insert(statusMapping).values([
+      { id: randomUUID(), ownerId, jiraProjectId: newProj.id, jiraStatusId: "1", jiraStatusName: "To Do", category: "TODO" },
+      { id: randomUUID(), ownerId, jiraProjectId: newProj.id, jiraStatusId: "3", jiraStatusName: "In Progress", category: "IN_PROGRESS" },
+    ]);
+
+    // --- The cycle that used to re-freeze -----------------------------------
+    const later = new Date("2026-08-22T12:00:00.000Z");
+    const result = await syncOwner({
+      ...baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch({ issues: [] }).fetchImpl),
+      now: later,
+      bypassDueCheck: true,
+    });
+    expect(result.jira.status).toBe("OK");
+
+    const [recreated] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    // A NEW row — the id is `randomUUID()` and the old one is gone. This is what
+    // made the re-created sprint indistinguishable from one never seen.
+    expect(recreated.id).not.toBe(sprintId);
+    expect(recreated.jiraSprintId).toBe("42");
+    // Both halves restored. Before the fix this row froze at the reconnect-time
+    // sum — 0, since the disconnect took the tickets with the sprint — stamped
+    // `later`, and `sprint_measurement.committed_sp` is copied and never
+    // recomputed, so that figure would have fed FR-024 for the team's lifetime.
+    expect(recreated.committedSp).toBe(3);
+    expect(recreated.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
+
+    // §2 of the phase: the existing `case when … is null` guard needs no second
+    // guard once the stamp is back — asserted rather than assumed.
+    const [measurement] = await db
+      .select()
+      .from(sprintMeasurement)
+      .where(eq(sprintMeasurement.ownerId, ownerId));
+    expect(measurement.committedSp).toBe(3);
+    expect(measurement.committedFrozenAt?.toISOString()).toBe(NOW.toISOString());
   });
 });
 
