@@ -50,7 +50,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | done |
 | S-17 | working-days-calendar     | public holidays are DERIVED automatically from the team's country (per-sprint team-wide days off ship in S-23, entered by hand) | S-08, S-23 | FR-007, FR-009, FR-010                          | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
-| S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
+| S-19 | team-navigation-section   | roster and absences move out of Settings into a first-class Team section                       | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every other absence reader — a carried-over absence stops being invisible to the risk score | S-08, S-16         | FR-010                                          | done     |
 | S-21 | db-pool-teardown          | one authenticated request builds ONE db pool instead of three (a Server Action, one instead of four), so connection count stops scaling with pool multiplicity; a database failure also stops reading as a sign-out | F-02 | — (NFR: graceful degradation) | done     |
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
@@ -59,6 +59,8 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
+| S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | proposed |
+| S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
 
 ## Streams
 
@@ -563,7 +565,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |
 | S-17       | working-days-calendar     | Public holidays derived automatically from the team's country          | no                     | ⚠️ **The "no unshipped FR depends on it" note was retired 2026-08-27.** S-23 makes the working-day count *be* the capacity, so a holiday now moves a headline number. S-23 covers the need by letting the lead record team-wide days off per sprint (FR-007); what remains here is deriving those dates from a country the account still does not store. Now downstream of S-23, not parallel to it |
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP. ⚠️ **Scoped against S-23 on 2026-08-28 (plan review F1):** S-23 ships FR-024's estimate over the **active** sprint's capacity ratio, which needs no future sprint. What remains here is projecting an UNSTARTED window — its own working-day config and absence coverage, neither of which Jira exposes before the sprint exists. S-23 does not close S-18 |
-| S-19       | team-navigation-section   | Roster, absences and cadence move into a first-class Team section       | yes                    | Prereqs S-08, S-15 done. Post-MVP; also the home for the post-setup cadence UI S-16 left out |
+| S-19       | team-navigation-section   | Roster and absences move into a first-class Team section                | yes                    | Prereqs S-08, S-15 done. Post-MVP. **Rescoped 2026-08-30 at `/10x-frame`** (`context/changes/team-navigation-section/frame.md`): the "and cadence" clause — which lived only in this row, never in the slice's own outcome — is removed, because there is no post-setup cadence surface to move. It never existed (`cadence-form.tsx` has one creating commit and was never mounted outside the wizard); it is now **S-29**. What remains here is what the owner asked for and called cosmetic: five live route references and the nav entry. Moving the routes re-opens S-15 manual rows 5.3/5.4 |
 | S-20       | absence-sprint-scoping    | `SPRINT_AT_RISK` matches an absence by date, like every other reader     | done                   | ✅ Implemented 2026-08-30, two phases. It **was** a decision slice — and the decision made the change small: the owner ruled that risk follows the absence's dates, so one predicate (`sprint-at-risk.ts:146`) was deleted and seven sibling readers stayed as they were. Capacity and `DEVELOPER_INACTIVE` were already correct and **must** stay date-based — `getSprintCapacityFor` computes a CLOSED sprint's capacity for S-23's frozen measurement record, which has no active sprint to compare a stamp against. No migration and no schema edit: `absence.sprint_id` keeps its writer and its `ON DELETE CASCADE`, both left to **S-26**. Impl-review F10 (a NULL stamp can never raise risk) is dissolved rather than documented a third time. The centre of gravity was Phase 2 — the superseded rule was still stated as an instruction in six places |
 | S-21       | db-pool-teardown          | One `db` handle per request — the 3-4x pool multiplicity, not a teardown | done                  | ✅ Implemented 2026-08-30, five phases — PR #77. **Reframed at `/10x-frame`:** the recorded defect (a pool never closed, holding a connection for as long as the isolate lived) is not what breaks. Measured — `pg.Pool`'s 10 s idle timer reclaims every pool in Node with no `.end()`, and Hyperdrive cleans the client up at request end; but one authenticated `GET` built **3** pools and a Server Action **4**, strictly linear in concurrency, which is what burned Supabase's 100 slots mid-Playwright-run. The fix is three lines in `src/lib/db.ts` (memoize the handle on the adapter's request-context object under a `Symbol.for` key) with **zero call-site churn**: 3.00/4.00 connections per request → a flat 5 (`POOL_MAX`) at K = 8, 12 and 24. `playwright.config.ts` runs parallel workers locally again and the suite got faster. Two by-products: `getOptionalSession` stops answering a database failure with "not signed in" (that conflation is why this read as flake for weeks), and `src/app/error.tsx` gives the app its first error boundary. `lessons.md` #3 rewritten — the wrong version had steered S-02 F3, S-04, S-05 and S-24 F2 |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | done                   | ✅ Implemented & merged — PR #68 (2026-08-30), five phases; archived 2026-08-30 (PR #73). Shipped as a **doorstep**, not a redirect: `/setup` is a first screen offering two doors — configure real data, or see the demo — which is what let FR-008 and the Access Control promise ("lands in the setup wizard") both hold as written. Prerequisites were widened during the slice to S-01, S-04, S-07, S-09, S-10: S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on. `isOnboardingComplete` went from zero production callers to gating `/dashboard`. **Status corrected 2026-08-30** — this row still read `yes` (ready to start) after the slice shipped and was archived; the at-a-glance table, the S-22 body and `change.md` all said done |
@@ -572,6 +574,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | done                   | ✅ Implemented 2026-08-30, five phases. **Raised by the tester** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`) and **reframed at `/10x-frame`:** the finding is not prominence — the three surfaces were in three different states of absence, and Today had no identity element to restyle at all. What ships is one fact (`PT Sprint 1 · 30.08 – 12.09`) computed once in a pure `src/lib/sprint-identity.ts` and rendered by one shared `molecules/sprint-identity-bar.tsx` on the cadence step, both dashboards and the Daily Recap. Two identity-fabricating fallbacks are gone (`?? "the active sprint"`, `?? "your sprint"`). Dates render in the team's Jira zone, correcting this entry's own UTC instruction (see the S-25 detail block). The wizard also stops hand-rolling its own `state = 'ACTIVE'` query, so it and Today can no longer disagree about which sprint exists |
 | S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | yes | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Unblocked 2026-08-30 by S-20**, which settled `absence.sprint_id` as write-only provenance with no reader — so the referential action is now S-26's to choose on its own merits. Scope may shrink or grow with Open Roadmap Question 4 |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
+| S-28       | working-day-aging         | Anomaly aging respects the team's working-day calendar | yes | **Raised by the owner, confirmed at `/10x-frame team-navigation-section` (2026-08-30)** with file:line evidence in that slice's `frame.md`. `countWorkingDays`/`countWorkingDaysInclusive` (`helpers.ts:96-117`) already exist, are tested, and take `workingDays` + time zone + `nonWorkingDays` — and are read by **3 of ~9** elapsed-time measurements. Wall-clock everywhere else: `ticket-status-aging.ts:77,83`, `pr-review-stalled.ts:31`, `developer-inactive.ts:31`, `ticket-no-commit-link.ts:28,36`, `sprint-at-risk.ts:88`. A 3 SP ticket moved to In Progress Friday 16:00 fires on Sunday 16:00 — into the Monday morning-sync inbox FR-016 calls the headline surface. The principle is already written in the codebase and applied to one of five branches of the same function (`ticket-status-aging.ts:62-66`). **No prior decision exists** that wall-clock aging is deliberate; the only recorded working-day discussion is the frozen 21-SP sentinel (`anomaly-settings-page/research.md:152-154`). Neighbouring open report: `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`. Not settled here and left to planning: WHICH rules become working-day-aware, and whether thresholds need recalibrating once they are. Watch three things a plan can trip on — the threshold model in `src/db/defaults.ts` and `/settings/anomalies` (a bucket is hours OR a sentinel, and "10 working days" is currently inexpressible), the demo fixture's **frozen clock**, and `stryker.conf.json` (`break: 70`, scoped to these rules) |
+| S-29       | post-setup-cadence-surface | Sprint cadence editable after setup, outside the wizard | yes | The leftover deferred three times, each time as substantive scope: owner at S-15 (`plan-brief.md:55` "Cadence on the tab \| Roster only"), declined at S-22 (`onboarding-routing/plan.md:387-390` "a separate slice"), parked at S-16 as out-of-scope item F (`change.md:127-128` → "S-19 / S-15"). Split out of S-19 on 2026-08-30 because S-19's own text never described it. FR-007 promises the override with **no surface condition** — so it is met formally (in the wizard) and not practically. The write path is safe (`reconcile-sprint.ts:259-261` preserves an override; `:216-225` carries it across rollover, pinned by three integration tests), and re-entering `/setup/team` is neutral for an onboarded lead (no auto-write, no Jira call). Carries one defect found at frame time: between sprints `saveCadence`'s UPDATE is scoped to `state = 'ACTIVE'` (`roster-store.ts:1003`) while the form pre-fills from a CLOSED row via `sprint.ts:34-42` — 0 rows update and the action still returns `{ok:true}`. Worth more **after S-28**, which makes `working_days` matter far beyond capacity |
 
 ## Open Roadmap Questions
 
@@ -633,8 +637,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ### S-19: Team navigation section
 
-- **Outcome:** roster, absences and cadence live under a first-class **Team**
-  section instead of being three tabs inside Settings.
+- **Outcome:** roster and absences live under a first-class **Team** section
+  instead of being two tabs inside Settings.
 - **Change ID:** team-navigation-section
 - **PRD refs:** FR-006, FR-010
 - **Prerequisites:** S-08, S-15
@@ -648,6 +652,18 @@ Foundations below assume these are present and do NOT re-scaffold them.
   invalidate S-15 manual rows 5.3 / 5.4 — the ones that verify the Settings nav
   reaches the roster at all. Those were only ticked on 2026-08-25; re-opening them
   to satisfy a navigation preference is the wrong trade under a deadline.
+- **Rescoped 2026-08-30 at `/10x-frame`** (`context/changes/team-navigation-section/frame.md`):
+  cadence is out; it becomes **S-29**. The clause promised moving a post-setup
+  cadence surface that has never existed — `cadence-form.tsx` has one creating
+  commit (S-04) and has only ever been mounted by the wizard step — and it lived
+  only in the Backlog Handoff row, never in this Outcome. The frame also demoted
+  this slice's own rationale: asked directly, the owner said the navigation is
+  cosmetic and the working-day mismatch in the anomaly rules (**S-28**) is what
+  actually hurts. S-19 stays because the owner still wants the move, not because
+  it fixes what the S-08 note implied it would. Cost is five live route
+  references (`settings/layout.tsx:21-22`, `settings/demo/actions.ts:39-40`,
+  `dashboard/availability.tsx:144`) plus the action modules that travel with the
+  pages.
 
 ---
 
@@ -1210,6 +1226,93 @@ Foundations below assume these are present and do NOT re-scaffold them.
   does delete the demo `user` row and everything under it, and `demo-panel.tsx:83-96`
   fires it with no confirmation — worth checking against that intent before this
   slice is planned.
+
+---
+
+### S-28: Aging measured in working days, not wall-clock hours
+
+- **Outcome:** an anomaly's elapsed-time budget is spent only on days the team
+  could have worked, so a Monday inbox no longer holds items that accrued over
+  the weekend.
+- **Change ID:** working-day-aging
+- **PRD refs:** FR-009, FR-013, FR-016
+- **Prerequisites:** S-06, S-14, S-23
+- **Status:** proposed
+
+- **Why this exists (owner, 2026-08-30, confirmed at `/10x-frame team-navigation-section`):**
+  the owner reported that the mechanism counts Saturdays and Sundays as working
+  days and that ticket time is computed against them. The frame verified it and
+  found it wider than reported: `countWorkingDays` /
+  `countWorkingDaysInclusive` (`helpers.ts:96-117`) already exist, are tested,
+  and take `workingDays` + time zone + `nonWorkingDays` — and are read by **3 of
+  ~9** elapsed-time measurements in the rules. Wall-clock everywhere else:
+  `ticket-status-aging.ts:77` (In Progress 1–13 SP), `:83` (Code Review,
+  Testing), `pr-review-stalled.ts:31`, `developer-inactive.ts:31`,
+  `ticket-no-commit-link.ts:28,36`, `sprint-at-risk.ts:88`.
+- **The sharpest evidence is in the codebase's own words.**
+  `ticket-status-aging.ts:62-66` states the principle — *"A ticket does not age
+  on a day the whole team is off … the budget is a budget of days somebody could
+  have moved it"* — and governs one of the five branches of the function it sits
+  in.
+- **Why it matters beyond tidiness:** a 3 SP ticket moved to In Progress on
+  Friday at 16:00 has a 48 h budget and fires on Sunday at 16:00, landing in the
+  morning-sync inbox FR-016 calls the product's headline surface. It also makes
+  `working_days` load-bearing — today the column is settable only in the wizard
+  (**S-29**) and has no Jira source at all (`cadence.ts:19-25`).
+- **Nothing was ever decided to the contrary.** The archive holds no decision
+  that wall-clock aging is deliberate; the only recorded working-day discussion
+  is the frozen 21-SP sentinel (`anomaly-settings-page/research.md:152-154`).
+  PRD FR-009 itself mixes units ("1/2 SP=24h … 21 SP=8 working days") without
+  ever saying how a weekend is treated — expect the FR to need an amendment.
+- **Left to planning, deliberately:** WHICH rules become working-day-aware, and
+  whether their thresholds need recalibrating once they are (a 24 h budget that
+  skips weekends is a different promise from the one the defaults were tuned
+  against). Three places a plan can trip: the threshold model in
+  `src/db/defaults.ts` + `/settings/anomalies`, where a bucket is hours OR a
+  sentinel and "10 working days" is inexpressible; the demo fixture's **frozen
+  clock**; and `stryker.conf.json` (`break: 70`), scoped to exactly these rules.
+- **Neighbouring open report:** `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`
+  — the Daily Recap knows neither weekends nor company days off. Same class, a
+  different layer; worth reading before scoping.
+
+---
+
+### S-29: Cadence editable after setup
+
+- **Outcome:** sprint length, start day and working days can be changed without
+  re-entering the setup wizard.
+- **Change ID:** post-setup-cadence-surface
+- **PRD refs:** FR-007
+- **Prerequisites:** S-15, S-16
+- **Status:** proposed
+
+- **Why this exists:** FR-007 promises the lead "can override the auto-pulled
+  values" and conditions that on no particular surface. The only `CadenceForm`
+  mount is the wizard step (`setup/team/page.tsx:104`), whose Save finishes
+  onboarding and pushes to `/dashboard`; none of the six Settings tabs mounts it.
+  The one in-app link back (`jira-project-editor.tsx:149`) renders only when the
+  lead has just switched the monitored Jira project. So the promise is met
+  formally and not practically.
+- **Deferred three times, each time as real scope:** owner at S-15
+  (`plan-brief.md:55`, "Cadence on the tab | Roster only"), declined at S-22
+  (`onboarding-routing/plan.md:387-390`, "a separate slice"), parked at S-16 as
+  out-of-scope item F (`change.md:127-128`, pointing at "S-19 / S-15"). Split out
+  of S-19 on 2026-08-30 because S-19's own outcome never described it.
+- **What is already safe, and must not be re-litigated:** the write path
+  preserves a lead's override on every sync (`reconcile-sprint.ts:259-261`) and
+  carries it onto a new sprint row at rollover (`:216-225`), including after a
+  between-sprints demotion — pinned by three integration tests. Re-entering
+  `/setup/team` is also neutral for an onboarded lead: no auto-write and no Jira
+  call fire (`cadence-form.tsx:144-152`, `roster-editor.tsx:273-276`).
+- **Carries one defect found at frame time:** between sprints, `saveCadence`'s
+  UPDATE is scoped to `state = 'ACTIVE'` (`roster-store.ts:1003`) while the form
+  pre-fills from a CLOSED row via `getActiveSprintRow`'s fallback
+  (`sprint.ts:34-42`) — zero rows update and the action still returns
+  `{ok:true}`. A silent no-op, not destructive.
+- **Worth more after S-28**, which turns `working_days` from a column feeding
+  capacity into one feeding the anomaly inbox.
+
+---
 
 ## Done
 

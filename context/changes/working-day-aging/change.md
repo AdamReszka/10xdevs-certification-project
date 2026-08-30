@@ -1,0 +1,90 @@
+---
+change_id: working-day-aging
+title: Anomaly aging stops counting the weekend as work
+status: new
+created: 2026-08-30
+updated: 2026-08-30
+archived_at: null
+---
+
+## Notes
+
+Roadmap **S-28** (`context/foundation/roadmap.md`). PRD refs FR-009, FR-013,
+FR-016. Prerequisites S-06, S-14, S-23 — all `done`.
+
+Split out of S-19 on 2026-08-30 at `/10x-frame team-navigation-section`. The
+full evidence and the reasoning that produced this slice live in
+`context/changes/team-navigation-section/frame.md`; this file carries only what
+a planner needs first.
+
+### Where it came from
+
+The owner raised it unprompted while framing S-19: *"było takie wskazanie, że
+mechanizm niepotrzebnie liczy soboty i niedziele jako dni robocze, w sensie że
+czas się przelicza na taskach."* The frame verified it against the code and found
+it wider than reported.
+
+### The mechanism, verified at frame time
+
+`countWorkingDays` / `countWorkingDaysInclusive` (`src/lib/anomaly/rules/helpers.ts:96-117`)
+exist, are tested (`helpers.test.ts:65,142`) and already take the sprint's
+`workingDays`, the team's time zone and `nonWorkingDays`. They are read by **3 of
+~9** elapsed-time measurements:
+
+| Measurement | How it measures | Weekend counts? |
+| --- | --- | --- |
+| `TICKET_STATUS_AGING` In Progress 1–13 SP | `hoursBetween` (`ticket-status-aging.ts:77`) | yes |
+| `TICKET_STATUS_AGING` Code Review / Testing | `hoursBetween` (`:83`) | yes |
+| `TICKET_STATUS_AGING` In Progress 21 SP | `countWorkingDays` (`:67`) | no |
+| `PR_REVIEW_STALLED` | `hoursBetween` (`pr-review-stalled.ts:31`) | yes |
+| `DEVELOPER_INACTIVE` | `now − days × MS_PER_DAY` (`developer-inactive.ts:31`) | yes |
+| `TICKET_NO_COMMIT_LINK` | `daysBetween` (`ticket-no-commit-link.ts:28,36`) | yes |
+| `SPRINT_AT_RISK` time left | `hoursBetween` (`sprint-at-risk.ts:88`) | yes |
+| `SPRINT_AT_RISK` absence cost | `countWorkingDaysInclusive` (`:142,164`) | no |
+
+The principle is already stated in the codebase and applied to one of five
+branches of the function it sits in — `ticket-status-aging.ts:62-66`: *"A ticket
+does not age on a day the whole team is off … the budget is a budget of days
+somebody could have moved it."*
+
+Concretely: a 3 SP ticket moved to In Progress on Friday at 16:00 has a 48 h
+budget and fires on Sunday at 16:00 — into the Monday morning-sync inbox that
+FR-016 calls the headline surface.
+
+### Open, and deliberately left to planning
+
+- **Which rules become working-day-aware.** Not obviously all of them: a PR that
+  has waited across a weekend may still be worth surfacing on Monday. The frame
+  did not settle this and should not have.
+- **Whether thresholds need recalibrating.** A 24 h budget that skips weekends is
+  a different promise from the one the defaults were tuned against (FR-009).
+- **FR-009 itself mixes units** ("1/2 SP=24h … 21 SP=8 working days") and never
+  says how a weekend is treated. Expect a PRD amendment rather than a silent
+  reinterpretation.
+
+### Three places a plan can trip (not yet read — research targets)
+
+1. **The threshold model** — `src/db/defaults.ts` and `/settings/anomalies`. A
+   bucket is hours OR a sentinel; "10 working days" is currently inexpressible,
+   recorded as deliberately not done in `manual-test-backlog.md` §10 and
+   `anomaly-settings-page/plan.md:108`.
+2. **The demo fixture runs on a frozen clock** (`anomaly-settings-page/plan.md:166`);
+   changing the unit of time can move which anomalies the demo is supposed to
+   show.
+3. **`stryker.conf.json`** — `break: 70`, scoped to exactly these rule files.
+   Per CLAUDE.md it wins by filename precedence over the stale
+   `stryker.config.json`.
+
+### Neighbouring open report
+
+`context/manual-tests/S-11-obserwacja-recap-dni-wolne.md` — the Daily Recap knows
+neither weekends nor company days off. Same class of defect at a different layer;
+read before scoping.
+
+### Worktree constraints
+
+No migration — this slice touches `src/lib/anomaly/**` and possibly
+`src/db/defaults.ts`, not the schema. Safe for the parallel worktree alongside
+S-26 in the main checkout. Per `lessons.md:63`, grep `*.integration.test.ts` and
+`e2e/*.spec.ts` for assertions on anomaly copy and counts before closing any
+phase, and run the E2E suite from here only while the other session is idle.
