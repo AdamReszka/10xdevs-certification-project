@@ -546,13 +546,13 @@ Reverting is a one-line restore of the predicate; no state would need unwinding.
 
 #### Automated
 
-- [ ] 1.1 Linting passes: `npm run lint`
-- [ ] 1.2 Type checking passes: `npx tsc --noEmit`
-- [ ] 1.3 Unit tests pass, including the inverted D2 assertion and the new `sprintId: null` case: `npm test`
-- [ ] 1.4 Integration tests pass, including the NULL-stamp and cross-boundary cases: `npm run test:integration`
-- [ ] 1.5 `grep -n "sprintId" src/lib/anomaly/rules/sprint-at-risk.ts` returns nothing
-- [ ] 1.6 `absence-store.integration.test.ts` still asserts the stamp is written — the writer is unchanged
-- [ ] 1.7 `grep -rn "did not account for it" src/` returns nothing — the F1 copy change landed in the rule AND the demo fixture
+- [x] 1.1 Linting passes: `npm run lint`
+- [x] 1.2 Type checking passes: `npx tsc --noEmit`
+- [x] 1.3 Unit tests pass, including the inverted D2 assertion and the new `sprintId: null` case: `npm test`
+- [x] 1.4 Integration tests pass, including the NULL-stamp and cross-boundary cases: `npm run test:integration`
+- [x] 1.5 `grep -n "sprintId" src/lib/anomaly/rules/sprint-at-risk.ts` returns nothing
+- [x] 1.6 `absence-store.integration.test.ts` still asserts the stamp is written — the writer is unchanged
+- [x] 1.7 `grep -rn "did not account for it" src/` returns nothing — the F1 copy change landed in the rule AND the demo fixture
 
 #### Manual
 
