@@ -813,11 +813,11 @@ fires.
 
 #### Automated
 
-- [x] 4.1 Unit suite passes
-- [x] 4.2 Type checking passes
-- [x] 4.3 Linting passes
-- [x] 4.4 Integration tests pass
-- [x] 4.5 E2E suite still passes
+- [x] 4.1 Unit suite passes — 8a13017
+- [x] 4.2 Type checking passes — 8a13017
+- [x] 4.3 Linting passes — 8a13017
+- [x] 4.4 Integration tests pass — 8a13017
+- [x] 4.5 E2E suite still passes — 8a13017
 
 #### Manual
 
@@ -831,11 +831,11 @@ fires.
 
 #### Automated
 
-- [ ] 5.1 Manual-test sweep exits zero
-- [ ] 5.2 Type checking passes
-- [ ] 5.3 Linting passes
-- [ ] 5.4 Unit suite passes
-- [ ] 5.5 No source file still cites the isolate-lifetime mechanism
+- [x] 5.1 Manual-test sweep exits zero
+- [x] 5.2 Type checking passes
+- [x] 5.3 Linting passes
+- [x] 5.4 Unit suite passes
+- [x] 5.5 No source file still cites the isolate-lifetime mechanism
 
 #### Manual
 

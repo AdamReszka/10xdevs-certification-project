@@ -183,8 +183,9 @@ export const auth = createAuth();
  * them at once — "there is no session" and "we could not tell" — and the two
  * consumers below read that `null` in OPPOSITE directions, each documented as
  * correct. Under a database error both fired: the signed-in user was bounced to
- * `/login`, and `/login` then rendered happily for them. That is why the S-21
- * connection leak read as E2E flake for weeks.
+ * `/login`, and `/login` then rendered happily for them. That is why S-21's
+ * connection exhaustion read as E2E flake for weeks — the noun is multiplicity,
+ * not a leak (`lessons.md` #3).
  *
  * `lessons.md` — "A narrowing predicate turns 'wrong value' into 'empty result',
  * which reads as success". This code predates the lesson.

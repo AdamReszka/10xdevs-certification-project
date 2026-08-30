@@ -25,8 +25,14 @@ import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
  * because a Server Action is its own entry point — Phase 4 disables the button
  * too, but this is the half that is a boundary rather than a courtesy.
  *
- * Owns pool teardown (lesson #3) via `ctx.waitUntil(pool.end())`, or an awaited
- * close when no `ctx` is present (e.g. `next dev`). Returns non-secret
+ * TAKES ITS OWN POOL (`getDbWithPool`) and closes it via
+ * `ctx.waitUntil(pool.end())`, or an awaited close when no `ctx` is present
+ * (e.g. `next dev`). Unlike the cron path this action DOES run inside a request
+ * context, so it could share the memoized handle (lesson #3); it deliberately
+ * does not, because a full sync is a long-running fan-out that outlives the
+ * useful life of the request's handle. **Never call `.end()` on a handle that
+ * came from `getDb`** — in `next dev` that pool is process-global and closing it
+ * poisons the dev server for the rest of its life. Returns non-secret
  * per-integration status — see `SyncNowOutcome` for what is deliberately
  * withheld.
  */

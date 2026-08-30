@@ -32,6 +32,11 @@ import {
  * `scheduled.ts:92` does (plan-review F5). A handle opened first would cost a
  * Hyperdrive connection for every forged request anyone on the internet cared to
  * send, and the 500 and 401 paths have no database work to do at all.
+ *
+ * IT IS A POOL THIS ROUTE OWNS (`getDbWithPool`), not the request-scoped handle.
+ * The webhook does run inside a request context and could share the memoized one
+ * (lesson #3); it takes a separate, self-closed pool because the disable fan-out
+ * is long-running. **Never call `.end()` on a handle that came from `getDb`.**
  */
 
 /** Ignorable events and unknown addresses are 200s — see below. */
@@ -97,8 +102,9 @@ export async function POST(request: Request) {
     console.log(`resend webhook: ${event.reason} disabled ${result.matched} owner(s)`);
     return OK();
   } finally {
-    // The request path has no after-hook (`lessons.md` #3, roadmap S-21), so the
-    // pool is closed here — after the queries resolve, never at construction.
+    // Safe because this pool came from `getDbWithPool` and this route owns it:
+    // closed after the queries resolve, never at construction. The request's own
+    // memoized handle (`lessons.md` #3) must never be closed this way.
     ctx.waitUntil(pool.end());
   }
 }

@@ -65,7 +65,8 @@ export async function getRecapSettings({
       enabled: recapSettings.enabled,
       // Read in the SAME query, not a second one: `/settings/recap` keeps its
       // single `Promise.all` (`page.tsx:28-32`), and a second round trip for two
-      // columns is the fan-out `lessons.md` #3 rejects.
+      // columns is the second fan-out `lessons.md` #3 rejects. Sharing one
+      // handle (S-21) makes that trip cheap; it does not make it free.
       disabledReason: recapSettings.disabledReason,
       disabledAt: recapSettings.disabledAt,
     })

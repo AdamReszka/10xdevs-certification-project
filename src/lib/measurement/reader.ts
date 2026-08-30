@@ -152,7 +152,8 @@ async function selectMeasurements(
  *
  * No project ⇒ an empty series, which is the same honest "no data" an owner with
  * no closed sprints gets. Two sequential queries on ONE handle, not a second
- * fan-out (`lessons.md` #3).
+ * fan-out: since S-21 the handle is memoized per request (`lessons.md` #3), so
+ * one handle buys one round of reads rather than one pool.
  */
 export async function listSprintMeasurementsForOwner(
   db: Db,

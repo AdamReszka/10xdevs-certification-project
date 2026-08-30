@@ -1521,9 +1521,14 @@ zostało już pokryte gdzie indziej.
       *Co zrobić:* powtórz import rosteru kilkanaście razy pod rząd.
       *Co musi być prawdą:* żadnego błędu połączenia, czas odpowiedzi się nie
       degraduje.
-      *Dlaczego to łapie:* `lessons.md` ma otwarty wpis o pulach per-request,
-      które nigdy nie są zamykane (`db-pool-teardown`). To jedyny wiersz, który
-      dotyka go od strony użytkownika.
+      *Dlaczego to łapie:* import rosteru robi **odczyty przed transakcją**
+      (`roster-store.ts:51-52`) — pod prawdziwym Hyperdrive każdy z nich bierze
+      połączenie z puli osobno, a nie jedzie tą samą sesją co zapis. To jedyny
+      wiersz, który sprawdza tę regułę od strony użytkownika, na żywym
+      Hyperdrive. *(Do 2026-08-30 uzasadnienie brzmiało „pule per-request, które
+      nigdy nie są zamykane". S-21 pokazał pomiarem, że taki mechanizm nie
+      istnieje — pule same się zwalniają. Wiersz zostaje, bo reguła, którą
+      naprawdę ćwiczy, jest inna i wciąż otwarta.)*
 
 - [ ] **13.3** (2.8) Odszyfrowanie zwraca **działający** token.
       *Co zrobić:* po zapisaniu credentiali kliknij **„Test connection"** na
@@ -2017,3 +2022,142 @@ wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
 `disconnect-impact.ts` plus test wyprowadzający kaskadę ze schematu — bez
 ekranu. Faza 4 poprawia teksty i dokumenty; zmienione zdania widać w 16.A, 16.B
 i 16.C.
+
+
+---
+
+## 17. S-21 `db-pool-teardown` — otwarte (2026-08-30)
+
+Slice zamknięty 2026-08-30, pięć faz, PR #77. Źródło kanoniczne:
+`context/changes/db-pool-teardown/plan.md` `## Progress`. Blokujące wiersze mają
+pełne opisy w `context/changes/db-pool-teardown/MANUAL-CHECKLIST.md` (17.A–17.C);
+reszta jest tylko tutaj.
+
+**O co chodzi, po ludzku.** Jedno żądanie do aplikacji otwierało do bazy **trzy**
+osobne połączenia (a akcja zapisu — **cztery**) zamiast jednego. Przy kilku
+równoległych testach Postgres kończył się miejsca. Gorsze było to, jak to
+wyglądało: aplikacja **nie** pokazywała błędu bazy, tylko wyrzucała zalogowaną
+osobę na `/login`, jakby sesja wygasła — więc przez tygodnie czytano to jako
+losowo pękające testy. Slice naprawia jedno i drugie.
+
+**Konto:** dowolne, na którym potrafisz się zalogować. Żaden wiersz nie dotyka
+prawdziwych tokenów, nic nie kasuje.
+
+⚠️ **17.A i 17.B wymagają zatrzymania lokalnej bazy** (`npx supabase stop`,
+powrót `npx supabase start`). Nic się nie kasuje — `stop` wyłącza kontenery,
+dane zostają. **Po testach uruchom bazę z powrotem.**
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **17.A** (faza 4, `4.6`) **Gdzie:** `/dashboard`, na koncie, na którym
+      jesteś **już zalogowana**.
+      **Co zrobić:** zaloguj się przy działającej bazie, potem `npx supabase stop`,
+      potem odśwież `/dashboard`.
+      **Co musi być prawdą:** karta **„Something went wrong"** z przyciskiem
+      **„Try again"** i zdaniem **„You are still signed in"**. Adres nadal
+      `/dashboard` — **nie** przeskoczyłaś na `/login`.
+      *Dlaczego to łapie:* to cała diagnoza slice'a. Awaria bazy udawała
+      wylogowanie, więc nikt nie szukał problemu z bazą. Ekran logowania w tym
+      miejscu znaczy, że poprawka nie zadziałała.
+
+- [ ] **17.B** (faza 4, `4.7`) **Gdzie:** `/login`, przy **zatrzymanej** bazie
+      (od razu po 17.A).
+      **Co zrobić:** wejdź ręcznie na `/login`.
+      **Co musi być prawdą:** strona logowania renderuje się normalnie — pola
+      e-mail i hasło. Żadnej karty błędu, żadnego pustego ekranu, żadnego
+      zapętlonego przekierowania.
+      *Dlaczego to łapie:* logowanie musi działać nawet gdy aplikacja nie
+      potrafi sprawdzić, czy ktoś jest zalogowany — inaczej awaria bazy zamyka
+      wszystkich na zewnątrz. Ta strona celowo zachowuje się odwrotnie niż
+      `/dashboard` i to rozróżnienie łatwo zepsuć jedną zmianą.
+
+- [ ] **17.C** (faza 4, `4.9`) **Gdzie:** `/dashboard`, przy **działającej**
+      bazie, w oknie prywatnym.
+      **Co zrobić:** `npx supabase start`, poczekaj, otwórz okno prywatne,
+      wejdź na `/dashboard`.
+      **Co musi być prawdą:** przekierowanie na `/login`, tak jak zawsze. Żadnej
+      karty „Something went wrong".
+      *Dlaczego to łapie:* 17.A i 17.B pilnują nowej ścieżki; ten wiersz pilnuje,
+      że stara — zwykłe przekierowanie niezalogowanego gościa — nie została przy
+      okazji zepsuta. Gdyby się zepsuła, każdy niezalogowany widziałby ekran
+      błędu zamiast logowania.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **17.D** (faza 4, `4.8`) **Gdzie:** `/settings/connections`, zalogowana,
+      przy **zatrzymanej** bazie.
+      **Co zrobić:** zaloguj się przy działającej bazie, wejdź na
+      `/settings/connections`, zatrzymaj bazę, kliknij dowolny przycisk
+      zapisujący (np. **„Test connection"**).
+      **Co musi być prawdą:** formularz zgłasza **niepowodzenie akcji** i
+      zostajesz na tej samej stronie. **Nie** zostajesz przerzucona na `/login`.
+      *Dlaczego to łapie:* akcje serwerowe były większym konsumentem tej wady niż
+      renderowanie stron (cztery połączenia na akcję, nie trzy). „Nie udało się
+      zapisać" jest prawdą; „zostałaś wylogowana" nie było.
+
+- [ ] **17.E** (faza 4, `4.10`) **Gdzie:** ekran błędu z 17.A.
+      **Co zrobić:** przeczytaj **całą** kartę, łącznie z drobnym drukiem na
+      dole. Jeśli umiesz — otwórz też podgląd źródła strony (Ctrl/Cmd+U).
+      **Co musi być prawdą:** nigdzie nie widać adresu bazy (`postgres://…`,
+      `127.0.0.1:54322`), żadnego tokena, żadnego surowego komunikatu
+      sterownika. Jedyna techniczna rzecz, jaka może się pojawić, to krótkie
+      **„Reference: …"** — nieprzezroczysty identyfikator.
+      *Dlaczego to łapie:* guardrail PRD mówi, że żaden token ani connection
+      string nie trafia do niczego, co widzi klient. Błędy sterownika Postgresa
+      **cytują connection string w treści komunikatu**, więc ekran błędu jest
+      dokładnie tym miejscem, gdzie wyciek jest najłatwiejszy.
+
+- [ ] **17.F** (faza 2, `2.7`–`2.9`) **Gdzie:** `/dashboard`,
+      `/settings/connections`, `/login`.
+      **Co zrobić:** przy działającej bazie: uruchom `npm run dev`, zaloguj się,
+      otwórz `/dashboard`, zapisz cokolwiek na `/settings/connections`, wyloguj
+      się i zaloguj ponownie.
+      **Co musi być prawdą:** wszystko działa dokładnie tak jak przed zmianą —
+      dashboard się renderuje z danymi, zapis się udaje, wylogowanie i logowanie
+      przechodzą.
+      *Dlaczego to łapie:* zmiana dotyka **jednego** pliku (`src/lib/db.ts`), ale
+      tego, przez który przechodzi każde zapytanie do bazy w całej aplikacji.
+      Jest pokryta testami automatycznymi (`npm test`, `npm run test:e2e`,
+      testy integracyjne), więc to wiersz „na wszelki wypadek", nie blokujący.
+
+- [ ] **17.G** (faza 3, `3.4`–`3.7`) **Gdzie:** terminal, nie przeglądarka —
+      wiersz dla właściciela, nie dla testerki.
+      **Co zrobić:** przeczytaj
+      `context/changes/db-pool-teardown/measurements.md` i porównaj tabelę
+      „przed" z tabelą „po"; uruchom `npm run test:e2e` (workery równoległe) i
+      sprawdź, czy w logu nie ma `53300` ani „remaining connection slots".
+      **Co musi być prawdą:** liczba połączeń przestaje rosnąć wraz z
+      równoległością — płaskie **5** (`POOL_MAX`) przy 8, 12 i 24 równoległych
+      żądaniach, zamiast 3,00 i 4,00 na żądanie. Suita E2E przechodzi na
+      równoległych workerach i nie jest wolniejsza niż wersja seryjna.
+      *Dlaczego to łapie:* to jedyny dowód, że poprawka zadziałała **z tego
+      powodu, z którego miała**. Pomiary są już wykonane i zapisane w
+      `measurements.md` (2026-08-30); ten wiersz to ich przegląd, nie powtórka.
+
+- [ ] **17.H** (faza 5, `5.6`–`5.8`) **Gdzie:** trzy dokumenty — wiersz dla
+      właściciela.
+      **Co zrobić:** przeczytaj wpis #3 w `context/foundation/lessons.md`, wpis
+      S-21 w `context/foundation/roadmap.md`, i sprawdź `git diff`, że cztery
+      celowo pominięte miejsca są **nietknięte**: `roster-store.ts:51-52`,
+      `reconcile-sprint.ts:29-30`, `absence-store.ts:139-140`,
+      `api/auth/[...all]/route.ts:10`.
+      **Co musi być prawdą:** wpis #3 da się zastosować bez znajomości historii
+      slice'a; wpis S-21 w roadmapie opisuje to, co naprawdę weszło; cztery
+      wymienione miejsca nie mają żadnej zmiany.
+      *Dlaczego to łapie:* stary wpis #3 podawał **błędny mechanizm** i przez
+      trzy miesiące sterował decyzjami w S-02, S-04, S-05 i S-24. Jeśli nowa
+      wersja jest niejasna, następny slice wyprowadzi z niej kolejne błędne
+      ograniczenie. Cztery pominięte miejsca używają tego samego słownictwa, ale
+      opisują **inne**, wciąż ważne reguły — zmiana któregokolwiek z nich byłaby
+      pomyłką, nie porządkami.
+
+- [ ] **17.I** `MANUAL-CHECKLIST.md` tego slice'a
+      (`context/changes/db-pool-teardown/MANUAL-CHECKLIST.md`) jest podpisana w
+      całości (17.A–17.C).
+      *Dlaczego to łapie:* pilnuje, że wiersze zostały naprawdę wykonane, a nie
+      odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29 wziął się
+      dokładnie stąd.
+
+**Faza 1 nie ma własnych wierszy manualnych po stronie aplikacji** — to pomiar
+bazowy wykonany jednorazowym skryptem ze scratchpada, zapisany w
+`measurements.md` i celowo niecommitowany.
