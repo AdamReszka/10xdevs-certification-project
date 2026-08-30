@@ -749,7 +749,7 @@ main checkout.
 
 #### Automated
 
-- [x] 5.1 npm test passes with the inventory test included
-- [x] 5.2 Removing one Phase 1 guard makes the inventory test fail
-- [x] 5.3 The inventory test asserts a non-empty set of call sites
-- [x] 5.4 manual-test-sweep exits zero; S-27's open rows are in the backlog
+- [x] 5.1 npm test passes with the inventory test included — 0f1eeb0
+- [x] 5.2 Removing one Phase 1 guard makes the inventory test fail — 0f1eeb0
+- [x] 5.3 The inventory test asserts a non-empty set of call sites — 0f1eeb0
+- [x] 5.4 manual-test-sweep exits zero; S-27's open rows are in the backlog — 0f1eeb0
