@@ -570,8 +570,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
 | S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | done | ✅ Implemented 2026-08-30, four phases. **Raised by the tester**, framed and planned the same day. Pattern copied is `molecules/confirm-dialog.tsx` (S-15), NOT `jira-project-editor.tsx` — whose copy was wrong in both directions and is now rebuilt from the same source. The load-bearing half is `src/lib/integrations/disconnect-impact.ts`: one declaration of the blast radius that a hermetic test holds equal to the schema's FK graph, so a future slice hanging a cascading child under `sprint` or `monitored_repo` breaks the build instead of silently making the dialog lie. Phase 3 also closed the Connections tab against demo — all nine Server Actions refuse server-side, which delivers one of S-27's three items |
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`). `sprint.start_date` / `end_date` are already populated from Jira and simply not rendered |
-| S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | no | Prereq S-24 not shipped. Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Sequence behind S-20** — both settle the meaning of `absence.sprint_id` and it must not be decided twice. Scope may shrink or grow with Open Roadmap Question 4 |
-| S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | no | Prereq S-24 not shipped. Raised at `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 takes the two items the owner scoped in (the dialog covers demo; the banner stops promising what is false); what remains is that `/setup/**` has no demo guard and the doorstep `push`es rather than `replace`s. **Third item DELIVERED by S-24 Phase 3 (2026-08-30):** `connections/page.tsx` documented a server-side refusal `connections/actions.ts` did not implement; all nine actions on that tab now return `demoRefusal()` / `DEMO_REFUSAL_MESSAGE`, each with a `*.demo.test.ts` sibling |
+| S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | **blocked on S-20** | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Sequence behind S-20** — both settle the meaning of `absence.sprint_id` and it must not be decided twice. Scope may shrink or grow with Open Roadmap Question 4 |
+| S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | yes | Prereqs S-09, S-22, S-24 all done (S-24 merged 2026-08-30). Raised at `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 takes the two items the owner scoped in (the dialog covers demo; the banner stops promising what is false); what remains is that `/setup/**` has no demo guard and the doorstep `push`es rather than `replace`s. **Third item DELIVERED by S-24 Phase 3 (2026-08-30):** `connections/page.tsx` documented a server-side refusal `connections/actions.ts` did not implement; all nine actions on that tab now return `demoRefusal()` / `DEMO_REFUSAL_MESSAGE`, each with a `*.demo.test.ts` sibling |
 
 ## Open Roadmap Questions
 
@@ -1076,9 +1076,21 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Status:** proposed
 
 - **Raised during `/10x-frame destructive-action-confirmation`** (2026-08-30).
-  S-24 takes the two demo items the owner put in its scope: the Disconnect dialog
-  covers the demo path like any other, and `demo-banner.tsx:93` gets a truthful
-  sentence. What is left here is the structural half.
+  S-24 took the two demo items the owner put in its scope and both shipped: the
+  Disconnect dialog covers the demo path like any other, and `demo-banner.tsx`
+  now claims only what the code keeps. What is left here is the structural half.
+- **The banner is NARROWED, not fixed — widening it back is this slice's job.**
+  S-24's impl-review (F1, `context/archive/2026-08-30-destructive-action-confirmation/reviews/impl-review.md`)
+  found the banner still promising *"Twoje prawdziwe dane i integracje są
+  nietknięte"* while the wizard's WRITE path was ungated. S-24 could only fix the
+  sentence, not the gap: `storeGithubIntegration` / `storeJiraIntegration` (and
+  the validate actions) carry **no** `demoRefusal`, and `/setup/**` has no
+  route-level demo guard — so a lead viewing demo can still reach `/setup/github`
+  and write or replace a real credential. So the concrete deliverable here is
+  those refusals plus the route guard; when they land, restore the banner's
+  stronger sentence (the code comment at `demo-banner.tsx` says so explicitly).
+  Note S-24 DID gate the wizard's two Disconnect buttons, since those were two of
+  its own four paths.
 - **The gating criterion is written down and is the wrong criterion.**
   `src/components/organisms/settings/integration-card.tsx:31-35` records the S-09
   decision as "only the control that would reach the live API is disabled", which
@@ -1142,3 +1154,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-14: user can navigate to a dedicated settings page (accessible after first run) and configure per-anomaly-type severity tiers (re-tier High/Medium/Low per anomaly rule) and detection thresholds (override the defaults from FR-009); **saving re-runs detection immediately**, so the Anomaly Inbox reflects the change on the next view rather than at the next cron tick.** — Archived 2026-08-29 → `context/archive/2026-08-29-anomaly-settings-page/`. Lesson: the manual-test backlog must be reconciled against every plan and MANUAL-CHECKLIST on archive — archiving a slice does not close its manual rows.
 - **S-12: user can view a list of past daily recaps and drill into any recap; recaps older than the current sprint + 2 previous sprints are automatically purged.** — Archived 2026-08-29 → `context/archive/2026-08-29-recap-history/`. Lesson: —.
 - **S-22: a user who signs up lands on a **doorstep** at `/setup` — a first screen inside the wizard shell, with the navigation suppressed, that says what SprintFlow needs and offers exactly two doors: continue configuring (GitHub, or whichever step is actually still missing), or see the demo. A user whose onboarding is already complete lands on `/dashboard` as before. Today both go to `/dashboard` — the full S-07/S-10 surface rendering zeros — and `/setup` is reachable only by typing the URL.** — Archived 2026-08-30 → `context/archive/2026-08-19-onboarding-routing/`. Lesson: —.
+- **S-24: disconnecting GitHub or Jira — from the setup wizard or from Settings — asks for confirmation first and names what will be destroyed. No path that permanently deletes synced or hand-entered data fires on a single click.** — Archived 2026-08-30 → `context/archive/2026-08-30-destructive-action-confirmation/`. Lesson: —.
