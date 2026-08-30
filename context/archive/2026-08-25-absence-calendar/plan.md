@@ -163,6 +163,24 @@ or NULL when there is none; `is_planned` is judged against **that** sprint's sta
 and the Phase 4 condition only fires for an absence whose `sprintId` equals the snapshot's
 sprint, so an absence carried into a later sprint stops raising risk on its own.
 
+> **REVERSED 2026-08-30 by S-20** (`context/changes/absence-sprint-scoping/`).
+> The last clause above — the Phase 4 condition firing only for an absence whose
+> `sprintId` equals the snapshot's sprint — is gone. `SPRINT_AT_RISK` now matches
+> absences by their **dates**, like every other absence reader
+> (`capacity.ts`, `developer-inactive.ts`, `load-snapshot.ts`, this file's own
+> `listAbsences` / `assertNoOverlap`), so an absence carried into a later sprint
+> raises risk there for as long as its dates overlap what is left of it.
+> Two reasons. **The stamp answered a different question:** `createAbsence` fills
+> it from whichever sprint was active when the lead typed the row, never from the
+> row's own dates — provenance, not membership. **The "forever" worry above does
+> not hold:** `overlaps(absence, now, endDate)` stops firing the moment the
+> absence ends, so the exposure is the one rollover the absence actually spans,
+> not an unbounded condition. What survives untouched is D2's *definition* of
+> planned-ness ("was it known before the sprint started?"), which still justifies
+> `is_planned`'s `true` default in `schema.ts`. The first half of the rule also
+> survives: `createAbsence` still stamps the column, because
+> `absence.sprint_id` is `ON DELETE CASCADE` and **S-26** owns that decision.
+
 #### 2. Validation schemas
 
 **File**: `src/lib/validations/absence.ts` (new)
@@ -489,7 +507,15 @@ were available. Emitted as its own anomaly because the rule has no headroom to r
 absence with `isPlanned === false` (strict, per the `scope-creep.ts:17` precedent) **whose
 `sprintId` is the snapshot's sprint** (per Phase 1 item 1 — an absence carried over from an
 earlier sprint was unplanned *there*, not here) and whose window overlaps
-`[now, sprint.endDate]`. `dedupKey` keyed on the absence id so two
+`[now, sprint.endDate]`.
+
+> **REVERSED 2026-08-30 by S-20** (`context/changes/absence-sprint-scoping/`).
+> The `sprintId` half of this contract no longer holds: the condition fires on
+> `isPlanned === false` plus date overlap alone. The strict-`false` check and the
+> whole magnitude specification below are unchanged. See the marker under Phase 1
+> item 1 for why.
+
+`dedupKey` keyed on the absence id so two
 absences for one member produce two anomalies and a deleted absence resolves cleanly.
 `relatedTeamMemberId` set to the absent member. `magnitude` is spelled out the way both
 existing conditions spell theirs (`:70`, `:84-85`), not left to the implementer:

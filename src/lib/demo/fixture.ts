@@ -637,7 +637,7 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
         type: "SPRINT_AT_RISK" as const,
         severity: "HIGH" as const,
         description:
-          "Bob Rivera is unexpectedly away for 3 of the 3 working day(s) left in the sprint — the commitment did not account for it.",
+          "Bob Rivera is unexpectedly away for 3 of the 3 working day(s) left in the sprint.",
         suggestedAction:
           "Re-plan around Bob Rivera's absence — 3 of the 3 working day(s) left in the sprint are gone.",
         sourceUrl: null,

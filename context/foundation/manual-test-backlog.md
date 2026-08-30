@@ -423,6 +423,30 @@ To przegląd spójności dokumentów (czy folder zmiany S-02 niesie odroczone
 obowiązki testowe, czy `test-plan §3` odzwierciedla stan faktyczny, czy recenzent
 doda test z §6.1 bez dopytywania). Do zrobienia czytając, nie klikając.
 
+**S-20 `absence-sprint-scoping`** — wiersze 2.6 i 2.7 z
+`context/changes/absence-sprint-scoping/plan.md`. **Nie oddawaj ich osobie
+testującej**: to czytanie dokumentów, nie klikanie w aplikacji, i wymaga
+znajomości historii decyzji. Zamyka je implementujący na końcu fazy 2.
+
+- [x] **2.6** **ZALICZONE 2026-08-30 (14338d8).** Przeczytaj sekcję **S-20** w `context/foundation/roadmap.md` od
+      początku do końca oraz wiersz **S-26** w tabeli szczegółowej.
+      **Co musi być prawdą:** sekcja S-20 nie zostawia wrażenia, że pogodzenie
+      trzech konsumentów jest wciąż otwarte (jest rozstrzygnięte: liczą się
+      daty), a S-26 nie czyta się już jako zablokowany.
+      *Dlaczego to łapie:* sekcja była napisana jako pytanie („nic nie mówi,
+      która interpretacja jest kanoniczna"). Zostawiona tak, każe następnej
+      osobie rozstrzygać po raz drugi coś, co właściciel już rozstrzygnął.
+
+- [x] **2.7** **ZALICZONE 2026-08-30 (d8b2eeb).** Przeczytaj rekomendację **A** w
+      `context/archive/2026-08-26-sprint-reconciliation/research.md` (tabela
+      „Separable — recommendation, owner decides").
+      **Co musi być prawdą:** czytelnik trafia na datowany znacznik odwrócenia
+      **wewnątrz** tej samej komórki, zanim zdąży potraktować rekomendację jako
+      obowiązującą; ten sam znacznik stoi przy akapicie o trzech niezgodnych
+      konsumentach (§ „Two nuances…").
+      *Dlaczego to łapie:* to jest dokładnie to zdanie, którym raz już odłożono
+      tę zmianę. Bez znacznika następna osoba zacytuje je i odłoży ją ponownie.
+
 ## 4. Osobna kategoria: deploy
 
 `context/deployment/deploy-plan.md` ma **19** niezaznaczonych kroków, ale to
@@ -2429,3 +2453,53 @@ osobnym wierszem właśnie dlatego.
 przewraca build, gdy jakaś akcja serwerowa celuje w prawdziwe konto bez
 sprawdzenia trybu demo, albo gdy strona z polem na token przestaje przekierowywać.
 Zastępuje komentarze, które trzy razy wymieniły za mało miejsc.
+
+---
+
+## 20. S-20 `absence-sprint-scoping` — otwarte (2026-08-30)
+
+Slice zamknięty 2026-08-30, dwie fazy. Źródło kanoniczne:
+`context/changes/absence-sprint-scoping/plan.md` `## Progress`. Pełne opisy
+wierszy: `context/changes/absence-sprint-scoping/MANUAL-CHECKLIST.md`.
+Zobowiązania dokumentacyjne tego slice'a (2.6, 2.7) **nie są tutaj** — siedzą w
+**§3** i zamyka je implementujący, nie osoba testująca.
+
+**O co chodzi, po ludzku.** Gdy lead zapisywał nieobecność, aplikacja zapamiętywała
+przy okazji, **który sprint był akurat aktywny**. Anomalia „sprint zagrożony"
+pytała potem o ten zapamiętany sprint zamiast o **daty** nieobecności. Skutek:
+urlop wpisany w sprincie 12, ciągnący się w sprint 13, obniżał pojemność sprintu
+13 i wyciszał w nim alert o braku commitów — ale **nie potrafił** podnieść w nim
+ryzyka. Od teraz liczą się wyłącznie daty, tak jak we wszystkich pozostałych
+siedmiu miejscach w kodzie.
+
+**Konto:** dowolne, z rosterem i aktywnym sprintem. Nic się nie kasuje, nie ma
+migracji, nie ma dotykania tokenów. Absencje założone w teście usuwasz na końcu
+sama (to część wiersza 18.A).
+
+⚠️ **Czego świadomie NIE ma na tej liście.** Dwa przypadki, dla których slice
+powstał — nieobecność zapisana, gdy konto nie ma jeszcze żadnego sprintu, oraz
+nieobecność zapisana w sprincie N zapalająca ryzyko w N+1 — wymagają ręcznego
+zamknięcia sprintu i wstawienia następnego w bazie. **Nie da się ich odtworzyć
+klikaniem.** Oba są pokryte testami integracyjnymi na prawdziwym Postgresie
+(`detect.integration.test.ts`) i to jest ich dowód.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **20.A** (faza 1, `1.8`) **Gdzie:** `/settings/absences`, potem
+      `/dashboard`.
+      **Co zrobić:** policz na `/dashboard` wiersze „sprint at risk" ze zdaniem
+      **„unexpectedly away"**; dodaj **nieplanowaną** nieobecność od dzisiaj do
+      daty za końcem sprintu; wróć na `/dashboard`. Potem dodaj **drugą**,
+      **zaplanowaną**, innej osobie w tym samym oknie; odśwież. Na koniec usuń
+      obie i odśwież.
+      **Co musi być prawdą:** nieplanowana daje **dokładnie jeden** nowy wiersz
+      („… unexpectedly away for **N** of the **M** working day(s) left"), gdzie
+      **M** to dni robocze od dziś do końca sprintu, a **N** — część
+      nieobecności w tym oknie. Zaplanowana **nie** dodaje nic. Usunięcie obu
+      gasi wiersz i wraca do liczby wyjściowej.
+      *Dlaczego to łapie:* slice **usunął** warunek, który wcześniej odsiewał
+      część nieobecności — po takiej zmianie najłatwiej o strzelanie za często
+      (podwojony wiersz) albo o utratę rozróżnienia „zaskoczenie" vs „urlop
+      wpisany miesiąc wcześniej". Zła liczba **M** albo **N** znaczy z kolei, że
+      przy okazji ruszono arytmetykę dni roboczych, która miała zostać
+      nietknięta.
