@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { cache } from "react";
-import { getDb } from "@/lib/db";
+import { getDb, getDbWithPool } from "@/lib/db";
 import * as schema from "@/db/schema";
 import { dispatchPasswordReset } from "@/lib/auth-email";
 import {
@@ -69,7 +69,10 @@ async function resolveWaitUntil(): Promise<
  * schema-gen CLI only (Node, build time) and is never used by the Worker.
  */
 export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
-  const db = getDb(env);
+  // No env means the static schema-gen export below — the one `createAuth` call
+  // that happens outside a request. It takes its own unmemoized handle so it can
+  // never become the memo's first constructor (see the docblock below).
+  const db = env ? getDb(env) : getDbWithPool().db;
   const secret = env?.BETTER_AUTH_SECRET ?? process.env.BETTER_AUTH_SECRET;
   const baseURL = env?.BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL;
 
@@ -163,6 +166,15 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
  * Static instance for the Better Auth schema-gen CLI (`@better-auth/cli generate`),
  * which runs in Node at build time and reads `auth.options`. Do NOT import this in
  * Worker request paths — use `createAuth(env)` there.
+ *
+ * It is also never the first constructor of the request-scoped `db` memo (S-21).
+ * It supplies no env, so `createAuth` gives it `getDbWithPool().db`. Without that
+ * it would be benign on Workers (module scope has no ALS store) but wrong in
+ * `next dev`, where `initOpenNextCloudflareForDev` has already installed the
+ * global context by the time this module is evaluated: this line would become
+ * the process-global pool for the entire dev server and every later
+ * `getDb(env)` would silently inherit ITS env. `getDbWithPool` is equally lazy,
+ * so construction still opens no connection.
  */
 export const auth = createAuth();
 

@@ -768,25 +768,25 @@ fires.
 
 #### Automated
 
-- [x] 1.1 The scratchpad snippet runs and prints a report; nothing new under `scripts/`
-- [x] 1.2 The snippet refuses a non-local DSN
+- [x] 1.1 The scratchpad snippet runs and prints a report; nothing new under `scripts/` — a73388a
+- [x] 1.2 The snippet refuses a non-local DSN — a73388a
 
 #### Manual
 
-- [x] 1.3 Baseline recorded for authenticated `GET /dashboard`
-- [x] 1.4 Baseline recorded for an authenticated Server Action
-- [x] 1.5 Both numbers written into the phase notes with concurrency and idle baseline
+- [x] 1.3 Baseline recorded for authenticated `GET /dashboard` — a73388a
+- [x] 1.4 Baseline recorded for an authenticated Server Action — a73388a
+- [x] 1.5 Both numbers written into the phase notes with concurrency and idle baseline — a73388a
 
 ### Phase 2: Request-scoped identity for the `db` handle
 
 #### Automated
 
-- [ ] 2.1 New test passes and the unit suite is green
-- [ ] 2.2 The six demo tests and `auth.test.ts` pass unchanged
-- [ ] 2.3 Type checking passes
-- [ ] 2.4 Linting passes
-- [ ] 2.5 Integration tests pass
-- [ ] 2.6 Production build succeeds
+- [x] 2.1 New test passes and the unit suite is green
+- [x] 2.2 The six demo tests and `auth.test.ts` pass unchanged
+- [x] 2.3 Type checking passes
+- [x] 2.4 Linting passes
+- [x] 2.5 Integration tests pass
+- [x] 2.6 Production build succeeds
 
 #### Manual
 
