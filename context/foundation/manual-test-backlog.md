@@ -910,7 +910,7 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       *Dlaczego to ma znaczenie:* cała gwarancja exactly-once opiera się na tym
       unique key. Nullowalny człon klucza nie kolidowałby nigdy (lessons.md #1).
 
-- [ ] **4.13** Dashboard „Today" renderuje się identycznie po wyciągnięciu
+- [x] **4.13** Dashboard „Today" renderuje się identycznie po wyciągnięciu
       mapowania anomalii z RSC do `lib/anomaly/inbox-view.ts`.
       *Jak:* `/dashboard` → Anomaly Inbox. Porównaj z tym, co pamiętasz sprzed
       slice'a: te same anomalie, ta sama kolejność, te same context chips,
@@ -919,6 +919,16 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       renderującej nagłówkową powierzchnię produktu. Test integracyjny dowodzi,
       że mail i inbox wołają tę samą funkcję — nie że komponent nadal ją dobrze
       konsumuje.
+      *Status:* **Zaliczone 2026-08-30** (sesja manualna, Ania). Wykonane w
+      trybie demo — konto realne ma zero anomalii, więc pusty inbox nie
+      pozwoliłby ocenić kolejności ani kontrolek. Potwierdzone: 14 pozycji,
+      kolejność HIGH (3× `SPRINT_AT_RISK`) → MEDIUM → LOW, komplet pięciu
+      atrybutów FR-014 na pozycji (opis, kontekst z osobą i datą, suggested
+      action, „View source" prowadzący do Jiry; `SPRINT_AT_RISK` bez linku —
+      poprawnie, `source_url IS NULL`), cztery sortowania (severity / age /
+      ticket / developer) zmieniają kolejność, oba filtry zawężają i czyszczą
+      się. Liczby zweryfikowane przeciwko bazie: Alice Kim = 3, Sprint at risk
+      = 3 — zgodne z ekranem co do sztuki.
 
 - [ ] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
       *Jak:* `/settings/connections` → zmiana projektu Jira → **przeczytaj

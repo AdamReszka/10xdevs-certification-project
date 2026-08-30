@@ -1231,7 +1231,7 @@ is exercised by the very first email.
 
 #### Manual
 
-- [ ] 4.13 Dashboard "Today" renders identically after the mapping extraction
+- [x] 4.13 Dashboard "Today" renders identically after the mapping extraction — manual 2026-08-30
 
 ### Phase 5: Scheduling, exactly-once send, cron wiring
 
