@@ -148,8 +148,15 @@ export function countTeamDaysOffInclusive(
   return count;
 }
 
-/** The team's working weekdays, defaulting to Mon–Fri when Jira told us nothing. */
-function workingDaySet(
+/**
+ * The team's working weekdays, defaulting to Mon–Fri when Jira told us nothing.
+ *
+ * EXPORTED for `working-time.ts` (S-28), which measures elapsed WORKING HOURS and
+ * needs the identical calendar. A second copy of the Mon–Fri defaulting is the
+ * exact "two counters that disagree" failure the doc block above and
+ * `context/foundation/lessons.md` each already record once.
+ */
+export function workingDaySet(
   workingDays: readonly string[] | null | undefined,
 ): Set<string> {
   return new Set<string>(
@@ -185,7 +192,7 @@ function countDays(
  * 2026-08-17 is a Monday in Warsaw and in Los Angeles. The zone has already done
  * its job upstream, deciding WHICH day keys the instants map to.
  */
-function weekdayOf(dayKey: DayKey): WeekdayCode {
+export function weekdayOf(dayKey: DayKey): WeekdayCode {
   return WEEKDAY_BY_INDEX[new Date(`${dayKey}T12:00:00Z`).getUTCDay()];
 }
 

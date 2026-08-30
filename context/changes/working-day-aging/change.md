@@ -1,7 +1,7 @@
 ---
 change_id: working-day-aging
 title: Anomaly aging stops counting the weekend as work
-status: new
+status: implementing
 created: 2026-08-30
 updated: 2026-08-30
 archived_at: null
@@ -68,9 +68,14 @@ FR-016 calls the headline surface.
    bucket is hours OR a sentinel; "10 working days" is currently inexpressible,
    recorded as deliberately not done in `manual-test-backlog.md` §10 and
    `anomaly-settings-page/plan.md:108`.
-2. **The demo fixture runs on a frozen clock** (`anomaly-settings-page/plan.md:166`);
-   changing the unit of time can move which anomalies the demo is supposed to
-   show.
+2. **The demo fixture is anchored to the moment it was loaded** — corrected by
+   research on 2026-08-30; this line previously said "a frozen clock", which is
+   only half true. `buildDemoFixture` is anchor-relative (`fixture.ts:135-139`)
+   and the anchor is real wall-clock time at load, stored as `user.demo_anchor_at`
+   (`load.ts:71,91,130`). So the demo can be loaded on any weekday, and under
+   working-day math whether it still shows four anomaly types — US-02's
+   acceptance criterion — starts depending on which day that was. `fixture.ts`
+   has no test.
 3. **`stryker.conf.json`** — `break: 70`, scoped to exactly these rule files.
    Per CLAUDE.md it wins by filename precedence over the stale
    `stryker.config.json`.
