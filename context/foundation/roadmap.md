@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: draft
 created: 2026-05-26
-updated: 2026-08-29
+updated: 2026-08-30
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -53,7 +53,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-19 | team-navigation-section   | roster, absences and cadence move out of Settings into a first-class Team section              | S-08, S-15         | FR-006, FR-010                                  | proposed |
 | S-20 | absence-sprint-scoping    | the three consumers of a recorded absence agree on which sprint it belongs to                  | S-08, S-16         | FR-010                                          | proposed |
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
-| S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | proposed |
+| S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 
 ## Streams
@@ -721,7 +721,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** onboarding-routing
 - **PRD refs:** Access Control — *"Sign-up: on success, the user lands in the setup wizard."*; FR-008 / US-02 (the demo door)
 - **Prerequisites:** S-01, S-04, S-07, S-09, S-10
-- **Status:** proposed
+- **Status:** done
 
 - **Why the prerequisite list is five, not two (widened 2026-08-30, after the
   slice was built).** It read `S-01, S-04` from the day the folder was opened —
@@ -904,3 +904,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-13: at refinement time the lead picks tickets to check — from the monitored project's Jira backlog, by ticket key, or pasted as text — and each one comes back with a readiness verdict: "DOR met", or the specific gaps blocking it, each stated in that ticket's own terms. Gap count follows the ticket, not a quota. A verdict may also be that the ticket should not enter the sprint at all (FR-021). Session saved for later review.** — Archived 2026-08-28 → `context/archive/2026-08-26-refinement-helper-ai/`. Lesson: —.
 - **S-14: user can navigate to a dedicated settings page (accessible after first run) and configure per-anomaly-type severity tiers (re-tier High/Medium/Low per anomaly rule) and detection thresholds (override the defaults from FR-009); **saving re-runs detection immediately**, so the Anomaly Inbox reflects the change on the next view rather than at the next cron tick.** — Archived 2026-08-29 → `context/archive/2026-08-29-anomaly-settings-page/`. Lesson: the manual-test backlog must be reconciled against every plan and MANUAL-CHECKLIST on archive — archiving a slice does not close its manual rows.
 - **S-12: user can view a list of past daily recaps and drill into any recap; recaps older than the current sprint + 2 previous sprints are automatically purged.** — Archived 2026-08-29 → `context/archive/2026-08-29-recap-history/`. Lesson: —.
+- **S-22: a user who signs up lands on a **doorstep** at `/setup` — a first screen inside the wizard shell, with the navigation suppressed, that says what SprintFlow needs and offers exactly two doors: continue configuring (GitHub, or whichever step is actually still missing), or see the demo. A user whose onboarding is already complete lands on `/dashboard` as before. Today both go to `/dashboard` — the full S-07/S-10 surface rendering zeros — and `/setup` is reachable only by typing the URL.** — Archived 2026-08-30 → `context/archive/2026-08-19-onboarding-routing/`. Lesson: —.

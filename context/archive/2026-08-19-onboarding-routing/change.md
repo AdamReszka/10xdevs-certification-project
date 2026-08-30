@@ -1,10 +1,10 @@
 ---
 change_id: onboarding-routing
 title: First-run routing into the setup wizard + entry point for returning users
-status: impl_reviewed
+status: archived
 created: 2026-08-19
 updated: 2026-08-30
-archived_at: null
+archived_at: 2026-08-30T07:12:13Z
 depends_on: setup-team-roster-cadence (S-04 — in review, PR #42)
 ---
 
