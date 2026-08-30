@@ -5,7 +5,15 @@ import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { jiraCredential, jiraProject, sprint, statusMapping, user } from "@/db/schema";
+import {
+  absence,
+  jiraCredential,
+  jiraProject,
+  sprint,
+  statusMapping,
+  teamMember,
+  user,
+} from "@/db/schema";
 import { JiraAuthError } from "@/lib/jira";
 import {
   disconnectJira,
@@ -472,5 +480,97 @@ describe("jira-store service — credential security (integration)", () => {
       expect(aCredAfter).toHaveLength(1);
       expect(aMappingsAfter).toHaveLength(3);
     });
+  });
+});
+
+/**
+ * S-26 — a Jira disconnect stops destroying the lead's hand-entered absences.
+ *
+ * The cascade `jira_credential → jira_project → sprint` is unchanged; the fourth
+ * hop to `absence` is now SET NULL. `absence-store.integration.test.ts` proves
+ * the same thing one level down (deleting the sprint directly); this pins it at
+ * the store function the Server Action actually calls.
+ */
+describe("S-26: disconnecting Jira keeps the recorded absences", () => {
+  const owners: string[] = [];
+
+  afterEach(async () => {
+    await cleanupUsers(owners.splice(0));
+  });
+
+  async function seedAbsenceFor(ownerId: string, projectRowId: string) {
+    const sprintId = randomUUID();
+    await db.insert(sprint).values({
+      id: sprintId,
+      ownerId,
+      jiraProjectId: projectRowId,
+      jiraSprintId: "1001",
+      name: "Sprint 24",
+      state: "ACTIVE",
+      startDate: new Date("2026-08-17T08:00:00.000Z"),
+      endDate: new Date("2026-08-31T08:00:00.000Z"),
+    });
+
+    const memberId = randomUUID();
+    await db.insert(teamMember).values({
+      id: memberId,
+      ownerId,
+      name: "Ada Dev",
+      source: "MANUAL",
+    });
+
+    const absenceId = randomUUID();
+    await db.insert(absence).values({
+      id: absenceId,
+      ownerId,
+      teamMemberId: memberId,
+      sprintId,
+      type: "VACATION",
+      startDate: new Date("2026-08-20T00:00:00.000Z"),
+      endDate: new Date("2026-08-22T23:59:59.999Z"),
+    });
+
+    return { absenceId, memberId };
+  }
+
+  it("leaves the absence row with sprint_id nulled after disconnectJira", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    await storeJiraIntegration({
+      db,
+      ownerId,
+      baseUrl: BASE,
+      workspaceUrl: BASE,
+      creds: CREDS,
+      jiraProjectId: "10000",
+      mappings: FULL_MAPPINGS,
+      opts: { fetchImpl: makeFetch() },
+    });
+    const [proj] = await db
+      .select()
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+    const { absenceId, memberId } = await seedAbsenceFor(ownerId, proj.id);
+
+    await disconnectJira({ db, ownerId });
+
+    // The cascade above `absence` really did fire — otherwise this is vacuous.
+    expect(
+      await db.select().from(jiraCredential).where(eq(jiraCredential.ownerId, ownerId)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(sprint).where(eq(sprint.ownerId, ownerId)),
+    ).toHaveLength(0);
+
+    const rows = await db.select().from(absence).where(eq(absence.id, absenceId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sprintId).toBeNull();
+    // The roster it hangs off is untouched too — an absence with no member
+    // would be as lost as a deleted one.
+    expect(rows[0].teamMemberId).toBe(memberId);
+    expect(
+      await db.select().from(teamMember).where(eq(teamMember.id, memberId)),
+    ).toHaveLength(1);
   });
 });

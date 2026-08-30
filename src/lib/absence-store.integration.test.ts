@@ -430,3 +430,57 @@ describe("listAbsences", () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe("S-26: the cascade no longer takes absences with the sprint", () => {
+  it("survives its sprint being deleted, with sprint_id nulled", async () => {
+    // The mechanism S-26 exists to end. `createAbsence` stamps the active
+    // sprint; `absence.sprint_id` used to be ON DELETE CASCADE, so deleting the
+    // sprint — which a Jira disconnect and a project switch both do — silently
+    // destroyed hand-entered FR-010 data.
+    const { ownerId, sprintId } = await newOwner();
+    const memberId = await newMember(ownerId);
+
+    const { id } = await createAbsence({
+      db,
+      ownerId,
+      input: vacation(memberId, "2026-05-05", "2026-05-09"),
+    });
+
+    await db.delete(sprint).where(eq(sprint.id, sprintId));
+
+    const [row] = await db.select().from(absence).where(eq(absence.id, id));
+    expect(row).toBeDefined();
+    expect(row.sprintId).toBeNull();
+    // Everything the lead actually typed is byte-for-byte intact.
+    expect(row.teamMemberId).toBe(memberId);
+    expect(row.type).toBe("VACATION");
+    expect(row.startDate.toISOString()).toBe("2026-05-04T22:00:00.000Z");
+  });
+
+  it("survives the whole Jira credential being deleted", async () => {
+    // The disconnect path end to end: jira_credential → jira_project → sprint
+    // is still a cascade; the fourth hop to `absence` is not.
+    const { ownerId } = await newOwner();
+    const memberId = await newMember(ownerId);
+
+    const { id } = await createAbsence({
+      db,
+      ownerId,
+      input: vacation(memberId, "2026-05-05", "2026-05-09"),
+    });
+
+    await db.delete(jiraCredential).where(eq(jiraCredential.ownerId, ownerId));
+
+    // The sprint really is gone — otherwise this test would pass vacuously.
+    const sprints = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(sprints).toHaveLength(0);
+
+    const [row] = await db.select().from(absence).where(eq(absence.id, id));
+    expect(row).toBeDefined();
+    expect(row.sprintId).toBeNull();
+
+    // And it is still readable through the store, not just present in the table.
+    const listed = await listAbsences({ db, ownerId });
+    expect(listed.map((a) => a.id)).toContain(id);
+  });
+});

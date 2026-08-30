@@ -172,9 +172,11 @@ export async function storeGithubIntegration({
 }
 
 /**
- * Remove the GitHub integration for `ownerId`: delete the credential, which
- * cascades FOUR levels deep — not one. `monitored_repo` goes, and with it every
- * `github_commit`, `github_pull_request` and `github_review` beneath them.
+ * Remove the GitHub integration for `ownerId`: delete the credential. Since
+ * S-26 the cascade stops there — `monitored_repo.credential_id` is SET NULL, so
+ * the repos and every `github_commit`, `github_pull_request` and
+ * `github_review` beneath them survive with no credential, to be re-linked on
+ * reconnect through `monitored_repo_owner_repo_uq`.
  * `src/lib/integrations/disconnect-impact.ts` holds the maintained answer and a
  * test keeps it equal to the schema's foreign-key graph; do not restate the list
  * here, because a restated list is a second copy that drifts (it already did,

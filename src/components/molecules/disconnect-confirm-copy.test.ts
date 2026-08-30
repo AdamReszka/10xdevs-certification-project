@@ -24,7 +24,9 @@ describe("disconnect dialog copy", () => {
 
     // Three sentences: what goes, what stays, what reconnecting does.
     expect(text.match(/\. /g)?.length ?? 0).toBeGreaterThanOrEqual(2);
-    expect(text).toMatch(/^This deletes /);
+    // The opening varies since S-26: a GitHub disconnect destroys nothing, so
+    // an empty `destroys` gets its own sentence instead of a hole in this one.
+    expect(text).toMatch(/^This (deletes|removes) /);
     expect(text).toContain(". It keeps ");
     expect(text.trim()).toMatch(/\.$/);
 
@@ -46,19 +48,25 @@ describe("disconnect dialog copy", () => {
     },
   );
 
-  it("the Jira dialog says the hand-entered absences do not come back", () => {
-    // The one irreplaceable item in either list. If a future fragment edit
-    // drops it, the lead consents to a loss nobody told them about.
+  it("the Jira dialog says the hand-entered absences SURVIVE", () => {
+    // The inversion of the S-24 assertion this replaces. Absences are still the
+    // one irreplaceable item in either list, so the sentence about them is
+    // still load-bearing — but the true sentence is now that they stay. A
+    // dialog that keeps threatening a loss it no longer inflicts frightens the
+    // lead off the safe path just as effectively as one that hides a real loss.
     const text = disconnectDescription("jira");
     expect(text).toContain("absences");
-    expect(text).toMatch(/cannot be synced back/);
-    expect(text).toMatch(/nothing entered by hand comes back/);
+    expect(text).toMatch(/It keeps [^.]*absences/);
+    expect(text).not.toMatch(/cannot be synced back/);
+    expect(text).not.toMatch(/nothing entered by hand comes back/);
   });
 
-  it("the GitHub dialog names the repositories and the synced history", () => {
+  it("the GitHub dialog names the repositories and the synced history as surviving", () => {
     const text = disconnectDescription("github");
     expect(text).toContain("monitored repositories");
-    expect(text).toContain("commit, pull request and code review");
+    expect(text).toMatch(/It keeps [^.]*monitored repositories/);
+    // Nothing below the credential dies, so there is no deletion list to name.
+    expect(text).toMatch(/^This removes the connection itself\./);
   });
 
   it("both dialogs say what SURVIVES, not only what is destroyed", () => {

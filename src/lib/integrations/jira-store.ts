@@ -288,9 +288,9 @@ export async function storeJiraIntegration({
 
 /**
  * Remove the Jira integration for `ownerId`: delete the credential, which
- * cascades FIVE levels deep — not one. Seven tables go, including `sprint`,
- * `anomaly` and — the sharp edge — `absence`, the lead's hand-entered FR-010
- * data that no sync can rebuild; `daily_recap` survives with `sprint_id` nulled.
+ * cascades FOUR levels deep — not one. Six tables go, including `sprint` and
+ * `anomaly`. Since S-26 `absence` is NOT among them: the lead's hand-entered
+ * FR-010 data survives with `sprint_id` nulled, as `daily_recap` already did.
  * `src/lib/integrations/disconnect-impact.ts` holds the maintained answer and a
  * test keeps it equal to the schema's foreign-key graph; do not restate the list
  * here, because a restated list is a second copy that drifts (it already did,

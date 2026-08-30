@@ -5,7 +5,14 @@ import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { githubCredential, monitoredRepo, user } from "@/db/schema";
+import {
+  githubCommit,
+  githubCredential,
+  githubPullRequest,
+  githubReview,
+  monitoredRepo,
+  user,
+} from "@/db/schema";
 import { GithubAuthError } from "@/lib/github";
 import {
   disconnectGithub,
@@ -297,5 +304,100 @@ describe("github-store service — credential security (integration)", () => {
       expect(aCredAfter).toHaveLength(1);
       expect(aReposAfter).toHaveLength(2);
     });
+  });
+});
+
+/**
+ * S-26 — the GitHub subtree survives a disconnect.
+ *
+ * `monitored_repo.credential_id` moved from CASCADE to SET NULL, so the repo
+ * rows and everything hanging off their internal ids stay put with no
+ * credential. This is what makes the dialog's default outcome real rather than
+ * copy: the ids are what a reconnect re-links through
+ * `monitored_repo_owner_repo_uq`.
+ */
+describe("S-26: disconnecting GitHub keeps the repos and their synced history", () => {
+  const owners: string[] = [];
+
+  afterEach(async () => {
+    await cleanupUsers(owners.splice(0));
+  });
+
+  it("leaves monitored_repo, commits, PRs and reviews in place with credential_id null", async () => {
+    const ownerId = await seedUser();
+    owners.push(ownerId);
+
+    await storeGithubIntegration({
+      db,
+      ownerId,
+      token: TOKEN,
+      selectedRepoIds: [String(REPOS[0].id)],
+      opts: { fetchImpl: makeFetch() },
+    });
+
+    const [repo] = await db
+      .select()
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+    const repoId = repo.id;
+
+    const prId = randomUUID();
+    await db.insert(githubCommit).values({
+      id: randomUUID(),
+      ownerId,
+      repoId,
+      sha: "abc1234",
+      authorGithubUsername: "octocat",
+      authoredAt: new Date("2026-08-20T10:00:00.000Z"),
+    });
+    await db.insert(githubPullRequest).values({
+      id: prId,
+      ownerId,
+      repoId,
+      githubPrId: 987654,
+      number: 42,
+      title: "Add the thing",
+    });
+    await db.insert(githubReview).values({
+      id: randomUUID(),
+      ownerId,
+      pullRequestId: prId,
+      reviewerGithubUsername: "hubot",
+    });
+
+    await disconnectGithub({ db, ownerId });
+
+    // The credential really is gone — otherwise this passes vacuously.
+    const creds = await db
+      .select()
+      .from(githubCredential)
+      .where(eq(githubCredential.ownerId, ownerId));
+    expect(creds).toHaveLength(0);
+
+    const reposAfter = await db
+      .select()
+      .from(monitoredRepo)
+      .where(eq(monitoredRepo.ownerId, ownerId));
+    expect(reposAfter).toHaveLength(1);
+    expect(reposAfter[0].id).toBe(repoId);
+    expect(reposAfter[0].credentialId).toBeNull();
+    // The durable GitHub-side key a reconnect re-links on.
+    expect(reposAfter[0].githubRepoId).toBe(REPOS[0].id);
+
+    const commits = await db
+      .select()
+      .from(githubCommit)
+      .where(eq(githubCommit.ownerId, ownerId));
+    const prs = await db
+      .select()
+      .from(githubPullRequest)
+      .where(eq(githubPullRequest.ownerId, ownerId));
+    const reviews = await db
+      .select()
+      .from(githubReview)
+      .where(eq(githubReview.ownerId, ownerId));
+    expect(commits).toHaveLength(1);
+    expect(prs).toHaveLength(1);
+    expect(reviews).toHaveLength(1);
   });
 });

@@ -23,6 +23,9 @@ import {
  * than the integration project.
  */
 
+/** What the FK graph alone can say about a weakened reference. */
+type SchemaWeakenedRef = Omit<WeakenedRef, "clearedOnClear">;
+
 type Edge = {
   child: string;
   childColumns: string[];
@@ -76,7 +79,9 @@ function deriveImpact(root: string, edges: Edge[]) {
   // A row survives with its reference nulled when its parent IS inside the
   // closure but the edge is SET NULL. An edge pointing at a parent outside the
   // closure (e.g. `anomaly.related_team_member_id → team_member`) never fires.
-  const weakened: WeakenedRef[] = [];
+  // The derived edge carries no `clearedOnClear` — that flag is a product
+  // decision the schema cannot express, and it is asserted separately below.
+  const weakened: SchemaWeakenedRef[] = [];
   for (const edge of edges) {
     if (edge.onDelete !== "set null") continue;
     if (!inClosure.has(edge.parent)) continue;
@@ -91,7 +96,7 @@ function deriveImpact(root: string, edges: Edge[]) {
 }
 
 const sorted = (values: readonly string[]) => [...values].sort();
-const sortedRefs = (refs: readonly WeakenedRef[]) =>
+const sortedRefs = (refs: readonly SchemaWeakenedRef[]) =>
   [...refs]
     .map((r) => `${r.table}.${r.column}`)
     .sort()
@@ -132,9 +137,30 @@ describe("DISCONNECT_IMPACT matches the schema's foreign-key graph", () => {
 
   // Three named regressions, each pinning a mistake already made in this repo.
 
-  it("a Jira disconnect destroys the hand-entered absences", () => {
-    expect(DISCONNECT_IMPACT.jira.destroyedTables).toContain("absence");
-    expect(deriveImpact("jira_credential", edges).destroyed).toContain("absence");
+  it("a Jira disconnect no longer destroys the hand-entered absences", () => {
+    // The inversion of the S-24 regression above it: `absence` used to be in
+    // `destroyedTables` and in the cascade closure, which is exactly what S-26
+    // exists to end. It now survives with its stamp nulled, and goes only on
+    // the deliberate second outcome.
+    expect(DISCONNECT_IMPACT.jira.destroyedTables).not.toContain("absence");
+    expect(deriveImpact("jira_credential", edges).destroyed).not.toContain("absence");
+    expect(DISCONNECT_IMPACT.jira.weakenedTables).toContainEqual({
+      table: "absence",
+      column: "sprint_id",
+      clearedOnClear: true,
+    });
+    expect(DISCONNECT_IMPACT.jira.clears.join(" ")).toContain("absences");
+  });
+
+  it("a GitHub disconnect no longer destroys the monitored repositories", () => {
+    expect(DISCONNECT_IMPACT.github.destroyedTables).toEqual([]);
+    expect(deriveImpact("github_credential", edges).destroyed).toEqual([]);
+    expect(DISCONNECT_IMPACT.github.weakenedTables).toContainEqual({
+      table: "monitored_repo",
+      column: "credential_id",
+      clearedOnClear: true,
+    });
+    expect(DISCONNECT_IMPACT.github.clears.join(" ")).toContain("repositories");
   });
 
   it("a Jira disconnect destroys the detected anomalies", () => {
@@ -146,9 +172,34 @@ describe("DISCONNECT_IMPACT matches the schema's foreign-key graph", () => {
     const derived = deriveImpact("jira_credential", edges);
     expect(derived.destroyed).not.toContain("daily_recap");
     expect(DISCONNECT_IMPACT.jira.destroyedTables).not.toContain("daily_recap");
-    expect(DISCONNECT_IMPACT.jira.weakenedTables).toEqual([
-      { table: "daily_recap", column: "sprint_id" },
-    ]);
+    // Containment, not an exact list: `absence` joined this list at S-26 and
+    // the next slice to spare a table would have had to edit an assertion whose
+    // point is only ever about `daily_recap`.
+    expect(DISCONNECT_IMPACT.jira.weakenedTables).toContainEqual({
+      table: "daily_recap",
+      column: "sprint_id",
+      clearedOnClear: false,
+    });
+  });
+
+  it("clearedTables is the cascade closure of every table the wipe removes", () => {
+    // The one guard that keeps the destructive branch honest as the schema
+    // grows: hang a cascading child under `absence` or `monitored_repo` and
+    // this fails, instead of `clear` quietly leaving orphans behind while the
+    // dialog claims the data is gone.
+    for (const key of keys) {
+      const declared = DISCONNECT_IMPACT[key];
+      const expected = new Set<string>();
+      for (const ref of declared.weakenedTables) {
+        if (!ref.clearedOnClear) continue;
+        expected.add(ref.table);
+        for (const child of deriveImpact(ref.table, edges).destroyed) {
+          expected.add(child);
+        }
+      }
+
+      expect(sorted(declared.clearedTables)).toEqual(sorted([...expected]));
+    }
   });
 });
 
@@ -157,9 +208,13 @@ describe("the copy lists", () => {
 
   it.each(keys)("%s names both what goes and what stays", (key) => {
     const impact = DISCONNECT_IMPACT[key];
-    expect(impact.destroys.length).toBeGreaterThan(0);
+    // `destroys` alone since S-26: a GitHub disconnect destroys NOTHING on the
+    // default outcome, so the invariant is that the entry says something about
+    // what is lost — on either branch — not that the unconditional list is
+    // non-empty.
+    expect(impact.destroys.length + impact.clears.length).toBeGreaterThan(0);
     expect(impact.keeps.length).toBeGreaterThan(0);
-    for (const fragment of [...impact.destroys, ...impact.keeps]) {
+    for (const fragment of [...impact.destroys, ...impact.clears, ...impact.keeps]) {
       // Clause fragments, not bullet labels: they must compose into a sentence.
       //
       // `[A-Z][a-z]` rather than a bare `[A-Z]` (impl-review F5): the intent is
@@ -172,10 +227,19 @@ describe("the copy lists", () => {
     }
   });
 
-  it("the Jira copy says the absences cannot be recovered", () => {
-    const destroys = DISCONNECT_IMPACT.jira.destroys.join(" ");
-    expect(destroys).toContain("absences");
-    expect(destroys).toMatch(/cannot be synced back/);
+  it("the Jira clear branch says the absences cannot be recovered", () => {
+    const clears = DISCONNECT_IMPACT.jira.clears.join(" ");
+    expect(clears).toContain("absences");
+    expect(clears).toMatch(/cannot be synced back/);
+    // …and the unconditional list must NOT still claim it, which is the whole
+    // point of the branch existing.
+    expect(DISCONNECT_IMPACT.jira.destroys.join(" ")).not.toContain("absences");
+  });
+
+  it("both Jira roots name the surviving absences among what stays", () => {
+    for (const key of ["jira", "projectSwitch"] as const) {
+      expect(DISCONNECT_IMPACT[key].keeps.join(" ")).toContain("absences");
+    }
   });
 
   it("the project-switch copy keeps the token and the status mapping", () => {
