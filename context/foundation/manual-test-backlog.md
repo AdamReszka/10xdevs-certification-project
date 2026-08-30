@@ -951,7 +951,16 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       „I understand — choose a project" plus „Cancel"; kliknięto Cancel, nic nie
       zmieniono.
 
-- [ ] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
+- [x] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania).
+      *Zaobserwowane* (konto `anna.jozwiak19@gmail.com`, brak wiersza
+      `recap_settings` → domyślne): sześć zakładek w kolejności Connections /
+      Team / Absences / Daily recap / Anomaly rules / Demo; przełącznik
+      włączony, godzina **15:00**; podpowiedź „SprintFlow has no time zone for
+      your team yet, so this is UTC until the next Jira sync picks one up"
+      (zgodne z `jira_project.time_zone = NULL` mimo wybranego projektu `PT`);
+      „Last send" → „No recap has been sent yet…" (zgodne z zerem wierszy
+      `daily_recap` dla tego ownera).
 - [ ] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
 - [ ] **6.13** Linia „Last send" odzwierciedla ostatni recap.
       *Dlaczego (6.11–6.13):* to jedyne miejsce w produkcie, gdzie owner w ogóle

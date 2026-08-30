@@ -1277,7 +1277,7 @@ is exercised by the very first email.
       KEEPS, not what it destroys: S-24 established `daily_recap.sprint_id` is ON
       DELETE SET NULL, so the recaps survive unlinked. The warning also names the
       hand-entered absences among the losses. — manual 2026-08-30
-- [ ] 6.11 `/settings/recap` reachable from the tabs and renders current values
+- [x] 6.11 `/settings/recap` reachable from the tabs and renders current values — manual 2026-08-30
 - [ ] 6.12 Changing the time saves, toasts, and survives a reload
 - [ ] 6.13 The last-send line reflects the most recent recap
 - [ ] 6.14 Turning the recap off stops the next day's send
