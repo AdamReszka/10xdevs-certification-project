@@ -40,9 +40,12 @@ import { exitDemoAction, openDemoAction } from "@/app/(app)/settings/demo/action
  * world and builds one only when none exists — the guard `/settings/demo` has
  * had since S-09.
  *
- * Which doors are offered, and where the configure door points, is decided by
- * `setup-doorstep-view.ts`; there is no component-test harness here, so that
- * decision is asserted as a pure function and this file only renders it.
+ * Which doors are offered, where the configure door points, and what the demo
+ * door is CALLED are all decided by `setup-doorstep-view.ts`; there is no
+ * component-test harness here, so those decisions are asserted as pure functions
+ * and this file only renders them. The demo door's label is one of them because
+ * after D1 it re-enters an existing world rather than building one, and "Zobacz
+ * demo" names the wrong act on a revisit.
  *
  * BOTH DOORS ARE BUTTONS, not links (S-27). The configure door used to be a bare
  * `<a href>`, which stopped working the moment the three wizard step pages began
@@ -50,7 +53,18 @@ import { exitDemoAction, openDemoAction } from "@/app/(app)/settings/demo/action
  * "Podłącz GitHuba" and land straight back here with no explanation. It now
  * leaves demo first and navigates second — see `handleConfigure`.
  */
-export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
+export default function SetupDoorstep({
+  door,
+  demoLabel,
+}: {
+  door: ConfigureDoor;
+  /**
+   * "Zobacz demo" or "Wróć do demo", decided by `demoDoorLabel` from the state the
+   * page already reads. A prop rather than a local `useState`, for the same reason
+   * `door` is one: this file renders decisions, it does not make them.
+   */
+  demoLabel: string;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [configuring, startConfiguring] = useTransition();
@@ -133,17 +147,22 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Zobacz demo</CardTitle>
+            <CardTitle>{demoLabel}</CardTitle>
             <CardDescription>
               Nie masz teraz tokenów pod ręką? Obejrzyj gotowy sprint bez łączenia
               się z czymkolwiek.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-4">
+            {/* The general guarantee, not a list of what demo cannot touch
+                (S-27). This used to be a near-variant of the sentence S-24 had to
+                retract from the banner — on the surface a new visitor reads
+                FIRST. The second half is kept and is made true by
+                `handleConfigure` above, not by copy. */}
             <p className="text-sm text-muted-foreground">
-              To fikcyjny zespół i fikcyjny sprint — dane są wymyślone, a Twoje
-              prawdziwe integracje pozostają nietknięte. Do konfiguracji wrócisz w
-              każdej chwili.
+              To fikcyjny zespół i fikcyjny sprint — dane są wymyślone, a nic, co
+              zrobisz w demie, nie zmienia Twojego prawdziwego konta. Do
+              konfiguracji wrócisz w każdej chwili.
             </p>
             <div className="mt-auto">
               <Button
@@ -154,7 +173,7 @@ export default function SetupDoorstep({ door }: { door: ConfigureDoor }) {
                 {pending ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : null}
-                Zobacz demo
+                {demoLabel}
               </Button>
             </div>
           </CardContent>

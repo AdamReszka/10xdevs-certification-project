@@ -723,9 +723,9 @@ main checkout.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass
-- [x] 3.2 Integration tests pass
-- [x] 3.3 Demo owner id stable across exit → re-enter; demo-side edit survives
+- [x] 3.1 Unit tests pass — 0c8fad2
+- [x] 3.2 Integration tests pass — 0c8fad2
+- [x] 3.3 Demo owner id stable across exit → re-enter; demo-side edit survives — 0c8fad2
 
 #### Manual
 
@@ -735,9 +735,9 @@ main checkout.
 
 #### Automated
 
-- [ ] 4.1 Lint + typecheck pass
-- [ ] 4.2 Unit tests pass with updated copy assertions
-- [ ] 4.3 No source file contains the retracted sentence; no demo surface enumerates actions
+- [x] 4.1 Lint + typecheck pass
+- [x] 4.2 Unit tests pass with updated copy assertions
+- [x] 4.3 No source file contains the retracted sentence; no demo surface enumerates actions
 
 #### Manual
 

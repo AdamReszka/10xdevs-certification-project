@@ -33,22 +33,15 @@ export default async function ConnectionsSettingsPage() {
   // data. The demo FLAG is read separately, to disable every control that would
   // mutate or spend the real account from a demo screen.
   //
-  // "The server refuses them too" is TRUE as of S-24, and was not when this
-  // comment was first written. All nine actions on this tab return
-  // `demoRefusal()` / `DEMO_REFUSAL_MESSAGE` before touching anything:
-  // `disconnectGithub` and `disconnectJira` (`setup/{github,jira}/actions.ts`),
-  // and `testGithubConnection`, `testJiraConnection`, `loadAvailableRepos`,
-  // `loadAvailableProjects`, `loadProjectStatuses`, `updateMonitoredRepos` and
-  // `updateJiraProject` (`settings/connections/actions.ts`). Each is asserted by
-  // a `*.demo.test.ts` sibling — the disabled attribute is the courtesy, those
-  // are the boundary.
-  //
-  // S-27 closes the tenth and eleventh: the CONNECT and RECONNECT controls on
-  // both cards, which are links into `/settings/connections/{github,jira}`.
-  // Those routes now redirect back here in demo, and the two store actions
-  // behind them (`storeGithubIntegration`, `storeJiraIntegration`) refuse like
-  // the rest. The card renders both triggers as disabled buttons rather than as
-  // links, because an `<a>` ignores `disabled`.
+  // THE CRITERION, NOT A LIST (S-27): every Server Action reachable from this tab
+  // that mutates or spends the REAL account refuses in demo before touching
+  // anything, and the routes that host a connect form redirect back here. This
+  // comment used to enumerate the nine actions it was true of; the enumeration
+  // went stale twice — S-24 rewrote it and S-27 added Connect / Reconnect to the
+  // disabled set without it noticing — so the rule is stated once and enforced by
+  // `src/lib/demo/boundary-inventory.test.ts`, which fails the build when an
+  // action pins the real owner without an `isDemo` guard. The disabled attribute
+  // is the courtesy; `demoRefusal()` and that test are the boundary.
   const { ownerId } = await requireRealWorkspace();
   const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
