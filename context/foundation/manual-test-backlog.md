@@ -678,7 +678,7 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 
 ### 7.7 — 4.7 🔴 Merge dwóch wierszy rosteru
 
-- [ ] **7.7** Scalenie dwóch członków zespołu w jeden wiersz.
+- [x] **7.7** Scalenie dwóch członków zespołu w jeden wiersz. **Zaliczone 2026-08-30** (sesja manualna).
       *Gdzie:* `/settings/team`, konto z prawdziwymi tokenami (identyfikuj po
       `token_last4`, nie po nazwie — §5).
       *Co zrobić:* dodaj dwa nowe wiersze — jeden z samym **GitHub username**
