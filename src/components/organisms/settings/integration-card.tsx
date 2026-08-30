@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import { classifyFailure, type SyncStatus } from "@/lib/integrations/failure-reason";
 import type { ConnectionTestResult } from "@/lib/settings/connection-service";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * One integration's card on the Connections settings tab (S-10 Phase 8).
@@ -122,8 +123,12 @@ export default function IntegrationCard({
   onTest: () => Promise<ConnectionTestResult>;
   reconnectHref: string;
   /** Widened in S-24: the action can now REFUSE (demo), and a refusal is
-   *  returned rather than thrown — so this card must render it. */
-  onDisconnect: () => Promise<{ ok: true } | { ok: false; message: string }>;
+   *  returned rather than thrown — so this card must render it. Widened again
+   *  in S-26: the dialog reports WHICH completion the lead chose, and the card
+   *  is only the wire between them — it never decides the mode itself. */
+  onDisconnect: (
+    mode: DisconnectMode,
+  ) => Promise<{ ok: true } | { ok: false; message: string }>;
   /** The selection editor, rendered inline when connected. */
   editSlot?: ReactNode;
   /**
@@ -159,11 +164,11 @@ export default function IntegrationCard({
     }
   }
 
-  async function handleDisconnect() {
+  async function handleDisconnect(mode: DisconnectMode) {
     setDisconnecting(true);
     setDisconnectError(null);
     try {
-      const result = await onDisconnect();
+      const result = await onDisconnect(mode);
       if (!result.ok) setDisconnectError(result.message);
     } finally {
       setDisconnecting(false);

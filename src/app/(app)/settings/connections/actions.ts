@@ -8,6 +8,10 @@ import { getDb } from "@/lib/db";
 import type { GithubClientOpts } from "@/lib/github";
 import { suggestCategory, type JiraClientOpts } from "@/lib/jira";
 import type { StatusMappingEntry } from "@/lib/integrations/jira-store";
+import {
+  parseDisconnectMode,
+  type DisconnectMode,
+} from "@/lib/validations/disconnect";
 
 type StatusCategory = StatusMappingEntry["category"];
 import {
@@ -287,10 +291,18 @@ export async function updateMonitoredRepos(
  * DESTRUCTIVE when the project actually changes — the caller must confirm
  * first. See the service's blast-radius note: sprints, tickets, and status
  * history all cascade from the project row.
+ *
+ * `mode` carries the outcome the lead picked on the warning surface (S-26), and
+ * is PARSED rather than trusted: a Server Action parameter is a public HTTP
+ * parameter and `"keep" | "clear"` is erased at runtime, so the typed call site
+ * guards nothing a crafted POST has to respect. `parseDisconnectMode` fails
+ * toward `keep`, which is also the product default — a malformed payload can
+ * only ever reach the outcome that destroys nothing.
  */
 export async function updateJiraProject(
   jiraProjectId: string,
   mappings: StatusMappingEntry[],
+  mode?: DisconnectMode,
 ): Promise<UpdateSelectionResult> {
   const { ownerId, isDemo } = await realOwnerAndDemoFlag();
   if (isDemo) return { ok: false, message: DEMO_REFUSAL_MESSAGE };
@@ -308,6 +320,7 @@ export async function updateJiraProject(
       ownerId: ownerId,
       jiraProjectId,
       mappings,
+      mode: parseDisconnectMode(mode),
       baseUrl: jiraBaseOverride(),
       opts: NO_JIRA_OPTS,
       env,

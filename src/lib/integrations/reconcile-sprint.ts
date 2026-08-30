@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 
-import { anomaly, jiraProject, sprint, type SelectSprint } from "@/db/schema";
+import {
+  anomaly,
+  jiraProject,
+  sprint,
+  sprintMeasurement,
+  type SelectSprint,
+} from "@/db/schema";
 import type { getDb } from "@/lib/db";
 import {
   type JiraBoard,
@@ -195,11 +201,87 @@ export async function reconcileActiveSprint({
         lengthDays: sprint.lengthDays,
         startDay: sprint.startDay,
         workingDays: sprint.workingDays,
+        jiraSprintId: sprint.jiraSprintId,
       })
       .from(sprint)
       .where(eq(sprint.ownerId, ownerId))
       .orderBy(desc(sprint.startDate))
       .limit(1);
+
+    /**
+     * S-26 — the frozen commitment is RECOVERED, not re-frozen.
+     *
+     * The freeze is designed to happen exactly once (`run-sync.ts`: `case when
+     * committed_frozen_at is null`). A disconnect deletes the `sprint` row, and
+     * the reconnect brings it back through the INSERT branch below with
+     * `committed_frozen_at` NULL — indistinguishable from a sprint never seen.
+     * The next full pull then re-froze the commitment at the RECONNECT-TIME
+     * sum, and since `sprint_measurement.committed_sp` is copied and never
+     * recomputed (`schema.ts`), one entry of the FR-024 velocity history was
+     * permanently poisoned with something that looked like valid data.
+     *
+     * DIRECTION OF THE DEPENDENCY, stated because this is the one place it
+     * reverses: the sweep copies sprint → measurement. This is the single
+     * deliberate read BACK, for the case where the sprint row was destroyed and
+     * recreated. `sprint_measurement` can serve as the authority precisely
+     * because it has no foreign key at all (`schema.ts`) — nothing in the
+     * cascade reaches it, so it outlives the row it describes.
+     *
+     * Both columns are required non-null. A record with a commitment but no
+     * stamp was never frozen, and seeding a stamp over a NULL sum would freeze
+     * the sprint at nothing, forever — the same permanence, pointed at a worse
+     * value.
+     *
+     * SCOPED BY PROJECT, not by owner and sprint id alone (impl-review F2). A
+     * Jira sprint id is unique per Jira INSTANCE, not globally, so an owner who
+     * reconnects against a DIFFERENT workspace can collide with a measurement
+     * written for an unrelated sprint — and this read would then seed the new
+     * sprint with a foreign commitment that the freeze guard, doing its job,
+     * refuses to correct ever after.
+     *
+     * The join is how the two identities are bridged, and the direction matters:
+     * `sprint_measurement.jira_project_id` holds the JIRA-SIDE project id
+     * (`schema.ts` — deliberately NOT the internal `jira_project.id`, which the
+     * settings path rewrites in place), while what this function is handed is
+     * the internal `projectId`. Matching on the Jira-side value through
+     * `jira_project` is what lets a switch-away-and-back find its own history
+     * and nobody else's.
+     *
+     * INSERT-ONLY, and the guard below is what makes that true of the QUERY and
+     * not merely of what is done with its answer (impl-review F10). The upsert
+     * conflicts on `(owner_id, jira_sprint_id)`, so when the owner's newest row
+     * already carries this `jiraSprintId` the cycle is heading for the UPDATE
+     * branch, which omits both columns — the read could only ever be discarded.
+     * Skipping it there keeps the steady state at the one round trip the plan
+     * costed it at, rather than a join every 15 minutes per owner. When the
+     * newest row is a DIFFERENT sprint the query still runs, which is correct:
+     * that is either a rollover or the recreate this whole mechanism exists for.
+     */
+    const isRecreate = previous?.jiraSprintId !== jiraSprintId;
+
+    const [measured] = !isRecreate ? [undefined] : await tx
+      .select({
+        committedSp: sprintMeasurement.committedSp,
+        committedFrozenAt: sprintMeasurement.committedFrozenAt,
+      })
+      .from(sprintMeasurement)
+      .innerJoin(jiraProject, eq(jiraProject.jiraProjectId, sprintMeasurement.jiraProjectId))
+      .where(
+        and(
+          eq(sprintMeasurement.ownerId, ownerId),
+          eq(jiraProject.id, projectId),
+          eq(sprintMeasurement.jiraSprintId, jiraSprintId),
+        ),
+      )
+      .limit(1);
+
+    const restoredFreeze =
+      measured?.committedFrozenAt != null && measured.committedSp != null
+        ? {
+            committedSp: measured.committedSp,
+            committedFrozenAt: measured.committedFrozenAt,
+          }
+        : {};
 
     // Persist the resolved board so the next cycle skips `listBoards`.
     await tx
@@ -245,6 +327,11 @@ export async function reconcileActiveSprint({
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         ...carry,
+        // INSERT-ONLY on purpose: the conflict branch below deliberately omits
+        // both columns, so an existing row's freeze is never touched by a
+        // metadata refresh. `values()` that the conflict branch does not
+        // reference through `excluded` is simply discarded.
+        ...restoredFreeze,
       })
       .onConflictDoUpdate({
         target: [sprint.ownerId, sprint.jiraSprintId],

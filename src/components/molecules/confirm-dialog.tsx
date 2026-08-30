@@ -61,7 +61,19 @@ export default function ConfirmDialog({
   secondary?: ConfirmAction;
 }) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const [isPending, setIsPending] = useState(false);
+  /**
+   * WHICH action is running, not merely THAT one is (S-26 plan-review F7).
+   *
+   * A boolean was enough while the pending label sat only on the primary
+   * action. The disconnect dialog makes `secondary` the irreversible branch, so
+   * it needs the same progress signal — and rendering "Working…" on both at
+   * once would leave two footer buttons with one accessible name, which is
+   * exactly the ambiguity `disconnect-confirm-copy.ts` keeps the labels apart
+   * to avoid. Both stay disabled either way; only the running one changes its
+   * label.
+   */
+  const [pending, setPending] = useState<"primary" | "secondary" | null>(null);
+  const isPending = pending !== null;
 
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : uncontrolledOpen;
@@ -71,17 +83,17 @@ export default function ConfirmDialog({
     else setUncontrolledOpen(next);
   }
 
-  function runAction(action: () => Promise<void>) {
+  function runAction(which: "primary" | "secondary", action: () => Promise<void>) {
     return async (event: React.MouseEvent) => {
       // Radix closes on Action click by default; hold it open for the await so
       // the pending state is visible and a second click cannot land.
       event.preventDefault();
-      setIsPending(true);
+      setPending(which);
       try {
         await action();
         setOpen(false);
       } finally {
-        setIsPending(false);
+        setPending(null);
       }
     };
   }
@@ -99,18 +111,25 @@ export default function ConfirmDialog({
           {secondary ? (
             <AlertDialogAction
               variant={secondary.variant ?? "outline"}
-              onClick={runAction(secondary.onConfirm)}
+              onClick={runAction("secondary", secondary.onConfirm)}
               disabled={isPending}
             >
-              {secondary.label}
+              {/* The pending label belongs on BOTH actions, not only the
+                  primary one (S-26 plan-review F7). `secondary` started life as
+                  the SAFER of the two (Deactivate beside Delete permanently),
+                  where being merely disabled was survivable. The disconnect
+                  dialog inverts that — its secondary is the irreversible
+                  branch — so leaving it silent would give the more dangerous
+                  button the weaker feedback while a slow Server Action runs. */}
+              {pending === "secondary" ? "Working…" : secondary.label}
             </AlertDialogAction>
           ) : null}
           <AlertDialogAction
             variant={variant}
-            onClick={runAction(onConfirm)}
+            onClick={runAction("primary", onConfirm)}
             disabled={isPending}
           >
-            {isPending ? "Working…" : confirmLabel}
+            {pending === "primary" ? "Working…" : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

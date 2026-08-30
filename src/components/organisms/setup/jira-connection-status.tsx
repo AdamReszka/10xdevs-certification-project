@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * Connected-status card (S-03). Renders "Connected to {workspace} as {email}"
@@ -24,12 +25,17 @@ import {
  * project key and the mapped-status count, and a Disconnect action that
  * refreshes back to the connect form.
  *
- * Disconnect is DESTRUCTIVE five levels deep, not one: the credential takes the
+ * Disconnect is destructive four levels deep, not one: the credential takes the
  * project, its status mapping, every sprint, ticket and status-change history,
- * the detected anomalies, and — the sharp edge — the lead's hand-entered
- * absences, which no sync rebuilds. `src/lib/integrations/disconnect-impact.ts`
- * is the maintained answer, held equal to the schema by a test; do not restate
- * the list here. Since S-24 the button opens a confirmation first.
+ * and the detected anomalies — all of it re-synced when the lead reconnects.
+ * `src/lib/integrations/disconnect-impact.ts` is the maintained answer, held
+ * equal to the schema by a test; do not restate the list here.
+ *
+ * The sharp edge is NO LONGER in that list. Since S-26 the lead's hand-entered
+ * absences survive by default (`absence.sprint_id` is `ON DELETE SET NULL` as of
+ * `0021`) and go only down the dialog's second, explicitly destructive
+ * completion. Since S-24 the button opens a confirmation first; since S-26 that
+ * confirmation offers two outcomes, and the primary one keeps.
  */
 export default function JiraConnectionStatus({
   workspaceUrl,
@@ -51,11 +57,11 @@ export default function JiraConnectionStatus({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleDisconnect() {
+  async function handleDisconnect(mode: DisconnectMode) {
     setIsDisconnecting(true);
     try {
       // The refusal is RETURNED, not thrown — see `github-connection-status.tsx`.
-      const result = await disconnectJira();
+      const result = await disconnectJira(mode);
       if (!result.ok) {
         toast.error(result.message);
         setIsDisconnecting(false);

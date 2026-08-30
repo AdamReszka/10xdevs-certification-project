@@ -148,6 +148,13 @@
       "when": 1788034127090,
       "tag": "0020_superb_white_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788110121631,
+      "tag": "0021_tricky_electro",
+      "breakpoints": true
     }
   ]
 }

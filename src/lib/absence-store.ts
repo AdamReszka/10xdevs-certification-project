@@ -127,9 +127,13 @@ export async function listAbsences({
  * (`listAbsences` above, `assertNoOverlap` below, `load-snapshot.ts:90-99`,
  * `capacity.ts:164-176`, `developer-inactive.ts:47`).
  *
- * The stamp is still written because `absence.sprint_id` is `ON DELETE CASCADE`
- * on `sprint` — the data-loss path **S-26** owns. S-20 deliberately did not
- * settle the column twice (`context/foundation/roadmap.md`, S-26).
+ * WHY IT IS STILL WRITTEN, since S-26 (2026-08-30): because provenance is worth
+ * keeping, and it now costs nothing. S-20 left the writer and the FK alone and
+ * pointed at S-26; S-26 re-pointed `absence.sprint_id` at `ON DELETE SET NULL`
+ * (`0021`), so a deleted sprint clears the stamp instead of taking the row with
+ * it. The column records which sprint was active when the lead typed the row and
+ * loses that note if the sprint is destroyed — which is the correct outcome for
+ * a provenance field with no reader, and no longer a data-loss path.
  */
 export async function createAbsence({
   db,

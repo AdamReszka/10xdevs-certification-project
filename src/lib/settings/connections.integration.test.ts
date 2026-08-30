@@ -6,15 +6,19 @@ import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
+  absence,
   githubCommit,
   githubCredential,
   jiraCredential,
   jiraProject,
   monitoredRepo,
   sprint,
+  sprintMeasurement,
   statusMapping,
   syncAttempt,
   syncState,
+  teamDayOff,
+  teamMember,
   user,
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
@@ -623,6 +627,7 @@ describe("updateJiraProject", () => {
       ownerId,
       jiraProjectId: "20000",
       mappings,
+      mode: "keep",
       baseUrl: JIRA_BASE,
       opts: { fetchImpl: jiraFetch },
     });
@@ -646,6 +651,7 @@ describe("updateJiraProject", () => {
       ownerId,
       jiraProjectId: "10000",
       mappings,
+      mode: "keep",
       baseUrl: JIRA_BASE,
       opts: { fetchImpl: jiraFetch },
     });
@@ -669,6 +675,7 @@ describe("updateJiraProject", () => {
       ownerId: a.ownerId,
       jiraProjectId: "20000",
       mappings,
+      mode: "keep",
       baseUrl: JIRA_BASE,
       opts: { fetchImpl: jiraFetch },
     });
@@ -678,5 +685,178 @@ describe("updateJiraProject", () => {
       .from(sprint)
       .where(eq(sprint.ownerId, b.ownerId));
     expect(bRows).toHaveLength(1);
+  });
+
+  /**
+   * S-26 Phase 4 — the THIRD path into the same loss.
+   *
+   * Until `0021` narrowed `absence.sprint_id` to SET NULL, the explicit
+   * `delete(sprint)` above cascaded straight through the lead's hand-entered
+   * FR-010 rows, silently and with no way to say no. The switch now carries the
+   * same keep-or-clear choice the two disconnects do.
+   */
+  describe("S-26: the project switch keeps or clears the absences", () => {
+    /** A roster member with one recorded absence stamped to the current sprint. */
+    async function seedAbsence(ownerId: string, sprintId: string) {
+      const memberId = randomUUID();
+      await db.insert(teamMember).values({
+        id: memberId,
+        ownerId,
+        name: "Ada Dev",
+        source: "MANUAL",
+      });
+
+      const absenceId = randomUUID();
+      await db.insert(absence).values({
+        id: absenceId,
+        ownerId,
+        teamMemberId: memberId,
+        sprintId,
+        type: "VACATION",
+        startDate: new Date("2026-08-20T00:00:00.000Z"),
+        endDate: new Date("2026-08-22T23:59:59.999Z"),
+      });
+
+      return { memberId, absenceId };
+    }
+
+    /**
+     * The rows NEITHER branch may touch: the FR-023 measurement history the PRD
+     * amended its own retention non-goal to keep, and the hand-entered
+     * team-wide days off, which belong to no integration at all.
+     */
+    async function seedUntouchables(ownerId: string) {
+      await db.insert(teamDayOff).values({
+        id: randomUUID(),
+        ownerId,
+        day: "2026-08-15",
+        label: "Assumption of Mary",
+      });
+      await db.insert(sprintMeasurement).values({
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId: "10000",
+        jiraSprintId: "1001",
+        sprintName: "Sprint 24",
+        committedSp: 40,
+      });
+    }
+
+    /** Both branches share this: the switch is still destructive of sprints. */
+    async function switchProject(ownerId: string, mode: "keep" | "clear") {
+      return updateJiraProject({
+        db,
+        ownerId,
+        jiraProjectId: "20000",
+        mappings,
+        mode,
+        baseUrl: JIRA_BASE,
+        opts: { fetchImpl: jiraFetch },
+      });
+    }
+
+    it("keep leaves the absence with its sprint stamp nulled", async () => {
+      const { ownerId, projectId } = await seedOwner();
+      await seedSprint(ownerId, projectId);
+      const [seeded] = await db
+        .select({ id: sprint.id })
+        .from(sprint)
+        .where(eq(sprint.ownerId, ownerId));
+      const { memberId, absenceId } = await seedAbsence(ownerId, seeded.id);
+      await seedUntouchables(ownerId);
+
+      const result = await switchProject(ownerId, "keep");
+      expect(result.sprintsDiscarded).toBe(true);
+
+      // The cascade above `absence` really did fire — without this the
+      // assertion below could pass on a switch that deleted nothing.
+      expect(
+        await db.select({ id: sprint.id }).from(sprint).where(eq(sprint.ownerId, ownerId)),
+      ).toEqual([]);
+
+      const rows = await db.select().from(absence).where(eq(absence.id, absenceId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sprintId).toBeNull();
+      // The absence crosses the project boundary attached to its PERSON, which
+      // is what makes it meaningful to the new project's risk score.
+      expect(rows[0].teamMemberId).toBe(memberId);
+    });
+
+    it("clear removes exactly the absences, and nothing else", async () => {
+      const { ownerId, projectId } = await seedOwner();
+      await seedSprint(ownerId, projectId);
+      const [seeded] = await db
+        .select({ id: sprint.id })
+        .from(sprint)
+        .where(eq(sprint.ownerId, ownerId));
+      const { memberId } = await seedAbsence(ownerId, seeded.id);
+      await seedUntouchables(ownerId);
+
+      await switchProject(ownerId, "clear");
+
+      expect(
+        await db.select().from(absence).where(eq(absence.ownerId, ownerId)),
+      ).toEqual([]);
+      // `clear` deletes the FR-010 rows, not the people they belong to.
+      expect(
+        await db.select().from(teamMember).where(eq(teamMember.id, memberId)),
+      ).toHaveLength(1);
+      expect(
+        await db.select().from(teamDayOff).where(eq(teamDayOff.ownerId, ownerId)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(sprintMeasurement)
+          .where(eq(sprintMeasurement.ownerId, ownerId)),
+      ).toHaveLength(1);
+    });
+
+    it("re-saving the SAME project clears nothing, whichever button was pressed", async () => {
+      const { ownerId, projectId } = await seedOwner();
+      await seedSprint(ownerId, projectId);
+      const [seeded] = await db
+        .select({ id: sprint.id })
+        .from(sprint)
+        .where(eq(sprint.ownerId, ownerId));
+      const { absenceId } = await seedAbsence(ownerId, seeded.id);
+
+      // `clear` removes precisely what the cascade stopped removing, and the
+      // cascade only ever fired when the project actually changed. Fixing a
+      // status mapping on the same project must stay non-destructive.
+      const result = await updateJiraProject({
+        db,
+        ownerId,
+        jiraProjectId: "10000",
+        mappings,
+        mode: "clear",
+        baseUrl: JIRA_BASE,
+        opts: { fetchImpl: jiraFetch },
+      });
+
+      expect(result.sprintsDiscarded).toBe(false);
+      const rows = await db.select().from(absence).where(eq(absence.id, absenceId));
+      expect(rows).toHaveLength(1);
+      expect(rows[0].sprintId).toBe(seeded.id);
+    });
+
+    it("never clears another owner's absences", async () => {
+      const a = await seedOwner();
+      const b = await seedOwner();
+      await seedSprint(a.ownerId, a.projectId);
+      await seedSprint(b.ownerId, b.projectId);
+      const [bSprint] = await db
+        .select({ id: sprint.id })
+        .from(sprint)
+        .where(eq(sprint.ownerId, b.ownerId));
+      const bAbsence = await seedAbsence(b.ownerId, bSprint.id);
+
+      await switchProject(a.ownerId, "clear");
+
+      // Ownership is the only guard here — no RLS sits behind this path.
+      expect(
+        await db.select().from(absence).where(eq(absence.id, bAbsence.absenceId)),
+      ).toHaveLength(1);
+    });
   });
 });

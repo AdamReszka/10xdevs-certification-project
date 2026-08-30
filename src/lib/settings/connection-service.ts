@@ -3,12 +3,14 @@ import { randomUUID } from "node:crypto";
 import { and, eq, notInArray, sql } from "drizzle-orm";
 
 import {
+  absence,
   githubCredential,
   jiraProject,
   monitoredRepo,
   sprint,
   statusMapping,
 } from "@/db/schema";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 import type { getDb } from "@/lib/db";
 import { TokenCryptoError } from "@/lib/crypto";
 import {
@@ -355,12 +357,38 @@ export async function updateMonitoredRepos({
  * (plan.md:1020-1031), and it is what the UI's destructive warning promises to
  * prevent. `boardId` / `timeZone` are cleared with it: both describe the old
  * project. `sprintsDiscarded` tells the caller a cadence re-import is now due.
+ *
+ * TWO OUTCOMES SINCE S-26, the same pair the two disconnects offer. This is the
+ * THIRD path into the same loss — `sprint` is deleted here explicitly, and
+ * `absence` used to ride out on its cascade — so it stops behaving differently
+ * from the other two. `keep` relies on the narrowed `absence.sprint_id` edge
+ * (SET NULL since `0021`), which leaves the lead's hand-entered FR-010 rows in
+ * place with their stamp cleared; `clear` deletes them, owner-scoped — every
+ * one of them, deliberately broader than the old cascade rather than equal to it
+ * (impl-review F7), because the cascade only ever reached the rows that happened
+ * to carry a stamp and the button's own wording promises the rest as well. The tables `clear` reaches MUST equal
+ * `DISCONNECT_IMPACT.projectSwitch.clearedTables`, derived from the schema graph
+ * by the guard test rather than trusted from this comment.
+ *
+ * A KEPT ABSENCE CROSSES THE PROJECT BOUNDARY, and that is the decision (plan
+ * review F8): `SPRINT_AT_RISK` matches absences by DATE, not by sprint
+ * (`sprint-at-risk.ts:117-131`), and `absence.team_member_id` is untouched by a
+ * switch — a developer on holiday is on holiday whichever project the lead is
+ * watching. The lead is told so before choosing: `projectSwitch.keeps` says it
+ * in words.
+ *
+ * `clear` sits INSIDE the `projectChanged` branch on purpose. `clear` removes
+ * precisely what the cascade stopped removing, and the cascade only ever fired
+ * when the project actually changed — so re-saving the SAME project to fix a
+ * status mapping stays non-destructive whichever button the lead pressed on the
+ * way in, exactly as it already does for `sprint`.
  */
 export async function updateJiraProject({
   db,
   ownerId,
   jiraProjectId,
   mappings,
+  mode,
   baseUrl,
   opts,
   env,
@@ -369,6 +397,7 @@ export async function updateJiraProject({
   ownerId: string;
   jiraProjectId: string;
   mappings: StatusMappingEntry[];
+  mode: DisconnectMode;
   baseUrl?: string;
   opts?: JiraClientOpts;
   env?: StoreEnv;
@@ -420,6 +449,13 @@ export async function updateJiraProject({
       await tx
         .delete(sprint)
         .where(and(eq(sprint.ownerId, ownerId), eq(sprint.jiraProjectId, existing.id)));
+
+      if (mode === "clear") {
+        // The one thing the narrowed edge above spared. Hand-entered FR-010
+        // data no sync rebuilds, so it goes only when the lead asked for it by
+        // name on the warning surface.
+        await tx.delete(absence).where(eq(absence.ownerId, ownerId));
+      }
     }
 
     await tx

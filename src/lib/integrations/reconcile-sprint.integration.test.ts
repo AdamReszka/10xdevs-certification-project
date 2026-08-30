@@ -10,6 +10,7 @@ import {
   jiraCredential,
   jiraProject,
   sprint,
+  sprintMeasurement,
   user,
   type SelectSprint,
 } from "@/db/schema";
@@ -533,5 +534,165 @@ describe("reconcileActiveSprint — between sprints closes an ENDED row (plan-re
     expect(created.lengthDays).toBe(21);
     expect(created.startDay).toBe("WED");
     expect(await activeCount(seeded.ownerId)).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+
+/**
+ * S-26 Phase 5 — a RE-CREATED sprint recovers what it was.
+ *
+ * The freeze in `run-sync.ts` is designed to happen exactly once, guarded by
+ * `committed_frozen_at is null`. A disconnect deleted the `sprint` row and the
+ * reconnect brought it back through the INSERT branch with that column NULL —
+ * indistinguishable from a sprint never seen — so the next full pull re-froze
+ * the commitment at the reconnect-time sum and poisoned one entry of the FR-024
+ * history permanently. `sprint_measurement` is the authority here precisely
+ * because it has NO foreign key: nothing in the cascade reaches it.
+ */
+describe("reconcileActiveSprint — the measurement restores a destroyed freeze (S-26)", () => {
+  const FROZEN_AT = new Date("2026-08-18T09:30:00.000Z");
+
+  /** What the FR-023 sweep leaves behind for a live sprint. */
+  async function seedMeasurement(
+    ownerId: string,
+    values: {
+      committedSp: number | null;
+      committedFrozenAt: Date | null;
+      jiraSprintId?: string;
+      jiraProjectId?: string;
+    },
+  ) {
+    await db.insert(sprintMeasurement).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: values.jiraProjectId ?? "10000",
+      jiraSprintId: values.jiraSprintId ?? "4242",
+      sprintName: "Sprint 7",
+      committedSp: values.committedSp,
+      committedFrozenAt: values.committedFrozenAt,
+      // Deliberately NOT finalized: the corruption this guards against is only
+      // reachable while the sprint is still in flight (`sweep.ts` refuses to
+      // recompute a finalized record).
+      finalizedAt: null,
+    });
+  }
+
+  it("(n) seeds committed SP and its stamp onto a freshly created row", async () => {
+    const seeded = await newOwner();
+    await seedMeasurement(seeded.ownerId, { committedSp: 34, committedFrozenAt: FROZEN_AT });
+
+    const result = await run(seeded);
+
+    expect(result.status).toBe("reconciled");
+    const all = await rows(seeded.ownerId);
+    expect(all).toHaveLength(1);
+    expect(all[0].jiraSprintId).toBe("4242");
+    expect(all[0].committedSp).toBe(34);
+    expect(all[0].committedFrozenAt?.toISOString()).toBe(FROZEN_AT.toISOString());
+  });
+
+  it("(o) restores nothing when the measurement was never frozen", async () => {
+    const seeded = await newOwner();
+    // A record with a commitment but no stamp was never frozen. Seeding a stamp
+    // over it would freeze the sprint at a figure no cycle ever agreed on.
+    await seedMeasurement(seeded.ownerId, { committedSp: 34, committedFrozenAt: null });
+
+    await run(seeded);
+
+    const all = await rows(seeded.ownerId);
+    expect(all[0].committedSp).toBeNull();
+    expect(all[0].committedFrozenAt).toBeNull();
+  });
+
+  it("(p) restores nothing when the frozen measurement carries a NULL sum", async () => {
+    const seeded = await newOwner();
+    await seedMeasurement(seeded.ownerId, { committedSp: null, committedFrozenAt: FROZEN_AT });
+
+    await run(seeded);
+
+    const all = await rows(seeded.ownerId);
+    // The stamp is the permanent half: seeding it over a NULL sum would freeze
+    // the sprint at nothing, forever.
+    expect(all[0].committedFrozenAt).toBeNull();
+    expect(all[0].committedSp).toBeNull();
+  });
+
+  it("(q) leaves an EXISTING row's freeze alone — the restore is insert-only", async () => {
+    const seeded = await newOwner();
+    const ownFreeze = new Date("2026-08-17T10:00:00.000Z");
+    await seedSprint(seeded, {
+      jiraSprintId: "4242",
+      committedSp: 21,
+      committedFrozenAt: ownFreeze,
+    });
+    // A measurement that DISAGREES, so a conflict-branch write would be visible.
+    await seedMeasurement(seeded.ownerId, { committedSp: 34, committedFrozenAt: FROZEN_AT });
+
+    await run(seeded);
+
+    const all = await rows(seeded.ownerId);
+    expect(all).toHaveLength(1);
+    expect(all[0].name).toBe("Sprint 7"); // metadata DID refresh
+    expect(all[0].committedSp).toBe(21);
+    expect(all[0].committedFrozenAt?.toISOString()).toBe(ownFreeze.toISOString());
+  });
+
+  it("(r) never reads another owner's measurement for the same Jira sprint", async () => {
+    const other = await newOwner();
+    await seedMeasurement(other.ownerId, { committedSp: 99, committedFrozenAt: FROZEN_AT });
+
+    const seeded = await newOwner();
+    await run(seeded);
+
+    // Two accounts watching the same Jira project share `jira_sprint_id`
+    // values; ownership is the only thing separating their histories.
+    const all = await rows(seeded.ownerId);
+    expect(all[0].committedSp).toBeNull();
+    expect(all[0].committedFrozenAt).toBeNull();
+  });
+
+  it("(t) never restores a measurement left behind by a DIFFERENT Jira project", async () => {
+    // A Jira sprint id is unique per Jira INSTANCE, not globally, so `4242` in
+    // the workspace this owner just repointed at is somebody else's sprint.
+    // Restoring its commitment would be PERMANENT — the freeze guard, doing its
+    // job, refuses to correct an already-stamped row (impl-review F2).
+    //
+    // The second owner is load-bearing rather than decoration: they still hold a
+    // `jira_project` row carrying the OLD Jira-side id, which is the row the
+    // join would otherwise find. Without `jiraProject.id = projectId` this test
+    // restores 99 through THEIR project row.
+    const other = await newOwner();
+    expect(other.projectId).toBeTruthy();
+
+    const seeded = await newOwner();
+    await db
+      .update(jiraProject)
+      .set({ jiraProjectId: "20000" })
+      .where(eq(jiraProject.id, seeded.projectId));
+
+    // `sprint_measurement` has no foreign key at all, so the old workspace's
+    // record outlives the project switch that made it irrelevant.
+    await seedMeasurement(seeded.ownerId, {
+      committedSp: 99,
+      committedFrozenAt: FROZEN_AT,
+      jiraProjectId: "10000",
+    });
+
+    await run(seeded);
+
+    const all = await rows(seeded.ownerId);
+    expect(all[0].committedSp).toBeNull();
+    expect(all[0].committedFrozenAt).toBeNull();
+  });
+
+  it("(s) a sprint with no measurement record at all is left unfrozen", async () => {
+    const seeded = await newOwner();
+
+    await run(seeded);
+
+    const all = await rows(seeded.ownerId);
+    expect(all[0].committedSp).toBeNull();
+    expect(all[0].committedFrozenAt).toBeNull();
   });
 });

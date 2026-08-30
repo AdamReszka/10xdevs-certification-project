@@ -557,9 +557,10 @@ describe("detectAnomalies — absences (S-08, FR-010)", () => {
     const [stored] = await db.select().from(absence).where(eq(absence.id, absenceId));
     expect(stored.sprintId).toBe(sprintN);
 
-    // The rollover. N is CLOSED rather than deleted on purpose:
-    // `absence.sprint_id` is ON DELETE CASCADE, so deleting N would take the
-    // absence with it and the test would prove nothing.
+    // The rollover. N is CLOSED rather than deleted on purpose: that is what a
+    // real rollover does. (Deleting it would no longer destroy the absence —
+    // `absence.sprint_id` is ON DELETE SET NULL since S-26's `0021` — but it
+    // would clear the stamp this test asserts on two lines above.)
     await db.update(sprint).set({ state: "CLOSED" }).where(eq(sprint.id, sprintN));
     const nextSprintId = randomUUID();
     await db.insert(sprint).values({

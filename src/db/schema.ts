@@ -295,9 +295,14 @@ export const monitoredRepo = pgTable(
     ownerId: text("owner_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    credentialId: text("credential_id")
-      .notNull()
-      .references(() => githubCredential.id, { onDelete: "cascade" }),
+    // Nullable + SET NULL since S-26: a disconnect that KEEPS the lead's data
+    // leaves the repo row — and every commit, PR and review hanging off its
+    // internal id — in place with no credential. `monitored_repo_owner_repo_uq`
+    // below is what re-links it on reconnect; `github_repo_id` is GitHub-side
+    // and durable, unlike the `randomUUID()` primary key.
+    credentialId: text("credential_id").references(() => githubCredential.id, {
+      onDelete: "set null",
+    }),
     // GitHub repo numeric id fits JS safe-int range → number mode (not BigInt).
     githubRepoId: bigint("github_repo_id", { mode: "number" }).notNull(),
     fullName: text("full_name").notNull(),
@@ -639,8 +644,14 @@ export const absence = pgTable(
     teamMemberId: text("team_member_id")
       .notNull()
       .references(() => teamMember.id, { onDelete: "cascade" }),
+    // SET NULL since S-26, not CASCADE: an absence is hand-entered FR-010 data
+    // that no sync can rebuild, yet every disconnect and project switch was
+    // destroying it as a side effect of deleting the sprint it was stamped with.
+    // S-20 settled this column as write-time provenance with no reader —
+    // SPRINT_AT_RISK matches absences by date — so nulling the stamp changes no
+    // behaviour downstream.
     sprintId: text("sprint_id").references(() => sprint.id, {
-      onDelete: "cascade",
+      onDelete: "set null",
     }),
     type: absenceType("type").notNull(),
     startDate: timestamp("start_date").notNull(),

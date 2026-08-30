@@ -20,6 +20,10 @@ import {
   validateAndListRepos,
 } from "@/lib/integrations/github-store";
 import {
+  type DisconnectMode,
+  parseDisconnectMode,
+} from "@/lib/validations/disconnect";
+import {
   githubTokenSchema,
   repoSelectionSchema,
 } from "@/lib/validations/github";
@@ -196,10 +200,21 @@ export async function storeGithubIntegration(
 }
 
 /**
- * Disconnect GitHub for the signed-in account. DESTRUCTIVE four levels deep —
- * the monitored repos and all their synced commits, PRs and reviews go with the
- * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
- * blast radius; every caller must confirm first (S-24).
+ * Disconnect GitHub for the signed-in account, in one of two modes (S-26).
+ *
+ * `keep` (the default, and what an absent or malformed argument resolves to)
+ * removes the credential and nothing else: since `monitored_repo.credential_id`
+ * is SET NULL, the repos and their synced commits, PRs and reviews stay and are
+ * re-linked by the wizard's upsert on reconnect. `clear` additionally deletes
+ * them, which is what the cascade used to do without asking. See
+ * `src/lib/integrations/disconnect-impact.ts` for the maintained blast radius;
+ * every caller must confirm first (S-24).
+ *
+ * THE ARGUMENT IS RE-PARSED HERE, not trusted from the type. A Server Action
+ * parameter is a public HTTP parameter and the union is erased at runtime, so
+ * `parseDisconnectMode` is the only thing standing between a crafted POST and
+ * the destructive branch — and it fails toward `keep`
+ * (`src/lib/validations/disconnect.ts`).
  *
  * REFUSES IN DEMO. It keeps `requireRealWorkspace()` — the target owner is
  * deliberately the real one, integration config is never simulated — and that is
@@ -208,7 +223,9 @@ export async function storeGithubIntegration(
  * `setup/team/actions.ts:51-61`; the disabled button is a courtesy, this is the
  * boundary (`src/lib/demo/refusal.ts`).
  */
-export async function disconnectGithub(): Promise<DisconnectResult> {
+export async function disconnectGithub(
+  mode?: DisconnectMode,
+): Promise<DisconnectResult> {
   const [{ ownerId }, { isDemo }] = await Promise.all([
     requireRealWorkspace(),
     resolveWorkspace(),
@@ -218,7 +235,11 @@ export async function disconnectGithub(): Promise<DisconnectResult> {
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  await disconnectGithubService({ db, ownerId: ownerId });
+  await disconnectGithubService({
+    db,
+    ownerId: ownerId,
+    mode: parseDisconnectMode(mode),
+  });
   return { ok: true };
 }
 
