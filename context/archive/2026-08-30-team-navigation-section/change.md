@@ -1,10 +1,10 @@
 ---
 change_id: team-navigation-section
 title: Roster and absences become a first-class Team section
-status: impl_reviewed
+status: archived
 created: 2026-08-30
 updated: 2026-08-31
-archived_at: null
+archived_at: 2026-08-30T22:45:38Z
 ---
 
 ## Notes

@@ -3,7 +3,7 @@ project: SprintFlow
 version: 1
 status: active
 created: 2026-05-26
-updated: 2026-08-30
+updated: 2026-08-31
 prd_version: 1
 main_goal: speed
 top_blocker: time
@@ -646,7 +646,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** team-navigation-section
 - **PRD refs:** FR-006, FR-010
 - **Prerequisites:** S-08, S-15
-- **Status:** done — shipped 2026-08-31
+- **Status:** done — shipped 2026-08-31 (PR #91)
 
 - **Why this exists (S-08, 2026-08-25):** Settings now carries Connections, Team
   and Absences, and S-14 adds Anomaly rules. Two of those four are "how SprintFlow
@@ -1504,3 +1504,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-21: (foundation) an authenticated request builds one pool for the app instead of three, and an authenticated Server Action one instead of four, so connection count stops scaling with pool multiplicity and is bounded by a single `POOL_MAX` ceiling.** — Archived 2026-08-30 → `context/archive/2026-08-19-db-pool-teardown/`. Lesson: "A request-scoped resource handle needs one identity per request, not a teardown" (`lessons.md` #3, rewritten in place by this slice — the original entry named the wrong mechanism and had steered five earlier decisions).
 - **S-20: `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every one of its seven sibling readers. An absence whose window crosses a sprint boundary now raises risk in whichever sprint its dates fall in — including one it was not recorded in, and one recorded when the owner had no sprint row at all.** — Archived 2026-08-30 → `context/archive/2026-08-30-absence-sprint-scoping/`. Lesson: —.
 - **S-26: disconnecting an integration removes what that integration supplied — the credential, the monitored selection, and the rows a future sync would rebuild. It stops taking data the lead typed themselves. Concretely: a Jira disconnect no longer deletes recorded absences.** — Archived 2026-08-30 → `context/archive/2026-08-30-disconnect-data-retention/`. Lesson: —.
+- **S-19: roster and absences live under a first-class **Team** section instead of being two tabs inside Settings.** — Archived 2026-08-31 → `context/archive/2026-08-30-team-navigation-section/`. Lesson: —. Note: this slice made the first licensed edit inside `context/archive/` — two ticked S-15 manual rows asserting a navigation path it deleted, marked `SUPERSEDED` and replaced by backlog rows 23.A/23.B. The carve-out is written into `CLAUDE.md` so it stops being a silent precedent.
