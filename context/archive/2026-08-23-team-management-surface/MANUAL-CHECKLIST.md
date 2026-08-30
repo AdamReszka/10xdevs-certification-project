@@ -88,7 +88,7 @@ patrz ostrzeżenie wyżej). `npm run dev`, potem `/settings/team`.
   > **Zaliczone 2026-08-25.** `Rocky Testowy` zniknął z bazy trwale; dialog się
   > otworzył, co potwierdza poprawkę `646facf` na żywo.
 
-- [ ] **4.7 — merge dwóch wierszy** *(faza 4)*
+- [x] **4.7 — merge dwóch wierszy** *(faza 4)* — manual 2026-08-30
 
   **Gdzie:** `/settings/team`.
   **Co zrobić:** dodaj dwa nowe wiersze — jeden z samym **GitHub username**
@@ -104,7 +104,7 @@ patrz ostrzeżenie wyżej). `npm run dev`, potem `/settings/team`.
   cicho psuje atrybucję anomalii (patrz `validations/roster.ts:54`).
   **Sprzątanie:** po teście usuń zmergowany wiersz (kosz → Delete permanently).
 
-- [ ] **Sprzątanie po testach** *(nie jest wierszem fazy)*
+- [x] **Sprzątanie po testach** *(nie jest wierszem fazy)* — manual 2026-08-30
 
   **Co musi być prawdą na koniec:** w rosterze zostają **`Adam Reszka`** i
   **`FoxyMind`**, oboje **aktywni**. Sprawdź w gridzie albo poproś mnie o `psql`.

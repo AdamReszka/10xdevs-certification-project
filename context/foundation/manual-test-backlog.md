@@ -704,7 +704,7 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 
 ### 7.7 — 4.7 🔴 Merge dwóch wierszy rosteru
 
-- [ ] **7.7** Scalenie dwóch członków zespołu w jeden wiersz.
+- [x] **7.7** Scalenie dwóch członków zespołu w jeden wiersz. **Zaliczone 2026-08-30** (sesja manualna).
       *Gdzie:* `/settings/team`, konto z prawdziwymi tokenami (identyfikuj po
       `token_last4`, nie po nazwie — §5).
       *Co zrobić:* dodaj dwa nowe wiersze — jeden z samym **GitHub username**
@@ -724,7 +724,21 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 
 ### 7.8 — Sprzątanie po testach S-15
 
-- [ ] **7.8** Roster wraca do stanu wyjściowego po wierszach 7.1–7.7.
+- [x] **7.8** Roster wraca do stanu wyjściowego po wierszach 7.1–7.7.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania) na koncie
+      `anna.jozwiak19@gmail.com` (prawdziwe credentiale, GitHub `AdamLisek`,
+      Jira `foxmind`). Roster: 6 wierszy, wszystkie aktywne — `Adam Reszka`,
+      `Liseusz Testowy`, `Rocky Testowy` (`source = JIRA`), `AdamLisek`,
+      `AniaReszka`, `FoxyMind` (`source = GITHUB`). **Ani jednego wiersza
+      `source = MANUAL`**, a tylko taki zostawiają po sobie testy §7 — wczorajsze
+      `merge-a` / `acc-merge-b` zniknęły. `Adam Reszka` i `FoxyMind` obecni i
+      aktywni, czyli warunek zaliczenia spełniony.
+      ⚠️ **Warunek „zostają dokładnie DWA wiersze" jest nieaktualny** — pisano go
+      dla konta `demo@sprintflow.test`, które nadal ma dokładnie te dwie osoby.
+      Konto testerki importuje 6 tożsamości z żywych źródeł i to jest jego
+      poprawny stan wyjściowy. Rozstrzygające jest `source`, nie liczba wierszy
+      ani słowo „Testowy" w nazwisku (Liseusz i Rocky to prawdziwe konta Jiry,
+      `712020:…`).
       *Gdzie:* `/settings/team` (albo `psql`).
       *Co zrobić:* po zakończeniu wierszy S-15 przejrzyj roster.
       *Co musi być prawdą:* zostają **`Adam Reszka`** i **`FoxyMind`**, oboje
@@ -896,22 +910,33 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
 > przechodzą** (lokalny dev używa transportu konsolowego), ale żaden mail nie
 > wychodzi.
 
+> ⚠️ **Obserwacja produktowa 2026-08-30 — dni wolne.**
+> `context/manual-tests/S-11-obserwacja-recap-dni-wolne.md`. Wysyłka nie patrzy
+> w kalendarz (`due.ts` zna tylko `enabled` + godzinę), „wczorajsza aktywność" to
+> poprzedni dzień **kalendarzowy** (`build.ts:66`), więc poniedziałkowy mail
+> opisuje niedzielę i gubi piątek; a `DEVELOPER_INACTIVE` nie czyta
+> `nonWorkingDays`, choć `SPRINT_AT_RISK` i kubełek 21 SP już tak. **To nie jest
+> nieudany wiersz** — nikt tego nie uruchomił, hipoteza pochodzi z kodu. Do
+> potwierdzenia przy 5.15/5.16. Decyzja: właściciel.
+
 ### Osiągalne od razu — nie wymagają Resenda
 
-- [ ] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
+- [x] **1.9** `\d daily_recap` i `\d recap_settings` na lokalnym Supabase
       pokazują zamierzony kształt.
       *Źródło:* `context/changes/daily-recap-email/plan.md` faza 1
       *Co musi być prawdą:* brak kolumny `recap_date`; `recap_day text NOT NULL`;
       `daily_recap_owner_day_uq UNIQUE (owner_id, recap_day)`; `send_status NOT
       NULL DEFAULT 'PENDING'`; kolumny `attempt_count`, `last_attempt_at`,
       `rendered_message`; `recap_settings` z `recap_settings_owner_uq`.
-      *Status:* **zweryfikowane w sesji** przez `psql` przeciwko `:54322` —
-      wyszło zgodnie z planem. Zostawione nieodhaczone, bo checklisty manualne
-      zamyka użytkownik, nie agent.
+      *Status:* **Zaliczone 2026-08-30** (sesja manualna) — wszystkie siedem
+      warunków potwierdzone odczytem `information_schema` / `pg_constraint`
+      przeciwko `:54322`. Wcześniejsze sprawdzenie z sesji 2026-08-26 dało ten
+      sam wynik; odhaczone dopiero teraz, bo checklisty manualne zamyka
+      użytkownik, nie agent.
       *Dlaczego to ma znaczenie:* cała gwarancja exactly-once opiera się na tym
       unique key. Nullowalny człon klucza nie kolidowałby nigdy (lessons.md #1).
 
-- [ ] **4.13** Dashboard „Today" renderuje się identycznie po wyciągnięciu
+- [x] **4.13** Dashboard „Today" renderuje się identycznie po wyciągnięciu
       mapowania anomalii z RSC do `lib/anomaly/inbox-view.ts`.
       *Jak:* `/dashboard` → Anomaly Inbox. Porównaj z tym, co pamiętasz sprzed
       slice'a: te same anomalie, ta sama kolejność, te same context chips,
@@ -920,16 +945,62 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       renderującej nagłówkową powierzchnię produktu. Test integracyjny dowodzi,
       że mail i inbox wołają tę samą funkcję — nie że komponent nadal ją dobrze
       konsumuje.
+      *Status:* **Zaliczone 2026-08-30** (sesja manualna, Ania). Wykonane w
+      trybie demo — konto realne ma zero anomalii, więc pusty inbox nie
+      pozwoliłby ocenić kolejności ani kontrolek. Potwierdzone: 14 pozycji,
+      kolejność HIGH (3× `SPRINT_AT_RISK`) → MEDIUM → LOW, komplet pięciu
+      atrybutów FR-014 na pozycji (opis, kontekst z osobą i datą, suggested
+      action, „View source" prowadzący do Jiry; `SPRINT_AT_RISK` bez linku —
+      poprawnie, `source_url IS NULL`), cztery sortowania (severity / age /
+      ticket / developer) zmieniają kolejność, oba filtry zawężają i czyszczą
+      się. Liczby zweryfikowane przeciwko bazie: Alice Kim = 3, Sprint at risk
+      = 3 — zgodne z ekranem co do sztuki.
 
-- [ ] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
+- [x] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
+      **Zaliczone 2026-08-30** (sesja manualna, Ania).
       *Jak:* `/settings/connections` → zmiana projektu Jira → **przeczytaj
       ostrzeżenie, nie potwierdzaj**.
-      *Dlaczego:* `daily_recap` kaskaduje po `sprint`, więc przełączenie projektu
-      kasuje archiwum recapów. Potwierdzenie, które niedomawia, co kasuje, jest
-      defektem.
+      *Dlaczego:* potwierdzenie, które niedomawia, co kasuje, jest defektem.
+      *Uwaga — pierwotne uzasadnienie tego wiersza było błędne.* Brzmiało
+      „`daily_recap` kaskaduje po `sprint`, więc przełączenie projektu kasuje
+      archiwum recapów". S-24 wykazał coś przeciwnego: `daily_recap.sprint_id`
+      jest `ON DELETE SET NULL`, więc recapy **przeżywają**, tracąc tylko
+      powiązanie ze sprintem. Ostrzeżenie wymienia je zatem po stronie *keeps*,
+      i to jest poprawne — wiersz zalicza się mimo innego niż zakładano znaku.
+      *Zaobserwowane:* nagłówek „This discards synced sprint data"; po stronie
+      strat — sprinty, ich tickety i historia statusów, anomalie oraz
+      **ręcznie wpisane nieobecności, których żaden sync nie odtworzy**; po
+      stronie zachowanych — token i workspace Jiry, roster, dni wolne zespołu,
+      capacity/velocity zamkniętych sprintów, status mapping (do ponownego
+      wpisania, nie do stracenia) i „past daily recaps, which stay readable but
+      stop being linked to a sprint". Dwa przyciski: destrukcyjny za jawnym
+      „I understand — choose a project" plus „Cancel"; kliknięto Cancel, nic nie
+      zmieniono.
 
-- [ ] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
-- [ ] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
+- [x] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania).
+      *Zaobserwowane* (konto `anna.jozwiak19@gmail.com`, brak wiersza
+      `recap_settings` → domyślne): sześć zakładek w kolejności Connections /
+      Team / Absences / Daily recap / Anomaly rules / Demo; przełącznik
+      włączony, godzina **15:00**; podpowiedź „SprintFlow has no time zone for
+      your team yet, so this is UTC until the next Jira sync picks one up"
+      (zgodne z `jira_project.time_zone = NULL` mimo wybranego projektu `PT`);
+      „Last send" → „No recap has been sent yet…" (zgodne z zerem wierszy
+      `daily_recap` dla tego ownera).
+- [x] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania) — na koncie
+      `anna.jozwiak19@gmail.com`, poza demem. Przebieg mocniejszy niż zakładała
+      instrukcja: `recap_settings` nie miała **ani jednego** wiersza dla żadnego
+      ownera, więc zapis poszedł ścieżką INSERT (pierwszy zapis konta), nie
+      UPDATE istniejącej wartości.
+      *Zaobserwowane:* pole startowało na domyślnych `15:00`; ustawione `09:30`
+      (celowo różne i godziną, i minutami — gubione minuty wyszłyby od razu);
+      po **Save** toast „Daily recap settings saved." na dole ekranu; po
+      przeładowaniu pole nadal `09:30`. W bazie **dokładnie jeden** wiersz:
+      `send_hour=9`, `send_minute=30`, `enabled=true`, `disabled_reason=NULL`,
+      `created_at = updated_at` — czyli wstawienie, nie nadpisanie.
+      *Stan po teście:* wiersz zostaje z `09:30`; nie przywracano `15:00`, bo
+      6.13 i 6.14 i tak potrzebują istniejącego wiersza.
 - [ ] **6.13** Linia „Last send" odzwierciedla ostatni recap.
       *Dlaczego (6.11–6.13):* to jedyne miejsce w produkcie, gdzie owner w ogóle
       widzi, czy wysyłka zadziałała — świadomie *pull*, nie banner na
