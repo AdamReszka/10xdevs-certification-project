@@ -806,7 +806,7 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Manual
 
-- [ ] 2.7 The setup wizard's cadence step still works end to end after the repoint
+- [x] 2.7 The setup wizard's cadence step still works end to end after the repoint — manual 2026-08-29 (fresh account, so `initialCadence` was null and the auto-pull path ran end to end; board chooser satisfied vacuously — FM has one scrum board). Backlog §1a row 2.7
 
 ### Phase 3: Wire the reconcile into the sync cycle
 
@@ -820,9 +820,9 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Manual
 
-- [ ] 3.6 Real-credential "Sync now" produces a `sprint` row matching Jira's active sprint
-- [ ] 3.7 Dashboard "Today" renders that sprint's tickets and anomalies
-- [ ] 3.8 Exactly one `ACTIVE` sprint row for the owner
+- [x] 3.6 Real-credential "Sync now" produces a `sprint` row matching Jira's active sprint — manual 2026-08-26, live data: a staged phantom `jira_sprint_id=999999` went CLOSED and Jira's sprint went ACTIVE in one real `syncOwner`. Does NOT cover the INSERT branch (upsert took CONFLICT). Backlog §1a row 3.6
+- [x] 3.7 Dashboard "Today" renders that sprint's tickets and anomalies — manual 2026-08-29: 3 anomalies + Sprint Pulse over the 5 synced tickets on an account that had 0 before. Does NOT prove "new, not previous" — the account has exactly one `sprint` row. Backlog §1a row 3.7
+- [x] 3.8 Exactly one `ACTIVE` sprint row for the owner — manual 2026-08-26, same live run as 3.6. Backlog §1a row 3.8
 
 ### Phase 4: Close the wizard's entry point and record the lesson
 
@@ -836,4 +836,4 @@ and stops winning `getActiveSprintRow`. Its `jira_ticket` / `anomaly` /
 
 #### Manual
 
-- [ ] 4.6 Connecting a different Jira project through the wizard discards the previous project's sprint
+- [x] 4.6 Connecting a different Jira project through the wizard discards the previous project's sprint — manual 2026-08-30, full path on a second real Jira project (PT): Disconnect → reconnect → pick PT → 5 mappings → 0 sprints left from FM, observed rather than inferred. Backlog §1a row 4.6
