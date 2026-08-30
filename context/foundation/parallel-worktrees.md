@@ -45,9 +45,11 @@ machine is shared.
    at once: port 3000, the fixture servers on 3098/3099, and `reuseExistingServer`
    silently attaching to the *other* worktree's dev server — which was started
    without `GITHUB_API_BASE_URL`, so the suite passes or fails against the wrong
-   backend. On top of that `playwright.config.ts` pins `workers: 1` because of
-   the S-21 connection leak; a second concurrent suite reintroduces the exact
-   exhaustion S-21 exists to fix.
+   backend. On top of that, S-21 restored PARALLEL workers locally
+   (`workers: process.env.CI ? 1 : undefined`) — so a second concurrent suite now
+   competes for Postgres's slots harder than it did under the serial pin, not
+   less. S-21 gave the dev server ONE pool with a fixed ceiling; two dev servers
+   are two ceilings, and that is exactly what the fix does not cover.
 
 4. **Never run demo seeding or any destructive script.** One database, one set of
    accounts. See the standing rule about never seeding the owner's account.

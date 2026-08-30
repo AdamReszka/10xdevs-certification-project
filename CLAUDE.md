@@ -27,8 +27,9 @@ The three rules that cost the most if broken, in a parallel worktree:
 - **No migrations** (`db:migrate` writes to the shared database).
 - **No `test:integration` and no `test:e2e`** in two worktrees at once —
   `reuseExistingServer` will silently attach the suite to the other worktree's
-  dev server, and `playwright.config.ts` pins `workers: 1` for the S-21
-  connection leak.
+  dev server. Since S-21 landed, `playwright.config.ts` runs PARALLEL workers
+  locally again (`workers: process.env.CI ? 1 : undefined`), so a second
+  concurrent suite competes for the same Postgres harder than before, not less.
 - **`npm ci` first.** `node_modules` is gitignored and 1.2 GB; the `PostToolUse`
   hooks run `npx eslint` and `npx vitest` after every edit and stall without it.
 

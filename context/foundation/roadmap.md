@@ -814,8 +814,9 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Watch the cost:** `scheduled.ts:43` already records that
   `isOnboardingComplete` is 6 sequential queries, too expensive to run per owner
   in a loop. On a single request path that is fine; do not let it drift into one.
-  Both call sites thread an existing `db` handle rather than opening a pool
-  (`getDb` IS the pool constructor — see S-21).
+  Both call sites thread an existing `db` handle rather than re-resolving one.
+  Since S-21 a second `getDb` returns the SAME memoized handle rather than a
+  second pool, so what threading saves is the round trip, not the connection.
 
 ---
 
