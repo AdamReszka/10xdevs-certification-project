@@ -17,11 +17,36 @@ import {
  * numbers under its name.
  */
 
-const ACTIVE: SprintRowRef = { id: "row-active", jiraSprintId: "900", name: "Sprint 12" };
-const CLOSED: SprintRowRef = { id: "row-closed", jiraSprintId: "899", name: "Sprint 11" };
+/**
+ * Every date below is DISTINCT per sprint and per source, so a leak has
+ * somewhere to show up (S-25 Phase 2). If the measurement-only branch ever
+ * returns `ACTIVE_START`, that is the whole bug this file exists to prevent,
+ * wearing dates instead of numbers.
+ */
+const ACTIVE_START = new Date("2026-08-17T00:00:00.000Z");
+const ACTIVE_END = new Date("2026-08-28T00:00:00.000Z");
+const CLOSED_ROW_START = new Date("2026-08-03T00:00:00.000Z");
+const CLOSED_ROW_END = new Date("2026-08-14T00:00:00.000Z");
+const RECORD_START = new Date("2026-07-06T00:00:00.000Z");
+const RECORD_END = new Date("2026-07-17T00:00:00.000Z");
+
+const ACTIVE: SprintRowRef = {
+  id: "row-active",
+  jiraSprintId: "900",
+  name: "Sprint 12",
+  startDate: ACTIVE_START,
+  endDate: ACTIVE_END,
+};
+const CLOSED: SprintRowRef = {
+  id: "row-closed",
+  jiraSprintId: "899",
+  name: "Sprint 11",
+  startDate: CLOSED_ROW_START,
+  endDate: CLOSED_ROW_END,
+};
 
 function measurement(jiraSprintId: string, sprintName: string | null): MeasurementRef {
-  return { jiraSprintId, sprintName, startDate: new Date("2026-08-03T00:00:00.000Z") };
+  return { jiraSprintId, sprintName, startDate: RECORD_START, endDate: RECORD_END };
 }
 
 const SERIES = [measurement("900", "Sprint 12"), measurement("899", "Sprint 11")];
@@ -39,6 +64,8 @@ describe("resolveSprintSelection", () => {
       jiraSprintId: "900",
       name: "Sprint 12",
       sprintRowId: "row-active",
+      startDate: ACTIVE_START,
+      endDate: ACTIVE_END,
       kind: "active",
     });
   });
@@ -72,8 +99,55 @@ describe("resolveSprintSelection", () => {
       jiraSprintId: "899",
       name: "Sprint 11",
       sprintRowId: null,
+      startDate: RECORD_START,
+      endDate: RECORD_END,
       kind: "measurement-only",
     });
+  });
+
+  it("dates a row-less sprint from its RECORD, never from the active sprint", () => {
+    // The same substitution as above, one field further in. A date is exactly
+    // the kind of value that looks plausible under the wrong sprint's name —
+    // which is why it is asserted against the active sprint's, not just for
+    // being non-null.
+    const selection = resolveSprintSelection({
+      requestedJiraSprintId: "899",
+      activeSprint: ACTIVE,
+      requestedSprint: null,
+      measurements: SERIES,
+    });
+
+    expect(selection.startDate).toEqual(RECORD_START);
+    expect(selection.endDate).toEqual(RECORD_END);
+    expect(selection.startDate).not.toEqual(ACTIVE_START);
+    expect(selection.endDate).not.toEqual(ACTIVE_END);
+  });
+
+  it("prefers the ROW's dates over the record's on the selected branch", () => {
+    const selection = resolveSprintSelection({
+      requestedJiraSprintId: "899",
+      activeSprint: ACTIVE,
+      requestedSprint: CLOSED,
+      measurements: SERIES,
+    });
+
+    expect(selection.startDate).toEqual(CLOSED_ROW_START);
+    expect(selection.endDate).toEqual(CLOSED_ROW_END);
+  });
+
+  it("falls back to the record's dates when the row carries none", () => {
+    // `sprint.start_date` is nullable, so this is reachable rather than
+    // theoretical — and it mirrors how the NAME already resolves one line up.
+    const selection = resolveSprintSelection({
+      requestedJiraSprintId: "899",
+      activeSprint: ACTIVE,
+      requestedSprint: { ...CLOSED, startDate: null, endDate: null },
+      measurements: SERIES,
+    });
+
+    expect(selection.kind).toBe("selected");
+    expect(selection.startDate).toEqual(RECORD_START);
+    expect(selection.endDate).toEqual(RECORD_END);
   });
 
   it("falls back to the active sprint on an id it has never recorded", () => {
@@ -111,7 +185,14 @@ describe("resolveSprintSelection", () => {
         requestedSprint: null,
         measurements: [],
       }),
-    ).toEqual({ jiraSprintId: null, name: null, sprintRowId: null, kind: "none" });
+    ).toEqual({
+      jiraSprintId: null,
+      name: null,
+      sprintRowId: null,
+      startDate: null,
+      endDate: null,
+      kind: "none",
+    });
   });
 
   it("still falls back to the active sprint when the series is empty", () => {
