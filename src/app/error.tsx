@@ -38,6 +38,13 @@ import {
  *
  * It must not call `getOptionalSession` — the boundary for a failed session
  * lookup cannot itself depend on one.
+ *
+ * WHICH IS WHY THE SESSION SENTENCE IS CONDITIONAL (impl-review F2). Being
+ * root-level makes this the boundary for `(auth)/login`, `/signup` and `/reset`
+ * too, where the visitor is by definition NOT signed in. The sentence still
+ * carries its purpose — it exists to undo the "you have been logged out"
+ * misreading this phase was built to kill — without asserting a fact this
+ * component is forbidden from checking.
  */
 export default function AppError({
   error,
@@ -62,7 +69,7 @@ export default function AppError({
           </CardTitle>
           <CardDescription>
             SprintFlow couldn&apos;t load this page. This is usually temporary —
-            try again in a moment. You are still signed in.
+            try again in a moment. If you were signed in, you still are.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

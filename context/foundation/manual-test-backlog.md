@@ -2086,7 +2086,7 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       **Co zrobić:** zaloguj się przy działającej bazie, potem `npx supabase stop`,
       potem odśwież `/dashboard`.
       **Co musi być prawdą:** karta **„Something went wrong"** z przyciskiem
-      **„Try again"** i zdaniem **„You are still signed in"**. Adres nadal
+      **„Try again"** i zdaniem **„If you were signed in, you still are"**. Adres nadal
       `/dashboard` — **nie** przeskoczyłaś na `/login`.
       *Dlaczego to łapie:* to cała diagnoza slice'a. Awaria bazy udawała
       wylogowanie, więc nikt nie szukał problemu z bazą. Ekran logowania w tym
@@ -2191,8 +2191,9 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       dokładnie stąd.
 
 **Faza 1 nie ma własnych wierszy manualnych po stronie aplikacji** — to pomiar
-bazowy wykonany jednorazowym skryptem ze scratchpada, zapisany w
-`measurements.md` i celowo niecommitowany.
+bazowy wykonany jednorazowym skryptem ze scratchpada. Niecommitowany jest sam
+**skrypt** (celowo — to jednorazowe narzędzie, nie instrument); wyniki są w repo,
+w `context/changes/db-pool-teardown/measurements.md`, i to je otwierasz w 17.G.
 
 ---
 

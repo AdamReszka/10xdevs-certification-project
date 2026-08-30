@@ -1,10 +1,10 @@
 ---
 change_id: db-pool-teardown
 title: One `db` handle per request (kill the 3-4x pool multiplicity)
-status: implementing
+status: archived
 created: 2026-08-19
 updated: 2026-08-30
-archived_at: null
+archived_at: 2026-08-30T14:06:00Z
 ---
 
 ## Notes

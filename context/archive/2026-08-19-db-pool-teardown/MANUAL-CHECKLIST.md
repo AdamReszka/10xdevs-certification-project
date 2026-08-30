@@ -38,7 +38,7 @@ testów uruchom bazę z powrotem**, inaczej nic innego nie zadziała.
 
   **Co musi być prawdą:** widzisz kartę z nagłówkiem **„Something went wrong"**,
   zdaniem, że SprintFlow nie mógł wczytać strony, i przyciskiem **„Try again"**.
-  Karta mówi wprost **„You are still signed in"**. Adres w pasku przeglądarki
+  Karta mówi wprost **„If you were signed in, you still are"**. Adres w pasku przeglądarki
   **nadal jest** `/dashboard` — **nie** przeskoczyłaś na `/login`.
 
   **Dlaczego to ma znaczenie:** to jest cała diagnoza tego slice'a. Przez
