@@ -54,7 +54,12 @@ export type ClientRepo = { id: string; fullName: string };
  */
 export type ActionFailure = {
   ok: false;
-  error: "invalid_token" | "unavailable" | "bad_format" | "no_repos";
+  error:
+    | "invalid_token"
+    | "unavailable"
+    | "bad_format"
+    | "no_repos"
+    | typeof DEMO_REFUSAL_ERROR;
   message: string;
 };
 
@@ -89,11 +94,20 @@ function githubOptsFromEnv(): GithubClientOpts | undefined {
 /**
  * Validate the pasted PAT and return the account login + repos for the picker.
  * No DB write, no token in the return — FR-002 "validate before store".
+ *
+ * REFUSES IN DEMO (S-27). It writes nothing, but it spends the real session
+ * against the live GitHub API with a pasted token — the demo promise is that no
+ * action taken in demo reaches outside, and an outbound call with a credential
+ * is the clearest possible breach of it.
  */
 export async function validateGithubToken(
   token: string,
 ): Promise<ValidateResult> {
-  await requireRealWorkspace();
+  const [, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<ActionFailure["error"]>();
 
   const parsed = githubTokenSchema.safeParse({ token });
   if (!parsed.success) {
@@ -128,12 +142,21 @@ export async function validateGithubToken(
 /**
  * Persist the credential + selected repos. Re-validates the token server-side
  * (defense-in-depth) via the service core, which encrypts before any DB write.
+ *
+ * REFUSES IN DEMO (S-27). `requireRealWorkspace()` stays — the target owner is
+ * deliberately the real one — and that is exactly why the demo check has to sit
+ * beside it: without one, a screen showing demo data REPLACES the real account's
+ * GitHub credential and its whole monitored-repo set.
  */
 export async function storeGithubIntegration(
   token: string,
   selectedRepoIds: string[],
 ): Promise<StoreResult> {
-  const { ownerId } = await requireRealWorkspace();
+  const [{ ownerId }, { isDemo }] = await Promise.all([
+    requireRealWorkspace(),
+    resolveWorkspace(),
+  ]);
+  if (isDemo) return demoRefusal<ActionFailure["error"]>();
 
   const tokenParsed = githubTokenSchema.safeParse({ token });
   if (!tokenParsed.success) {
