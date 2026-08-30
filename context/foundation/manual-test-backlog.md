@@ -3076,3 +3076,20 @@ ludzi w rosterze). Wiersz 23.E wymaga wejścia w tryb demo.
       funkcja zniknęła. **Nieblokujące:** zły albo brakujący tekst nikogo nie
       zatrzymuje i niczego nie psuje, dlatego nie ma tego wiersza w checkliście
       slice'a.
+
+- [ ] **23.G** (impl-review F1, dopisane 2026-08-31) **Gdzie:** `/dashboard` →
+      zakładka **Availability**.
+      **Co zrobić:** popatrz na nagłówek karty „Who is away" — na jego prawą
+      stronę. Kliknij **Days off**.
+      **Co musi być prawdą:** w nagłówku są **dwie** kontrolki obok siebie:
+      `Manage` (z ramką) i `Days off` (bez ramki). Nie nachodzą na siebie, nie
+      zawijają się brzydko i nie rozjeżdżają tytułu karty — sprawdź też przy
+      szerokości tabletu (DevTools → 1024 px). `Days off` prowadzi na
+      `/team/days-off`.
+      *Dlaczego to łapie:* karta pokazuje linijkę „− N team days off already
+      subtracted", a po podziale stron w S-19 jej jedyny przycisk prowadził już
+      tylko do nieobecności — liczba nie miała drogi do swojego edytora. Drugi
+      przycisk to naprawia, ale nagłówek nie był projektowany na dwie kontrolki,
+      więc jego wygląd jest jedyną rzeczą tutaj, której nie potwierdza żaden test
+      automatyczny. **Nieblokujące:** obie ścieżki działają niezależnie od tego,
+      jak to wygląda.

@@ -140,9 +140,22 @@ export default function Availability({
             lowers the sprint&apos;s capacity.
           </CardDescription>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/team/absences">Manage</Link>
-        </Button>
+        {/*
+          TWO LINKS SINCE S-19, because this card shows two things. The header
+          used to carry one `Manage` button pointing at `/settings/absences`,
+          which hosted BOTH editors — so one click reached both halves. S-19 gave
+          team days off their own tab, and the card renders a "− N team days off
+          already subtracted" line below, so the second link is what keeps every
+          number on this card one click from the surface that edits it.
+        */}
+        <div className="flex shrink-0 gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/team/absences">Manage</Link>
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/team/days-off">Days off</Link>
+          </Button>
+        </div>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-6">
