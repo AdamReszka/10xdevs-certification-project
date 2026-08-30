@@ -930,12 +930,26 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       się. Liczby zweryfikowane przeciwko bazie: Alice Kim = 3, Sprint at risk
       = 3 — zgodne z ekranem co do sztuki.
 
-- [ ] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
+- [x] **6.10** Ostrzeżenie przy zmianie projektu Jira wymienia „daily recaps".
+      **Zaliczone 2026-08-30** (sesja manualna, Ania).
       *Jak:* `/settings/connections` → zmiana projektu Jira → **przeczytaj
       ostrzeżenie, nie potwierdzaj**.
-      *Dlaczego:* `daily_recap` kaskaduje po `sprint`, więc przełączenie projektu
-      kasuje archiwum recapów. Potwierdzenie, które niedomawia, co kasuje, jest
-      defektem.
+      *Dlaczego:* potwierdzenie, które niedomawia, co kasuje, jest defektem.
+      *Uwaga — pierwotne uzasadnienie tego wiersza było błędne.* Brzmiało
+      „`daily_recap` kaskaduje po `sprint`, więc przełączenie projektu kasuje
+      archiwum recapów". S-24 wykazał coś przeciwnego: `daily_recap.sprint_id`
+      jest `ON DELETE SET NULL`, więc recapy **przeżywają**, tracąc tylko
+      powiązanie ze sprintem. Ostrzeżenie wymienia je zatem po stronie *keeps*,
+      i to jest poprawne — wiersz zalicza się mimo innego niż zakładano znaku.
+      *Zaobserwowane:* nagłówek „This discards synced sprint data"; po stronie
+      strat — sprinty, ich tickety i historia statusów, anomalie oraz
+      **ręcznie wpisane nieobecności, których żaden sync nie odtworzy**; po
+      stronie zachowanych — token i workspace Jiry, roster, dni wolne zespołu,
+      capacity/velocity zamkniętych sprintów, status mapping (do ponownego
+      wpisania, nie do stracenia) i „past daily recaps, which stay readable but
+      stop being linked to a sprint". Dwa przyciski: destrukcyjny za jawnym
+      „I understand — choose a project" plus „Cancel"; kliknięto Cancel, nic nie
+      zmieniono.
 
 - [ ] **6.11** `/settings/recap` osiągalne z zakładek i pokazuje bieżące wartości.
 - [ ] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.

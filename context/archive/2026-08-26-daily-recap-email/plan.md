@@ -1273,7 +1273,10 @@ is exercised by the very first email.
 
 #### Manual
 
-- [ ] 6.10 The Jira project-switch confirmation names daily recaps among what it destroys
+- [x] 6.10 The Jira project-switch confirmation names daily recaps — under what it
+      KEEPS, not what it destroys: S-24 established `daily_recap.sprint_id` is ON
+      DELETE SET NULL, so the recaps survive unlinked. The warning also names the
+      hand-entered absences among the losses. — manual 2026-08-30
 - [ ] 6.11 `/settings/recap` reachable from the tabs and renders current values
 - [ ] 6.12 Changing the time saves, toasts, and survives a reload
 - [ ] 6.13 The last-send line reflects the most recent recap
