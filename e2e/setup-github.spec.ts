@@ -105,10 +105,16 @@ test.describe("setup — GitHub connect (authenticated)", () => {
 
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toBeVisible();
-    // It NAMES what it is about to destroy (the house convention), so the lead
-    // is not consenting to an unspecified deletion.
-    await expect(dialog).toContainText("monitored repositories");
-    await expect(dialog).toContainText("commit, pull request and code review");
+    // It NAMES what each outcome does with the repositories and their synced
+    // artefacts (the house convention), so the lead is not consenting to an
+    // unspecified deletion. Since S-26 those two clauses live on DIFFERENT
+    // branches: the default keeps them, and only the second button removes them.
+    await expect(dialog).toContainText(
+      "the monitored repositories and everything synced from them, which are re-linked when you reconnect",
+    );
+    await expect(dialog).toContainText(
+      "Choosing \u201cDelete my GitHub data\u201d also removes the list of monitored repositories and every commit, pull request and code review synced from them",
+    );
 
     await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(dialog).not.toBeVisible();
@@ -123,5 +129,64 @@ test.describe("setup — GitHub connect (authenticated)", () => {
     await expect(
       page.getByRole("button", { name: "Connect", exact: true }),
     ).toHaveCount(0);
+  });
+
+  /**
+   * Risk-tied (S-26): **the choice exists, and a locator can tell the three
+   * controls apart.** `disconnect-confirm-copy.test.ts` already holds the three
+   * strings mutually non-containing as pure data; what it cannot see is the
+   * rendered dialog. `getByRole`'s `name` is a case-insensitive SUBSTRING match,
+   * so a relabelling to `Disconnect GitHub` / `Disconnect GitHub and delete data`
+   * would keep every copy test green while making every locator in this suite —
+   * and every screen-reader announcement — ambiguous. The `toHaveCount(1)` calls
+   * are the assertion that fails in that world.
+   */
+  test("the dialog offers two outcomes, and all three controls are distinguishable", async ({
+    page,
+  }) => {
+    await page.goto("/setup/github");
+
+    // Reach the connected state this test is about.
+    await disconnectIfConnected(page, "GitHub");
+    await page.getByLabel("Personal access token").fill(FIXTURE_TOKEN);
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    await expect(page.getByText("Choose repositories to monitor")).toBeVisible();
+    await page.getByRole("checkbox", { name: "sprintflow-e2e/frontend" }).check();
+    await page.getByRole("button", { name: /^Save/ }).click();
+    await expect(page.getByText("GitHub connected")).toBeVisible();
+
+    // Closed, the trigger is the page's only "Disconnect" — the state every
+    // caller of `disconnectIfConnected` starts from.
+    const trigger = page.getByRole("button", { name: "Disconnect", exact: true });
+    await expect(trigger).toHaveCount(1);
+    await trigger.click();
+
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toBeVisible();
+
+    // Three controls. Deliberately WITHOUT `exact` — `getByRole`'s default is a
+    // case-insensitive substring match, so `toHaveCount(1)` here is the mutual
+    // non-containment assertion: it fails if any other button's name contains
+    // this one, which is precisely what a `Disconnect GitHub` /
+    // `Disconnect GitHub and delete data` pair would do.
+    const keep = dialog.getByRole("button", { name: "Keep my GitHub data" });
+    const clear = dialog.getByRole("button", { name: "Delete my GitHub data" });
+    const cancel = dialog.getByRole("button", { name: "Cancel" });
+    await expect(keep).toHaveCount(1);
+    await expect(clear).toHaveCount(1);
+    await expect(cancel).toHaveCount(1);
+
+    // No action re-uses the trigger's word at all. (The trigger itself is out of
+    // the accessibility tree while the modal is open — Radix `aria-hidden`s the
+    // rest of the page — so this counts dialog buttons only, which is the half
+    // that is this dialog's to keep true.)
+    await expect(dialog.getByRole("button", { name: "Disconnect" })).toHaveCount(
+      0,
+    );
+
+    // Leave the connection intact; `afterEach` owns the cleanup.
+    await cancel.click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.getByText("GitHub connected")).toBeVisible();
   });
 });

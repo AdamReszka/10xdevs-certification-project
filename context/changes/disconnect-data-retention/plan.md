@@ -913,19 +913,19 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 5.1 The disconnect→reconnect regression passes
-- [x] 5.2 Unit suite passes
-- [x] 5.3 Type checking passes
-- [x] 5.4 Linting passes
+- [x] 5.1 The disconnect→reconnect regression passes — 15c52c8
+- [x] 5.2 Unit suite passes — 15c52c8
+- [x] 5.3 Type checking passes — 15c52c8
+- [x] 5.4 Linting passes — 15c52c8
 
 ### Phase 6: Documents, E2E and the stale claims
 
 #### Automated
 
-- [ ] 6.1 E2E suite passes
-- [ ] 6.2 Manual-test sweep exits zero
-- [ ] 6.3 Unit suite passes
-- [ ] 6.4 Linting passes
+- [x] 6.1 E2E suite passes
+- [x] 6.2 Manual-test sweep exits zero
+- [x] 6.3 Unit suite passes
+- [x] 6.4 Linting passes
 
 #### Manual
 

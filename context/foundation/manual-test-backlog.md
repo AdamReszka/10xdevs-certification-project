@@ -447,6 +447,28 @@ znajomości historii decyzji. Zamyka je implementujący na końcu fazy 2.
       *Dlaczego to łapie:* to jest dokładnie to zdanie, którym raz już odłożono
       tę zmianę. Bez znacznika następna osoba zacytuje je i odłoży ją ponownie.
 
+**S-26 `disconnect-data-retention`** — wiersz 6.6 z
+`context/changes/disconnect-data-retention/plan.md`. **Nie oddawaj go osobie
+testującej**: to czytanie dokumentów, nie klikanie w aplikacji. Zamyka go
+implementujący na końcu fazy 6.
+
+- [ ] **6.6** Przejrzyj zdania, które opisują, co ginie przy rozłączeniu
+      integracji: `context/foundation/roadmap.md` (sekcja **S-26**, wiersz S-26 w
+      tabeli szczegółowej, **Open Roadmap Question 4**),
+      `context/changes/disconnect-data-retention/change.md`, §16 tego pliku oraz
+      `src/lib/integrations/disconnect-impact.ts`.
+      **Co musi być prawdą:** żaden z nich nie twierdzi już, że **potwierdzone**
+      rozłączenie kasuje nieobecności — wszędzie jest to warunkowe („tylko przy
+      wyborze «Delete my … data»"). Nigdzie też nie zostało zdanie, że
+      `anomaly.status` to ręczna triage leada. Stare brzmienia mogą zostać, ale
+      **wyłącznie** oznaczone datą i powodem zmiany, nie jako obowiązujący opis.
+      *Dlaczego to łapie:* ten slice zmienia zachowanie **i** kilkanaście zdań,
+      które je opisują. Zdanie, które przeżyje zmianę zachowania, jest gorsze niż
+      brak zdania: mówi leadowi, że traci coś, czego nie traci, i wypycha go z
+      bezpiecznej ścieżki. Dokładnie tak powstał błąd, który S-24 znalazł w
+      `jira-project-editor.tsx` — wymieniał raporty dzienne, które przeżywają, a
+      pomijał nieobecności, które ginęły.
+
 ## 4. Osobna kategoria: deploy
 
 `context/deployment/deploy-plan.md` ma **19** niezaznaczonych kroków, ale to
@@ -2026,43 +2048,74 @@ raport: `.../reviews/impl-review.md`.
 `token_last4`). 16.B najlepiej na koncie, które ma wpisaną co najmniej jedną
 nieobecność.
 
-⚠️ **Żaden wiersz poniżej nie każe klikać „Disconnect …" do końca.** Cały sens
-slice'a to możliwość wycofania się. Potwierdzone odłączenie Jiry kasuje ręcznie
-wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
+⚠️ **Żaden wiersz poniżej nie każe klikać żadnej z akcji okna do końca.** Cały
+sens slice'a to możliwość wycofania się; wszystkie kończą się na **Cancel**.
 
-- [ ] **16.A** (faza 2, `2.5`) **Gdzie:** `/setup/github`, konto z podłączonym
-      GitHubem.
+⚠️ **ZMIENIONE 2026-08-30 przez S-26 (§21).** Do tej pory stało tu zdanie:
+*„Potwierdzone odłączenie Jiry kasuje ręcznie wpisane nieobecności bezpowrotnie
+— żaden sync ich nie odtworzy"*. **To już nieprawda i nie jest tylko poprawką
+stylistyczną.** S-26 zwęził kaskadę w bazie (migracja `0021`) i rozbił jedną
+akcję na dwie: okno ma teraz **dwa** przyciski akcji, domyślny **zachowuje**
+nieobecności, a kasuje je wyłącznie ten drugi, nazwany wprost „Delete my Jira
+data". Dlatego wiersze 16.A i 16.B poniżej mają **nowe** warunki zaliczenia —
+stara treść okna („Disconnect GitHub" jako jedyny przycisk, nieobecności na
+liście strat) dziś oznacza **błąd**, a nie sukces. Zdanie zostaje zapisane tutaj
+z powodem, a nie wykasowane, żeby ktoś czytający starą checklistę S-24
+(`context/archive/2026-08-30-destructive-action-confirmation/MANUAL-CHECKLIST.md`)
+wiedział, dlaczego jej treść i ekran się rozjeżdżają.
+
+- [ ] **16.A** (faza 2, `2.5`; treść okna zaktualizowana przez S-26)
+      **Gdzie:** `/setup/github`, konto z podłączonym GitHubem.
       **Co zrobić:** kliknij **Disconnect**, przeczytaj okno, kliknij **Cancel**.
       **Co musi być prawdą:** po kliknięciu **nic się nie odłączyło** — pojawia
-      się okno „Disconnect GitHub?", które wymienia *monitorowane repozytoria*
-      oraz *commity, pull requesty i recenzje* jako kasowane, i osobno mówi, co
-      zostaje (zespół, dni wolne, pomiary zamkniętych sprintów, połączenie z
-      Jirą). Przyciski to **Cancel** i **Disconnect GitHub** — nie dwa razy
-      „Disconnect". Po Cancel karta „GitHub connected" jest dokładnie taka jak
-      była: ten sam login, ta sama liczba repozytoriów, żadnego formularza
+      się okno „Disconnect GitHub?". Repozytoria i to, co z nich zsynchronizowane,
+      są wymienione **po stronie zachowywanych**: „the monitored repositories and
+      everything synced from them, which are re-linked when you reconnect", obok
+      zespołu, dni wolnych, pomiarów zamkniętych sprintów i połączenia z Jirą.
+      Jako kasowane wymienia je **wyłącznie** osobne zdanie o drugim przycisku:
+      „Choosing „Delete my GitHub data" also removes the list of monitored
+      repositories and every commit, pull request and code review synced from
+      them". W stopce są **trzy** kontrolki: `Cancel`, `Delete my GitHub data`
+      (czerwony) i `Keep my GitHub data` (zwykły) — **żadna** nie nazywa się
+      „Disconnect GitHub". Po Cancel karta „GitHub connected" jest dokładnie taka
+      jak była: ten sam login, ta sama liczba repozytoriów, żadnego formularza
       „Connect".
       *Dlaczego to łapie:* to była ścieżka, na której jeden klik kasował
       bezpowrotnie całą historię commitów, PR-ów i recenzji bez pytania. Jeśli
       Cancel jednak coś skasował, dialog jest gorszy niż jego brak — daje
-      fałszywe poczucie bezpieczeństwa.
+      fałszywe poczucie bezpieczeństwa. Nowa część warunku pilnuje drugiej
+      strony: po S-26 domyślne wyjście **niczego nie kasuje poniżej samego
+      credentiala**, więc okno, które nadal straszy utratą repozytoriów, wypycha
+      leada z bezpiecznej ścieżki równie skutecznie, jak wcześniej milczenie
+      wpychało go w kasowanie.
 
-- [ ] **16.B** (faza 2, `2.6`) **Gdzie:** `/settings/connections`, karta **Jira**,
-      konto z podłączoną Jirą i co najmniej jedną nieobecnością w
-      `/settings/absences`.
-      **Co zrobić:** kliknij **Disconnect** na karcie Jira, przeczytaj okno,
-      kliknij **Cancel**, potem wejdź na `/settings/absences`.
-      **Co musi być prawdą:** okno mówi wprost, że kasowane są **wpisane ręcznie
-      nieobecności i że nie da się ich zsynchronizować z powrotem** — nie samo
-      „dane Jiry". Wymienia też sprinty, ticket'y, historię statusów i anomalie;
-      po stronie „zostaje" wymienia zespół, dni wolne całego zespołu, pomiary
-      zamkniętych sprintów, połączenie z GitHubem oraz to, że dotychczasowe
-      raporty dzienne **zostają**, tylko przestają być powiązane ze sprintem. Po
-      Cancel nieobecność nadal jest na liście.
-      *Dlaczego to łapie:* nieobecności to jedyna pozycja na tej liście, której
-      żaden sync nie odtworzy — a jedyne wcześniejsze ostrzeżenie w aplikacji
-      pomijało je i w zamian wymieniało raporty dzienne, które w rzeczywistości
-      przeżywają. Pominięcie ich znaczy, że lead zgadza się na utratę czegoś, o
-      czym nie został poinformowany.
+- [ ] **16.B** (faza 2, `2.6`; warunek zaliczenia **przepisany** przez S-26 —
+      okno oferuje dwa wyjścia, a domyślnym jest zachowanie danych)
+      **Gdzie:** `/settings/connections`, karta **Jira**, konto z podłączoną Jirą
+      i co najmniej jedną nieobecnością w `/settings/absences`.
+      **Co zrobić:** kliknij **Disconnect** na karcie Jira, przeczytaj **całe**
+      okno, kliknij **Cancel**, potem wejdź na `/settings/absences`.
+      **Co musi być prawdą:** w stopce są **trzy** kontrolki: `Cancel`,
+      `Delete my Jira data` (czerwony) i `Keep my Jira data` (zwykły, domyślny —
+      to on jest wyróżniony, nie czerwony). Nieobecności **nie** stoją po stronie
+      strat: okno mówi, że zostają („the recorded absences you entered by hand,
+      which stay with the team and stop being linked to a sprint"), obok zespołu,
+      dni wolnych całego zespołu, pomiarów zamkniętych sprintów, połączenia z
+      GitHubem i raportów dziennych. Jako kasowane wymienia sprinty, ticket'y,
+      historię statusów, anomalie i mapowanie statusów. Osobne zdanie nazywa
+      **czerwony przycisk po imieniu**: „Choosing „Delete my Jira data" also
+      removes the recorded absences, which were entered by hand and cannot be
+      synced back". Po Cancel nieobecność nadal jest na liście, a Jira nadal
+      podłączona.
+      *Dlaczego to łapie:* to jest widziany oczami użytkownika efekt S-26.
+      Nieobecności to jedyna pozycja na tej liście, której żaden sync nie
+      odtworzy; do S-24 okno w ogóle o nich nie mówiło, a do S-26 kasowało je
+      **każde** potwierdzone odłączenie. Jeśli okno nadal ma jeden przycisk
+      akcji albo domyślnym jest czerwony, slice nie dotarł do ekranu; jeśli
+      wymienia nieobecności po stronie strat, tekst i kod się rozjechały i lead
+      zrezygnuje z rozłączenia, którego może bezpiecznie dokonać. Pełne
+      sprawdzenie obu ścieżek (klik do końca) siedzi w §21 — tutaj kończymy na
+      Cancel.
 
 - [ ] **16.C** (faza 3, `3.6`) **Gdzie:** `/settings/connections`, konto z
       **załadowanym demo** (baner na górze) i z prawdziwie podłączonymi
@@ -2574,3 +2627,152 @@ klikaniem.** Oba są pokryte testami integracyjnymi na prawdziwym Postgresie
       wpisany miesiąc wcześniej". Zła liczba **M** albo **N** znaczy z kolei, że
       przy okazji ruszono arytmetykę dni roboczych, która miała zostać
       nietknięta.
+
+---
+
+## 21. S-26 `disconnect-data-retention` — otwarte (2026-08-30)
+
+Slice zamknięty 2026-08-30, sześć faz. Źródło kanoniczne:
+`context/changes/disconnect-data-retention/plan.md` `## Progress`. Pełne opisy
+wierszy: `context/changes/disconnect-data-retention/MANUAL-CHECKLIST.md`.
+Zobowiązanie dokumentacyjne (6.6) **nie jest tutaj** — siedzi w **§3** i zamyka
+je implementujący, nie osoba testująca. Wiersze **4.6 i 4.7** (zmiana
+monitorowanego projektu Jira) są **zaliczone** i nie ma ich poniżej.
+
+**O co chodzi, po ludzku.** Rozłączenie Jiry kasowało **wszystkie ręcznie
+wpisane nieobecności** — dane, których żadna synchronizacja nie odtworzy, bo
+nigdy nie przyszły z Jiry. Nikt tego nie chciał ani nie zaprojektował: absencja
+dostawała przy zapisie stempel „aktywny sprint", a sprinty ginęły kaskadą razem
+z credentialem. S-24 dołożył pytanie („czy na pewno?"), ale świadoma strata to
+nadal strata. S-26 zwęża kaskadę w bazie (migracja `0021`) i **rozbija jedną
+akcję na dwie**: domyślne wyjście zachowuje to, co lead wpisał sam, a kasuje
+tylko drugi przycisk, nazwany wprost. Drugi, cichszy defekt: rozłączenie i
+ponowne podłączenie **w trakcie sprintu** zamrażało zobowiązanie sprintu po raz
+drugi, po nowej sumie — czyli trwale zatruwało jeden wpis historii prędkości
+danymi wyglądającymi na poprawne.
+
+**Konto:** wiersze 21.B–21.D wymagają konta z **prawdziwymi** credentialami (na
+lokalnej bazie `demo@sprintflow.test` — patrz §5, identyfikuj po `token_last4`),
+z podłączoną Jirą i co najmniej jedną nieobecnością. W trybie demo cała zakładka
+Connections odmawia (S-27), więc na koncie demo tych wierszy nie da się zrobić.
+
+⚠️ **Kolejność jest wiążąca.** 21.A (migracja) musi być **przed** 21.C i 21.D.
+Kod uruchomiony na niezmigrowanej bazie wygląda identycznie, a kaskada dalej
+kasuje nieobecności — 21.C wtedy słusznie failuje, ale z powodu, którego ten
+slice nie dotyczy.
+
+⚠️ **21.D kasuje dane nieodwracalnie.** Nie ma „cofnij"; ponowne podłączenie
+Jiry nieobecności nie przywróci. Rób go dopiero po 21.C i tylko wtedy, gdy
+zgadzasz się stracić nieobecności na tym koncie.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **21.A** (faza 1, `1.7`) **Gdzie:** terminal, **główny checkout** repo (nie
+      worktree — wszystkie worktree dzielą jedną lokalną bazę). Potrzebny
+      connection string do bazy produkcyjnej.
+      **Co zrobić:** najpierw sprawdź, co jest **naprawdę** zaaplikowane —
+      zajrzyj do tabeli `drizzle.__drizzle_migrations` albo uruchom
+      `DATABASE_URL_OVERRIDE='<connection string>' npx drizzle-kit up --config
+      drizzle.config.ts`. Nie zakładaj, że baza stoi na `0020`. Potem
+      `DATABASE_URL_OVERRIDE='<connection string>' npm run db:migrate`.
+      **Co musi być prawdą:** komenda kończy się `migrations applied
+      successfully`, ostatni wiersz `drizzle.__drizzle_migrations` to
+      `0021_tricky_electro`, a w bazie `absence.sprint_id` i
+      `monitored_repo.credential_id` mają `ON DELETE SET NULL` (nie `CASCADE`),
+      przy czym `monitored_repo.credential_id` jest `NULL`-owalna. Liczba wierszy
+      w `absence` i `monitored_repo` **przed i po jest identyczna** — migracja
+      niczego nie kasuje.
+      *Dlaczego to łapie:* schemat i kod jadą tu dwoma osobnymi torami i tylko
+      jeden jest zautomatyzowany — CI migruje własną, tymczasową bazę, a
+      Cloudflare Workers Builds deployuje wyłącznie kod. Zielony deploy **nie
+      jest** dowodem na zmigrowaną bazę, a `lessons.md:56-60` odnotowuje, że
+      `0019` i `0020` pojechały z kodem i nikt ich nie zaaplikował. Bez `0021` na
+      produkcji cały slice jest tylko nowym napisem na przycisku: użytkownik
+      wybiera „zachowaj moje dane", a baza dalej kasuje je kaskadą.
+
+- [ ] **21.B** (faza 3, `3.6`) **Gdzie:** `/settings/connections`, prawdziwe
+      konto. **Ten wiersz niczego nie zapisuje** — kończy się na `Cancel`.
+      **Co zrobić:** na karcie **Jira** kliknij **Disconnect**, przeczytaj całą
+      treść okna, popatrz na stopkę, zamknij **Cancel**. Powtórz na karcie
+      **GitHub**.
+      **Co musi być prawdą:** w stopce są **trzy** kontrolki: `Cancel`,
+      `Delete my Jira data` (czerwony) i `Keep my Jira data` (zwykły, wyróżniony
+      jako domyślny). Żadna **nie** nazywa się „Disconnect". Na karcie GitHub
+      analogicznie: `Delete my GitHub data` i `Keep my GitHub data`. Treść okna
+      zawiera zdanie „Choosing „Delete my Jira data" also removes…", czyli
+      **cytuje nazwę** przycisku powodującego dodatkową stratę. Po `Cancel`
+      integracja jest nadal połączona.
+      *Dlaczego to łapie:* to cały slice widziany oczami użytkownika. Jeśli oba
+      przyciski wyglądają tak samo albo domyślny jest czerwony, lead kliknie ten
+      destrukcyjny „bo tak się kończy takie okno". Etykiety nie mogą też zawierać
+      słowa „Disconnect" — inaczej ani Playwright, ani czytnik ekranu nie
+      odróżni ich od przycisku, który to okno otworzył.
+
+- [ ] **21.C** (faza 3, `3.7`) **Gdzie:** `/settings/absences`, potem
+      `/settings/connections`, prawdziwe konto. **Wymaga 21.A.**
+      **Co zrobić:** na `/settings/absences` zapisz sobie (zrzut ekranu), ile
+      nieobecności widzisz i dla kogo; jeśli nie ma żadnej — dodaj jedną. Potem
+      `/settings/connections` → karta Jira → **Disconnect** → **Keep my Jira
+      data**. Wróć na `/settings/absences`.
+      **Co musi być prawdą:** wszystkie nieobecności z pierwszego kroku są nadal
+      na liście, z tymi samymi osobami i datami. Karta Jira pokazuje teraz „Not
+      connected". Roster (`/settings/team`) i dni wolne całego zespołu też są
+      nietknięte.
+      *Dlaczego to łapie:* to jest defekt, dla którego powstał S-26. Do tej pory
+      rozłączenie Jiry kasowało **każdą** nieobecność wpisaną ręcznie przez leada
+      — dane, których żaden sync nie odtworzy — i nikt o tym nie był
+      informowany. Pusta lista po tym kroku znaczy, że migracja `0021` nie jest
+      na bazie (patrz 21.A) albo kaskada nie została zwężona.
+
+- [ ] **21.D** (faza 3, `3.8`) 🔴 **KASUJE DANE NIEODWRACALNIE.** **Gdzie:**
+      `/settings/connections` → `/settings/absences`, prawdziwe konto. **Wymaga
+      21.A i 21.C.**
+      **Co zrobić:** podłącz Jirę z powrotem (**Connect** / kreator), żeby
+      Disconnect znów był dostępny; upewnij się na `/settings/absences`, że
+      jakaś nieobecność istnieje; potem karta Jira → **Disconnect** → **Delete my
+      Jira data**; wróć na `/settings/absences`.
+      **Co musi być prawdą:** lista nieobecności jest **pusta**. Roster
+      (`/settings/team`) jest **nienaruszony** — ludzie zostają, znikają wyłącznie
+      ich nieobecności. Dni wolne całego zespołu też zostają.
+      *Dlaczego to łapie:* bez tego kroku „wybór" jest pozorny — obie ścieżki
+      robiłyby to samo i lead, który świadomie czyści konto przed oddaniem go
+      komuś innemu, zostawiłby dane w bazie. Sprawdzenie rosteru pilnuje drugiej
+      strony: `clear` ma usuwać wiersze FR-010, a nie osoby, do których należą.
+
+- [ ] **21.E** (faza 6, `6.5`) **Gdzie:** wiersz **16.B** (§16) plus **21.C** i
+      **21.D** powyżej — ten wiersz jest ich domknięciem, nie nowym klikaniem.
+      **Co zrobić:** zrób 16.B (czytasz okno, kończysz na `Cancel`), potem 21.C
+      (ścieżka zachowująca) i 21.D (ścieżka kasująca).
+      **Co musi być prawdą:** obie ścieżki dają się **doprowadzić do końca** z
+      tego samego okna i dają **różne** wyniki na `/settings/absences` — po 21.C
+      nieobecności są, po 21.D ich nie ma. Treść okna zapowiadała dokładnie to,
+      co się stało w obu przypadkach.
+      *Dlaczego to łapie:* dwa przyciski, które robią to samo, są gorsze niż
+      jeden — obiecują wybór, którego nie ma. To jedyny wiersz sprawdzający obie
+      gałęzie **przeciwko sobie**; osobno każda z nich może wyglądać poprawnie,
+      gdy `mode` nie dojechał z okna do akcji serwerowej i obie idą tą samą
+      ścieżką.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **21.F** **Zamrożone zobowiązanie sprintu przeżywa rozłączenie w trakcie
+      sprintu.** **Gdzie:** `/dashboard` (Sprint Pulse / burndown) →
+      `/settings/connections` → kreator Jiry → z powrotem `/dashboard`.
+      ⚠️ Ten wiersz **kasuje zsynchronizowane sprinty** (tickety, historię
+      statusów, anomalie) — odzyskuje je kolejny sync.
+      **Co zrobić:** w trakcie **trwającego** sprintu zapisz sobie liczbę
+      „committed SP". Dodaj do sprintu w Jirze nowy ticket z estymatą (albo
+      poproś kogoś, żeby dodał), tak żeby bieżąca suma SP była **inna** niż
+      zamrożona. Rozłącz Jirę (**Keep my Jira data**), podłącz **ten sam**
+      projekt z powrotem i poczekaj na pełny sync (albo wymuś go).
+      **Co musi być prawdą:** „committed SP" jest **takie samo jak na początku** —
+      nie równa się nowej, wyższej sumie.
+      *Dlaczego to łapie:* zobowiązanie sprintu ma być zamrożone **raz**, na
+      starcie. Rozłączenie kasowało wiersz sprintu, a ponowne podłączenie
+      tworzyło nowy, nieodróżnialny od sprintu nigdy niewidzianego — więc
+      następny pełny sync zamrażał zobowiązanie **drugi raz, po sumie z chwili
+      ponownego podłączenia**. Efekt jest cichy i trwały: `sprint_measurement`
+      kopiuje tę liczbę i nigdy jej nie przelicza, więc jeden wpis historii
+      prędkości (FR-023/FR-024) zostaje na zawsze zatruty wartością wyglądającą
+      na poprawną. Objęte testem integracyjnym, ale wyłącznie ta droga pokazuje
+      to na prawdziwej Jirze.

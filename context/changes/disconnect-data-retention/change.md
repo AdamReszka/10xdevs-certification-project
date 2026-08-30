@@ -21,6 +21,30 @@ the lead is asked, is told what goes, and can cancel. This is the other half: a
 confirmation makes an irreversible loss **conscious**, it does not make it
 **necessary**.
 
+### What shipped (2026-08-30, six phases)
+
+**Read this before the sections below.** Everything from "The mechanism" onwards
+describes the defect **as it stood before this slice**, in the present tense it
+was written in. It is kept because it is the evidence, not because it is still
+true. What is true now:
+
+- Migration `0021` re-points two referential actions at `ON DELETE SET NULL`
+  (`absence.sprint_id`, `monitored_repo.credential_id`) and deletes nothing.
+- Disconnect has **two** completions rather than one meaning: `Keep my <X> data`
+  (primary, default) and `Delete my <X> data` (destructive, reached by name).
+  The Jira project switch offers the same pair. So a confirmed disconnect
+  destroys recorded absences **only when the lead asks for it by that name** —
+  any sentence in this repo that says otherwise unconditionally is stale.
+- `anomaly` and `status_mapping` stay in the cascade, for the structural reason
+  recorded below (regenerated `randomUUID()` parents, so a kept row would be an
+  orphan) — not because the loss was overlooked.
+- A re-created `sprint` row now recovers its frozen commitment from
+  `sprint_measurement` instead of freezing a second time at the reconnect-time
+  sum.
+- **Not fixed here, and now on the roadmap:** the cadence override still dies
+  with the `sprint` row (**S-28**), and Reconnect still looks like Disconnect's
+  twin (**S-29**). Open Roadmap Question 4 is recorded as answered.
+
 ### The mechanism, as the roadmap records it (to be verified in research)
 
 - `absence.sprint_id` is `ON DELETE CASCADE` on `sprint` (`src/db/schema.ts`),

@@ -199,3 +199,27 @@ bazie, dalej je kasuje kaskadą.
   jest tu jedynym miejscem, w którym lead dowiaduje się, **który** klik powoduje
   nieodwracalną stratę; jeśli nazwa w zdaniu i napis na przycisku się rozjadą,
   lead kliknie, żeby się dowiedzieć.
+
+---
+
+## Fazy 2, 5 i 6 — bez własnych wierszy blokujących
+
+**Faza 2** (store'y i akcje) i **faza 5** (pomiar jako źródło zamrożonego
+zobowiązania) nie mają wierszy manualnych: obie są pokryte testami
+integracyjnymi na prawdziwym Postgresie i nie dokładają nowego ekranu. Efekt
+fazy 5 widać w niezmienionym „committed SP" po rozłączeniu i ponownym
+podłączeniu w trakcie sprintu — to wiersz **21.F** w
+`context/foundation/manual-test-backlog.md`, nieblokujący, bo wymaga
+manipulowania sprintem po stronie Jiry.
+
+**Faza 6** ma dwa wiersze w `plan.md` `## Progress` i oba celowo **nie** są
+osobnymi pozycjami tej checklisty — byłyby duplikatem:
+
+- **6.5** — „tester idący wierszem 16.B domyka obie ścieżki". To domknięcie
+  wierszy **3.7** i **3.8** powyżej, spięte w backlogu jako **21.E**. Odhacz je
+  dopiero, gdy 3.7 **i** 3.8 są zrobione, a treść okna zapowiedziała dokładnie
+  to, co się w obu przypadkach stało.
+- **6.6** — przegląd dokumentów (czy gdziekolwiek nie zostało zdanie, że
+  *potwierdzone* rozłączenie kasuje nieobecności). **Nie oddawaj go osobie
+  testującej** — to czytanie, nie klikanie; zamyka je implementujący. Siedzi w
+  **§3** backlogu, razem z pozostałymi zobowiązaniami dokumentacyjnymi.

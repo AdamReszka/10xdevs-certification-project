@@ -59,6 +59,8 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
+| S-28 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | proposed |
+| S-29 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | proposed |
 
 ## Streams
 
@@ -572,13 +574,15 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | done                   | ✅ Implemented 2026-08-30, five phases. **Raised by the tester** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`) and **reframed at `/10x-frame`:** the finding is not prominence — the three surfaces were in three different states of absence, and Today had no identity element to restyle at all. What ships is one fact (`PT Sprint 1 · 30.08 – 12.09`) computed once in a pure `src/lib/sprint-identity.ts` and rendered by one shared `molecules/sprint-identity-bar.tsx` on the cadence step, both dashboards and the Daily Recap. Two identity-fabricating fallbacks are gone (`?? "the active sprint"`, `?? "your sprint"`). Dates render in the team's Jira zone, correcting this entry's own UTC instruction (see the S-25 detail block). The wizard also stops hand-rolling its own `state = 'ACTIVE'` query, so it and Today can no longer disagree about which sprint exists |
 | S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | yes | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Unblocked 2026-08-30 by S-20**, which settled `absence.sprint_id` as write-only provenance with no reader — so the referential action is now S-26's to choose on its own merits. Scope may shrink or grow with Open Roadmap Question 4 |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
+| S-28       | cadence-override-retention | A hand-entered sprint cadence survives a disconnect and a project switch | yes | Prereqs S-16, S-26 done. Found while framing S-26 (`context/changes/disconnect-data-retention/frame.md`) and deliberately left out of it: S-26 narrowed the cascade for `absence`, but `sprint` rows still die with the Jira credential in BOTH outcomes, and cadence carry-forward reads the *previous* sprint row (`reconcile-sprint.ts:190-231`). With that row gone the next reconcile reseeds from Jira's defaults with `cadenceOverridden: false`, so the lead's override is not lost loudly — it is replaced by a plausible wrong number. Unlike `absence`, this one cannot be fixed by a referential action: the values live ON the deleted row, so it needs the `sprint_measurement` treatment (a record that carries no FK into the sync lifecycle) or a cadence that belongs to the account rather than to a sprint. Overlaps S-19, which is where post-setup cadence UI is meant to live |
+| S-29       | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision | yes | Prereqs S-24, S-26 done. The half of Open Roadmap Question 4(b) that S-26 answered but could not fix: **token rotation is already lossless** — `storeJiraIntegration` upserts and touches `sprint` only when the project actually changes, and Settings' "Reconnect" reaches exactly that path — yet nothing on the card says so, and Disconnect sits beside it as the more emphatic-looking button. S-24 gave Disconnect a confirmation and S-26 gave it a safe default, but a lead whose token expired still has to infer which of two adjacent buttons is the one that does not cost them anything. This is a UI/copy slice, not a data one: name the job (rotate a token / point at a different project / stop using the integration) instead of the mechanism. Small, and the kind of thing a tester raises rather than a plan |
 
 ## Open Roadmap Questions
 
 1. ~~**Demo data ↔ real integrations interaction**~~ — **RESOLVED 2026-08-29.** Answer: **any account may load demo data, including one with real Jira + GitHub credentials connected.** Owner: user (answered during `/10x-frame demo-mode`). Block: **none** — and the claim that it "determines demo-mode data routing architecture" did not survive the frame. It is a design input to S-09, not a precondition; the actual precondition is a demo/real discriminator that does not exist in the schema today. Consequence to carry into planning: under this answer, a load that clears the owner's rows destroys real credentials. Full reasoning: `context/changes/demo-mode/frame.md`.
 2. **5-category status mapping rigidity** — Should MVP keep the 5 standard categories (To Do / In Progress / Code Review / Testing / Done) or add a 6th "Blocked" bucket? A 6th bucket would suppress `TICKET_STATUS_AGING` for explicitly blocked tickets. Owner: user. Block: S-03 (no — MVP ships with 5 categories; 6th bucket is phase 2 per PRD; implementation can proceed; revisit after first real-team trial).
 3. **GitHub cache TTL default** — FR-011 commits to 15-minute default; confirm against actual rate-limit budget during S-05 implementation (classic PAT = 5,000 req/h; multi-user deployments may require a higher TTL). Owner: implementation planning (S-05). Block: no.
-4. **Should disconnecting an integration delete its data at all — and who actually disconnects?** — Raised by the owner during `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 settles *consent*: the lead is asked, is told what goes, and can cancel. It deliberately does not ask whether the deletion is the right behaviour. Two halves, and the second is the one nobody has evidence on. (a) The cascade is currently justified by nothing written down; the only recorded framing of Disconnect is S-02/S-03's "I mistyped the token, let me re-enter it" (`context/archive/2026-06-14-setup-github-integration/plan.md:192`), a use case for which deleting the whole synced history is a strange response. (b) **Who is the user of this button?** A satisfied lead running one team has no reason to press it; the plausible pressers are someone rotating an expired token (who wants the data KEPT), someone repointing at a different project (which `jira-project-editor.tsx` already serves without a disconnect), and someone leaving the product (who does not care). If no real user wants the deletion, the question is not how loudly to warn but whether Disconnect should mean "forget the credential" rather than "forget everything". Owner: user. Block: **no** — S-24 ships consent regardless; the answer changes S-26's scope and could shrink it to nothing. Full evidence: `context/changes/destructive-action-confirmation/frame.md`.
+4. ~~**Should disconnecting an integration delete its data at all — and who actually disconnects?**~~ — **RESOLVED 2026-08-30** (`context/changes/disconnect-data-retention/frame.md`, owner's decision at `/10x-frame`). **Answer: neither. Disconnect keeps a *choice*.** The dialog offers two completions — keep (the default and the primary button) or clear (destructive, reached by name) — scoped to the payload that can genuinely be kept. That qualifier is load-bearing rather than decorative: "keep the data" is structurally coherent only for rows carrying no FK into the sync lifecycle, so `absence` and the whole GitHub subtree qualify, while `anomaly` and `status_mapping` do not — internal `jira_project.id` / `sprint.id` are `randomUUID()`s a reconnect regenerates, and a preserved row would be an orphan nothing re-finds. Half (b) got a second answer worth keeping: **the presser who wants the data kept is already served losslessly** — `storeJiraIntegration` upserts, and touches `sprint` only when the project actually changes, which is the path Settings' "Reconnect" reaches. They lose everything only because Disconnect sits beside Reconnect looking equally reasonable; that affordance problem is now its own roadmap line (**S-29**). Shipped as S-26. Original text, for the reasoning that produced the answer: Raised by the owner during `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 settles *consent*: the lead is asked, is told what goes, and can cancel. It deliberately does not ask whether the deletion is the right behaviour. Two halves, and the second is the one nobody has evidence on. (a) The cascade is currently justified by nothing written down; the only recorded framing of Disconnect is S-02/S-03's "I mistyped the token, let me re-enter it" (`context/archive/2026-06-14-setup-github-integration/plan.md:192`), a use case for which deleting the whole synced history is a strange response. (b) **Who is the user of this button?** A satisfied lead running one team has no reason to press it; the plausible pressers are someone rotating an expired token (who wants the data KEPT), someone repointing at a different project (which `jira-project-editor.tsx` already serves without a disconnect), and someone leaving the product (who does not care). If no real user wants the deletion, the question is not how loudly to warn but whether Disconnect should mean "forget the credential" rather than "forget everything". Owner: user. Block: **no** — S-24 ships consent regardless; the answer changes S-26's scope and could shrink it to nothing. Full evidence: `context/changes/destructive-action-confirmation/frame.md`.
 
 ### S-17: Working-days calendar
 
@@ -1137,14 +1141,29 @@ Foundations below assume these are present and do NOT re-scaffold them.
   nothing downstream changes behaviour if the stamp is nulled. S-26 is therefore
   free to choose the referential action on its own merits — and the column is not
   being settled twice, because S-20 deliberately left the writer, the FK and the
-  cascade exactly as they were. Also in range and not yet weighed: `status_mapping`
-  (the lead's status→category judgement, hand-entered, nowhere else), the frozen
-  `sprint.committed_sp` / `committed_frozen_at` and the hand-imported cadence
-  columns (`schema.ts:419-436`), and `anomaly.status` — the triaged/dismissed
-  state the lead set by hand.
-- **Blocked on Open Roadmap Question 4** in the useful sense: if the answer is
-  that Disconnect should mean "forget the credential", this slice grows; if the
-  deletion is affirmed as correct, it may shrink to `absence` alone.
+  cascade exactly as they were. Also in range: `status_mapping` (the lead's
+  status→category judgement, hand-entered, nowhere else), the frozen
+  `sprint.committed_sp` / `committed_frozen_at`, and the hand-imported cadence
+  columns (`schema.ts:419-436`).
+- **CORRECTION 2026-08-30 (`context/changes/disconnect-data-retention/frame.md`).**
+  This entry used to close the list above with "`anomaly.status` — the
+  triaged/dismissed state the lead set by hand". **That was wrong**, and it was
+  wrong in the direction that would have grown the slice: the column holds
+  `ACTIVE` / `RESOLVED`, written only by `detect.ts` and the rollover sweep, and
+  no dismiss or acknowledge action exists anywhere in `src/`. Anomaly rows are
+  fully re-derived by the next detection cycle. `anomaly` therefore stays in the
+  cascade **on its own merits** — `sprint_id` is `NOT NULL` and sits in the dedup
+  key `(owner_id, sprint_id, dedup_key)`, which the rollover sweep compares
+  NULL-free — and a preserved row would in any case be orphaned, because
+  `sprint.id` is a `randomUUID()` that a reconnect regenerates. The same error
+  stood in `change.md`; both were corrected with the fix rather than left for a
+  future reader to re-derive.
+- **Open Roadmap Question 4 is ANSWERED** (see below): Disconnect keeps a
+  **choice** rather than a fixed meaning. So the slice neither grew to "forget
+  the credential only" nor shrank to `absence` alone — it ships two completions
+  over the payload that can genuinely be kept (`absence`, and the whole GitHub
+  subtree), leaves `anomaly` and `status_mapping` in the cascade for the
+  structural reason above, and adds one phase for the `committed_sp` corruption.
 
 ---
 
@@ -1210,6 +1229,75 @@ Foundations below assume these are present and do NOT re-scaffold them.
   does delete the demo `user` row and everything under it, and `demo-panel.tsx:83-96`
   fires it with no confirmation — worth checking against that intent before this
   slice is planned.
+
+### S-28: A hand-entered cadence survives a disconnect
+
+- **Outcome:** the sprint cadence a lead entered by hand — length, start day,
+  working days — is still theirs after a Jira disconnect or a project switch,
+  instead of being replaced by Jira's defaults on the next reconcile.
+- **Change ID:** cadence-override-retention
+- **PRD refs:** FR-007
+- **Prerequisites:** S-16, S-26
+- **Status:** proposed
+
+- **Found while framing S-26, and deliberately left out of it** (2026-08-30,
+  `context/changes/disconnect-data-retention/frame.md`). S-26 answered "what
+  should a disconnect keep?" for the rows it could keep by changing a referential
+  action. This one it cannot: `sprint` rows die with the Jira credential in
+  **both** of S-26's outcomes — they have to, because `sprint.id` is a
+  `randomUUID()` that a reconnect regenerates — and the cadence columns live ON
+  those rows (`schema.ts:419-436`).
+- **The mechanism.** Cadence carry-forward reads the **previous** sprint row
+  (`reconcile-sprint.ts:190-231`). After a disconnect there is no previous row, so
+  the next reconcile reseeds from Jira's configuration and writes
+  `cadenceOverridden: false`. The override is not lost loudly — it is replaced by
+  a plausible wrong number, on a field the lead entered precisely because Jira's
+  answer was wrong for their team. FR-007's own argument ("re-asking duplicates
+  state and risks divergence") is what makes the silent revert worse than an
+  error.
+- **Why it is not a one-line fix.** The house answer to "this must outlive a
+  sync-lifecycle parent" is already written and it is **not** softening a cascade:
+  `sprint_measurement` (`schema.ts:446-470`) carries the Jira-side key and no FK
+  into the sync graph. Applying it here means deciding what a cadence override
+  belongs to — the account, or a sprint identified Jira-side — which is a modelling
+  question, not a schema tweak.
+- **Overlaps S-19**, which is where post-setup cadence UI is meant to live. Worth
+  planning the two together if S-19 comes first.
+
+---
+
+### S-29: Reconnect and Disconnect stop looking like the same decision
+
+- **Outcome:** a lead whose token expired can see, without experimenting, which
+  control rotates it losslessly — and Disconnect stops reading as the natural
+  thing to press when an integration is broken.
+- **Change ID:** reconnect-affordance
+- **PRD refs:** — (PRD Guardrails: no silent data loss)
+- **Prerequisites:** S-24, S-26
+- **Status:** proposed
+
+- **The finding S-26 answered but could not fix** (2026-08-30,
+  `context/changes/disconnect-data-retention/frame.md`, "Overloaded verb").
+  **Token rotation is already lossless today.** `storeJiraIntegration` is an
+  upsert — credential and project go through `onConflictDoUpdate` with `id`
+  deliberately omitted from the SET (`jira-store.ts:189-231`) — and `sprint` is
+  deleted **only** when the monitored project actually changes (`:233-259`).
+  Settings' "Reconnect" renders that form regardless of credential state. So the
+  presser who most wants their data kept is already served, by the button sitting
+  next to the one that used to destroy everything, with nothing distinguishing
+  them when the card is red.
+- **Why S-24 and S-26 do not close it.** S-24 gave Disconnect a confirmation;
+  S-26 gave it a safe default and a second, deliberately-named destructive
+  outcome. Both act **after** the lead has already chosen the wrong control. The
+  remaining problem is upstream of the dialog: two adjacent buttons named after
+  mechanisms, when the lead is thinking in jobs — *my token expired*, *we moved
+  to a different project*, *we are done with this integration*.
+- **Shape:** copy and layout, no schema and no store change. Name the jobs on the
+  card, make the lossless one the obvious route, and let Disconnect keep the
+  meaning S-26 gave it. Small; the kind of thing the tester raises rather than a
+  plan — S-24 itself was raised that way.
+
+---
 
 ## Done
 
