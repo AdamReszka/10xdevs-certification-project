@@ -546,13 +546,13 @@ Reverting is a one-line restore of the predicate; no state would need unwinding.
 
 #### Automated
 
-- [x] 1.1 Linting passes: `npm run lint`
-- [x] 1.2 Type checking passes: `npx tsc --noEmit`
-- [x] 1.3 Unit tests pass, including the inverted D2 assertion and the new `sprintId: null` case: `npm test`
-- [x] 1.4 Integration tests pass, including the NULL-stamp and cross-boundary cases: `npm run test:integration`
-- [x] 1.5 `grep -n "sprintId" src/lib/anomaly/rules/sprint-at-risk.ts` returns nothing
-- [x] 1.6 `absence-store.integration.test.ts` still asserts the stamp is written — the writer is unchanged
-- [x] 1.7 `grep -rn "did not account for it" src/` returns nothing — the F1 copy change landed in the rule AND the demo fixture
+- [x] 1.1 Linting passes: `npm run lint` — 9f7d2a2
+- [x] 1.2 Type checking passes: `npx tsc --noEmit` — 9f7d2a2
+- [x] 1.3 Unit tests pass, including the inverted D2 assertion and the new `sprintId: null` case: `npm test` — 9f7d2a2
+- [x] 1.4 Integration tests pass, including the NULL-stamp and cross-boundary cases: `npm run test:integration` — 9f7d2a2
+- [x] 1.5 `grep -n "sprintId" src/lib/anomaly/rules/sprint-at-risk.ts` returns nothing — 9f7d2a2
+- [x] 1.6 `absence-store.integration.test.ts` still asserts the stamp is written — the writer is unchanged — 9f7d2a2
+- [x] 1.7 `grep -rn "did not account for it" src/` returns nothing — the F1 copy change landed in the rule AND the demo fixture — 9f7d2a2
 
 #### Manual
 
@@ -562,11 +562,11 @@ Reverting is a one-line restore of the predicate; no state would need unwinding.
 
 #### Automated
 
-- [ ] 2.1 Linting passes: `npm run lint`
-- [ ] 2.2 Type checking passes: `npx tsc --noEmit`
-- [ ] 2.3 Unit tests still pass after the comment edits: `npm test`
-- [ ] 2.4 The manual backlog covers this slice's open rows: `node scripts/manual-test-sweep.mjs` exits 0
-- [ ] 2.5 No instruction to scope absence risk by `sprint_id` survives outside a dated reversal marker
+- [x] 2.1 Linting passes: `npm run lint`
+- [x] 2.2 Type checking passes: `npx tsc --noEmit`
+- [x] 2.3 Unit tests still pass after the comment edits: `npm test`
+- [x] 2.4 The manual backlog covers this slice's open rows: `node scripts/manual-test-sweep.mjs` exits 0
+- [x] 2.5 No instruction to scope absence risk by `sprint_id` survives outside a dated reversal marker
 
 #### Manual
 

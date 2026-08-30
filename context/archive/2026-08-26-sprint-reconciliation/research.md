@@ -118,6 +118,20 @@ Two nuances the F10 note does not carry:
 - **The NULL case is narrower than it looks.** `getActiveSprintRow` falls back to the most-recently-started sprint of any state, so NULL only happens for an owner with **zero** sprint rows. Given finding §3 below, that is exactly the "onboarded between sprints" owner — which the core S-16 fix eliminates. In practice the more common bad stamp is not NULL but *the stale old sprint's id*, which fails the same `!==` just as hard.
 - **Three consumers of the same row disagree about which sprint it belongs to.** `sprint-at-risk.ts:141` is `sprint_id`-scoped; `getSprintCapacity` (`capacity.ts:170-176`) and `detectDeveloperInactive` (`developer-inactive.ts:47-51`) filter by **date overlap only**. So a cross-boundary absence *does* reduce sprint N+1's capacity and *does* suppress `DEVELOPER_INACTIVE` there, while being invisible to the risk rule. Per S-08's own design rule (`context/archive/2026-08-25-absence-calendar/plan.md:154-163`) the risk rule's behaviour is **intentional** ("planned there" by D2's definition) — so "re-stamp at rollover" would contradict a recorded decision, not just fix a bug. This is a genuine owner call, not a defect to sweep up.
 
+  > **ANSWERED 2026-08-30 by S-20** (`context/changes/absence-sprint-scoping/`).
+  > The owner's call landed on **dates**: `SPRINT_AT_RISK` now matches an absence
+  > by its window, like the other two consumers, and the `sprint_id` comparison
+  > at `sprint-at-risk.ts` was deleted. So only ONE of the three consumers was
+  > wrong — capacity and `DEVELOPER_INACTIVE` were already right and were left
+  > untouched (`getSprintCapacityFor` in particular MUST stay date-based: S-23
+  > calls it for a CLOSED sprint's measurement record, where no active sprint
+  > exists to compare a stamp against). The paragraph above is still correct that
+  > the S-08 behaviour was *intentional* rather than accidental — what it could
+  > not know is that D2's stated worry ("keeps raising risk after the rollover")
+  > is bounded by `overlaps(absence, now, endDate)` to the single rollover the
+  > absence spans. `absence.sprint_id` survives as write-only provenance with no
+  > reader; the cascade on it belongs to S-26.
+
 Also: `isPlanned`'s client-side default is computed against `sprintStartDay` from the *stale* active sprint (`absence-calendar-view.ts:148-151` ← `settings/absences/page.tsx:41-42`).
 
 #### `daily_recap` — no writer exists
@@ -268,7 +282,7 @@ Vocabulary already exists for legible no-ops: `sync_attempt.outcome` (`run-sync.
 
 | # | Item | Recommendation |
 |---|---|---|
-| **A** | **Re-stamp `absence.sprint_id` at rollover** (S-08 F10) | **Defer, and say so in code.** C4 removes most of the reachable NULL case. And re-stamping would contradict S-08's recorded design rule that a carried-over absence *should* stop raising risk (`absence-calendar/plan.md:154-163`). What is worth doing here is naming the real defect: three consumers disagree (risk = `sprint_id`-scoped, capacity + `DEVELOPER_INACTIVE` = date-scoped). That reconciliation is its own slice |
+| **A** | **Re-stamp `absence.sprint_id` at rollover** (S-08 F10) | **Defer, and say so in code.** C4 removes most of the reachable NULL case. And re-stamping would contradict S-08's recorded design rule that a carried-over absence *should* stop raising risk (`absence-calendar/plan.md:154-163`). What is worth doing here is naming the real defect: three consumers disagree (risk = `sprint_id`-scoped, capacity + `DEVELOPER_INACTIVE` = date-scoped). That reconciliation is its own slice. **SETTLED 2026-08-30 by S-20** (`context/changes/absence-sprint-scoping/`): the deferral above was the right call and this recommendation was NOT overturned — S-20 removed the READER instead of adding a re-stamp, so nothing re-stamps `absence.sprint_id` to this day. What it did overturn is S-08's D2 inference: risk follows the absence's DATES, so a carried-over absence raises risk in the later sprint after all. Of the three disagreeing consumers only `sprint-at-risk` was wrong |
 | **B** | **Close old-sprint anomalies at rollover** (they freeze `ACTIVE` forever, `detect.ts:70`) | **Small enough to include** — one owner-scoped sweep when the sprint id changed. Invisible today, but S-12's recap history will read those rows as live. If the owner wants S-16 tight, this is the first thing to cut, with a note on S-12 |
 | **C** | **Board ambiguity in a headless cycle** — `board_id` is NULL for demo-seeded and wizard-`storeJiraIntegration` accounts, and `listBoards` can return >1 with no UI to ask | **Must be decided inside S-16** (C1 cannot ship without an answer), but the *answer* can be minimal: persist nothing and skip with a new `outcome: "board_ambiguous"`, leaving the owner to pick at `/setup/team`. Auto-picking silently is how `type === "scrum"` bit us before |
 | **D** | **Retention purge** (current + 2 previous sprints) | **S-12.** But S-16 turns "one row per owner" into a growing series, so flag it — and fix the false claim at `settings/absences/page.tsx:24` while nearby |

@@ -16,8 +16,7 @@ import { z } from "zod";
  *    have a window covering these days?" — answered in `absence-store.ts` with an
  *    owner-scoped read, which also makes it unbypassable by a crafted payload.
  *  - **`sprintId`.** Server-derived when the absence is recorded, so a client
- *    cannot pin an absence to a sprint of its choosing and thereby change how
- *    `is_planned` is judged.
+ *    cannot pin an absence to a sprint of its choosing.
  */
 
 /** Recorded absence kind (FR-010) — mirrors the `absence_type` pgEnum. */

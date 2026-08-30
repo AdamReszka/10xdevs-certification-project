@@ -116,16 +116,20 @@ export async function listAbsences({
  * Record a new absence.
  *
  * `sprint_id` is stamped SERVER-SIDE from the owner's active sprint (or left NULL
- * when they have none) and is deliberately absent from the wire. D2 defines
- * planned-ness *relative to a sprint* — "was it known before that sprint started?"
- * — so without a record of which sprint the judgement was made against, an absence
- * entered mid-sprint keeps raising `SPRINT_AT_RISK` after the rollover, when by
- * D2's own definition it is planned in the next one. Letting a client choose the
- * sprint would hand it control of that judgement.
+ * when they have none) and is deliberately absent from the wire, so a client
+ * cannot pin an absence to a sprint of its choosing.
  *
- * The sprint comes from `getActiveSprintRow`, the same resolver
- * `loadSprintSnapshot` uses, so the Phase 4 "is this absence's sprint the
- * snapshot's sprint?" comparison can never disagree with what was stamped.
+ * WHAT THE COLUMN IS, since S-20 (2026-08-30): write-time provenance — which
+ * sprint was active when the lead typed the row — and nothing more. It has **no
+ * reader in the codebase**. `SPRINT_AT_RISK` used to compare it against the
+ * snapshot's sprint (S-08's D2 rule); that predicate is gone, and risk now
+ * follows the absence's DATES like every other absence reader here
+ * (`listAbsences` above, `assertNoOverlap` below, `load-snapshot.ts:90-99`,
+ * `capacity.ts:164-176`, `developer-inactive.ts:47`).
+ *
+ * The stamp is still written because `absence.sprint_id` is `ON DELETE CASCADE`
+ * on `sprint` — the data-loss path **S-26** owns. S-20 deliberately did not
+ * settle the column twice (`context/foundation/roadmap.md`, S-26).
  */
 export async function createAbsence({
   db,
@@ -168,9 +172,10 @@ export async function createAbsence({
 /**
  * Edit an existing absence in place.
  *
- * `sprint_id` is NOT re-stamped: the planned-ness judgement was made against the
- * sprint the absence was recorded in, and moving the window does not move that
- * judgement (D2).
+ * `sprint_id` is NOT re-stamped: it records which sprint was active when the row
+ * was first typed, and moving the window does not change that fact. Since S-20
+ * removed the column's only reader there is also nothing to keep in sync — see
+ * `createAbsence` above.
  */
 export async function updateAbsence({
   db,
