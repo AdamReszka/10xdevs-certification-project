@@ -161,6 +161,18 @@ the backlog. It only checks presence — writing the row is still yours, and it
 carries the four things below. A row that is genuinely obsolete moves to the
 backlog's §6 with the reason; it is never deleted quietly.
 
+**The one licensed write into `context/archive/` (added 2026-08-31, S-19).**
+Archived folders are read-only by convention, and every 10x skill refuses to
+write there. One case is exempt: a **ticked** manual row that a later slice
+invalidates. Leaving it is worse than the exception — it asserts, as a *passed*
+test, behaviour the repo no longer has. Annotate the row in place with
+`⚠️ SUPERSEDED <date> by <slice>: <one line>` naming the replacement row, and
+open the replacement under the NEW slice's number, never by re-opening the old
+one. S-19 is the precedent: it moved `/settings/team`, which invalidated S-15
+rows 5.3/5.4 (`context/archive/2026-08-23-team-management-surface/plan.md`), now
+replaced by backlog rows 23.A/23.B. Nothing else in an archived folder is ever
+edited.
+
 ### Two files, two jobs
 
 - **`context/changes/<change-id>/MANUAL-CHECKLIST.md` — the short list.** Only
