@@ -961,7 +961,20 @@ automatycznych zielone: 550 unit, 210 integration, 11/11 E2E, `typecheck`,
       (zgodne z `jira_project.time_zone = NULL` mimo wybranego projektu `PT`);
       „Last send" → „No recap has been sent yet…" (zgodne z zerem wierszy
       `daily_recap` dla tego ownera).
-- [ ] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
+- [x] **6.12** Zmiana godziny zapisuje się, toastuje i przeżywa reload.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania) — na koncie
+      `anna.jozwiak19@gmail.com`, poza demem. Przebieg mocniejszy niż zakładała
+      instrukcja: `recap_settings` nie miała **ani jednego** wiersza dla żadnego
+      ownera, więc zapis poszedł ścieżką INSERT (pierwszy zapis konta), nie
+      UPDATE istniejącej wartości.
+      *Zaobserwowane:* pole startowało na domyślnych `15:00`; ustawione `09:30`
+      (celowo różne i godziną, i minutami — gubione minuty wyszłyby od razu);
+      po **Save** toast „Daily recap settings saved." na dole ekranu; po
+      przeładowaniu pole nadal `09:30`. W bazie **dokładnie jeden** wiersz:
+      `send_hour=9`, `send_minute=30`, `enabled=true`, `disabled_reason=NULL`,
+      `created_at = updated_at` — czyli wstawienie, nie nadpisanie.
+      *Stan po teście:* wiersz zostaje z `09:30`; nie przywracano `15:00`, bo
+      6.13 i 6.14 i tak potrzebują istniejącego wiersza.
 - [ ] **6.13** Linia „Last send" odzwierciedla ostatni recap.
       *Dlaczego (6.11–6.13):* to jedyne miejsce w produkcie, gdzie owner w ogóle
       widzi, czy wysyłka zadziałała — świadomie *pull*, nie banner na
