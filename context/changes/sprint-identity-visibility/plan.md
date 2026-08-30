@@ -696,18 +696,18 @@ the sprint name and anomaly count on every recap already sent. No backfill.
 
 #### Automated
 
-- [x] 2.1 Unit tests pass, including the new branch assertions: `npm test`
-- [x] 2.2 Type checking passes: `npm run typecheck`
-- [x] 2.3 Linting passes: `npm run lint`
+- [x] 2.1 Unit tests pass, including the new branch assertions: `npm test` — b2c5de5
+- [x] 2.2 Type checking passes: `npm run typecheck` — b2c5de5
+- [x] 2.3 Linting passes: `npm run lint` — b2c5de5
 
 ### Phase 3: The identity bar on both dashboards
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `npm test`
-- [ ] 3.2 Type checking passes: `npm run typecheck`
-- [ ] 3.3 Linting passes: `npm run lint`
-- [ ] 3.4 Production build passes: `npm run build`
+- [x] 3.1 Unit tests pass: `npm test`
+- [x] 3.2 Type checking passes: `npm run typecheck`
+- [x] 3.3 Linting passes: `npm run lint`
+- [x] 3.4 Production build passes: `npm run build`
 
 #### Manual
 

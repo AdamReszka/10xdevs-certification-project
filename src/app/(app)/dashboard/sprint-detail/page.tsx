@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { Badge } from "@/components/ui/badge";
+import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
 import ActivityMatrix from "@/components/organisms/dashboard/activity-matrix";
 import AgingReport from "@/components/organisms/dashboard/aging-report";
 import CapacityAdjustments from "@/components/organisms/dashboard/capacity-adjustments";
@@ -21,8 +22,16 @@ import { getActivityRollup } from "@/lib/dashboard/activity";
 import { getTicketAging } from "@/lib/dashboard/aging";
 import { getBurndownSeries } from "@/lib/dashboard/burndown";
 import { listRoster } from "@/lib/roster";
-import { listRecordedSprintsForOwner, type SprintMeasurement } from "@/lib/measurement/reader";
+import {
+  listRecordedSprintsForOwner,
+  type SprintMeasurement,
+} from "@/lib/measurement/reader";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow, getSprintRowByJiraId } from "@/lib/sprint";
+import {
+  toSprintIdentity,
+  type SprintIdentityView,
+} from "@/lib/sprint-identity";
 import { getSyncState } from "@/lib/sync-state";
 import { resolveWorkspace } from "@/lib/workspace";
 
@@ -71,7 +80,14 @@ export default async function SprintDetailPage({
   // await cost every render an extra serialized Hyperdrive round trip. The
   // no-sprint branch now pays for a roster it does not use — a rare branch on a
   // fresh account, against a saved round trip on every ordinary render.
-  const [activeSprint, recorded, requestedSprint, syncStateRaw, roster] = await Promise.all([
+  const [
+    activeSprint,
+    recorded,
+    requestedSprint,
+    syncStateRaw,
+    roster,
+    timeZone,
+  ] = await Promise.all([
     getActiveSprintRow(db, ownerId),
     // The switcher's list AND the resolver's authority on what `?sprint=` may
     // name — owner-scoped and filtered to the currently monitored Jira project.
@@ -81,6 +97,10 @@ export default async function SprintDetailPage({
       : getSprintRowByJiraId(db, ownerId, requestedJiraSprintId),
     getSyncState(db, ownerId),
     listRoster(db, ownerId),
+    // S-25: this page had no zone of its own. The identity line's dates are
+    // read in the TEAM's zone, the same one Today and the cadence step use, so
+    // a sprint Jira calls 30.08 is not named 29.08 here.
+    getJiraTimeZone(db, ownerId),
   ]);
 
   const selection = resolveSprintSelection({
@@ -91,11 +111,24 @@ export default async function SprintDetailPage({
   });
   const options = toSprintOptions({ measurements: recorded, activeSprint });
 
+  // Built from the SELECTION, not from `activeSprint` — the switcher can be
+  // showing a sprint whose raw row was cascade-deleted, and Phase 2 is what
+  // makes its dates come from its own measurement record rather than from
+  // whatever sprint happens to be active.
+  const identity = toSprintIdentity({
+    name: selection.name,
+    jiraSprintId: selection.jiraSprintId,
+    startDate: selection.startDate,
+    endDate: selection.endDate,
+    timeZone,
+    now,
+  });
+
   if (selection.jiraSprintId === null) {
     return (
       <PageShell
         syncState={toInboxSyncState(syncStateRaw)}
-        sprintName={null}
+        identity={identity}
         stateLabel={null}
         options={options}
         selectedJiraSprintId={null}
@@ -119,8 +152,12 @@ export default async function SprintDetailPage({
   // agree. Falls back to the sprint's own bounds only when startDate is absent.
   const startDate = sprintRow?.startDate ?? null;
   const endDate = sprintRow?.endDate ?? null;
-  const rangeFrom = startDate ?? new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
-  const rangeTo = endDate === null ? now : new Date(Math.min(endDate.getTime(), now.getTime()));
+  const rangeFrom =
+    startDate ?? new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  const rangeTo =
+    endDate === null
+      ? now
+      : new Date(Math.min(endDate.getTime(), now.getTime()));
 
   // THE AGING CLOCK STOPS WHEN THE SPRINT DOES (impl-review phase-7 F2). The
   // fold accrues its open interval up to whatever instant it is given, so a
@@ -149,7 +186,9 @@ export default async function SprintDetailPage({
   // Name map covers ALL members incl. deactivated (S-07 impl-review F1): a
   // ticket assigned to someone who left must still resolve to their name.
   const nameByJiraAccount = new Map(
-    roster.filter((m) => m.jiraAccountId).map((m) => [m.jiraAccountId!, m.name]),
+    roster
+      .filter((m) => m.jiraAccountId)
+      .map((m) => [m.jiraAccountId!, m.name]),
   );
 
   const agingRows: AgingRow[] = (detail?.[0] ?? []).map((t) => ({
@@ -174,8 +213,11 @@ export default async function SprintDetailPage({
   return (
     <PageShell
       syncState={toInboxSyncState(syncStateRaw)}
-      sprintName={selection.name}
-      stateLabel={toStateLabel(selection.kind, sprintRow?.state ?? measurement?.state ?? null)}
+      identity={identity}
+      stateLabel={toStateLabel(
+        selection.kind,
+        sprintRow?.state ?? measurement?.state ?? null,
+      )}
       options={options}
       selectedJiraSprintId={selection.jiraSprintId}
     >
@@ -184,7 +226,9 @@ export default async function SprintDetailPage({
           which is the whole reason the measurement record exists. */}
       <ReliabilityKpi
         {...toReliabilityProps(measurement, sprintRow)}
-        isClosed={(sprintRow?.state ?? measurement?.state ?? "CLOSED") !== "ACTIVE"}
+        isClosed={
+          (sprintRow?.state ?? measurement?.state ?? "CLOSED") !== "ACTIVE"
+        }
       />
 
       {adjustments.kind === "editable" ? (
@@ -280,15 +324,15 @@ function toStateLabel(
 /** Shared chrome so the null-sprint path renders the same header and bar. */
 function PageShell({
   syncState,
-  sprintName,
+  identity,
   stateLabel,
   options,
   selectedJiraSprintId,
   children,
 }: {
   syncState: InboxSyncState;
-  /** The Jira sprint's own name — which sprint the reader is looking at. */
-  sprintName: string | null;
+  /** Which sprint the reader is looking at, with its dates (S-25). */
+  identity: SprintIdentityView;
   /** Set only when the sprint is NOT active, so a closed one is unmistakable. */
   stateLabel: string | null;
   options: React.ComponentProps<typeof SprintSwitcher>["options"];
@@ -302,10 +346,12 @@ function PageShell({
           <h1 className="text-2xl font-semibold tracking-tight">
             Dashboard — Sprint Detail
           </h1>
-          {/* The Jira sprint's own name. Every number on this page is scoped to
-              one sprint, so which one it is belongs in the heading — not only in
-              Jira. Especially once a team has several sprints behind them. */}
-          {sprintName ? <Badge variant="secondary">{sprintName}</Badge> : null}
+          {/* Every number on this page is scoped to one sprint, so which one it
+              is belongs beside the heading — not only in Jira. It replaced a
+              muted `<Badge variant="secondary">` in S-25: a name the lead has
+              to hunt for is not a fact they can check, and the badge carried no
+              dates to check it against. */}
+          <SprintIdentityBar view={identity} />
           {stateLabel ? (
             <Badge variant="outline" className="text-muted-foreground">
               Sprint {stateLabel.toLowerCase()}
@@ -337,9 +383,9 @@ function EmptyState() {
     <div className="rounded-lg border border-dashed p-8 text-center">
       <p className="font-medium">No active sprint</p>
       <p className="mx-auto mt-2 max-w-prose text-sm text-muted-foreground">
-        SprintFlow found no active sprint for your Jira project. Point SprintFlow
-        at a project with a running sprint (start + end dates) in setup, and this
-        dashboard will populate on the next sync.
+        SprintFlow found no active sprint for your Jira project. Point
+        SprintFlow at a project with a running sprint (start + end dates) in
+        setup, and this dashboard will populate on the next sync.
       </p>
     </div>
   );
@@ -359,14 +405,16 @@ function EmptyState() {
 function RawDataNotice() {
   return (
     <div className="rounded-lg border border-dashed p-8 text-center">
-      <p className="font-medium">This sprint&apos;s detail data is no longer stored</p>
+      <p className="font-medium">
+        This sprint&apos;s detail data is no longer stored
+      </p>
       <p className="mx-auto mt-2 max-w-prose text-sm text-muted-foreground">
-        SprintFlow keeps each sprint&apos;s measurement — capacity, committed and
-        delivered story points — for good, but the tickets, pull requests and
-        commits behind it only for the current sprint and the two before it. This
-        sprint&apos;s raw data has either aged out of that window or was removed
-        when the monitored Jira project was switched. The figures above are what
-        was recorded at the time.
+        SprintFlow keeps each sprint&apos;s measurement — capacity, committed
+        and delivered story points — for good, but the tickets, pull requests
+        and commits behind it only for the current sprint and the two before it.
+        This sprint&apos;s raw data has either aged out of that window or was
+        removed when the monitored Jira project was switched. The figures above
+        are what was recorded at the time.
       </p>
     </div>
   );
@@ -397,16 +445,20 @@ function NoAdjustmentsNotice() {
  * renders friendly copy from `status` alone, so a raw API error string can never
  * reach a client payload.
  */
-function toInboxSyncState(raw: Awaited<ReturnType<typeof getSyncState>>): InboxSyncState {
+function toInboxSyncState(
+  raw: Awaited<ReturnType<typeof getSyncState>>,
+): InboxSyncState {
   return {
     GITHUB: {
       integration: "GITHUB",
-      lastSuccessfulSyncAt: raw.GITHUB.lastSuccessfulSyncAt?.toISOString() ?? null,
+      lastSuccessfulSyncAt:
+        raw.GITHUB.lastSuccessfulSyncAt?.toISOString() ?? null,
       status: raw.GITHUB.status,
     },
     JIRA: {
       integration: "JIRA",
-      lastSuccessfulSyncAt: raw.JIRA.lastSuccessfulSyncAt?.toISOString() ?? null,
+      lastSuccessfulSyncAt:
+        raw.JIRA.lastSuccessfulSyncAt?.toISOString() ?? null,
       status: raw.JIRA.status,
     },
   };
