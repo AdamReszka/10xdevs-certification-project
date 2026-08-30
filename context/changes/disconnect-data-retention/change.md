@@ -1,7 +1,7 @@
 ---
 change_id: disconnect-data-retention
 title: Disconnecting an integration stops destroying the lead's own data
-status: implementing
+status: implemented
 created: 2026-08-30
 updated: 2026-08-30
 archived_at: null

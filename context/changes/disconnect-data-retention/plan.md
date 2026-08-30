@@ -922,10 +922,10 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 6.1 E2E suite passes
-- [x] 6.2 Manual-test sweep exits zero
-- [x] 6.3 Unit suite passes
-- [x] 6.4 Linting passes
+- [x] 6.1 E2E suite passes — 12ba953
+- [x] 6.2 Manual-test sweep exits zero — 12ba953
+- [x] 6.3 Unit suite passes — 12ba953
+- [x] 6.4 Linting passes — 12ba953
 
 #### Manual
 
