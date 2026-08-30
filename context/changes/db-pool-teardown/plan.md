@@ -781,12 +781,12 @@ fires.
 
 #### Automated
 
-- [x] 2.1 New test passes and the unit suite is green
-- [x] 2.2 The six demo tests and `auth.test.ts` pass unchanged
-- [x] 2.3 Type checking passes
-- [x] 2.4 Linting passes
-- [x] 2.5 Integration tests pass
-- [x] 2.6 Production build succeeds
+- [x] 2.1 New test passes and the unit suite is green — d9e45de
+- [x] 2.2 The six demo tests and `auth.test.ts` pass unchanged — d9e45de
+- [x] 2.3 Type checking passes — d9e45de
+- [x] 2.4 Linting passes — d9e45de
+- [x] 2.5 Integration tests pass — d9e45de
+- [x] 2.6 Production build succeeds — d9e45de
 
 #### Manual
 
@@ -798,9 +798,9 @@ fires.
 
 #### Automated
 
-- [ ] 3.1 Full E2E suite passes with parallel workers
-- [ ] 3.2 Type checking passes
-- [ ] 3.3 Linting passes
+- [x] 3.1 Full E2E suite passes with parallel workers
+- [x] 3.2 Type checking passes
+- [x] 3.3 Linting passes
 
 #### Manual
 

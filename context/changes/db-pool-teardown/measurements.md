@@ -1,4 +1,4 @@
-# S-21 — connection measurements (Phase 1 baseline)
+# S-21 — connection measurements (Phase 1 baseline + Phase 3 after)
 
 Phase 1's success criteria ask for the before-numbers to be "written into this
 plan's phase notes". They live here rather than inside `plan.md`, because
@@ -101,3 +101,83 @@ concurrency and the peak settles at the dev server's single `POOL_MAX` ceiling.
 Note the unit — per-request connections do **not** fall to 1: with one shared
 pool the dashboard's 8-way fan-out is free to draw up to `POOL_MAX = 5` where it
 previously drew 1. The win is the ceiling, not the per-request number.
+
+---
+
+## After the fix (2026-08-30, `next dev`, local Supabase, same instrument)
+
+Same snippet, same measurement account, same targets, same `next dev` + local
+Supabase. Only `src/lib/db.ts` changed between the two tables.
+
+| Target | Workspace | K | idle baseline | peak | app bucket `postgres/(none)` at peak | peak − base |
+| ------ | --------- | - | ------------- | ---- | ----------------------------------- | ----------- |
+| `GET /dashboard` | DEMO | 8 | 11 | 16 | **5** | 5 |
+| `GET /dashboard` | DEMO | 12 | 11 | 16 | **5** | 5 |
+| `GET /dashboard` | DEMO | 24 | 16 | 16 | **5** | 0 |
+| Server Action `testGithubConnection` | REAL | 8 | 13 | 16 | **5** | 3 |
+| Server Action `testGithubConnection` | REAL | 12 | 16 | 16 | **5** | 0 |
+
+### Read the app bucket, not the delta — the instrument's own column changed meaning
+
+`peak − base` was the right column **before** the fix and is misleading **after**
+it. Baseline made a fresh pool per call and every one of them was reclaimed by
+pg's 10 s idle timer between runs, so the idle baseline was reliably Supabase's
+own set and the delta *was* the app's cost. After the fix the app's single pool
+is process-global in `next dev`: it survives between runs, and the settling loop
+now settles *with it still open*. That is why the K=24 and the action-K=12 rows
+read `peak − base = 0` — the five app connections were already counted in their
+own baseline (`postgres/(none)=5`), not because nothing was opened.
+
+The unambiguous figure is the partitioned bucket the instrument already prints.
+The app's own connections are the only ones under `postgres/(none)`:
+
+- **at rest**, between runs: 0 → 5, drifting down as pg's idle timer reclaims
+  (observed 0 on the dashboard runs' baselines, 2 on the action K=8 baseline, 5
+  when a run had just finished)
+- **under load**: **5**, in every single configuration measured — both targets,
+  K = 8, 12 and 24
+
+Five is `POOL_MAX`. The ceiling is not approached-and-exceeded; it is hit and
+held.
+
+## The delta
+
+| | before | after |
+| - | ------ | ----- |
+| `GET /dashboard`, K=8 | 24 connections (3.00/req) | 5, flat |
+| `GET /dashboard`, K=12 | 36 connections (3.00/req) | 5, flat |
+| `GET /dashboard`, K=24 | (not run — would be ~72) | 5, flat |
+| Server Action, K=8 | 32 connections (4.00/req) | 5, flat |
+| Server Action, K=12 | 48 connections (4.00/req) | 5, flat |
+
+1. **Cost stopped scaling with concurrency.** The baseline's headline finding was
+   that per-request cost held at exactly 3.00 and 4.00 with *no plateau* — the
+   thing that made ~22 concurrent authenticated actions enough to exhaust the
+   database. Tripling K from 8 to 24 now moves the peak by zero.
+
+2. **Per-request connections did NOT fall to 1, exactly as the plan predicted.**
+   The dashboard's 8-way `Promise.all` (`dashboard/page.tsx:87-105`) now draws up
+   to `POOL_MAX` from the one shared pool where three `max: 1` pools drew three.
+   The win is the ceiling, not the per-request number — and the same change makes
+   the fan-out run 5-wide instead of serialised through one connection.
+
+3. **The dev server as a whole now has one budget.** In `next dev` the memoized
+   pool is process-global, so the five connections are the entire dev server's
+   ceiling regardless of request rate or how many Playwright workers drive it.
+
+## Acceptance test — `playwright.config.ts` unpinned
+
+`workers: process.env.CI ? 1 : undefined` restored (Phase 3 §1). Playwright picks
+4 workers on this 8-core machine.
+
+| run | workers | result | wall clock |
+| --- | ------- | ------ | ---------- |
+| serial baseline (S-24 workaround, `workers: 1`) | 1 | 15 passed | ~21 s |
+| parallel run 1 | 4 | **15 passed** | **16.9 s** |
+| parallel run 2 | 4 | **15 passed** | **18.8 s** |
+
+`grep -ciE '53300|remaining connection slots|too many clients'` over both run
+logs: **0**. No spec failed on a Playwright timeout, so the `POOL_MAX = 5`
+headroom question Phase 3 left open is answered in the affirmative — five
+connections are enough for four concurrent workers, and the two-constant split
+Phase 2 rejected stays rejected. Both parallel runs beat the serial baseline.
