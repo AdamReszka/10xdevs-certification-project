@@ -26,9 +26,11 @@ import {
 import { resolveWorkspace } from "@/lib/workspace";
 
 /**
- * Mutations for the `/settings/absences` page: S-08 absences (FR-010) and S-23
- * team-wide days off (FR-007) — deliberately thin, mirroring
- * `setup/team/actions.ts`.
+ * Mutations for the Team section's `/team/absences` and `/team/days-off` pages:
+ * S-08 absences (FR-010) and S-23 team-wide days off (FR-007) — deliberately
+ * thin, mirroring `setup/team/actions.ts`, which is also the precedent for one
+ * actions file serving two independent forms. Both families live here because
+ * they share the private `redetect()` helper below.
  * Each action does `resolveWorkspace()` + `getCloudflareContext().env` +
  * `getDb(env)` inside the body, then delegates to the request-context-free
  * service core with the resolved `ownerId`. No business logic here. The resolver
@@ -89,7 +91,7 @@ export async function createAbsenceAction(input: unknown): Promise<AbsenceMutati
     await redetect(db, ownerId, now);
     return { ok: true, id };
   } catch (err) {
-    return toFailure(err, "[settings/absences] createAbsence");
+    return toFailure(err, "[team/absences] createAbsence");
   }
 }
 
@@ -118,7 +120,7 @@ export async function updateAbsenceAction(input: unknown): Promise<AbsenceMutati
     await redetect(db, ownerId, now);
     return { ok: true, id };
   } catch (err) {
-    return toFailure(err, "[settings/absences] updateAbsence");
+    return toFailure(err, "[team/absences] updateAbsence");
   }
 }
 
@@ -139,7 +141,7 @@ export async function deleteAbsenceAction(
     await redetect(db, ownerId, now);
     return { ok: true, id: parsed.data };
   } catch (err) {
-    return toFailure(err, "[settings/absences] deleteAbsence");
+    return toFailure(err, "[team/absences] deleteAbsence");
   }
 }
 
@@ -178,7 +180,7 @@ export async function createTeamDayOffAction(
     // error: the owner asked for that day to be off, and it is.
     return { ok: true, id };
   } catch (err) {
-    return toFailure(err, "[settings/absences] createTeamDayOff");
+    return toFailure(err, "[team/absences] createTeamDayOff");
   }
 }
 
@@ -199,7 +201,7 @@ export async function deleteTeamDayOffAction(
     await redetect(db, ownerId, now);
     return { ok: true, id: parsed.data };
   } catch (err) {
-    return toFailure(err, "[settings/absences] deleteTeamDayOff");
+    return toFailure(err, "[team/absences] deleteTeamDayOff");
   }
 }
 
@@ -227,7 +229,7 @@ async function redetect(
   try {
     await detectAnomalies({ db, ownerId, now });
   } catch (err) {
-    console.error("[settings/absences] re-detect after save failed:", err);
+    console.error("[team/absences] re-detect after save failed:", err);
   }
 }
 

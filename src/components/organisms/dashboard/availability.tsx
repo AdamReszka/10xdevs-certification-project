@@ -141,7 +141,7 @@ export default function Availability({
           </CardDescription>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link href="/settings/absences">Manage</Link>
+          <Link href="/team/absences">Manage</Link>
         </Button>
       </CardHeader>
 

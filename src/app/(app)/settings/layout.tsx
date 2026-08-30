@@ -10,7 +10,10 @@ import SettingsTabs from "@/components/molecules/settings-tabs";
  * tab — and with it the active-tab styling the nav had been missing, invisible
  * while there was only one tab. S-08 added Absences as the third, S-11 the
  * Daily recap as the fourth, S-09 the Demo tab as the fifth. S-14 landed the
- * Anomaly rules tab (thresholds + severity tiers) as the sixth.
+ * Anomaly rules tab (thresholds + severity tiers) as the sixth. S-19 moved Team
+ * and Absences out into their own `/team/*` section, leaving the four tabs that
+ * genuinely answer "how SprintFlow reaches your data" — which is what the
+ * subtitle below had always claimed.
  *
  * Inherits `requireSession()` + `force-dynamic` from `(app)/layout.tsx` — do NOT
  * re-declare either.
@@ -18,8 +21,6 @@ import SettingsTabs from "@/components/molecules/settings-tabs";
 
 const TABS: { label: string; href: string }[] = [
   { label: "Connections", href: "/settings/connections" },
-  { label: "Team", href: "/settings/team" },
-  { label: "Absences", href: "/settings/absences" },
   { label: "Daily recap", href: "/settings/recap" },
   { label: "Anomaly rules", href: "/settings/anomalies" },
   // S-09 (FR-008). Last on purpose: it is the tab a first-time visitor with no

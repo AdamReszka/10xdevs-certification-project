@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import {
   createTeamDayOffAction,
   deleteTeamDayOffAction,
-} from "@/app/(app)/settings/absences/actions";
+} from "@/app/(app)/team/actions";
 import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";

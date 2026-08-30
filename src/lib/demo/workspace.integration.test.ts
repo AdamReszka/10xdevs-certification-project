@@ -37,7 +37,7 @@ import { absence, anomaly, teamMember, user } from "@/db/schema";
 import { loadDemo } from "@/lib/demo/load";
 import { listRoster, listRosterForEditor } from "@/lib/roster";
 import { resolveWorkspace } from "@/lib/workspace";
-import { deleteAbsenceAction } from "@/app/(app)/settings/absences/actions";
+import { deleteAbsenceAction } from "@/app/(app)/team/actions";
 import { saveRosterAction } from "@/app/(app)/setup/team/actions";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });

@@ -12,7 +12,7 @@ import {
   createAbsenceAction,
   deleteAbsenceAction,
   updateAbsenceAction,
-} from "@/app/(app)/settings/absences/actions";
+} from "@/app/(app)/team/actions";
 import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +63,9 @@ import {
 } from "./absence-calendar-view";
 
 /**
- * The `/settings/absences` surface (S-08, FR-010) — record who is away.
+ * The `/team/absences` surface (S-08, FR-010) — record who is away. It was
+ * `/settings/absences` until S-19; the folder still names the origin, per the
+ * `organisms/setup/roster-editor.tsx` precedent.
  *
  * Rendering and wiring only: every judgement this component makes lives in the
  * pure `absence-calendar-view.ts` sibling, because there is no component-test

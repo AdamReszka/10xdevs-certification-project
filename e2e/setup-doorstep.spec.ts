@@ -44,7 +44,8 @@ test.describe("first run — the doorstep is where a new account lands", () => {
    * straight to `/dashboard`, which rendered the full S-07/S-10 surface against
    * an empty account. If the gate regressed, the URL would settle on
    * `/dashboard`; if the nav suppression regressed, the header links would be
-   * visible and the doorstep would have four exits it is not supposed to offer.
+   * visible and the doorstep would have five exits it is not supposed to offer
+   * (five since S-19 added Team to the nav).
    */
   test("signing up lands on the doorstep, with two doors and no navigation", async ({
     page,
@@ -68,7 +69,13 @@ test.describe("first run — the doorstep is where a new account lands", () => {
 
     // No navigation out. Asserted per link rather than on the <nav> element, so
     // this fails on a partial regression too.
-    for (const label of ["Dashboard", "Sprint Detail", "Settings", "Refinement"]) {
+    for (const label of [
+      "Dashboard",
+      "Sprint Detail",
+      "Team",
+      "Settings",
+      "Refinement",
+    ]) {
       await expect(page.getByRole("link", { name: label, exact: true })).toHaveCount(0);
     }
 

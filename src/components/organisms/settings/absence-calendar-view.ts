@@ -3,7 +3,7 @@ import { type DayKey, enumerateDayKeys } from "@/lib/dashboard/day-bucket";
 import type { AbsenceType } from "@/lib/validations/absence";
 
 /**
- * Decision logic for the `/settings/absences` editor. PURE — no React, no DB.
+ * Decision logic for the `/team/absences` editor. PURE — no React, no DB.
  *
  * WHY IT IS A SEPARATE FILE: there is no component-test harness in this project
  * (no jsdom, no RTL — `context/foundation/test-plan.md`), so anything the editor

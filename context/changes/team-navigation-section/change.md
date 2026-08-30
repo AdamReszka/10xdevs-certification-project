@@ -1,9 +1,9 @@
 ---
 change_id: team-navigation-section
 title: Roster, absences and cadence become a first-class Team section
-status: preparing
+status: implementing
 created: 2026-08-30
-updated: 2026-08-30
+updated: 2026-08-31
 archived_at: null
 ---
 
