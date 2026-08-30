@@ -1912,10 +1912,12 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
 
 ## 16. S-24 `destructive-action-confirmation` — otwarte (2026-08-30)
 
-Slice zamknięty 2026-08-30, cztery fazy. Pełne opisy:
-`context/changes/destructive-action-confirmation/MANUAL-CHECKLIST.md`.
-Źródło kanoniczne: `context/changes/destructive-action-confirmation/plan.md`
-`## Progress`.
+Slice zamknięty i zarchiwizowany 2026-08-30, cztery fazy. Pełne opisy:
+`context/archive/2026-08-30-destructive-action-confirmation/MANUAL-CHECKLIST.md`.
+Źródło kanoniczne: `context/archive/2026-08-30-destructive-action-confirmation/plan.md`
+`## Progress` (16.A–16.D). **16.E pochodzi z impl-review (F1), nie z planu** —
+nie ma go w checkliście ani w `## Progress`, bo powstał po ich zamknięciu;
+raport: `.../reviews/impl-review.md`.
 
 **Konto:** wiersze 16.A i 16.B wymagają konta z **prawdziwymi** credentialami
 (na lokalnej bazie `demo@sprintflow.test` — patrz §5, identyfikuj po
@@ -1987,9 +1989,26 @@ wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
       znikałyby przy każdym wyjściu — a właściciel wprost chce, żeby demo
       zostawało dostępne w każdej chwili.
 
-- [ ] **16.E** `MANUAL-CHECKLIST.md` tego slice'a
-      (`context/changes/destructive-action-confirmation/MANUAL-CHECKLIST.md`) jest
-      podpisana w całości (16.A–16.D).
+- [ ] **16.E** (z impl-review F1, **nie** ma odpowiednika w checkliście slice'a)
+      **Gdzie:** dowolny ekran w trybie demo — najprościej `/dashboard` — baner na
+      samej górze strony.
+      **Co zrobić:** załaduj demo i przeczytaj **całe** zdanie w banerze
+      „Jesteś w trybie demonstracyjnym".
+      **Co musi być prawdą:** baner mówi, że **nie widzisz tu żadnych swoich
+      prawdziwych danych, a ustawienia integracji są w demo zablokowane**.
+      Nie może tam paść zdanie, że „Twoje prawdziwe dane i integracje są
+      nietknięte" — bez zastrzeżenia, o integracjach też.
+      *Dlaczego to łapie:* to zdanie **było nieprawdziwe**. Kreator (`/setup/**`)
+      nadal nie ma bramki demo, a `storeGithubIntegration` /
+      `storeJiraIntegration` nie mają odmowy — więc z ekranu demo wciąż można
+      wejść na `/setup/github` i **zapisać prawdziwy token**. S-24 zawęził samo
+      zdanie do tego, co kod naprawdę trzyma; zamknięcie luki to **S-27**. Jeśli
+      kiedyś zobaczysz tu z powrotem mocniejsze zdanie o „nietkniętych
+      integracjach", a S-27 nie jest zrobione — to jest błąd, zgłoś go.
+
+- [ ] **16.F** `MANUAL-CHECKLIST.md` tego slice'a
+      (`context/archive/2026-08-30-destructive-action-confirmation/MANUAL-CHECKLIST.md`)
+      jest podpisana w całości (16.A–16.D), a 16.E odhaczone osobno.
       *Dlaczego to łapie:* pilnuje, że pozostałe zostały naprawdę wykonane, a nie
       odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29 wziął się
       dokładnie stąd.
