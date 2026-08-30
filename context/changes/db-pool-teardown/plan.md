@@ -831,11 +831,11 @@ fires.
 
 #### Automated
 
-- [x] 5.1 Manual-test sweep exits zero
-- [x] 5.2 Type checking passes
-- [x] 5.3 Linting passes
-- [x] 5.4 Unit suite passes
-- [x] 5.5 No source file still cites the isolate-lifetime mechanism
+- [x] 5.1 Manual-test sweep exits zero — 6380045
+- [x] 5.2 Type checking passes — 6380045
+- [x] 5.3 Linting passes — 6380045
+- [x] 5.4 Unit suite passes — 6380045
+- [x] 5.5 No source file still cites the isolate-lifetime mechanism — 6380045
 
 #### Manual
 
