@@ -1,6 +1,9 @@
 "use server";
 
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { eq } from "drizzle-orm";
+
+import { teamMember } from "@/db/schema";
 
 import { demoRefusal } from "@/lib/demo/refusal";
 import { TokenCryptoError } from "@/lib/crypto";
@@ -96,7 +99,9 @@ export type ActionFailure = {
     | "decrypt_failed"
     | "invalid_input"
     /** S-09: the action reaches outside the app and the account is in demo. */
-    | "demo_mode";
+    | "demo_mode"
+    /** The wizard's last step ran with no saved roster (`onboarding-routing` F2). */
+    | "no_roster";
   message: string;
 };
 
@@ -316,6 +321,28 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
+
+  // THIS IS WHAT FINISHES THE WIZARD, and the last step has TWO independent
+  // saves — the roster editor's own button and this one. A lead who reviews the
+  // imported roster without pressing "Save roster" would otherwise be pushed to
+  // `/dashboard`, bounced back by the first-run gate (no `team_member`), and
+  // handed a door pointing at this very page, with nothing naming the missing
+  // condition (`onboarding-routing` impl-review F2). Refusing here says it once,
+  // where the lead can act on it. The cadence is deliberately NOT saved yet: the
+  // form keeps its values, so nothing is lost by making this the first step.
+  const [member] = await db
+    .select({ id: teamMember.id })
+    .from(teamMember)
+    .where(eq(teamMember.ownerId, ownerId))
+    .limit(1);
+  if (!member) {
+    return {
+      ok: false,
+      error: "no_roster",
+      message:
+        "Save your team roster first — SprintFlow needs at least one team member before the dashboard has anything to show.",
+    };
+  }
 
   try {
     await saveCadenceService({

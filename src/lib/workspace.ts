@@ -141,18 +141,26 @@ export const resolveWorkspace = cache(async (): Promise<Workspace> => {
     .where(eq(user.demoOf, realOwnerId))
     .limit(1);
 
-  // Demo only. The predicate reuses the `db` this function already built — the
-  // layout has no handle of its own and `getDb` IS the pool constructor
-  // (`db.ts`), so computing this one level up would leak a Hyperdrive-backed
-  // connection on every gated render in demo. It short-circuits on the first
-  // unsatisfied probe, so the account this actually matters for — a fresh one
-  // that took the demo door — costs a single `SELECT … LIMIT 1`.
-  const realOnboarded = await isOnboardingComplete({ db, ownerId: realOwnerId });
+  const demoOwnerRow = demoOwner ?? null;
+
+  // Demo only, and only once the demo scope is fully formed. The predicate reuses
+  // the `db` this function already built — the layout has no handle of its own
+  // and `getDb` IS the pool constructor (`db.ts`), so computing this one level up
+  // would leak a Hyperdrive-backed connection on every gated render in demo.
+  //
+  // The anchor guard mirrors `decideWorkspace`'s own condition on purpose: a
+  // half-formed demo falls back to REAL, where the field is reported `true`
+  // regardless — so running the query first would spend a round trip on an answer
+  // that is then discarded (impl-review F6).
+  const realOnboarded =
+    demoOwnerRow?.demoAnchorAt != null
+      ? await isOnboardingComplete({ db, ownerId: realOwnerId })
+      : true;
 
   return decideWorkspace({
     realOwnerId,
     activeWorkspace,
-    demoOwner: demoOwner ?? null,
+    demoOwner: demoOwnerRow,
     liveNow,
     realOnboarded,
   });

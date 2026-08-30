@@ -26,6 +26,34 @@ import pg from "pg";
 export const DB_URL =
   process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
+/**
+ * HARD-REFUSE any database that is not local Supabase.
+ *
+ * This module runs `delete from "user"` and writes six tables directly. The
+ * integration project already refuses a non-local `DATABASE_URL` for exactly
+ * that reason (`test/integration/setup.ts`), and the repo has a
+ * `DATABASE_URL_OVERRIDE` convention precisely because people DO point
+ * `DATABASE_URL` somewhere else — at which point `npm run test:e2e` would delete
+ * rows there. A wrong URL must fail at import, before any spec runs.
+ */
+{
+  let host: string;
+  let port: string;
+  try {
+    const parsed = new URL(DB_URL);
+    host = parsed.hostname;
+    port = parsed.port;
+  } catch {
+    throw new Error("DATABASE_URL is not a valid URL.");
+  }
+  const isLocal = (host === "127.0.0.1" || host === "localhost") && port === "54322";
+  if (!isLocal) {
+    throw new Error(
+      `E2E specs write and DELETE rows directly; they refuse any database that is not local Supabase (127.0.0.1:54322). Got ${host}:${port}.`,
+    );
+  }
+}
+
 export const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:3000";
 
 export const PASSWORD = "Sprint-Flow-1!";

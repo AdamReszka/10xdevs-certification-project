@@ -1,4 +1,5 @@
-import { eq } from "drizzle-orm";
+import { eq, exists, type SQL } from "drizzle-orm";
+import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 
 import {
   githubCredential,
@@ -7,6 +8,7 @@ import {
   monitoredRepo,
   statusMapping,
   teamMember,
+  user,
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
 
@@ -31,79 +33,56 @@ export type OnboardingSteps = {
  * that already connected it is exactly the drift this shape prevents
  * (`onboarding-routing` plan review F7).
  *
- * Owner-scoped queries only — the cross-account-isolation guard.
+ * Each probe is a table plus its owner column, and nothing else: the shape is
+ * deliberately too narrow to express a condition that is not owner-scoped, which
+ * is the cross-account-isolation guard.
  */
 const ONBOARDING_PROBES: {
   key: keyof OnboardingSteps;
-  satisfied: (db: Db, ownerId: string) => Promise<boolean>;
+  table: PgTable;
+  ownerColumn: PgColumn;
 }[] = [
-  {
-    key: "githubCredential",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: githubCredential.id })
-        .from(githubCredential)
-        .where(eq(githubCredential.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
-  {
-    key: "monitoredRepo",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: monitoredRepo.id })
-        .from(monitoredRepo)
-        .where(eq(monitoredRepo.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
-  {
-    key: "jiraCredential",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: jiraCredential.id })
-        .from(jiraCredential)
-        .where(eq(jiraCredential.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
-  {
-    key: "jiraProject",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: jiraProject.id })
-        .from(jiraProject)
-        .where(eq(jiraProject.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
-  {
-    key: "statusMapping",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: statusMapping.id })
-        .from(statusMapping)
-        .where(eq(statusMapping.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
-  {
-    key: "teamMember",
-    satisfied: async (db, ownerId) => {
-      const [row] = await db
-        .select({ id: teamMember.id })
-        .from(teamMember)
-        .where(eq(teamMember.ownerId, ownerId))
-        .limit(1);
-      return row != null;
-    },
-  },
+  { key: "githubCredential", table: githubCredential, ownerColumn: githubCredential.ownerId },
+  { key: "monitoredRepo", table: monitoredRepo, ownerColumn: monitoredRepo.ownerId },
+  { key: "jiraCredential", table: jiraCredential, ownerColumn: jiraCredential.ownerId },
+  { key: "jiraProject", table: jiraProject, ownerColumn: jiraProject.ownerId },
+  { key: "statusMapping", table: statusMapping, ownerColumn: statusMapping.ownerId },
+  { key: "teamMember", table: teamMember, ownerColumn: teamMember.ownerId },
 ];
+
+/**
+ * Read all six conditions in ONE round trip.
+ *
+ * Six sequential `SELECT … LIMIT 1` was the original shape, and the short-circuit
+ * made a brand-new account cheap — but an account that HAS finished paid all six
+ * round trips, on every `/dashboard` render and (in demo) on every gated render
+ * of every route. This repo had already reached that verdict once:
+ * `sync/scheduled.ts` refuses the per-owner predicate outright ("6 sequential
+ * queries × N owners would burn the invocation budget") and substitutes one
+ * set-based query. Over Hyperdrive the round trips, not the scans, are the cost
+ * (`onboarding-routing` impl-review F6).
+ *
+ * One row from `user` carries six `EXISTS` columns. The FROM is the owner's own
+ * row rather than a synthetic one so the query is still owner-scoped end to end;
+ * an id with no `user` row yields no row at all, which reads as "nothing
+ * satisfied" — the correct answer for an owner that does not exist.
+ */
+async function readOnboardingSteps(db: Db, ownerId: string): Promise<OnboardingSteps> {
+  const projection = Object.fromEntries(
+    ONBOARDING_PROBES.map((probe) => [
+      probe.key,
+      exists(
+        db.select({ ownerId: probe.ownerColumn }).from(probe.table).where(eq(probe.ownerColumn, ownerId)),
+      ),
+    ]),
+  ) as Record<keyof OnboardingSteps, SQL<boolean>>;
+
+  const [row] = await db.select(projection).from(user).where(eq(user.id, ownerId)).limit(1);
+
+  const steps = {} as OnboardingSteps;
+  for (const probe of ONBOARDING_PROBES) steps[probe.key] = row?.[probe.key] === true;
+  return steps;
+}
 
 /**
  * The single derived source of truth for "has this account finished the setup
@@ -119,9 +98,6 @@ const ONBOARDING_PROBES: {
  * (`jira_sprint_id` is NOT NULL), so requiring cadence would wrongly block a
  * legitimate state — cadence is best-effort and re-pulls on the next sync
  * (FR-007).
- *
- * Short-circuits on the first unsatisfied probe: a brand-new account — the case
- * the `/dashboard` gate meets most often — costs exactly one `SELECT … LIMIT 1`.
  */
 export async function isOnboardingComplete({
   db,
@@ -130,10 +106,8 @@ export async function isOnboardingComplete({
   db: Db;
   ownerId: string;
 }): Promise<boolean> {
-  for (const probe of ONBOARDING_PROBES) {
-    if (!(await probe.satisfied(db, ownerId))) return false;
-  }
-  return true;
+  const steps = await readOnboardingSteps(db, ownerId);
+  return ONBOARDING_PROBES.every((probe) => steps[probe.key]);
 }
 
 /**
@@ -143,10 +117,6 @@ export async function isOnboardingComplete({
  * predicate rather than on a step: an account that connected GitHub and then
  * abandoned Jira is sent to the doorstep, and must be handed a door onto the
  * first step it is actually missing rather than one that re-offers GitHub.
- *
- * Runs all six probes (no short-circuit) — the caller needs the full picture.
- * Sequentially, not in parallel: the request's pool is `max: 1`
- * (`src/lib/db.ts`), so concurrency here would only queue on one connection.
  */
 export async function getOnboardingSteps({
   db,
@@ -155,9 +125,5 @@ export async function getOnboardingSteps({
   db: Db;
   ownerId: string;
 }): Promise<OnboardingSteps> {
-  const steps = {} as OnboardingSteps;
-  for (const probe of ONBOARDING_PROBES) {
-    steps[probe.key] = await probe.satisfied(db, ownerId);
-  }
-  return steps;
+  return readOnboardingSteps(db, ownerId);
 }

@@ -1,7 +1,7 @@
 ---
 change_id: onboarding-routing
 title: First-run routing into the setup wizard + entry point for returning users
-status: implemented
+status: impl_reviewed
 created: 2026-08-19
 updated: 2026-08-30
 archived_at: null

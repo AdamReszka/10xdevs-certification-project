@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FlaskConical, Loader2 } from "lucide-react";
@@ -37,13 +37,46 @@ export default function DemoBanner({
   needsSetup?: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [exiting, startExiting] = useTransition();
+  const [leaving, startLeaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function handleExit() {
-    startTransition(async () => {
-      await exitDemoAction();
+    startExiting(async () => {
+      setError(null);
+      const result = await exitDemoAction();
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
       // Nothing in the URL changes when the mode does, so the refresh is what
       // actually puts the real account back on screen.
+      router.refresh();
+    });
+  }
+
+  /**
+   * Leave demo, THEN go to the wizard — never the other way round.
+   *
+   * `/setup/**` is an always-real area, but `/setup/team`'s two save actions
+   * resolve their owner with `resolveWorkspace()` on purpose: `/settings/team`
+   * mounts the same organisms, and demo edits must land under the demo owner
+   * (`setup/team/actions.ts:44-60`). Walking into the wizard while still in DEMO
+   * would therefore save the roster against the demo owner, the `/dashboard`
+   * gate would find no real `team_member`, and the lead would be bounced back to
+   * the doorstep pointing at the page they just finished. Navigating only after
+   * the flip has committed is what makes "Dokończ konfigurację" configure the
+   * account the lead thinks it does.
+   */
+  function handleFinishSetup() {
+    startLeaving(async () => {
+      setError(null);
+      const result = await exitDemoAction();
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.push("/setup");
       router.refresh();
     });
   }
@@ -64,16 +97,29 @@ export default function DemoBanner({
             .
           </span>
           <span>
-            <Button size="sm" variant="outline" onClick={handleExit} disabled={pending}>
-              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExit}
+              disabled={exiting || leaving}
+            >
+              {exiting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               Wyjdź z demo
             </Button>
             {needsSetup ? (
-              <Button size="sm" variant="outline" asChild className="ml-2">
-                <Link href="/setup">Dokończ konfigurację</Link>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleFinishSetup}
+                disabled={exiting || leaving}
+                className="ml-2"
+              >
+                {leaving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                Dokończ konfigurację
               </Button>
             ) : null}
           </span>
+          {error ? <span className="text-destructive">{error}</span> : null}
         </AlertDescription>
       </Alert>
     </div>

@@ -153,7 +153,17 @@ export default function CadenceForm({
       // returns the lead to fictional data with no sign the setup worked. The
       // demo world is KEPT (exitDemoAction only flips `active_workspace`), so
       // it can be re-entered from Settings.
-      if (inDemo) await exitDemoAction();
+      if (inDemo) {
+        // Not fire-and-forget: `exitDemoAction` reports a DB failure by RETURNING
+        // `{ok:false}` rather than throwing, so the catch below would never see
+        // it and the push would land the lead back under the demo banner — the
+        // one outcome this call exists to prevent (impl-review F5).
+        const exited = await exitDemoAction();
+        if (!exited.ok) {
+          setFormError(exited.message);
+          return;
+        }
+      }
       router.push("/dashboard");
     } catch {
       setFormError("Something went wrong saving your cadence. Please try again.");

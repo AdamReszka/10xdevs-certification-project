@@ -12,15 +12,21 @@
  * account is the bug this function exists to prevent (plan review F7).
  */
 
-/** The six wizard conditions, as `getOnboardingSteps` reports them. */
-export type DoorstepSteps = {
-  githubCredential: boolean;
-  monitoredRepo: boolean;
-  jiraCredential: boolean;
-  jiraProject: boolean;
-  statusMapping: boolean;
-  teamMember: boolean;
-};
+// Type-only: erased at compile time, so this module stays runtime-pure (no DB,
+// no React) and its unit test needs no harness.
+import type { OnboardingSteps } from "@/lib/onboarding";
+
+/**
+ * The wizard conditions, as `getOnboardingSteps` reports them.
+ *
+ * IMPORTED, never re-declared. A hand-copied structural twin type-checks against
+ * a wider `OnboardingSteps` (excess-property checking does not apply to
+ * non-literals), so adding a seventh probe to `ONBOARDING_PROBES` would compile
+ * silently and re-open the drift `onboarding.ts` exists to close: the gate would
+ * say "incomplete" while this door said "everything is done" and pointed at
+ * `/dashboard` — a redirect ping-pong (`onboarding-routing` impl-review F4).
+ */
+export type DoorstepSteps = OnboardingSteps;
 
 export type ConfigureDoor = {
   href: string;
