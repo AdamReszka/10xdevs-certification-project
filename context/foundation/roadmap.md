@@ -55,6 +55,8 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-21 | db-pool-teardown          | the request path stops leaking a Hyperdrive connection per invocation                          | F-02               | — (NFR: graceful degradation)                   | proposed |
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
+| S-24 | destructive-action-confirmation | disconnecting GitHub or Jira asks first and says what will be destroyed, on every path that can lose data | S-02, S-03, S-08, S-16 | — (PRD Guardrails: graceful degradation, no silent data loss) | proposed |
+| S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | proposed |
 
 ## Streams
 
@@ -564,6 +566,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04, S-07, S-09, S-10 all done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers. **Prerequisites widened 2026-08-30** — S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on; see the S-22 body |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
+| S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md`). The pattern to copy already exists in-repo: `jira-project-editor.tsx:75-92` warns before a project switch |
+| S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`). `sprint.start_date` / `end_date` are already populated from Jira and simply not rendered |
 
 ## Open Roadmap Questions
 
@@ -879,6 +883,90 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **CI/CD pipeline (.github/workflows)** — Why parked: baseline reports absent; deferred given `speed` main goal; add in a hardening pass after S-07 lands.
 - **Unique index on `team_member` identity keys** — Why parked: `(owner_id, lower(github_username))` and `(owner_id, jira_account_id)` have no DB-level uniqueness; it is enforced only by `rosterSaveSchema.superRefine`, which sees one submission at a time. A duplicate silently corrupts anomaly attribution (`indexBy` keeps whichever row it reads last — see `validations/roster.ts:54`). The known route in was closed by S-15 follow-up `646facf` (`saveRoster` now hands persisted ids back, so a freshly-inserted row stops being re-inserted), and the local DB has zero duplicates, so this is defence in depth, not a live hole. Real cost is not the migration: it fails on any pre-existing duplicate, so it needs a detect-and-merge script (which row survives, what happens to its absences and anomalies) plus `23505` translation into a readable error — half a day to a day. Revisit in a hardening pass, or if a second duplicate route is ever found. Raised 2026-08-25.
 - **Observability (structured logging, Sentry, metrics)** — Why parked: no MVP NFR requires it; deferred given `speed` main goal; add before any public launch.
+
+
+### S-24: Confirmation before destructive disconnects
+
+- **Outcome:** disconnecting GitHub or Jira — from the setup wizard or from
+  Settings — asks for confirmation first and names what will be destroyed. No
+  path that permanently deletes synced or hand-entered data fires on a single
+  click.
+- **Change ID:** destructive-action-confirmation
+- **PRD refs:** — (Guardrails under `## Success Criteria`: the product must
+  degrade gracefully and must not lose the lead's data without warning)
+- **Prerequisites:** S-02, S-03, S-08, S-16
+- **Status:** proposed
+
+- **Raised by the tester, not by code review** (2026-08-30, full write-up in
+  `context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md`). She stopped
+  in front of the button and said a warning ought to be there. She was right.
+- **Four paths, none of them confirm.** Wizard GitHub
+  (`github-connection-status.tsx`), wizard Jira (`jira-connection-status.tsx`),
+  and both Settings cards (`integration-card.tsx`) — the last as a `ghost`
+  button, visually the *lightest* of *Test connection / Reconnect / Disconnect*,
+  though it is the only one that destroys anything. Settings has no separate
+  path: it imports the same two Server Actions the wizard uses.
+- **What one click destroys.** Read off the live database:
+  `jira_credential → jira_project → {sprint → jira_ticket, anomaly, absence},
+  status_mapping` all CASCADE, and `github_credential → monitored_repo →
+  {github_commit, github_pull_request → github_review}` likewise. So the Jira
+  path takes recorded **absences** — hand-entered FR-010 data that no sync can
+  reconstruct — and the GitHub path takes the entire commit/PR/review history.
+  Two unconfirmed clicks reset an account to near-fresh. `daily_recap` survives
+  with `sprint_id` nulled.
+- **The pattern to copy is already in the repo, one component away.**
+  `settings/jira-project-editor.tsx:75-92` warns before a *project switch* with a
+  destructive `Alert`, a destructive button and an after-the-fact summary of what
+  was discarded; `connection-service.ts:405-408` even cites it in a comment. The
+  product already decided that losing a synced sprint deserves a warning — and
+  then omitted it on the path that destroys strictly more.
+- **This closes a hole S-16 left open by assumption.** S-16's checklist justified
+  the wizard having no dialog by pointing at "the equivalent in
+  `/settings/connections`". That equivalent guards the project switch, not the
+  disconnect. The assumption was never verified.
+- **Scope note for planning:** demo mode was not checked —
+  `integration-card.tsx` disables *Test connection* in demo but does not appear
+  to disable *Disconnect*.
+
+---
+
+### S-25: Say which sprint the user is looking at
+
+- **Outcome:** every surface that renders sprint data names the sprint and shows
+  its dates — the wizard's cadence step, Dashboard "Today", and Sprint Detail —
+  prominently enough to answer "which sprint is this?" without hunting.
+- **Change ID:** sprint-identity-visibility
+- **PRD refs:** FR-007, FR-016, FR-017
+- **Prerequisites:** S-04, S-07, S-10, S-16
+- **Status:** proposed
+
+- **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`),
+  in her own words: *"na dashboardzie nie ma nazwy, nazwa jest dopiero w zakładce
+  Sprint Detail ale jest mało widoczna, nie rzuca się w ogóle w oczy"*.
+- **Where the name is today.** Cadence step: woven into a sentence in a
+  `CardDescription`. Today: **only** inside the *Estimated velocity* panel's
+  descriptive sentence — no heading, no badge. Sprint Detail: a deliberately
+  muted `<Badge variant="secondary">`.
+- **The worst case is the first run.** `velocity-estimate.tsx:42` falls back to
+  `sprintName ?? "the active sprint"`, and with fewer than two closed sprints the
+  panel renders its empty copy instead of numbers — so on a freshly configured
+  account, exactly when the lead most needs to confirm they are looking at the
+  right sprint, the name may never appear on Today at all.
+- **Why this is not cosmetics.** The cadence step asks the lead to *confirm
+  settings pulled from a specific sprint*; "which one?" is the first reasonable
+  question and the answer sits in grey helper text mid-sentence. It is also the
+  same class of failure as the incident behind S-16: the demo seed's
+  `jira_sprint_id=1001` survived connecting a real Jira, sync reported green, the
+  dashboard was empty, and **nobody could tell the app was showing the wrong
+  sprint**. S-16 closed the route into that state; it did not give the user a way
+  to recognise it if one appears again. Risk rises after every project switch and
+  every rollover.
+- **The dates are already there.** `sprint.start_date` / `end_date` are populated
+  from Jira and never rendered. One line — `PT Sprint 1 · 30.08 – 12.09` — answers
+  both halves of the finding. ⚠️ The columns are `timestamp without time zone` in
+  UTC and the UI renders UTC deliberately (backlog §5); do not "fix" that here.
+- **Not checked, for planning:** whether the Daily Recap email names the sprint;
+  contrast of the Sprint Detail badge in dark mode; demo mode.
 
 ## Done
 
