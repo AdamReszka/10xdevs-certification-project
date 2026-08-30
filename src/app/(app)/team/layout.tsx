@@ -18,6 +18,9 @@ import SettingsTabs from "@/components/molecules/settings-tabs";
 const TABS: { label: string; href: string }[] = [
   { label: "Roster", href: "/team/roster" },
   { label: "Absences", href: "/team/absences" },
+  // S-19 split this out of the absences page: one person away and a day the
+  // whole company is off are different models with different time horizons.
+  { label: "Team days off", href: "/team/days-off" },
 ];
 
 export default function TeamLayout({ children }: { children: ReactNode }) {

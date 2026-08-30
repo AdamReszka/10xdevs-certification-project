@@ -41,13 +41,16 @@ import {
 } from "./team-days-off-view";
 
 /**
- * Team-wide days off on `/settings/absences` (S-23, FR-007/FR-022) — public
+ * Team-wide days off on `/team/days-off` (S-23, FR-007/FR-022) — public
  * holidays and company days off, recorded once as dates on the account.
  *
- * ON THIS PAGE RATHER THAN A NEW ROUTE: the page already answers "who is not
- * working"; a team day off is the same question asked of everybody. Putting the
- * two calendars side by side also makes the distinction legible — one row per
- * person versus one row for the team — which a separate route would hide.
+ * IT SHARED `/settings/absences` UNTIL S-19. The argument for one page was that
+ * a team day off is "who is not working" asked of everybody, and that the two
+ * calendars side by side made the distinction legible. In use the side-by-side
+ * did the opposite: an absence belongs to a person and a sprint, a holiday is a
+ * property of the calendar that applies to every sprint spanning it, and one
+ * screen with two headings asked the owner to hold both models at once. Each
+ * now has its own tab, and each subtitle names the other.
  *
  * ADD AND REMOVE, NO EDIT. A holiday moved to a different date is a different
  * holiday, and delete-then-add says that more honestly than an update would. It
