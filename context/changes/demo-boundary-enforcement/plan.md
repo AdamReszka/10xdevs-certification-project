@@ -403,6 +403,12 @@ on a revisit.
 **File**: `src/lib/demo/load.integration.test.ts` (extend) and a unit test for
 the new action
 
+> **Landed elsewhere (impl-review F2).** The integration assertions live in
+> `src/app/(app)/settings/demo/actions.integration.test.ts:178-270`, not in
+> `load.integration.test.ts`. Every requirement below is met there; the file is
+> the better home, because the properties are about `openDemoAction` rather than
+> about `loadDemo`. The unit test is `settings/demo/actions.test.ts`.
+
 **Intent**: Lock D1 and D2 as properties rather than as a comment.
 
 **Contract**: Integration — load demo, edit one demo-owned row, exit, open demo
