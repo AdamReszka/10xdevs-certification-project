@@ -704,10 +704,10 @@ the sprint name and anomaly count on every recap already sent. No backfill.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `npm test`
-- [x] 3.2 Type checking passes: `npm run typecheck`
-- [x] 3.3 Linting passes: `npm run lint`
-- [x] 3.4 Production build passes: `npm run build`
+- [x] 3.1 Unit tests pass: `npm test` — 25e4727
+- [x] 3.2 Type checking passes: `npm run typecheck` — 25e4727
+- [x] 3.3 Linting passes: `npm run lint` — 25e4727
+- [x] 3.4 Production build passes: `npm run build` — 25e4727
 
 #### Manual
 
@@ -719,10 +719,10 @@ the sprint name and anomaly count on every recap already sent. No backfill.
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `npm test`
-- [ ] 4.2 Type checking passes: `npm run typecheck`
-- [ ] 4.3 Linting passes: `npm run lint`
-- [ ] 4.4 Production build passes: `npm run build`
+- [x] 4.1 Unit tests pass: `npm test`
+- [x] 4.2 Type checking passes: `npm run typecheck`
+- [x] 4.3 Linting passes: `npm run lint`
+- [x] 4.4 Production build passes: `npm run build`
 
 #### Manual
 

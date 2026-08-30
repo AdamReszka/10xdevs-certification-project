@@ -8,9 +8,21 @@ import { teamMember } from "@/db/schema";
 import { demoRefusal } from "@/lib/demo/refusal";
 import { TokenCryptoError } from "@/lib/crypto";
 import { getDb } from "@/lib/db";
-import { GithubAuthError, type GithubClientOpts, GithubUnavailableError } from "@/lib/github";
-import { JiraAuthError, type JiraBoard, JiraUnavailableError } from "@/lib/jira";
+import {
+  GithubAuthError,
+  type GithubClientOpts,
+  GithubUnavailableError,
+} from "@/lib/github";
+import {
+  JiraAuthError,
+  type JiraBoard,
+  JiraUnavailableError,
+} from "@/lib/jira";
 import { MissingCredentialError } from "@/lib/integrations/credentials";
+import {
+  toSprintIdentity,
+  type SprintIdentityView,
+} from "@/lib/sprint-identity";
 import {
   LastMemberError,
   type MemberHistory,
@@ -114,7 +126,10 @@ export type ActionFailure = {
  * from seeding the `/settings/team` banner off preview rows and concluding that
  * the whole team is unconfirmed.
  */
-export type ClientPreviewMember = Omit<ClientMember, "id" | "fteConfirmedAt"> & {
+export type ClientPreviewMember = Omit<
+  ClientMember,
+  "id" | "fteConfirmedAt"
+> & {
   /** Absent ⇒ a proposal with no DB row yet. */
   id?: string;
   proposed?: true;
@@ -142,7 +157,15 @@ export type ImportCadenceResult =
       cadence: DerivedCadence;
       boardId: number | null;
       jiraSprintId: string | null;
-      sprintName: string | null;
+      /**
+       * WHICH sprint the cadence above was pulled from, ready to render (S-25).
+       *
+       * A view of plain strings rather than the bare name plus `Date`s: no
+       * `Date` crosses an RSC/action boundary in this codebase, and formatting
+       * on the server keeps every `Intl` call on one side of it — so the wizard,
+       * both dashboards and the recap cannot spell the same sprint four ways.
+       */
+      sprintIdentity: SprintIdentityView;
       boardCandidates: JiraBoard[];
       noActiveSprint: boolean;
     }
@@ -150,15 +173,18 @@ export type ImportCadenceResult =
 
 export type SaveCadenceResult = { ok: true } | ActionFailure;
 
-export type SetMemberActiveResult = { ok: true; isActive: boolean } | ActionFailure;
+export type SetMemberActiveResult =
+  { ok: true; isActive: boolean } | ActionFailure;
 
 export type DeleteMemberResult = { ok: true } | ActionFailure;
 
 export type MergeMembersResult = { ok: true; id: string } | ActionFailure;
 
-export type ConfirmAvailabilityResult = { ok: true; confirmed: number } | ActionFailure;
+export type ConfirmAvailabilityResult =
+  { ok: true; confirmed: number } | ActionFailure;
 
-export type MemberHistoryResult = ({ ok: true } & MemberHistory) | ActionFailure;
+export type MemberHistoryResult =
+  ({ ok: true } & MemberHistory) | ActionFailure;
 
 /**
  * Test-only GitHub base override (`GITHUB_API_BASE_URL`) — lets the Playwright
@@ -178,12 +204,19 @@ function githubOptsFromEnv(): GithubClientOpts | undefined {
  * there) and the demo flag (so they refuse rather than quietly acting on the
  * real account from a screen that says "demo").
  */
-async function workspaceForImport(): Promise<{ ownerId: string; isDemo: boolean }> {
+async function workspaceForImport(): Promise<{
+  ownerId: string;
+  isDemo: boolean;
+  now: Date;
+}> {
   const [real, active] = await Promise.all([
     requireRealWorkspace(),
     resolveWorkspace(),
   ]);
-  return { ownerId: real.ownerId, isDemo: active.isDemo };
+  // The clock comes from the workspace like everywhere else, rather than from a
+  // bare `new Date()` — every caller here refuses in demo first, so it is the
+  // real one, and the convention holds without an exception to explain.
+  return { ownerId: real.ownerId, isDemo: active.isDemo, now: active.now };
 }
 
 /** Test-only Jira base override (`JIRA_API_BASE_URL`); undefined in production. */
@@ -243,7 +276,9 @@ export async function importRosterAction(): Promise<ImportRosterResult> {
 }
 
 /** Persist the user-edited roster (full owner-scoped set). */
-export async function saveRosterAction(input: unknown): Promise<SaveRosterResult> {
+export async function saveRosterAction(
+  input: unknown,
+): Promise<SaveRosterResult> {
   const { ownerId } = await resolveWorkspace();
 
   const parsed = rosterSaveSchema.safeParse(input);
@@ -251,7 +286,8 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
     return {
       ok: false,
       error: "invalid_input",
-      message: parsed.error.issues[0]?.message ?? "Check the roster and try again.",
+      message:
+        parsed.error.issues[0]?.message ?? "Check the roster and try again.",
     };
   }
 
@@ -278,7 +314,7 @@ export async function saveRosterAction(input: unknown): Promise<SaveRosterResult
 export async function importCadenceAction(
   chosenBoardId?: number,
 ): Promise<ImportCadenceResult> {
-  const { ownerId, isDemo } = await workspaceForImport();
+  const { ownerId, isDemo, now } = await workspaceForImport();
   if (isDemo) return demoRefusal();
 
   const { env } = getCloudflareContext();
@@ -297,7 +333,16 @@ export async function importCadenceAction(
       cadence: result.cadence,
       boardId: result.boardId,
       jiraSprintId: result.jiraSprintId,
-      sprintName: result.sprintName,
+      // Formatted HERE, on the server, so the client component never sees a
+      // `Date` or an `Intl` call (S-25).
+      sprintIdentity: toSprintIdentity({
+        name: result.sprintName,
+        jiraSprintId: result.jiraSprintId,
+        startDate: result.startDate,
+        endDate: result.endDate,
+        timeZone: result.timeZone,
+        now,
+      }),
       boardCandidates: result.boardCandidates,
       noActiveSprint: result.noActiveSprint,
     };
@@ -307,7 +352,9 @@ export async function importCadenceAction(
 }
 
 /** Persist the user-confirmed / overridden cadence (flips `cadence_overridden`). */
-export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResult> {
+export async function saveCadenceAction(
+  input: unknown,
+): Promise<SaveCadenceResult> {
   const { ownerId } = await resolveWorkspace();
 
   const parsed = cadenceSchema.safeParse(input);
@@ -315,7 +362,8 @@ export async function saveCadenceAction(input: unknown): Promise<SaveCadenceResu
     return {
       ok: false,
       error: "invalid_input",
-      message: parsed.error.issues[0]?.message ?? "Check the cadence and try again.",
+      message:
+        parsed.error.issues[0]?.message ?? "Check the cadence and try again.",
     };
   }
 
@@ -401,7 +449,8 @@ export async function setMemberActiveAction(
 
   const parsedId = memberIdSchema.safeParse(memberId);
   if (!parsedId.success) return invalidInput("Pick a member and try again.");
-  if (typeof isActive !== "boolean") return invalidInput("Pick a member and try again.");
+  if (typeof isActive !== "boolean")
+    return invalidInput("Pick a member and try again.");
 
   const { env } = getCloudflareContext();
   const db = getDb(env);
@@ -420,7 +469,9 @@ export async function setMemberActiveAction(
 }
 
 /** Permanently delete a member. Refused when they carry history or are the last. */
-export async function deleteMemberAction(memberId: unknown): Promise<DeleteMemberResult> {
+export async function deleteMemberAction(
+  memberId: unknown,
+): Promise<DeleteMemberResult> {
   const { ownerId } = await resolveWorkspace();
 
   const parsed = memberIdSchema.safeParse(memberId);
@@ -438,7 +489,9 @@ export async function deleteMemberAction(memberId: unknown): Promise<DeleteMembe
 }
 
 /** Fuse two imported rows into one member. `keepId` is the row the grid keeps. */
-export async function mergeMembersAction(input: unknown): Promise<MergeMembersResult> {
+export async function mergeMembersAction(
+  input: unknown,
+): Promise<MergeMembersResult> {
   const { ownerId } = await resolveWorkspace();
 
   const parsed = mergeMembersSchema.safeParse(input);
@@ -502,28 +555,35 @@ function toFailure(err: unknown, tag: string): ActionFailure {
     return {
       ok: false,
       error: "invalid_token",
-      message: "An integration rejected the stored credentials. Reconnect and try again.",
+      message:
+        "An integration rejected the stored credentials. Reconnect and try again.",
     };
   }
   if (err instanceof TokenCryptoError) {
     return {
       ok: false,
       error: "decrypt_failed",
-      message: "Could not read a stored credential. Reconnect the integration and try again.",
+      message:
+        "Could not read a stored credential. Reconnect the integration and try again.",
     };
   }
-  if (err instanceof GithubUnavailableError || err instanceof JiraUnavailableError) {
+  if (
+    err instanceof GithubUnavailableError ||
+    err instanceof JiraUnavailableError
+  ) {
     return {
       ok: false,
       error: "integration_unavailable",
-      message: "Couldn't reach an integration right now. Please try again in a moment.",
+      message:
+        "Couldn't reach an integration right now. Please try again in a moment.",
     };
   }
   if (err instanceof MissingCredentialError) {
     return {
       ok: false,
       error: "integration_unavailable",
-      message: "An integration is not connected. Complete the earlier steps and try again.",
+      message:
+        "An integration is not connected. Complete the earlier steps and try again.",
     };
   }
   // A submitted row id outside the caller's roster — a stale grid, or a crafted
@@ -548,7 +608,8 @@ function toFailure(err: unknown, tag: string): ActionFailure {
     return {
       ok: false,
       error: "invalid_input",
-      message: "This is your only team member. Add someone else before removing them.",
+      message:
+        "This is your only team member. Add someone else before removing them.",
     };
   }
   console.error(`${tag} unexpected error:`, err);
