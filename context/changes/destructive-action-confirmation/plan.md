@@ -826,11 +826,11 @@ commit.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass, including the new demo refusals: `npm test`
-- [x] 3.2 Type checking passes: `npm run typecheck`
-- [x] 3.3 Linting passes: `npm run lint`
-- [x] 3.4 Integration tests pass: `npm run test:integration`
-- [x] 3.5 E2E passes: `npm run test:e2e`
+- [x] 3.1 Unit tests pass, including the new demo refusals: `npm test` — 2ee1009
+- [x] 3.2 Type checking passes: `npm run typecheck` — 2ee1009
+- [x] 3.3 Linting passes: `npm run lint` — 2ee1009
+- [x] 3.4 Integration tests pass: `npm run test:integration` — 2ee1009
+- [x] 3.5 E2E passes: `npm run test:e2e` — 2ee1009
 
 #### Manual
 
@@ -841,8 +841,8 @@ commit.
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `npm test`
-- [ ] 4.2 Type checking passes: `npm run typecheck`
-- [ ] 4.3 Linting passes: `npm run lint`
-- [ ] 4.4 Backlog reconciliation is clean: `node scripts/manual-test-sweep.mjs`
-- [ ] 4.5 The deleted note is gone and no live document points at it
+- [x] 4.1 Unit tests pass: `npm test`
+- [x] 4.2 Type checking passes: `npm run typecheck`
+- [x] 4.3 Linting passes: `npm run lint`
+- [x] 4.4 Backlog reconciliation is clean: `node scripts/manual-test-sweep.mjs`
+- [x] 4.5 The deleted note is gone and no live document points at it

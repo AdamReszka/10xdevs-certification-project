@@ -16,18 +16,38 @@ import {
   type ClientProject,
   type ClientStatus,
 } from "@/app/(app)/settings/connections/actions";
+import {
+  DISCONNECT_IMPACT,
+  joinClauses,
+} from "@/lib/integrations/disconnect-impact";
 
 /**
  * Change the monitored Jira project without re-entering the API token
  * (S-10 Phase 8). Reuses the wizard's project selector and status mapper.
  *
- * DESTRUCTIVE, so it opens with a confirmation rather than the picker. `sprint`
- * hangs off `jira_project`, and `jira_ticket`, `jira_status_history` and — since
- * S-11 — `daily_recap` all hang off `sprint`, cascading. Switching projects
- * discards the account's synced sprint history AND its stored daily recaps, and
- * the owner has to know that before the picker appears, not after they have
+ * DESTRUCTIVE, so it opens with a confirmation rather than the picker — and the
+ * owner has to know what goes before the picker appears, not after they have
  * chosen. A confirmation that undersells what it deletes is the defect.
+ *
+ * CORRECTED IN S-24. This docstring used to say `daily_recap` cascades off
+ * `sprint` and omitted both `absence` and `anomaly`. `daily_recap.sprint_id` is
+ * ON DELETE **SET NULL** (`schema.ts:1037-1039`) — the recaps SURVIVE, unlinked
+ * — while `absence` cascades and is the lead's hand-entered FR-010 data that no
+ * sync rebuilds. Its author reasoned explicitly about cascades and still got it
+ * wrong in both directions, which is why the copy below is no longer written by
+ * hand: it is built from `DISCONNECT_IMPACT.projectSwitch`, a declaration a
+ * hermetic test holds equal to the schema's foreign-key graph.
+ *
+ * NOTE the entry is rooted at `sprint`, NOT at `jira_credential`. A project
+ * switch UPDATES the `jira_project` row in place and REPLACES the status
+ * mappings from the form (`connection-service.ts`), so neither is destroyed and
+ * the token and workspace are untouched — a subtraction from the Jira disconnect
+ * entry would have wrongly listed both.
  */
+
+/** The blast radius of a PROJECT SWITCH, not of a disconnect — see the note in
+ *  the docstring above. */
+const PROJECT_SWITCH = DISCONNECT_IMPACT.projectSwitch;
 
 type Stage =
   | { kind: "closed" }
@@ -76,11 +96,11 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>This discards synced sprint data</AlertTitle>
           <AlertDescription>
-            Pointing the account at a different project deletes the sprints,
-            tickets, status history, and daily recaps synced from
-            {currentProjectKey ? ` ${currentProjectKey}` : " the current project"}.
-            Anomalies detected from that data go with it. Re-syncing rebuilds
-            only what the new project&apos;s Jira history contains.
+            Pointing the account at
+            {currentProjectKey ? ` a project other than ${currentProjectKey}` : " a different project"}{" "}
+            deletes {joinClauses(PROJECT_SWITCH.destroys)}. It keeps{" "}
+            {joinClauses(PROJECT_SWITCH.keeps)}. Re-syncing rebuilds only what
+            the new project&apos;s Jira history contains.
           </AlertDescription>
         </Alert>
         {error ? (
@@ -107,10 +127,10 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>{stage.summary}</AlertTitle>
           <AlertDescription>
-            The previous project&apos;s sprints, tickets, status history and
-            daily recaps were discarded, as warned. Nothing has imported a sprint for the new
-            project yet, so both dashboards will stay empty until you re-run the
-            cadence import.
+            As warned, this discarded {joinClauses(PROJECT_SWITCH.destroys)}.
+            Your past daily recaps were kept, but are no longer linked to a
+            sprint. Nothing has imported a sprint for the new project yet, so
+            both dashboards will stay empty until you re-run the cadence import.
           </AlertDescription>
         </Alert>
         <div className="flex gap-2">
