@@ -882,11 +882,11 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 3.1 Copy tests pass
-- [x] 3.2 Unit suite passes
-- [x] 3.3 Type checking passes
-- [x] 3.4 Linting passes
-- [x] 3.5 Production build succeeds
+- [x] 3.1 Copy tests pass — 169b3a1
+- [x] 3.2 Unit suite passes — 169b3a1
+- [x] 3.3 Type checking passes — 169b3a1
+- [x] 3.4 Linting passes — 169b3a1
+- [x] 3.5 Production build succeeds — 169b3a1
 
 #### Manual
 
