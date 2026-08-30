@@ -1,7 +1,7 @@
 ---
 project: SprintFlow
 version: 1
-status: draft
+status: active
 created: 2026-05-26
 updated: 2026-08-30
 prd_version: 1
@@ -586,8 +586,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
   working days — in the `TICKET_STATUS_AGING` budget, in the `SPRINT_AT_RISK`
   absence magnitude, and in the capacity divisor alike.
 - **Change ID:** working-days-calendar
-- **PRD refs:** FR-009, FR-010
-- **Prerequisites:** S-08
+- **PRD refs:** FR-007, FR-009, FR-010
+- **Prerequisites:** S-08, S-23
 - **Status:** proposed
 
 - **Why this exists (S-08, 2026-08-25):** S-08 built the seam and left it empty.
@@ -601,6 +601,14 @@ Foundations below assume these are present and do NOT re-scaffold them.
   in Vienna and a team in Warsaw wrong in opposite ways. So the slice is: a
   country (or holiday-set) field, a source for the dates, per-sprint custom days
   off, a settings surface, and tests — none of which is a line of code in S-08.
+- **Now downstream of S-23, not parallel to it** (recorded 2026-08-27, carried
+  into this block 2026-08-30). S-23 makes the working-day count *be* the capacity,
+  so a holiday moves a headline number rather than only an aging budget — which is
+  why FR-007 joins the refs and S-23 joins the prerequisites. S-23 also covers the
+  need in the meantime by letting the lead record team-wide days off as dates on
+  the account; what remains here is DERIVING those dates from a country the
+  account still does not store. The `At a glance` row said this from 2026-08-27;
+  this block did not, and the two disagreed until now.
 
 ---
 
