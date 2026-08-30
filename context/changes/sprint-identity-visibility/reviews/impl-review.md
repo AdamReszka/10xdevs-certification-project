@@ -34,6 +34,39 @@ in the identity path.
 WARNING is F1: the repo's CI runs an integration suite this worktree is
 forbidden to run, and it was red.
 
+## E2E — actually executed, and the plan's residual risk is closed
+
+The plan recorded E2E as unverifiable here ("None executed from this worktree";
+"verified only after the branches merge"). That deferral rested on a misreading
+of the constraint, and on an assumption about CI that does not hold:
+
+- **The rule is exclusivity, not location.** `parallel-worktrees.md` forbids
+  `test:e2e` *in two worktrees at once* — port 3000, the fixture servers on
+  3098/3099, and `reuseExistingServer` silently attaching to another worktree's
+  dev server. The main checkout is not privileged; it collides identically. With
+  the other two sessions idle and port 3000 free, running here is permitted.
+- **CI never runs E2E at all.** `.github/workflows/` has four gates — `test`,
+  `integration`, `bundle-size`, Workers Builds — and Playwright appears only in
+  a comment saying such a job *could* be added. So "verify after merge" named no
+  mechanism: merging would not have verified anything.
+
+Run 2026-08-30 with the owner confirming no session held port 3000. Full suite,
+**15/15 passed** in 23.6s. The three assertions this slice put at risk all pass:
+
+| Assertion | Spec | Result |
+| --- | --- | --- |
+| `getByRole("heading", { name: "Dashboard — Today" })` | `dashboard-sprint-detail.spec.ts:82` | pass |
+| `getByRole("heading", { name: "Dashboard — Sprint Detail" })` | `:161`, `:393` | pass |
+| `getByText("No active sprint", { exact: true })` | `:163` | pass |
+
+Both structural mitigations therefore hold in practice, not just by inspection:
+the identity bar is a SIBLING of each `<h1>` (accessible names unchanged), and
+`Sprint: none active` does not collide with the exact-text assertion on the
+no-sprint account.
+
+CI on PR #79 after F1's fix: `test`, `integration`, `bundle-size` and Workers
+Builds all pass.
+
 ## Findings
 
 ### F1 — Phase 2 broke an integration test the worktree cannot run

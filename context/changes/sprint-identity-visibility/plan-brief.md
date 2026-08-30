@@ -97,11 +97,16 @@ purely additive, Phase 4 is the widest diff.
   "do not fix UTC here". The plan records why: that instruction cites backlog §5,
   which is about `sync_state.*_at`, not sprint dates. The roadmap should be
   corrected in the same PR rather than left contradicting the code.
-- **E2E cannot be run from this worktree**, so its assertions are verified only
-  after the branches merge. Two mitigations, both structural rather than
-  procedural: identity is a sibling of the heading and never inside it, and the
-  empty-state copy is a string no existing element uses (`Sprint: none active`),
-  greppable without Playwright.
+- ~~**E2E cannot be run from this worktree**, so its assertions are verified only
+  after the branches merge.~~ **RESOLVED 2026-08-30 — the suite was run here and
+  passed 15/15.** The risk as written was wrong twice over: the constraint is
+  *two worktrees at once*, not "a worktree", so with the other sessions idle this
+  checkout is a legitimate place to run it; and CI runs no E2E job at all, so
+  "verified after merge" named no mechanism that would ever fire. Both structural
+  mitigations held — identity is a sibling of the heading, and `Sprint: none
+  active` does not collide with the exact-text `No active sprint` assertion at
+  `dashboard-sprint-detail.spec.ts:163`. Details in
+  `reviews/impl-review.md`.
 - **Assumption:** `jira_project.time_zone` is populated for real accounts;
   `safeZone` degrades an absent or invalid zone to UTC without throwing, so the
   worst case is the old behaviour rather than a crash.
