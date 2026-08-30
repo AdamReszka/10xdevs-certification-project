@@ -734,10 +734,10 @@ every tester who had visited an old path once.
 
 #### Automated
 
-- [x] 2.1 Type checking passes: `npm run typecheck`
-- [x] 2.2 Linting passes: `npm run lint`
-- [x] 2.3 Unit tests pass: `npm test`, including the two untouched pure-view tests
-- [x] 2.4 Production build succeeds: `npm run build`
+- [x] 2.1 Type checking passes: `npm run typecheck` — 6c88749
+- [x] 2.2 Linting passes: `npm run lint` — 6c88749
+- [x] 2.3 Unit tests pass: `npm test`, including the two untouched pure-view tests — 6c88749
+- [x] 2.4 Production build succeeds: `npm run build` — 6c88749
 
 #### Manual
 
