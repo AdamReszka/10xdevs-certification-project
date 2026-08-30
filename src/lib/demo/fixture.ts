@@ -24,6 +24,10 @@ import type {
 import { absenceInstants } from "@/lib/absence-dates";
 import { encryptToken } from "@/lib/crypto";
 import { dayKeyInTimeZone, type DayKey } from "@/lib/dashboard/day-bucket";
+import {
+  workingHoursAfter,
+  workingHoursBefore,
+} from "@/lib/anomaly/rules/working-time";
 
 /**
  * The demo dataset (S-09 / FR-008, US-02) — one realistic mixed-state sprint for
@@ -43,6 +47,17 @@ import { dayKeyInTimeZone, type DayKey } from "@/lib/dashboard/day-bucket";
  * the demo owner has no `anomaly_settings`, so the defaults are what apply. Every
  * "→ fires X" comment marks a deliberate crossing; every "healthy" one marks a
  * counter-example that must stay untouched by any rule.
+ *
+ * EVERY ANOMALY-PRODUCING OFFSET IS IN WORKING HOURS (S-28). The anchor is real
+ * wall-clock time at load, so the demo can be pressed on any weekday; once the
+ * engine ages in working hours, a crossing expressed as a calendar offset lands
+ * on a different side of its budget depending on which weekday that was, and
+ * US-02's "at least four anomaly types" quietly becomes a property of the day.
+ * The `wh` helper below therefore places each of those rows through the SAME
+ * primitive the detectors measure with, and `fixture.test.ts` asserts the
+ * criterion on all seven anchor weekdays. Rows that feed the burndown axis
+ * rather than a budget (the To Do and Done tickets) stay on calendar offsets:
+ * they are the sprint's shape, not a threshold crossing.
  */
 
 const ZONE = "Europe/Warsaw";
@@ -53,13 +68,23 @@ const MS_PER_HOUR = 3_600_000;
 const MS_PER_DAY = 86_400_000;
 
 /**
- * The sprint's remaining hours at the anchor. Under 48 so `SPRINT_AT_RISK`'s
- * `todo_near_end` condition fires; 47 rather than a round 36 so that at least one
- * WORKING day always remains, whichever weekday the demo happens to be loaded on
- * (a Saturday load with a shorter tail would leave zero, and the absence row's
- * copy would read "0 of the 0 working days left").
+ * The team's working week, shared by the sprint row and by every working-hour
+ * offset below so the fixture and the detectors read the same calendar.
  */
-const SPRINT_HOURS_LEFT = 47;
+const WORKING_DAYS = ["MON", "TUE", "WED", "THU", "FRI"] as const;
+
+/**
+ * The sprint's remaining WORKING hours at the anchor (S-28). Under the 16
+ * working-hour `todo_near_end` lead time so `SPRINT_AT_RISK` fires, and — being
+ * counted in working hours rather than wall-clock ones — it leaves at least one
+ * whole working day on ANY anchor weekday, which is the constraint the old
+ * calendar figure could only approximate by being oddly large (it was 47 h, "not
+ * a round 36", so that a Saturday load would not leave zero and the absence
+ * row's copy would not read "0 of the 0 working days left"). Twelve working
+ * hours is a day and a half of the team's time whichever day the visitor
+ * pressed the button on.
+ */
+const SPRINT_WORKING_HOURS_LEFT = 12;
 const SPRINT_DAYS_ELAPSED = 12.5;
 
 /** The team, mapped across both systems. Six people, per US-02. */
@@ -140,8 +165,36 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
   /** The day key `n` days from the anchor, in the team's zone. */
   const dayKey = (n: number) => dayKeyInTimeZone(d(-n), ZONE);
 
+  // --- The calendar the working-hour offsets are walked on -----------------
+  // RESOLVED FIRST, DELIBERATELY (S-28). The team-wide days off below are days
+  // no budget advances on, so every `wh` offset in this function depends on
+  // them; computing them after the first `wh` call would place each crossing
+  // against a calendar the detector does not use. The ordering used to be
+  // incidental — since working-hour aging it is load-bearing.
+  const teamDayOffKeys: readonly DayKey[] = [
+    workingDayKeyOnOrBefore(d(4)),
+    workingDayKeyOnOrBefore(d(9)),
+  ];
+  const nonWorkingDays: ReadonlySet<DayKey> = new Set(teamDayOffKeys);
+
+  /**
+   * `n` WORKING hours before the anchor — the same primitive the detectors
+   * measure with (`working-time.ts`), so every "→ fires X" crossing below is
+   * exact by construction on whichever weekday the visitor pressed the button,
+   * rather than by calendar arithmetic that happens to work on a Wednesday.
+   * US-02's "at least four anomaly types" is otherwise a property of the day.
+   */
+  const wh = (n: number) =>
+    workingHoursBefore(anchor, n, WORKING_DAYS, ZONE, nonWorkingDays);
+
   const sprintStart = d(SPRINT_DAYS_ELAPSED);
-  const sprintEnd = h(-SPRINT_HOURS_LEFT);
+  const sprintEnd = workingHoursAfter(
+    anchor,
+    SPRINT_WORKING_HOURS_LEFT,
+    WORKING_DAYS,
+    ZONE,
+    nonWorkingDays,
+  );
 
   const jiraCredentialId = randomUUID();
   const jiraProjectId = randomUUID();
@@ -211,16 +264,11 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
 
   // --- Team-wide days off (FR-007) ----------------------------------------
   const teamDaysOff: (typeof teamDayOffTable.$inferInsert)[] = [
+    { id: randomUUID(), ownerId, day: teamDayOffKeys[0], label: "Święto firmowe" },
     {
       id: randomUUID(),
       ownerId,
-      day: workingDayKeyOnOrBefore(d(4)),
-      label: "Święto firmowe",
-    },
-    {
-      id: randomUUID(),
-      ownerId,
-      day: workingDayKeyOnOrBefore(d(9)),
+      day: teamDayOffKeys[1],
       label: "Dzień wolny od pracy",
     },
   ];
@@ -235,30 +283,34 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     { key: "WEB-86", sp: 2, cat: "DONE", who: "farida", moved: d(4), added: false, summary: "Sprint pulse polish" },
 
     // Bob holds three tickets in Code Review against a guideline of two.
-    // → SPRINT_AT_RISK (max_parallel). WEB-88 is also 96h old in the category
-    // → TICKET_STATUS_AGING (codeReviewHours = 24); the other two are fresh, so
-    // the aging report does not read as "everything is late".
-    { key: "WEB-88", sp: 5, cat: "CODE_REVIEW", who: "bob", moved: h(96), added: false, summary: "Incremental Jira history pull" },
-    { key: "WEB-89", sp: 3, cat: "CODE_REVIEW", who: "bob", moved: h(10), added: false, summary: "Retry backoff for GitHub 403s" },
-    { key: "WEB-92", sp: 2, cat: "CODE_REVIEW", who: "bob", moved: h(8), added: false, summary: "Fix burndown off-by-one" },
+    // → SPRINT_AT_RISK (max_parallel). WEB-88 is also 32 WORKING hours old in the
+    // category, 4× the 8-working-hour budget → TICKET_STATUS_AGING; the other two
+    // are fresh, so the aging report does not read as "everything is late".
+    // Freshness is a working-hour claim too — a calendar `h(10)` would be a full
+    // 8-hour shift on an evening anchor and WEB-89 would age out with it.
+    { key: "WEB-88", sp: 5, cat: "CODE_REVIEW", who: "bob", moved: wh(32), added: false, summary: "Incremental Jira history pull" },
+    { key: "WEB-89", sp: 3, cat: "CODE_REVIEW", who: "bob", moved: wh(4), added: false, summary: "Retry backoff for GitHub 403s" },
+    { key: "WEB-92", sp: 2, cat: "CODE_REVIEW", who: "bob", moved: wh(3), added: false, summary: "Fix burndown off-by-one" },
 
-    // 60h in Testing against a 48h budget → TICKET_STATUS_AGING.
-    { key: "WEB-90", sp: 3, cat: "TESTING", who: "dana", moved: h(60), added: false, summary: "E2E coverage for setup wizard" },
+    // 20 working hours in Testing against a 16-working-hour budget
+    // → TICKET_STATUS_AGING.
+    { key: "WEB-90", sp: 3, cat: "TESTING", who: "dana", moved: wh(20), added: false, summary: "E2E coverage for setup wizard" },
 
-    // Erik's. 72h In Progress at 2 SP (budget 24h) → TICKET_STATUS_AGING, and no
-    // commit mentions it → TICKET_NO_COMMIT_LINK. DEVELOPER_INACTIVE is
+    // Erik's. 24 working hours In Progress at 2 SP (budget 8) → TICKET_STATUS_AGING,
+    // and no commit mentions it → TICKET_NO_COMMIT_LINK. DEVELOPER_INACTIVE is
     // SUPPRESSED for Erik by his recorded absence.
-    { key: "WEB-91", sp: 2, cat: "IN_PROGRESS", who: "erik", moved: h(72), added: false, summary: "Mobile burndown parity" },
+    { key: "WEB-91", sp: 2, cat: "IN_PROGRESS", who: "erik", moved: wh(24), added: false, summary: "Mobile burndown parity" },
 
-    // Alice's. Added mid-sprint (→ SCOPE_CREEP), 130h In Progress at 8 SP
-    // (budget 120h) → TICKET_STATUS_AGING, no linked commit
+    // Alice's. Added mid-sprint (→ SCOPE_CREEP), 44 working hours In Progress at
+    // 8 SP (budget 40) → TICKET_STATUS_AGING, no linked commit
     // → TICKET_NO_COMMIT_LINK, and Alice has not committed for days with no
     // absence recorded → DEVELOPER_INACTIVE.
-    { key: "WEB-93", sp: 8, cat: "IN_PROGRESS", who: "alice", moved: h(130), added: true, summary: "Sprint Detail aging report" },
+    { key: "WEB-93", sp: 8, cat: "IN_PROGRESS", who: "alice", moved: wh(44), added: true, summary: "Sprint Detail aging report" },
 
-    // HEALTHY In Progress: 72h at 8 SP is inside the 120h budget, and Chen's
-    // commit below references the key inside the no-commit window. No rule fires.
-    { key: "WEB-99", sp: 8, cat: "IN_PROGRESS", who: "chen", moved: h(72), added: false, summary: "Hyperdrive connection pooling" },
+    // HEALTHY In Progress: 24 working hours at 8 SP is inside the 40-hour budget,
+    // and Chen's commit below references the key inside the no-commit window. No
+    // rule fires.
+    { key: "WEB-99", sp: 8, cat: "IN_PROGRESS", who: "chen", moved: wh(24), added: false, summary: "Hyperdrive connection pooling" },
 
     // Still To Do with under 48h left → SPRINT_AT_RISK (todo_near_end).
     { key: "WEB-95", sp: 5, cat: "TODO", who: null, moved: h(200), added: false, summary: "Recap email template" },
@@ -320,16 +372,16 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     ["WEB-86", "TODO", "IN_PROGRESS", d(7.5)],
     ["WEB-86", "IN_PROGRESS", "DONE", d(4)],
     ["WEB-88", "TODO", "IN_PROGRESS", d(8)],
-    ["WEB-88", "IN_PROGRESS", "CODE_REVIEW", h(96)],
+    ["WEB-88", "IN_PROGRESS", "CODE_REVIEW", wh(32)],
     ["WEB-89", "TODO", "IN_PROGRESS", d(3)],
-    ["WEB-89", "IN_PROGRESS", "CODE_REVIEW", h(10)],
+    ["WEB-89", "IN_PROGRESS", "CODE_REVIEW", wh(4)],
     ["WEB-90", "TODO", "IN_PROGRESS", d(6)],
-    ["WEB-90", "IN_PROGRESS", "TESTING", h(60)],
-    ["WEB-91", "TODO", "IN_PROGRESS", h(72)],
+    ["WEB-90", "IN_PROGRESS", "TESTING", wh(20)],
+    ["WEB-91", "TODO", "IN_PROGRESS", wh(24)],
     ["WEB-92", "TODO", "IN_PROGRESS", d(2)],
-    ["WEB-92", "IN_PROGRESS", "CODE_REVIEW", h(8)],
-    ["WEB-93", "TODO", "IN_PROGRESS", h(130)],
-    ["WEB-99", "TODO", "IN_PROGRESS", h(72)],
+    ["WEB-92", "IN_PROGRESS", "CODE_REVIEW", wh(3)],
+    ["WEB-93", "TODO", "IN_PROGRESS", wh(44)],
+    ["WEB-99", "TODO", "IN_PROGRESS", wh(24)],
     ["WEB-97", "TODO", "IN_PROGRESS", d(9)],
     ["WEB-97", "IN_PROGRESS", null, d(6)],
   ];
@@ -352,9 +404,16 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
   // is one-way, so those rows keep NULL forever and the activity matrix must
   // render "—" rather than 0.
   //
-  // Alice's newest commit is 5 days old — she is the DEVELOPER_INACTIVE case
-  // (no absence explains it). Erik's is likewise old, and stays UNFLAGGED
-  // because his absence is recorded.
+  // STALENESS IS A WORKING-HOUR CLAIM (S-28). Alice is the DEVELOPER_INACTIVE
+  // case (no absence explains it) and Erik's WEB-91 is the TICKET_NO_COMMIT_LINK
+  // one; both depend on their newest commit sitting OUTSIDE a window that is now
+  // `noCommitDays × 8` working hours — 16 by default — and a 16-working-hour
+  // window reaches back four or five calendar days once a weekend and the team's
+  // day off are skipped. Expressed in calendar days these two commits landed
+  // INSIDE it on a Monday, which suppressed both rows; at `wh(24)` they are a
+  // whole working day clear of the boundary on every anchor weekday. Erik stays
+  // UNFLAGGED as a developer regardless — his absence is recorded — but the
+  // ticket-centric rule has no absence to read.
   const COMMITS: readonly [string, Date, number | null, number | null, string][] = [
     ["chenwu", h(6), 74, 21, "WEB-99: pool connections through Hyperdrive"],
     ["chenwu", h(30), 190, 40, "WEB-99: extract the pool factory"],
@@ -367,9 +426,9 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     ["farida-n", d(3.4), 61, 9, "WEB-86: tidy the legend"],
     ["dana-o", h(34), 38, 4, "WEB-90: add the wizard happy path"],
     ["dana-o", d(5.4), 92, 16, "WEB-90: stabilise the fixtures"],
-    ["alice-kim", d(5), 120, 14, "WEB-83: finish the empty states"],
-    ["alice-kim", d(6.2), null, null, "WEB-83: restyle the placeholder"],
-    ["eriklund", d(4.1), 61, 8, "WEB-91: scaffold the mobile series"],
+    ["alice-kim", wh(24), 120, 14, "WEB-83: finish the empty states"],
+    ["alice-kim", wh(40), null, null, "WEB-83: restyle the placeholder"],
+    ["eriklund", wh(24), 61, 8, "WEB-91: scaffold the mobile series"],
     // A drive-by contributor who is NOT on the roster → the UNKNOWN matrix row.
     ["outside-contributor", d(7.6), 27, 3, "chore: bump the linter"],
   ];
@@ -394,15 +453,16 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     // MERGED, but WEB-88 is still in Code Review → PR_TICKET_DESYNC.
     // 234 lines keeps it under the 500-line guideline.
     { num: 138, author: "chenwu", state: "MERGED", ready: d(10), merged: d(9.2), ticket: "WEB-88", adds: 210, dels: 24 },
-    // OPEN and unreviewed for 31h against a 24h target → PR_REVIEW_STALLED.
-    { num: 142, author: "bob-r", state: "OPEN", ready: h(31), merged: null, ticket: "WEB-89", adds: 180, dels: 12 },
+    // OPEN and unreviewed for 10 working hours against an 8-working-hour target
+    // → PR_REVIEW_STALLED.
+    { num: 142, author: "bob-r", state: "OPEN", ready: wh(10), merged: null, ticket: "WEB-89", adds: 180, dels: 12 },
     // HEALTHY: merged, and its ticket reached Done. No rule fires.
     { num: 147, author: "alice-kim", state: "MERGED", ready: d(8.6), merged: d(8.1), ticket: "WEB-83", adds: 96, dels: 30 },
     // OPEN at 960 lines against a 500-line guideline → PR_TOO_BIG. Reviewed
     // inside the window, so it is NOT also a stalled review.
-    { num: 150, author: "alice-kim", state: "OPEN", ready: h(20), merged: null, ticket: "WEB-93", adds: 920, dels: 40 },
-    // HEALTHY: open, small, and reviewed 4h after it was ready.
-    { num: 152, author: "dana-o", state: "OPEN", ready: h(30), merged: null, ticket: "WEB-90", adds: 64, dels: 8 },
+    { num: 150, author: "alice-kim", state: "OPEN", ready: wh(6), merged: null, ticket: "WEB-93", adds: 920, dels: 40 },
+    // HEALTHY: open, small, and reviewed two working hours after it was ready.
+    { num: 152, author: "dana-o", state: "OPEN", ready: wh(10), merged: null, ticket: "WEB-90", adds: 64, dels: 8 },
   ] as const satisfies readonly {
     num: number;
     author: string;
@@ -444,8 +504,8 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
       [147, "chenwu", "APPROVED", d(8.3)],
       [147, "dana-o", "COMMENTED", d(8.4)],
       // Keeps #150 out of PR_REVIEW_STALLED — it is too big, not unreviewed.
-      [150, "farida-n", "CHANGES_REQUESTED", h(16)],
-      [152, "bob-r", "COMMENTED", h(26)],
+      [150, "farida-n", "CHANGES_REQUESTED", wh(4)],
+      [152, "bob-r", "COMMENTED", wh(8)],
     ] as const
   ).map(([num, reviewer, state, at]) => ({
     id: randomUUID(),
@@ -760,7 +820,7 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
       completedSp: 18,
       lengthDays: 14,
       startDay: "MON",
-      workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+      workingDays: [...WORKING_DAYS],
       cadenceOverridden: false,
     },
     teamMembers,

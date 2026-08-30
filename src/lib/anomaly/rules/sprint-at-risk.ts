@@ -5,11 +5,11 @@ import {
   CATEGORY_LABEL,
   clamp01,
   countWorkingDaysInclusive,
-  hoursBetween,
   indexBy,
   round,
   type Detector,
 } from "@/lib/anomaly/rules/helpers";
+import { workingHoursBetween } from "@/lib/anomaly/rules/working-time";
 
 type SprintRiskThresholds = {
   maxParallelByCategory: Record<string, number>;
@@ -85,7 +85,18 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
   // --- 2. ToDo tickets remaining near sprint end ----------------------------
   const endDate = snapshot.sprint.endDate;
   if (endDate) {
-    const hoursLeft = hoursBetween(now, endDate);
+    // WORKING hours, not calendar hours (S-28). This is the one place in the
+    // slice where the change makes a number LESS like the calendar: "16 hours
+    // left" now means two working days, which is why every surface that renders
+    // it names the unit. One unit governs the whole engine — a lead-time in
+    // wall-clock hours beside budgets in working hours would be unreadable.
+    const hoursLeft = workingHoursBetween(
+      now,
+      endDate,
+      snapshot.sprint.workingDays,
+      snapshot.timeZone,
+      snapshot.nonWorkingDays,
+    );
     if (hoursLeft <= t.toDoBeforeSprintEndLeadTimeHours) {
       const todo = snapshot.tickets.filter((tk) => tk.currentCategory === "TODO");
       if (todo.length > 0) {
@@ -97,7 +108,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
           type: "SPRINT_AT_RISK",
           severity,
           dedupKey: `SPRINT_AT_RISK:todo_near_end:${snapshot.sprint.id}`,
-          description: `${todo.length} ticket(s) still in To Do with ${round(hoursLeft)}h left in the sprint.`,
+          description: `${todo.length} ticket(s) still in To Do with ${round(hoursLeft)} working hours left in the sprint.`,
           suggestedAction: suggestedAction.sprintAtRiskTodoNearEnd({
             count: todo.length,
             hours: round(hoursLeft),
@@ -106,6 +117,8 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
             condition: "todo_near_end",
             todoCount: todo.length,
             todoSp,
+            /** WORKING hours (S-28), eight to the day — not calendar hours. The
+             *  key keeps its name so stored anomaly contexts stay readable. */
             hoursLeft: round(hoursLeft),
           },
           sourceUrl: null,

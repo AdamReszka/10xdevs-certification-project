@@ -117,6 +117,34 @@ pusta treść poniedziałkowego maila zostaje pytaniem otwartym.
 Punkty 1–3 są niezależne; punkt 2 jest jedyny, który dotyka dwóch powierzchni
 naraz.
 
+## Aktualizacja 2026-08-30 — S-28 zamknął **tylko** punkt 3
+
+Slice **S-28** (`context/changes/working-day-aging/`) przestawił silnik anomalii
+na czas roboczy: budżety wszystkich pięciu reguł czasowych — `PR_REVIEW_STALLED`,
+wszystkie pięć gałęzi `TICKET_STATUS_AGING`, `DEVELOPER_INACTIVE`,
+`TICKET_NO_COMMIT_LINK` i warunek „ToDo pod koniec sprintu" w `SPRINT_AT_RISK` —
+liczą się w **godzinach roboczych**: zegar chodzi 08:00–16:00 w strefie zespołu,
+wyłącznie w dniach roboczych sprintu i nigdy w dniu wolnym całej firmy
+(`team_day_off`). Tabela z punktu 3 tej notatki jest więc **nieaktualna**: nie ma
+już reguły, która nie zna dni wolnych. Indywidualna absencja świadomie **nie**
+zatrzymuje zegara (sprint jest zespołu, nie osoby), a wyciszenie
+`DEVELOPER_INACTIVE` przez absencję działa dalej dokładnie tak jak wcześniej —
+FR-010 nie został ruszony.
+
+**Punkty 1 i 2 pozostają otwarte i nikt ich nie podjął.** S-28 nie dotykał
+warstwy recapu:
+
+- **Wysyłka** (`src/lib/recap/due.ts`) nadal nie patrzy w kalendarz — mail
+  wychodzi w sobotę, niedzielę i w święto firmowe.
+- **„Wczoraj"** (`src/lib/recap/build.ts:66`) to nadal poprzednie 24 godziny
+  kalendarzowe, więc poniedziałkowy mail nadal opisuje niedzielę. Uwaga o
+  kierunku zależności z punktu 2 dalej obowiązuje: definicję „wczoraj" trzeba
+  zmieniać jednocześnie w mailu i w panelu „Yesterday's Activity" na
+  `/dashboard`, inaczej obie powierzchnie się rozjadą.
+
+Ta notatka **nie jest** więc zamknięta i nie wolno jej czytać jako naprawionej —
+naprawiona jest jedna z trzech obserwacji.
+
 ## Stan po teście
 
 Bez śladów. Wykonano wyłącznie odczyty — zapytanie o strukturę tabel (wiersz 1.9)

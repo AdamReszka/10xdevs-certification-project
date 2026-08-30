@@ -179,6 +179,11 @@ const CATEGORY_LABEL: Record<StatusCategoryValue, string> = {
  * "which ticket, which PR, who, how long"). Runs server-side so the client organism
  * receives plain strings — no `unknown`, no schema import. Deterministic, no locale
  * / timezone dependence (dates rendered as UTC `YYYY-MM-DD`).
+ *
+ * EVERY ELAPSED FIGURE IS IN WORKING TIME (S-28) and spells the unit out. The
+ * old terse `12h open` / `2d no commits` forms would still render — and would
+ * still be wrong, because nothing pins these strings: they would simply name a
+ * wall-clock span the engine stopped measuring.
  */
 export function anomalyContextChips(anomaly: {
   type: AnomalyTypeValue;
@@ -187,7 +192,10 @@ export function anomalyContextChips(anomaly: {
   switch (anomaly.type) {
     case "PR_REVIEW_STALLED": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
-      return [`${c.ageHours}h open`, `threshold ${c.thresholdHours}h`];
+      return [
+        `${c.ageHours} working hours open`,
+        `threshold ${c.thresholdHours} working hours`,
+      ];
     }
     case "TICKET_STATUS_AGING": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
@@ -198,13 +206,16 @@ export function anomalyContextChips(anomaly: {
     }
     case "DEVELOPER_INACTIVE": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
-      const chips = [`${c.noCommitDays}d no commits`];
+      const chips = [`${c.noCommitDays} working days, no commits`];
       if (c.githubUsername) chips.push(`@${c.githubUsername}`);
       return chips;
     }
     case "TICKET_NO_COMMIT_LINK": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
-      return [`${c.daysInProgress}d in progress`, `${c.noCommitDays}d no commits`];
+      return [
+        `${c.daysInProgress} working days in progress`,
+        `${c.noCommitDays} working days, no commits`,
+      ];
     }
     case "SPRINT_AT_RISK": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });
@@ -213,11 +224,14 @@ export function anomalyContextChips(anomaly: {
       }
       if (c.condition === "absence") {
         return [
-          `${c.workingDaysLost}d lost to an absence`,
-          `${c.workingDaysLeft}d left`,
+          `${c.workingDaysLost} working days lost to an absence`,
+          `${c.workingDaysLeft} working days left`,
         ];
       }
-      return [`${c.todoCount} to-do (${c.todoSp} SP)`, `${c.hoursLeft}h left`];
+      return [
+        `${c.todoCount} to-do (${c.todoSp} SP)`,
+        `${c.hoursLeft} working hours left`,
+      ];
     }
     case "PR_TOO_BIG": {
       const c = anomalyContextOf({ type: anomaly.type, context: anomaly.context });

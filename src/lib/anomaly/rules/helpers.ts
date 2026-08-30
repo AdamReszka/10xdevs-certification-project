@@ -6,7 +6,15 @@ import type { DetectedAnomaly, SprintSnapshot } from "@/lib/anomaly/types";
 /**
  * Shared pure utilities for the 8 detectors (S-06). No DB, no I/O. Kept in one
  * place so time math, roster lookups, category labels, and the working-day
- * calendar (the `8_WORKING_DAYS` sentinel) are consistent across rules.
+ * calendar are consistent across rules.
+ *
+ * ELAPSED-TIME MEASUREMENT NO LONGER LIVES HERE (S-28). Every budget in the
+ * engine is now denominated in WORKING hours and is measured by
+ * `working-time.ts`, which imports this file's calendar (`workingDaySet`,
+ * `weekdayOf`) rather than keeping a second copy. `hoursBetween` and
+ * `daysBetween` below are raw wall-clock spans and remain correct for what
+ * still wants one — a `detectedAt` delta, a display age — but a rule reaching
+ * for one to check a threshold is the defect S-28 closed.
  */
 
 /** Every detector has this shape: pure over the snapshot + effective config + an
@@ -148,8 +156,15 @@ export function countTeamDaysOffInclusive(
   return count;
 }
 
-/** The team's working weekdays, defaulting to Mon–Fri when Jira told us nothing. */
-function workingDaySet(
+/**
+ * The team's working weekdays, defaulting to Mon–Fri when Jira told us nothing.
+ *
+ * EXPORTED for `working-time.ts` (S-28), which measures elapsed WORKING HOURS and
+ * needs the identical calendar. A second copy of the Mon–Fri defaulting is the
+ * exact "two counters that disagree" failure the doc block above and
+ * `context/foundation/lessons.md` each already record once.
+ */
+export function workingDaySet(
   workingDays: readonly string[] | null | undefined,
 ): Set<string> {
   return new Set<string>(
@@ -185,7 +200,7 @@ function countDays(
  * 2026-08-17 is a Monday in Warsaw and in Los Angeles. The zone has already done
  * its job upstream, deciding WHICH day keys the instants map to.
  */
-function weekdayOf(dayKey: DayKey): WeekdayCode {
+export function weekdayOf(dayKey: DayKey): WeekdayCode {
   return WEEKDAY_BY_INDEX[new Date(`${dayKey}T12:00:00Z`).getUTCDay()];
 }
 

@@ -112,7 +112,11 @@ describe("resolveEffectiveThresholds — with stored overrides", () => {
 
     expect(Object.keys(body.inProgressHoursBySp)).toHaveLength(7);
     expect(body.inProgressHoursBySp["1"]).toBe(12);
-    expect(body.inProgressHoursBySp["21"]).toBe("8_WORKING_DAYS");
+    // THE COMPATIBILITY PATH (S-28). The row was written before working-hour
+    // aging; the literal must still parse — a rejection would make `mergeRule`
+    // discard this owner's whole rule, severity included — and must arrive at
+    // the detector as the number 64, never as the string.
+    expect(body.inProgressHoursBySp["21"]).toBe(64);
     expect(body.codeReviewHours).toBe(8);
     // Severity was not overridden, so the default tier survives.
     expect(effective.TICKET_STATUS_AGING.severity).toBe(
