@@ -6,13 +6,18 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 // Every entry is a live route: Dashboard (S-07), Sprint Detail and Settings
-// (S-10), Refinement (S-13). No inert `#` anchors remain.
+// (S-10), Refinement (S-13), Team (S-19). No inert `#` anchors remain.
 //
 // Settings is what makes the setup wizard's connected-state pages reachable
 // after first run — they had no entry point at all between S-02 and S-10.
+//
+// Team sits between Sprint Detail and Settings on purpose: it is team DATA, so
+// it belongs with the other team-data surfaces, ahead of configuration. It
+// points at `/team`, not at a tab, so adding a tab never moves the nav.
 const NAV_ITEMS: { label: string; href: string }[] = [
   { label: "Dashboard", href: "/dashboard" },
   { label: "Sprint Detail", href: "/dashboard/sprint-detail" },
+  { label: "Team", href: "/team" },
   { label: "Settings", href: "/settings" },
   { label: "Refinement", href: "/refinement" },
 ];
@@ -23,7 +28,7 @@ const NAV_ITEMS: { label: string; href: string }[] = [
  * EXACT match, never `startsWith` — `/setup/github|jira|team` must KEEP their
  * nav. Those steps are reached by choice and a returning lead has a legitimate
  * need to reach Settings from them; the doorstep is the forced landing, where
- * four header links would be four exits the first-run design does not want.
+ * five header links would be five exits the first-run design does not want.
  *
  * Why here and not in `AppShell`: the `(app)` layout that renders the shell is a
  * server component and cannot read the child route, middleware is a stated

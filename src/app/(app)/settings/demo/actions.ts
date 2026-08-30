@@ -36,8 +36,9 @@ const WORKSPACE_SCOPED_PATHS = [
   "/setup",
   "/dashboard/sprint-detail",
   "/refinement",
-  "/settings/team",
-  "/settings/absences",
+  "/team/roster",
+  "/team/absences",
+  "/team/days-off",
   "/settings/recap",
   "/settings/demo",
 ];

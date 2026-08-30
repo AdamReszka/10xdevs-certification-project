@@ -50,7 +50,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-16 | sprint-reconciliation     | the sync reconciles the active sprint against Jira on every cycle, instead of freezing the one captured at setup | S-05 | FR-007 | done |
 | S-17 | working-days-calendar     | public holidays are DERIVED automatically from the team's country (per-sprint team-wide days off ship in S-23, entered by hand) | S-08, S-23 | FR-007, FR-009, FR-010                          | proposed |
 | S-18 | next-sprint-capacity      | the availability tab forecasts the NEXT window's capacity, not just who is away                | S-08               | FR-010                                          | proposed |
-| S-19 | team-navigation-section   | roster and absences move out of Settings into a first-class Team section                       | S-08, S-15         | FR-006, FR-010                                  | proposed |
+| S-19 | team-navigation-section   | roster and absences move out of Settings into a first-class Team section                       | S-08, S-15         | FR-006, FR-010                                  | done |
 | S-20 | absence-sprint-scoping    | `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every other absence reader — a carried-over absence stops being invisible to the risk score | S-08, S-16         | FR-010                                          | done     |
 | S-21 | db-pool-teardown          | one authenticated request builds ONE db pool instead of three (a Server Action, one instead of four), so connection count stops scaling with pool multiplicity; a database failure also stops reading as a sign-out | F-02 | — (NFR: graceful degradation) | done     |
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
@@ -567,7 +567,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-16       | sprint-reconciliation     | The sync reconciles the active sprint against Jira on every cycle       | done                   | ✅ Implemented, reviewed & archived — PR #52 (2026-08-26) |
 | S-17       | working-days-calendar     | Public holidays derived automatically from the team's country          | no                     | ⚠️ **The "no unshipped FR depends on it" note was retired 2026-08-27.** S-23 makes the working-day count *be* the capacity, so a holiday now moves a headline number. S-23 covers the need by letting the lead record team-wide days off per sprint (FR-007); what remains here is deriving those dates from a country the account still does not store. Now downstream of S-23, not parallel to it |
 | S-18       | next-sprint-capacity      | Availability tab forecasts the NEXT window's capacity                   | yes                    | Prereq S-08 done. Post-MVP. ⚠️ **Scoped against S-23 on 2026-08-28 (plan review F1):** S-23 ships FR-024's estimate over the **active** sprint's capacity ratio, which needs no future sprint. What remains here is projecting an UNSTARTED window — its own working-day config and absence coverage, neither of which Jira exposes before the sprint exists. S-23 does not close S-18 |
-| S-19       | team-navigation-section   | Roster and absences move into a first-class Team section                | yes                    | Prereqs S-08, S-15 done. Post-MVP. **Rescoped 2026-08-30 at `/10x-frame`** (`context/changes/team-navigation-section/frame.md`): the "and cadence" clause — which lived only in this row, never in the slice's own outcome — is removed, because there is no post-setup cadence surface to move. It never existed (`cadence-form.tsx` has one creating commit and was never mounted outside the wizard); it is now **S-29**. What remains here is what the owner asked for and called cosmetic: five live route references and the nav entry. Moving the routes re-opens S-15 manual rows 5.3/5.4 |
+| S-19       | team-navigation-section   | Roster and absences move into a first-class Team section                | done                   | ✅ Shipped 2026-08-31. **Rescoped 2026-08-30 at `/10x-frame`** (`context/changes/team-navigation-section/frame.md`): the "and cadence" clause — which lived only in this row, never in the slice's own outcome — was removed, because there was no post-setup cadence surface to move. It never existed (`cadence-form.tsx` has one creating commit and was never mounted outside the wizard); it is now **S-29**, still open. What shipped is the move the owner asked for and called cosmetic: `/team/{roster,absences,days-off}` with `/team` as a stable redirect, the nav entry, 307 stubs at both old paths, and the absences page split from the company calendar. Cost was five live route references plus seven runtime log tags — no schema change, no migration. S-15 manual rows 5.3/5.4 are marked `SUPERSEDED` in the archive and replaced by backlog rows **23.A**/**23.B** |
 | S-20       | absence-sprint-scoping    | `SPRINT_AT_RISK` matches an absence by date, like every other reader     | done                   | ✅ Implemented 2026-08-30, two phases. It **was** a decision slice — and the decision made the change small: the owner ruled that risk follows the absence's dates, so one predicate (`sprint-at-risk.ts:146`) was deleted and seven sibling readers stayed as they were. Capacity and `DEVELOPER_INACTIVE` were already correct and **must** stay date-based — `getSprintCapacityFor` computes a CLOSED sprint's capacity for S-23's frozen measurement record, which has no active sprint to compare a stamp against. No migration and no schema edit: `absence.sprint_id` keeps its writer and its `ON DELETE CASCADE`, both left to **S-26**. Impl-review F10 (a NULL stamp can never raise risk) is dissolved rather than documented a third time. The centre of gravity was Phase 2 — the superseded rule was still stated as an instruction in six places |
 | S-21       | db-pool-teardown          | One `db` handle per request — the 3-4x pool multiplicity, not a teardown | done                  | ✅ Implemented 2026-08-30, five phases — PR #77. **Reframed at `/10x-frame`:** the recorded defect (a pool never closed, holding a connection for as long as the isolate lived) is not what breaks. Measured — `pg.Pool`'s 10 s idle timer reclaims every pool in Node with no `.end()`, and Hyperdrive cleans the client up at request end; but one authenticated `GET` built **3** pools and a Server Action **4**, strictly linear in concurrency, which is what burned Supabase's 100 slots mid-Playwright-run. The fix is three lines in `src/lib/db.ts` (memoize the handle on the adapter's request-context object under a `Symbol.for` key) with **zero call-site churn**: 3.00/4.00 connections per request → a flat 5 (`POOL_MAX`) at K = 8, 12 and 24. `playwright.config.ts` runs parallel workers locally again and the suite got faster. Two by-products: `getOptionalSession` stops answering a database failure with "not signed in" (that conflation is why this read as flake for weeks), and `src/app/error.tsx` gives the app its first error boundary. `lessons.md` #3 rewritten — the wrong version had steered S-02 F3, S-04, S-05 and S-24 F2 |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | done                   | ✅ Implemented & merged — PR #68 (2026-08-30), five phases; archived 2026-08-30 (PR #73). Shipped as a **doorstep**, not a redirect: `/setup` is a first screen offering two doors — configure real data, or see the demo — which is what let FR-008 and the Access Control promise ("lands in the setup wizard") both hold as written. Prerequisites were widened during the slice to S-01, S-04, S-07, S-09, S-10: S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on. `isOnboardingComplete` went from zero production callers to gating `/dashboard`. **Status corrected 2026-08-30** — this row still read `yes` (ready to start) after the slice shipped and was archived; the at-a-glance table, the S-22 body and `change.md` all said done |
@@ -646,7 +646,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** team-navigation-section
 - **PRD refs:** FR-006, FR-010
 - **Prerequisites:** S-08, S-15
-- **Status:** proposed
+- **Status:** done — shipped 2026-08-31
 
 - **Why this exists (S-08, 2026-08-25):** Settings now carries Connections, Team
   and Absences, and S-14 adds Anomaly rules. Two of those four are "how SprintFlow
@@ -668,6 +668,62 @@ Foundations below assume these are present and do NOT re-scaffold them.
   references (`settings/layout.tsx:21-22`, `settings/demo/actions.ts:39-40`,
   `dashboard/availability.tsx:144`) plus the action modules that travel with the
   pages.
+
+- **How it was built:** three decisions, all cheap to reverse.
+
+  **`/team/*` with `/team` as a stable redirect.** The section is a sibling of
+  Settings, not a nested case of it: its own `layout.tsx` with heading, subtitle
+  and tab strip, reusing `SettingsTabs` — which turned out to be section-agnostic
+  except for one hard-coded `aria-label="Settings sections"`. That is user-facing
+  copy, not a component name, so it became an optional `label` prop with the old
+  string as its default; the component keeps its name, because renaming it would
+  touch every Settings import for a cosmetic gain inside a cosmetic slice. The
+  nav points at `/team`, which redirects to `/team/roster`, so adding a fourth
+  tab later never moves the nav. No new gating: `(app)/layout.tsx` carries
+  `requireSession()` + `force-dynamic`, and there is no `middleware.ts`, so the
+  new tree is gated for free.
+
+  **Absences split from the company calendar.** `/settings/absences` carried two
+  models on one screen. S-23's own note argued for keeping them together — "a
+  team day off is *who is not working* asked of everybody" — and that argument
+  did not survive use: an absence belongs to a person and a sprint, a public
+  holiday is a property of the calendar that applies to every sprint spanning it
+  (FR-007's own wording), and one screen with two headings asked the lead to hold
+  both at once. `/team/days-off` is now the third tab, and each subtitle names
+  the other. The organisms did NOT move folders: `RosterEditor` already sets the
+  precedent that an organism's folder names its origin, not its mount points.
+
+  **307 stubs, not 308 redirects.** The old paths are ordinary `(app)` pages
+  calling `redirect()`. A 308 from `next.config` is cached permanently by the
+  browser and cannot be invalidated remotely, which would make reversing this
+  decision expensive for every tester who had visited an old path once. Living
+  inside `(app)` also means an unauthenticated visitor still reaches login rather
+  than learning the route map.
+
+- **The `change.md` E2E warning was wrong, and the correction is the finding.**
+  It predicted the move would force a full `test:e2e` run coordinated against the
+  S-26 session, because two specs "reference `/settings`". They reference
+  `/settings/connections` only; nothing under `e2e/` touches either moving route.
+  What the grep DID find was the opposite failure mode:
+  `e2e/setup-doorstep.spec.ts` loops over the literal list `["Dashboard",
+  "Sprint Detail", "Settings", "Refinement"]` asserting the doorstep offers no
+  exits. A fifth nav item does not fail that test — it silently stops covering
+  the new link, which is `lessons.md`'s *"A parallel worktree cannot run the suite
+  that guards the shape it is changing"* exactly. The list learned "Team" and the
+  spec was run on its own (4/4). Cost of the whole slice, measured rather than
+  feared: five live route references in three files, plus seven runtime log tags
+  inside the moved actions module that would otherwise have named a route which
+  only redirects.
+
+- **Two S-15 manual rows died with the move.** 5.3 (*"Settings → Team reachable
+  from the nav"*) and 5.4 (*"active tab is visually distinct on both tabs"*) were
+  ticked on 2026-08-25 and assert a navigation path that no longer exists. They
+  are marked `SUPERSEDED` in place at
+  `context/archive/2026-08-23-team-management-surface/plan.md:900-901` rather than
+  re-opened, and are replaced by backlog rows **23.A** and **23.B**, which carry
+  S-19's number. The backlog's 35 stale `/settings/team` / `/settings/absences`
+  strings were rewritten in the same pass, with a dated reconciliation note under
+  the file header for anyone holding an older printout.
 
 ---
 

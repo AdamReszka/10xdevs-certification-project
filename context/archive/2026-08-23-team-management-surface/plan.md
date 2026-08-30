@@ -897,8 +897,8 @@ No schema migration. Two behavioural migrations to be aware of:
 
 #### Manual
 
-- [x] 5.3 Settings → Team reachable from the nav and renders the roster
-- [x] 5.4 Active tab is visually distinct on both tabs
+- [x] 5.3 Settings → Team reachable from the nav and renders the roster — ⚠️ SUPERSEDED 2026-08-31 by S-19: the roster left Settings for `/team/roster`, so this navigation path no longer exists. Replaced by backlog row **23.A**.
+- [x] 5.4 Active tab is visually distinct on both tabs — ⚠️ SUPERSEDED 2026-08-31 by S-19: the Team section has three tabs, not two. Replaced by backlog row **23.B**.
 - [ ] 5.5 A track change from Settings reaches the sub-burndowns after a sync
 - [x] 5.6 `/setup/team` still works end-to-end for a fresh account — manual 2026-08-29
 - [ ] 5.7 Tablet width: grid scrolls, controls reachable (closes S-04 row 4.6)
