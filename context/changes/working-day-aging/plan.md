@@ -839,13 +839,13 @@ without its migration" hazard in `lessons.md` does not apply.
 
 #### Automated
 
-- [x] 5.1 Type checking passes
-- [x] 5.2 Linting passes
-- [x] 5.3 Unit tests pass
-- [x] 5.4 Fixture test passes on all seven anchor weekdays
-- [x] 5.5 Integration suite passes (other session idle)
-- [x] 5.6 E2E suite passes (other session idle, port 3000 free)
-- [x] 5.7 Manual-test sweep exits zero
+- [x] 5.1 Type checking passes — 931a404
+- [x] 5.2 Linting passes — 931a404
+- [x] 5.3 Unit tests pass — 931a404
+- [x] 5.4 Fixture test passes on all seven anchor weekdays — 931a404
+- [x] 5.5 Integration suite passes (other session idle) — 931a404
+- [x] 5.6 E2E suite passes (other session idle, port 3000 free) — 931a404
+- [x] 5.7 Manual-test sweep exits zero — 931a404
 
 #### Manual
 
