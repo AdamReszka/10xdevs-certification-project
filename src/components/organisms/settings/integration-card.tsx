@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
+import DisconnectConfirmDialog from "@/components/molecules/disconnect-confirm";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -92,6 +93,7 @@ export default function IntegrationCard({
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const failure = classifyFailure(
     status,
@@ -202,9 +204,21 @@ export default function IntegrationCard({
             <Button variant="outline" asChild>
               <a href={reconnectHref}>Reconnect</a>
             </Button>
-            <Button variant="ghost" onClick={handleDisconnect} disabled={disconnecting}>
+            {/* Stays `ghost` deliberately (owner's decision): the dialog is
+                the gate, not the button's weight. */}
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmOpen(true)}
+              disabled={disconnecting}
+            >
               {disconnecting ? "Disconnecting…" : "Disconnect"}
             </Button>
+            <DisconnectConfirmDialog
+              integration={name === "GitHub" ? "github" : "jira"}
+              open={confirmOpen}
+              onOpenChange={setConfirmOpen}
+              onConfirm={handleDisconnect}
+            />
           </div>
 
           {isDemo ? (

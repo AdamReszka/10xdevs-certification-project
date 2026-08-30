@@ -159,7 +159,12 @@ export async function storeGithubIntegration(
   }
 }
 
-/** Clear the credential + its repos for the signed-in account. */
+/**
+ * Disconnect GitHub for the signed-in account. DESTRUCTIVE four levels deep —
+ * the monitored repos and all their synced commits, PRs and reviews go with the
+ * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
+ * blast radius; every caller must confirm first (S-24).
+ */
 export async function disconnectGithub(): Promise<{ ok: true }> {
   const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();

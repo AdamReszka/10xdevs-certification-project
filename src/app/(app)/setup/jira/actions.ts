@@ -246,7 +246,13 @@ export async function storeJiraIntegration(
   }
 }
 
-/** Clear the credential + its project + mappings for the signed-in account. */
+/**
+ * Disconnect Jira for the signed-in account. DESTRUCTIVE five levels deep — the
+ * project, its status mapping, every sprint/ticket/status-history row, the
+ * detected anomalies AND the lead's hand-entered absences go with the
+ * credential. See `src/lib/integrations/disconnect-impact.ts` for the maintained
+ * blast radius; every caller must confirm first (S-24).
+ */
 export async function disconnectJira(): Promise<{ ok: true }> {
   const { ownerId } = await requireRealWorkspace();
   const { env } = getCloudflareContext();

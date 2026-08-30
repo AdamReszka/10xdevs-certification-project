@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+import { disconnectIfConnected } from "./disconnect";
+
 /**
  * S-03 setup wizard — Jira connect happy path (FR-003, FR-004, FR-005).
  *
@@ -24,11 +26,7 @@ test.describe("setup — Jira connect (authenticated)", () => {
   // starts from the connect form.
   test.afterEach(async ({ page }) => {
     await page.goto("/setup/jira");
-    const disconnect = page.getByRole("button", { name: "Disconnect" });
-    if (await disconnect.isVisible().catch(() => false)) {
-      await disconnect.click();
-      await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
-    }
+    await disconnectIfConnected(page, "Jira");
   });
 
   /**
@@ -43,17 +41,13 @@ test.describe("setup — Jira connect (authenticated)", () => {
     await page.goto("/setup/jira");
 
     // Ensure a clean starting point.
-    const existingDisconnect = page.getByRole("button", { name: "Disconnect" });
-    if (await existingDisconnect.isVisible().catch(() => false)) {
-      await existingDisconnect.click();
-      await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
-    }
+    await disconnectIfConnected(page, "Jira");
 
     // Stage 1 — validate the credentials (no write yet, FR-003).
     await page.getByLabel("Workspace URL").fill(WORKSPACE);
     await page.getByLabel("Account email").fill(EMAIL);
     await page.getByLabel("API token").fill(TOKEN);
-    await page.getByRole("button", { name: "Connect" }).click();
+    await page.getByRole("button", { name: "Connect", exact: true }).click();
 
     // Stage 2 — the project picker appears with the fixture's project (FR-004).
     await expect(page.getByText("Choose a project to monitor")).toBeVisible();

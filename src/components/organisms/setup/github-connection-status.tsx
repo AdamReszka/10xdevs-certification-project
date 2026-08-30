@@ -7,6 +7,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { disconnectGithub } from "@/app/(app)/setup/github/actions";
+import DisconnectConfirmDialog from "@/components/molecules/disconnect-confirm";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -20,8 +21,13 @@ import {
 /**
  * Connected-status card (S-02). Renders "Connected as {login} (ghp_••••{last4})"
  * from the stored NON-secret columns — no token decryption — plus a Disconnect
- * action that clears the credential and its repos, then refreshes the server
- * component back to the connect form.
+ * action that refreshes the server component back to the connect form.
+ *
+ * Disconnect is DESTRUCTIVE four levels deep, not one: the credential takes
+ * `monitored_repo` with it, and that takes every synced commit, pull request and
+ * code review. `src/lib/integrations/disconnect-impact.ts` is the maintained
+ * answer — it is held equal to the schema's foreign-key graph by a test, so do
+ * not restate the list here. Since S-24 the button opens a confirmation first.
  */
 export default function GithubConnectionStatus({
   login,
@@ -34,6 +40,7 @@ export default function GithubConnectionStatus({
 }) {
   const router = useRouter();
   const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleDisconnect() {
     setIsDisconnecting(true);
@@ -75,11 +82,19 @@ export default function GithubConnectionStatus({
         <Button
           type="button"
           variant="outline"
-          onClick={handleDisconnect}
+          onClick={() => setConfirmOpen(true)}
           disabled={isDisconnecting}
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
+        {/* The dialog owns its own pending state while the action runs;
+            `isDisconnecting` is the trigger's post-confirm feedback. */}
+        <DisconnectConfirmDialog
+          integration="github"
+          open={confirmOpen}
+          onOpenChange={setConfirmOpen}
+          onConfirm={handleDisconnect}
+        />
         <Button asChild>
           <Link href="/setup/jira">
             Continue to Jira

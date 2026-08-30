@@ -172,10 +172,16 @@ export async function storeGithubIntegration({
 }
 
 /**
- * Remove the GitHub integration for `ownerId`: delete the credential (the
- * monitored-repo rows cascade via the FK). Ownership is the ONLY guard — this is
- * exactly what the #4 IDOR test exercises: calling with account B's ownerId must
- * not touch account A's rows.
+ * Remove the GitHub integration for `ownerId`: delete the credential, which
+ * cascades FOUR levels deep — not one. `monitored_repo` goes, and with it every
+ * `github_commit`, `github_pull_request` and `github_review` beneath them.
+ * `src/lib/integrations/disconnect-impact.ts` holds the maintained answer and a
+ * test keeps it equal to the schema's foreign-key graph; do not restate the list
+ * here, because a restated list is a second copy that drifts (it already did,
+ * in four places, before S-24).
+ *
+ * Ownership is the ONLY guard — this is exactly what the #4 IDOR test
+ * exercises: calling with account B's ownerId must not touch account A's rows.
  */
 export async function disconnectGithub({
   db,

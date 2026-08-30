@@ -803,19 +803,19 @@ commit.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `npm test`
-- [x] 1.2 The new guard fails when the declaration is wrong (drop `absence`, confirm red, restore)
-- [x] 1.3 Type checking passes: `npm run typecheck`
-- [x] 1.4 Linting passes: `npm run lint`
+- [x] 1.1 Unit tests pass: `npm test` — 502802b
+- [x] 1.2 The new guard fails when the declaration is wrong (drop `absence`, confirm red, restore) — 502802b
+- [x] 1.3 Type checking passes: `npm run typecheck` — 502802b
+- [x] 1.4 Linting passes: `npm run lint` — 502802b
 
 ### Phase 2: One confirmation on all four paths
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `npm test`
-- [ ] 2.2 Type checking passes: `npm run typecheck`
-- [ ] 2.3 Linting passes: `npm run lint`
-- [ ] 2.4 E2E passes, including the four repaired hooks and the new cancel test: `npm run test:e2e`
+- [x] 2.1 Unit tests pass: `npm test`
+- [x] 2.2 Type checking passes: `npm run typecheck`
+- [x] 2.3 Linting passes: `npm run lint`
+- [x] 2.4 E2E passes, including the four repaired hooks and the new cancel test: `npm run test:e2e`
 
 #### Manual
 
