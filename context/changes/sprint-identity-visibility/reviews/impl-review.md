@@ -60,7 +60,7 @@ forbidden to run, and it was red.
   - Tradeoff: None — the assertion was under-specified, not wrong.
   - Confidence: HIGH — mirrors the assertion already added to the unit sibling.
   - Blind spot: Still not executable from this worktree; re-verified only by CI.
-- **Decision**: FIXED — applied during review (`6cfaf40`). Swept the remaining
+- **Decision**: FIXED — applied during review (`82f4dc7`). Swept the remaining
   integration tests for the same class of pin: `roster-store`, `build`, `send`,
   `retention`, `reconcile-sprint` — none asserts the shape of a changed type or
   a literal recap subject, so this was the only casualty.
