@@ -363,8 +363,10 @@ export async function updateMonitoredRepos({
  * `absence` used to ride out on its cascade — so it stops behaving differently
  * from the other two. `keep` relies on the narrowed `absence.sprint_id` edge
  * (SET NULL since `0021`), which leaves the lead's hand-entered FR-010 rows in
- * place with their stamp cleared; `clear` deletes them, owner-scoped, which is
- * what the old cascade did by accident. The tables `clear` reaches MUST equal
+ * place with their stamp cleared; `clear` deletes them, owner-scoped — every
+ * one of them, deliberately broader than the old cascade rather than equal to it
+ * (impl-review F7), because the cascade only ever reached the rows that happened
+ * to carry a stamp and the button's own wording promises the rest as well. The tables `clear` reaches MUST equal
  * `DISCONNECT_IMPACT.projectSwitch.clearedTables`, derived from the schema graph
  * by the guard test rather than trusted from this comment.
  *

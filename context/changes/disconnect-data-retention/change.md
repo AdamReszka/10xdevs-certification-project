@@ -1,7 +1,7 @@
 ---
 change_id: disconnect-data-retention
 title: Disconnecting an integration stops destroying the lead's own data
-status: implemented
+status: impl_reviewed
 created: 2026-08-30
 updated: 2026-08-30
 archived_at: null
@@ -41,9 +41,19 @@ true. What is true now:
 - A re-created `sprint` row now recovers its frozen commitment from
   `sprint_measurement` instead of freezing a second time at the reconnect-time
   sum.
+- **One accepted deviation from the plan** (impl-review F6): the plan required
+  `clearedTables` to be derived mechanically — "for every entry in
+  `weakenedTables`, that table plus its own cascade closure". It is instead a
+  literal, gated by a per-edge `clearedOnClear` flag, because the plan's own
+  formula would have swept `daily_recap` into `clear` for both Jira roots and
+  quietly undone S-12 / `0019`. The safety property the rule existed for is
+  intact: the guard test holds the literal equal to the derivation, and
+  `WeakenedRef` gives the flag no default, so a future weakened edge has to make
+  the call explicitly rather than being left behind in silence.
+
 - **Not fixed here, and now on the roadmap:** the cadence override still dies
-  with the `sprint` row (**S-28**), and Reconnect still looks like Disconnect's
-  twin (**S-29**). Open Roadmap Question 4 is recorded as answered.
+  with the `sprint` row (**S-30**), and Reconnect still looks like Disconnect's
+  twin (**S-31**). Open Roadmap Question 4 is recorded as answered.
 
 ### The mechanism, as the roadmap records it (to be verified in research)
 

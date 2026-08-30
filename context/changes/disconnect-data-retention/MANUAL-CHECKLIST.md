@@ -143,7 +143,7 @@ bazie, dalej je kasuje kaskadą.
 > historię statusów, anomalie) — tak działa zmiana projektu i tak było przed
 > S-26. Odzyskuje się je ponownym syncem z nowego projektu; nieobecności nie.
 
-- [x] **4.6 — zmiana monitorowanego projektu Jira z „keep" zostawia nieobecności** *(faza 4)*
+- [ ] **4.6 — zmiana monitorowanego projektu Jira z „keep" zostawia nieobecności** *(faza 4)*
 
   **Gdzie:** `/settings/absences`, potem `/settings/connections`, zalogowany na
   **prawdziwe** konto (w demo cała zakładka Connections odmawia). Potrzebne
@@ -172,7 +172,7 @@ bazie, dalej je kasuje kaskadą.
   pusta, migracja `0021` nie jest na bazie (patrz 1.7) albo `mode` nie dojechał
   z ekranu ostrzeżenia do zapisu przez trzy kroki kreatora.
 
-- [x] **4.7 — ostrzeżenie zapowiada dokładnie to, co robią przyciski** *(faza 4)*
+- [ ] **4.7 — ostrzeżenie zapowiada dokładnie to, co robią przyciski** *(faza 4)*
 
   **Gdzie:** `/settings/connections`, prawdziwe konto. **Ten wiersz niczego nie
   zapisuje** — kończy się na `Cancel`, więc można go zrobić przed 4.6.
@@ -208,7 +208,7 @@ bazie, dalej je kasuje kaskadą.
 zobowiązania) nie mają wierszy manualnych: obie są pokryte testami
 integracyjnymi na prawdziwym Postgresie i nie dokładają nowego ekranu. Efekt
 fazy 5 widać w niezmienionym „committed SP" po rozłączeniu i ponownym
-podłączeniu w trakcie sprintu — to wiersz **21.F** w
+podłączeniu w trakcie sprintu — to wiersz **22.F** w
 `context/foundation/manual-test-backlog.md`, nieblokujący, bo wymaga
 manipulowania sprintem po stronie Jiry.
 
@@ -216,7 +216,7 @@ manipulowania sprintem po stronie Jiry.
 osobnymi pozycjami tej checklisty — byłyby duplikatem:
 
 - **6.5** — „tester idący wierszem 16.B domyka obie ścieżki". To domknięcie
-  wierszy **3.7** i **3.8** powyżej, spięte w backlogu jako **21.E**. Odhacz je
+  wierszy **3.7** i **3.8** powyżej, spięte w backlogu jako **22.E**. Odhacz je
   dopiero, gdy 3.7 **i** 3.8 są zrobione, a treść okna zapowiedziała dokładnie
   to, co się w obu przypadkach stało.
 - **6.6** — przegląd dokumentów (czy gdziekolwiek nie zostało zdanie, że

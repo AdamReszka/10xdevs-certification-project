@@ -556,12 +556,17 @@ describe("reconcileActiveSprint — the measurement restores a destroyed freeze 
   /** What the FR-023 sweep leaves behind for a live sprint. */
   async function seedMeasurement(
     ownerId: string,
-    values: { committedSp: number | null; committedFrozenAt: Date | null; jiraSprintId?: string },
+    values: {
+      committedSp: number | null;
+      committedFrozenAt: Date | null;
+      jiraSprintId?: string;
+      jiraProjectId?: string;
+    },
   ) {
     await db.insert(sprintMeasurement).values({
       id: randomUUID(),
       ownerId,
-      jiraProjectId: "10000",
+      jiraProjectId: values.jiraProjectId ?? "10000",
       jiraSprintId: values.jiraSprintId ?? "4242",
       sprintName: "Sprint 7",
       committedSp: values.committedSp,
@@ -642,6 +647,40 @@ describe("reconcileActiveSprint — the measurement restores a destroyed freeze 
 
     // Two accounts watching the same Jira project share `jira_sprint_id`
     // values; ownership is the only thing separating their histories.
+    const all = await rows(seeded.ownerId);
+    expect(all[0].committedSp).toBeNull();
+    expect(all[0].committedFrozenAt).toBeNull();
+  });
+
+  it("(t) never restores a measurement left behind by a DIFFERENT Jira project", async () => {
+    // A Jira sprint id is unique per Jira INSTANCE, not globally, so `4242` in
+    // the workspace this owner just repointed at is somebody else's sprint.
+    // Restoring its commitment would be PERMANENT — the freeze guard, doing its
+    // job, refuses to correct an already-stamped row (impl-review F2).
+    //
+    // The second owner is load-bearing rather than decoration: they still hold a
+    // `jira_project` row carrying the OLD Jira-side id, which is the row the
+    // join would otherwise find. Without `jiraProject.id = projectId` this test
+    // restores 99 through THEIR project row.
+    const other = await newOwner();
+    expect(other.projectId).toBeTruthy();
+
+    const seeded = await newOwner();
+    await db
+      .update(jiraProject)
+      .set({ jiraProjectId: "20000" })
+      .where(eq(jiraProject.id, seeded.projectId));
+
+    // `sprint_measurement` has no foreign key at all, so the old workspace's
+    // record outlives the project switch that made it irrelevant.
+    await seedMeasurement(seeded.ownerId, {
+      committedSp: 99,
+      committedFrozenAt: FROZEN_AT,
+      jiraProjectId: "10000",
+    });
+
+    await run(seeded);
+
     const all = await rows(seeded.ownerId);
     expect(all[0].committedSp).toBeNull();
     expect(all[0].committedFrozenAt).toBeNull();

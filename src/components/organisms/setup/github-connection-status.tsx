@@ -24,11 +24,15 @@ import type { DisconnectMode } from "@/lib/validations/disconnect";
  * from the stored NON-secret columns — no token decryption — plus a Disconnect
  * action that refreshes the server component back to the connect form.
  *
- * Disconnect is DESTRUCTIVE four levels deep, not one: the credential takes
- * `monitored_repo` with it, and that takes every synced commit, pull request and
- * code review. `src/lib/integrations/disconnect-impact.ts` is the maintained
- * answer — it is held equal to the schema's foreign-key graph by a test, so do
- * not restate the list here. Since S-24 the button opens a confirmation first.
+ * Disconnect stops at the credential since S-26. `monitored_repo` is
+ * `ON DELETE SET NULL` on it as of `0021`, so the repos and every synced commit,
+ * pull request and code review survive by default and are re-linked on the next
+ * connect through `monitored_repo_owner_repo_uq` — the durable GitHub-side key.
+ * They go only down the dialog's second, explicitly destructive completion.
+ * `src/lib/integrations/disconnect-impact.ts` is the maintained answer — held
+ * equal to the schema's foreign-key graph by a test, so do not restate the list
+ * here. Since S-24 the button opens a confirmation first; since S-26 that
+ * confirmation offers two outcomes, and the primary one keeps.
  */
 export default function GithubConnectionStatus({
   login,

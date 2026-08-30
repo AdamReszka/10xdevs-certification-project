@@ -6,13 +6,19 @@ import { expect, type Page } from "@playwright/test";
  * `clear` is the DEFAULT here, and deliberately not the default the product
  * offers. In the product the keeping button is primary, because a lead who
  * disconnects almost never means "destroy what I typed". In the suite the
- * opposite is true: every caller disconnects to put the shared `storageState`
- * account back into a genuinely empty state, and `keep` no longer delivers that
- * — `monitored_repo.credential_id` is `SET NULL` since `0021`, so the rows
- * survive the credential and `monitoredRepo` (one of `isOnboardingComplete`'s
- * six probes) stays satisfied. `e2e/seed.spec.ts:34` and
- * `e2e/dashboard-sprint-detail.spec.ts:51` both rest on that account being left
- * un-onboarded, so the cleanup path has to be the destructive one.
+ * opposite is true: every caller disconnects as CLEANUP, to hand the shared
+ * `storageState` account back to the next spec in a genuinely empty state, and
+ * `keep` no longer delivers that — since `0021` the repos and their whole synced
+ * subtree survive the credential with `credential_id` NULL, so a `keep` cleanup
+ * leaves rows behind for whatever runs next under `fullyParallel`.
+ *
+ * NOT for onboarding reasons (impl-review F9): `isOnboardingComplete` is
+ * `.every()` over six probes (`src/lib/onboarding.ts`) and `githubCredential` is
+ * one of them, so EITHER outcome un-onboards the account — the credential row is
+ * deleted in both. And `e2e/seed.spec.ts` and `e2e/dashboard-sprint-detail.spec.ts`
+ * do not depend on this account at all any more: both moved to their own
+ * dedicated accounts precisely because the shared one's state is a coin flip
+ * under parallel workers. Leftover DATA is the reason; onboarding state is not.
  */
 export type DisconnectMode = "keep" | "clear";
 

@@ -835,10 +835,20 @@ and `0020` shipped at the S-12 merge without being applied to production. Confir
 the production migration state before applying `0021`, rather than assuming it is
 at `0020`.
 
-**Rollback**: re-point both constraints at `ON DELETE cascade`. Rows retained
-under the new behaviour would then be destroyed by the next disconnect, so a
-rollback is safe for the schema and lossy for anything a lead kept in between —
-prefer rolling forward.
+**Rollback**: three ordered steps, not one (impl-review F8). Re-pointing the
+constraints alone leaves `monitored_repo.credential_id` nullable, and restoring
+`SET NOT NULL` FAILS the moment a single keep-disconnect has left a NULL there —
+an error met halfway through a rollback, which is the worst time to discover it.
+
+1. Deal with the NULLs first: either re-point the orphaned repos at a credential,
+   or `DELETE FROM monitored_repo WHERE credential_id IS NULL` (which cascades to
+   their commits, PRs and reviews).
+2. `ALTER TABLE "monitored_repo" ALTER COLUMN "credential_id" SET NOT NULL`.
+3. Re-point both constraints at `ON DELETE cascade`.
+
+Rows retained under the new behaviour are destroyed by step 1 or by the next
+disconnect after step 3, so a rollback is safe for the schema and lossy for
+anything a lead kept in between — prefer rolling forward.
 
 ## References
 
@@ -906,8 +916,8 @@ prefer rolling forward.
 
 #### Manual
 
-- [x] 4.6 Switching the monitored Jira project with keep leaves absences intact — 92ef756
-- [x] 4.7 The warning names the same outcomes the buttons deliver — 92ef756
+- [ ] 4.6 Switching the monitored Jira project with keep leaves absences intact
+- [ ] 4.7 The warning names the same outcomes the buttons deliver
 
 ### Phase 5: The measurement is the authority for the frozen commitment
 
@@ -930,4 +940,4 @@ prefer rolling forward.
 #### Manual
 
 - [ ] 6.5 A tester following backlog row 16.B completes both branches
-- [ ] 6.6 No document still claims a disconnect destroys absences unconditionally
+- [x] 6.6 No document still claims a disconnect destroys absences unconditionally — impl-review F4

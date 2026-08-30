@@ -30,6 +30,41 @@ afterAll(async () => {
   await pool.end();
 });
 
+/** A user with NO integration at all — the only shape the cycle must skip. */
+async function seedBareUser(): Promise<string> {
+  const ownerId = randomUUID();
+  await db.insert(user).values({ id: ownerId, name: "Bare", email: `bare-${ownerId}@example.test` });
+  owners.push(ownerId);
+  return ownerId;
+}
+
+/** Jira connected, GitHub not — what an owner looks like after S-26's
+ *  "Keep my GitHub data" disconnect, or while a PAT is being rotated. */
+async function seedJiraOnlyUser(): Promise<string> {
+  const ownerId = randomUUID();
+  await db.insert(user).values({ id: ownerId, name: "Jira", email: `jo-${ownerId}@example.test` });
+  const [cred] = await db
+    .insert(jiraCredential)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      encryptedToken: "x",
+      tokenLast4: "1234",
+      workspaceUrl: "https://acme.atlassian.net",
+      jiraEmail: "lead@example.com",
+    })
+    .returning({ id: jiraCredential.id });
+  await db.insert(jiraProject).values({
+    id: randomUUID(),
+    ownerId,
+    credentialId: cred.id,
+    jiraProjectId: "1",
+    projectKey: "SF",
+  });
+  owners.push(ownerId);
+  return ownerId;
+}
+
 const owners: string[] = [];
 
 /** Seed a user; `onboarded` adds the jira credential+project that the
@@ -75,23 +110,41 @@ afterEach(async () => {
 });
 
 describe("enumerateOnboardedOwners", () => {
-  it("returns only owners with BOTH a jira project and a github credential", async () => {
-    const onboarded = await seedUser(true);
+  it("returns an owner with EITHER integration, and skips one with neither", async () => {
+    const both = await seedUser(true);
     const ghOnly = await seedUser(false);
+    const bare = await seedBareUser();
 
     const result = await enumerateOnboardedOwners(db);
 
-    expect(result).toContain(onboarded);
-    expect(result).not.toContain(ghOnly);
+    expect(result).toContain(both);
+    expect(result).toContain(ghOnly);
+    expect(result).not.toContain(bare);
   });
 
   /**
-   * S-09 / FR-008. A demo owner is fully "onboarded" by this query's own proxy —
+   * S-26 impl-review F3. This used to require BOTH integrations, so a lead who
+   * disconnected GitHub — now an advertised, reversible, "keep my data" act —
+   * silently lost their JIRA sync too: no anomaly refresh and no daily recap,
+   * with nothing saying so. The Jira half must keep running on its own.
+   */
+  it("keeps syncing an owner whose GitHub is disconnected but whose Jira is not", async () => {
+    const jiraOnly = await seedJiraOnlyUser();
+
+    const result = await enumerateOnboardedOwners(db);
+
+    expect(result).toContain(jiraOnly);
+  });
+
+  /**
+   * S-09 / FR-008. `demo_of IS NULL` is now the ONLY thing excluding a demo
+   * owner, and this test is what holds it there. The old argument — that
    * `github_commit → monitored_repo → github_credential` is NOT NULL end to end,
-   * so it MUST hold a github credential, and it holds a jira project too. Absent
-   * credentials therefore cannot stand in for the exclusion. Without the explicit
-   * `demo_of IS NULL`, this loop would sync a fictional account with a fake token
-   * every 15 minutes and hand it to `sendDailyRecap`.
+   * so a demo owner necessarily matches — was falsified twice over: `0021` made
+   * `monitored_repo.credential_id` nullable, and the enumeration now admits an
+   * owner holding EITHER side alone. Without the explicit filter this loop would
+   * sync a fictional account with a fake token every 15 minutes and hand it to
+   * `sendDailyRecap`.
    */
   it("excludes a demo owner even though it has both a jira project and a github credential", async () => {
     const real = await seedUser(true);

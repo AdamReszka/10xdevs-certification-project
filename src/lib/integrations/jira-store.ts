@@ -299,9 +299,16 @@ export async function storeJiraIntegration({
  *
  * Two outcomes since S-26, and `mode` is the whole difference. `keep` relies on
  * the narrowed cascade above. `clear` additionally deletes the recorded
- * absences — the one thing the narrowed edge spared, and the sharp edge this
- * slice exists for: hand-entered FR-010 data no sync can rebuild, which now goes
- * only when the lead asks for it by name. The tables `clear` reaches MUST equal
+ * absences — the sharp edge this slice exists for: hand-entered FR-010 data no
+ * sync can rebuild, which now goes only when the lead asks for it by name.
+ *
+ * `clear` is deliberately BROADER than the cascade it replaces (impl-review F7).
+ * It removes every absence on the account, including rows whose `sprint_id` was
+ * already NULL — typed before any sprint existed, or nulled by an earlier
+ * keep-disconnect — which the old cascade could never reach. That is the point:
+ * the cascade destroyed an arbitrary subset decided by WHEN a row happened to be
+ * typed, which nothing in the UI exposed. The button says "Delete my Jira data"
+ * without qualification, and this is what makes that sentence true. The tables `clear` reaches MUST equal
  * `DISCONNECT_IMPACT.jira.clearedTables`, which the guard test derives from the
  * schema graph rather than trusting this comment.
  *

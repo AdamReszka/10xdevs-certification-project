@@ -1,4 +1,4 @@
-import { eq, isNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 import { githubCredential, jiraProject, user } from "@/db/schema";
 import { getDbWithPool } from "@/lib/db";
@@ -48,28 +48,47 @@ const MAX_OWNERS_PER_CYCLE = 50;
 type Db = ReturnType<typeof getDbWithPool>["db"];
 
 /**
- * Enumerate onboarded owners with ONE set-based query — never the per-owner
+ * Enumerate syncable owners with ONE set-based query — never the per-owner
  * `isOnboardingComplete` predicate (6 sequential queries × N owners would burn
- * the invocation budget before any sync runs). An owner with a `jira_project` AND
- * a `github_credential` is a cheap onboarded proxy; both tables are unique on
- * `owner_id`, so the join yields one row per owner.
+ * the invocation budget before any sync runs). Both tables are unique on
+ * `owner_id`, so the two LEFT JOINs still yield one row per owner.
  *
- * DEMO OWNERS ARE EXCLUDED EXPLICITLY (S-09 / FR-008), and the exclusion is
- * mandatory rather than defensive: `github_commit.repo_id → monitored_repo
- * .credential_id → github_credential.id` is NOT NULL the whole way, so a demo
- * owner NECESSARILY holds a `github_credential` and therefore matches the join
- * above. Without `demo_of IS NULL` the cycle would attempt a real GitHub/Jira
- * sync with a fake token every 15 minutes and — worse — hand a fictional account
- * to `sendDailyRecap`, which this same loop drives. Still ONE set-based query;
- * the comment above about not going per-owner still governs.
+ * EITHER integration is enough, and that is a fix rather than a loosening
+ * (S-26 impl-review F3). This used to require BOTH — an INNER JOIN of
+ * `github_credential` onto `jira_project` — which meant an owner who
+ * disconnected GitHub silently lost their JIRA sync as well: no anomaly
+ * refresh, and no daily recap, with nothing anywhere saying so. S-26 turns
+ * disconnect into a cheap, reversible, advertised act ("Keep my GitHub data"),
+ * so a lead rotating a PAT now sits in that state on purpose. Requiring both
+ * would punish them for it. The halves already degrade on their own:
+ * `syncGithub` and `syncJira` each return `SKIPPED / not_connected` when their
+ * own credential or project is missing (`run-sync.ts`), so a one-sided owner
+ * costs one cheap skip rather than a failure.
+ *
+ * DEMO OWNERS ARE EXCLUDED EXPLICITLY (S-09 / FR-008) by `demo_of IS NULL`, and
+ * that filter is now the ONLY thing doing it. The original argument for why it
+ * was mandatory — `github_commit.repo_id → monitored_repo.credential_id →
+ * github_credential.id` being NOT NULL the whole way, so a demo owner
+ * necessarily holds a credential and necessarily matches — stopped being true
+ * when `0021` made `monitored_repo.credential_id` nullable, and the OR above
+ * would admit a demo owner holding either side alone. The exclusion never
+ * depended on the chain in practice (the fixture inserts a credential), but it
+ * must not be re-derived from one again: without `demo_of IS NULL` this loop
+ * would sync a fictional account with a fake token every 15 minutes and hand it
+ * to `sendDailyRecap`.
  */
 export async function enumerateOnboardedOwners(db: Db): Promise<string[]> {
   const rows = await db
-    .select({ ownerId: jiraProject.ownerId })
-    .from(jiraProject)
-    .innerJoin(githubCredential, eq(githubCredential.ownerId, jiraProject.ownerId))
-    .innerJoin(user, eq(user.id, jiraProject.ownerId))
-    .where(isNull(user.demoOf));
+    .select({ ownerId: user.id })
+    .from(user)
+    .leftJoin(jiraProject, eq(jiraProject.ownerId, user.id))
+    .leftJoin(githubCredential, eq(githubCredential.ownerId, user.id))
+    .where(
+      and(
+        isNull(user.demoOf),
+        or(isNotNull(jiraProject.ownerId), isNotNull(githubCredential.ownerId)),
+      ),
+    );
   return rows.map((r) => r.ownerId);
 }
 
