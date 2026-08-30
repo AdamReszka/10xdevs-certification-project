@@ -698,7 +698,21 @@ zdegradowanym GitHubie i nie jest to oczywiste na pierwszy rzut oka.
 
 ### 7.8 — Sprzątanie po testach S-15
 
-- [ ] **7.8** Roster wraca do stanu wyjściowego po wierszach 7.1–7.7.
+- [x] **7.8** Roster wraca do stanu wyjściowego po wierszach 7.1–7.7.
+      **Zaliczone 2026-08-30** (sesja manualna, Ania) na koncie
+      `anna.jozwiak19@gmail.com` (prawdziwe credentiale, GitHub `AdamLisek`,
+      Jira `foxmind`). Roster: 6 wierszy, wszystkie aktywne — `Adam Reszka`,
+      `Liseusz Testowy`, `Rocky Testowy` (`source = JIRA`), `AdamLisek`,
+      `AniaReszka`, `FoxyMind` (`source = GITHUB`). **Ani jednego wiersza
+      `source = MANUAL`**, a tylko taki zostawiają po sobie testy §7 — wczorajsze
+      `merge-a` / `acc-merge-b` zniknęły. `Adam Reszka` i `FoxyMind` obecni i
+      aktywni, czyli warunek zaliczenia spełniony.
+      ⚠️ **Warunek „zostają dokładnie DWA wiersze" jest nieaktualny** — pisano go
+      dla konta `demo@sprintflow.test`, które nadal ma dokładnie te dwie osoby.
+      Konto testerki importuje 6 tożsamości z żywych źródeł i to jest jego
+      poprawny stan wyjściowy. Rozstrzygające jest `source`, nie liczba wierszy
+      ani słowo „Testowy" w nazwisku (Liseusz i Rocky to prawdziwe konta Jiry,
+      `712020:…`).
       *Gdzie:* `/settings/team` (albo `psql`).
       *Co zrobić:* po zakończeniu wierszy S-15 przejrzyj roster.
       *Co musi być prawdą:* zostają **`Adam Reszka`** i **`FoxyMind`**, oboje
