@@ -2179,9 +2179,11 @@ Jiry**, żeby dało się je porównać jeden do jednego z Jirą — sama nazwa j
 nieweryfikowalna, a to właśnie weryfikowalności zabrakło, gdy sync świecił
 zielono przy pustym dashboardzie.
 
-Pełne opisy: `context/changes/sprint-identity-visibility/MANUAL-CHECKLIST.md`.
-Źródło kanoniczne: `context/changes/sprint-identity-visibility/plan.md`
-`## Progress`.
+Pełne opisy: `context/archive/2026-08-30-sprint-identity-visibility/MANUAL-CHECKLIST.md`.
+Źródło kanoniczne: `context/archive/2026-08-30-sprint-identity-visibility/plan.md`
+`## Progress`. **Slice zarchiwizowany 2026-08-30 — to NIE zamyka tych wierszy.**
+Archiwizacja przenosi folder, nie odhacza testów; 18.A–18.E czekają tak samo jak
+przedtem. Odhaczając cokolwiek, odhacz też w powyższym `plan.md`.
 
 **Konta:** wiersze 18.A, 18.B i 18.D wymagają konta z **prawdziwą** Jirą i
 trwającym sprintem — to `demo@sprintflow.test` (mimo nazwy to ono ma prawdziwe

@@ -1016,7 +1016,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **PRD refs:** FR-007, FR-016, FR-017
 - **Prerequisites:** S-04, S-07, S-10, S-16
 - **Status:** done — implemented 2026-08-30 in five phases; manual rows open
-  (`context/changes/sprint-identity-visibility/MANUAL-CHECKLIST.md`, backlog §18)
+  (`context/archive/2026-08-30-sprint-identity-visibility/MANUAL-CHECKLIST.md`, backlog §18)
 
 - **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`),
   in her own words: *"na dashboardzie nie ma nazwy, nazwa jest dopiero w zakładce
@@ -1202,3 +1202,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-12: user can view a list of past daily recaps and drill into any recap; recaps older than the current sprint + 2 previous sprints are automatically purged.** — Archived 2026-08-29 → `context/archive/2026-08-29-recap-history/`. Lesson: —.
 - **S-22: a user who signs up lands on a **doorstep** at `/setup` — a first screen inside the wizard shell, with the navigation suppressed, that says what SprintFlow needs and offers exactly two doors: continue configuring (GitHub, or whichever step is actually still missing), or see the demo. A user whose onboarding is already complete lands on `/dashboard` as before. Today both go to `/dashboard` — the full S-07/S-10 surface rendering zeros — and `/setup` is reachable only by typing the URL.** — Archived 2026-08-30 → `context/archive/2026-08-19-onboarding-routing/`. Lesson: —.
 - **S-24: disconnecting GitHub or Jira — from the setup wizard or from Settings — asks for confirmation first and names what will be destroyed. No path that permanently deletes synced or hand-entered data fires on a single click.** — Archived 2026-08-30 → `context/archive/2026-08-30-destructive-action-confirmation/`. Lesson: —.
+- **S-25: every surface that renders sprint data names the sprint and shows its dates — the wizard's cadence step, Dashboard "Today", and Sprint Detail — prominently enough to answer "which sprint is this?" without hunting.** — Archived 2026-08-30 → `context/archive/2026-08-30-sprint-identity-visibility/`. Lesson: "A parallel worktree cannot run the suite that guards the shape it is changing" (`lessons.md` #9).
