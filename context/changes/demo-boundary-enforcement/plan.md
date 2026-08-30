@@ -735,9 +735,9 @@ main checkout.
 
 #### Automated
 
-- [x] 4.1 Lint + typecheck pass
-- [x] 4.2 Unit tests pass with updated copy assertions
-- [x] 4.3 No source file contains the retracted sentence; no demo surface enumerates actions
+- [x] 4.1 Lint + typecheck pass — 887e708
+- [x] 4.2 Unit tests pass with updated copy assertions — 887e708
+- [x] 4.3 No source file contains the retracted sentence; no demo surface enumerates actions — 887e708
 
 #### Manual
 
@@ -749,7 +749,7 @@ main checkout.
 
 #### Automated
 
-- [ ] 5.1 npm test passes with the inventory test included
-- [ ] 5.2 Removing one Phase 1 guard makes the inventory test fail
-- [ ] 5.3 The inventory test asserts a non-empty set of call sites
-- [ ] 5.4 manual-test-sweep exits zero; S-27's open rows are in the backlog
+- [x] 5.1 npm test passes with the inventory test included
+- [x] 5.2 Removing one Phase 1 guard makes the inventory test fail
+- [x] 5.3 The inventory test asserts a non-empty set of call sites
+- [x] 5.4 manual-test-sweep exits zero; S-27's open rows are in the backlog

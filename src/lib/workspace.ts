@@ -173,6 +173,12 @@ export const resolveWorkspace = cache(async (): Promise<Workspace> => {
  * The always-real counterpart, for Connections and the setup wizard: integration
  * configuration is never simulated. Same session guard — this is an explicit
  * choice at the call site, not an omission of the resolver.
+ *
+ * PINNING THE REAL OWNER IS HALF A DECISION. The other half is what the action
+ * does when the account is currently VIEWING demo — without it, a demo screen
+ * mutates or spends the real account. `src/lib/demo/boundary-inventory.test.ts`
+ * enforces that half: every exported action calling this must also read `isDemo`,
+ * or carry an entry on that test's exception list with its reason.
  */
 export async function requireRealWorkspace(): Promise<{ ownerId: string }> {
   const session = await requireSession();
