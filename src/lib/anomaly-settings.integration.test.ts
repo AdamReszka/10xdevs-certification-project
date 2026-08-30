@@ -179,7 +179,7 @@ describe("saveAnomalyRule", () => {
             "5": 72,
             "8": 120,
             "13": 120,
-            "21": "8_WORKING_DAYS",
+            "21": 64,
           },
           codeReviewHours: 8,
           testingHours: 48,
@@ -192,7 +192,7 @@ describe("saveAnomalyRule", () => {
     // The jsonb round trip keeps every bucket — the merge is shallow, so a lost
     // key here would silently drop In-Progress aging to the nearest lower budget.
     expect(Object.keys(stored.inProgressHoursBySp)).toHaveLength(7);
-    expect(stored.inProgressHoursBySp["21"]).toBe("8_WORKING_DAYS");
+    expect(stored.inProgressHoursBySp["21"]).toBe(64);
   });
 });
 
@@ -295,7 +295,7 @@ describe("the override actually reaches the detector", () => {
             "5": 72,
             "8": 120,
             "13": 120,
-            "21": "8_WORKING_DAYS",
+            "21": 64,
           },
           codeReviewHours: 24,
           testingHours: 48,
@@ -310,5 +310,51 @@ describe("the override actually reaches the detector", () => {
 
     expect(Object.keys(body.inProgressHoursBySp)).toHaveLength(7);
     expect(body.inProgressHoursBySp["1"]).toBe(12);
+  });
+
+  /**
+   * A ROW WRITTEN BEFORE S-28, read after it.
+   *
+   * The insert bypasses `saveAnomalyRule` deliberately: the point is a body
+   * already sitting in the column, which is exactly how the legacy value got
+   * there — the write path can no longer produce it, because the schema
+   * normalises on parse. What must not happen is `mergeRule` rejecting it: the
+   * override is then discarded WHOLESALE, severity included, with only a
+   * `console.error`, and the lead sees their whole rule silently reverted.
+   */
+  it("normalises a pre-S-28 8_WORKING_DAYS row to 64 and keeps its severity", async () => {
+    const ownerId = await newOwner();
+    await db.insert(anomalySettings).values({
+      id: randomUUID(),
+      ownerId,
+      anomalyType: "TICKET_STATUS_AGING",
+      severityOverride: "HIGH",
+      thresholds: {
+        inProgressHoursBySp: {
+          "1": 12,
+          "2": 24,
+          "3": 48,
+          "5": 72,
+          "8": 120,
+          "13": 120,
+          "21": "8_WORKING_DAYS",
+        },
+        codeReviewHours: 24,
+        testingHours: 48,
+      },
+    });
+
+    const effective = await resolveEffectiveThresholds(db, ownerId);
+    const body = effective.TICKET_STATUS_AGING.thresholds as {
+      inProgressHoursBySp: Record<string, unknown>;
+    };
+
+    expect(body.inProgressHoursBySp["21"]).toBe(64);
+    // The detector has no branch for the string; it must never see one.
+    expect(body.inProgressHoursBySp["21"]).not.toBe("8_WORKING_DAYS");
+    // The account's own numbers and severity survived — the override was not
+    // discarded and replaced by the shipped defaults.
+    expect(body.inProgressHoursBySp["1"]).toBe(12);
+    expect(effective.TICKET_STATUS_AGING.severity).toBe("HIGH");
   });
 });

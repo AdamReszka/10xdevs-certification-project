@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_THRESHOLDS } from "@/db/defaults";
 import { anomalyType } from "@/db/schema";
+import { WORK_HOURS_PER_DAY } from "@/lib/anomaly/rules/working-time";
 import {
+  LEGACY_8_WORKING_DAYS_HOURS,
   THRESHOLD_BODY_SCHEMAS,
   anomalyRuleSaveSchema,
 } from "@/lib/validations/anomaly-settings";
@@ -136,12 +138,33 @@ describe("TICKET_STATUS_AGING.inProgressHoursBySp must carry exactly seven bucke
     );
   });
 
-  it("accepts the working-day sentinel on any bucket, because the detector branches on the value", () => {
+  it("accepts the legacy sentinel on any bucket, because the OLD detector branched on the value", () => {
+    // Retained for compatibility only (S-28). A pre-slice detector branched on
+    // the VALUE and never on the key, so a stored body may carry it anywhere;
+    // narrowing it to bucket 21 here would reject a row the old code wrote, and
+    // `mergeRule` discards a rejected override wholesale.
+    const parsed = THRESHOLD_BODY_SCHEMAS.TICKET_STATUS_AGING.safeParse(
+      body({ ...full, "13": "8_WORKING_DAYS" }),
+    );
+    expect(parsed.success).toBe(true);
     expect(
-      THRESHOLD_BODY_SCHEMAS.TICKET_STATUS_AGING.safeParse(
-        body({ ...full, "13": "8_WORKING_DAYS" }),
-      ).success,
-    ).toBe(true);
+      (parsed.data!.inProgressHoursBySp as Record<string, unknown>)["13"],
+    ).toBe(LEGACY_8_WORKING_DAYS_HOURS);
+  });
+
+  it("normalises the legacy sentinel away, so no detector can ever see a string", () => {
+    const parsed = THRESHOLD_BODY_SCHEMAS.TICKET_STATUS_AGING.safeParse(body(full));
+    const map = parsed.data!.inProgressHoursBySp as Record<string, unknown>;
+    for (const value of Object.values(map)) expect(typeof value).toBe("number");
+    expect(map["21"]).toBe(64);
+  });
+
+  it("keeps the legacy value equal to eight of the engine's working days", () => {
+    // `anomaly-settings.ts` spells 64 as a literal rather than importing it, to
+    // keep the client form free of the engine. This is the pin that stops the
+    // two drifting: change `WORK_HOURS_PER_DAY` and this fails here, not in
+    // production.
+    expect(LEGACY_8_WORKING_DAYS_HOURS).toBe(8 * WORK_HOURS_PER_DAY);
   });
 
   it("rejects an unrecognised sentinel", () => {

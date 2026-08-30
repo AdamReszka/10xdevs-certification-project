@@ -84,7 +84,13 @@ export function equalsDefaults(
 export type NumberFieldDescriptor = {
   path: string;
   label: string;
-  /** Rendered after the input — "hours", "days", "lines", "%". */
+  /**
+   * Rendered after the input — "working hours", "working days", "lines", "%".
+   *
+   * Since S-28 every elapsed budget is denominated in WORKING time, so the unit
+   * has to say so: a bare "hours" would read as a wall-clock span the number no
+   * longer is. See {@link WORKING_TIME_HINT}.
+   */
   unit: string;
   min: number;
   max: number;
@@ -112,7 +118,13 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
     detects:
       "A pull request has been open this long with no review activity on it at all.",
     fields: [
-      { path: "hours", label: "Review timeout", unit: "hours", min: 1, max: 2000 },
+      {
+        path: "hours",
+        label: "Review timeout",
+        unit: "working hours",
+        min: 1,
+        max: 2000,
+      },
     ],
   },
   {
@@ -124,11 +136,17 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
       {
         path: "codeReviewHours",
         label: "Code Review budget",
-        unit: "hours",
+        unit: "working hours",
         min: 1,
         max: 2000,
       },
-      { path: "testingHours", label: "Testing budget", unit: "hours", min: 1, max: 2000 },
+      {
+        path: "testingHours",
+        label: "Testing budget",
+        unit: "working hours",
+        min: 1,
+        max: 2000,
+      },
     ],
     hasStoryPointBudgets: true,
   },
@@ -136,18 +154,30 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
     anomalyType: "DEVELOPER_INACTIVE",
     label: "Developer inactive",
     detects:
-      "Someone on the roster has pushed no commits for this many days. Recorded absences suppress it, so a holiday never reads as a stall.",
+      "Someone on the roster has pushed no commits for this many working days. Recorded absences suppress it, so a holiday never reads as a stall.",
     fields: [
-      { path: "noCommitDays", label: "No-commit window", unit: "days", min: 1, max: 90 },
+      {
+        path: "noCommitDays",
+        label: "No-commit window",
+        unit: "working days",
+        min: 1,
+        max: 90,
+      },
     ],
   },
   {
     anomalyType: "TICKET_NO_COMMIT_LINK",
     label: "Ticket with no commits",
     detects:
-      "A ticket is In Progress but no commit references it, for this many days — the classic stuck developer who has not escalated.",
+      "A ticket is In Progress but no commit references it, for this many working days — the classic stuck developer who has not escalated.",
     fields: [
-      { path: "noCommitDays", label: "No-commit window", unit: "days", min: 1, max: 90 },
+      {
+        path: "noCommitDays",
+        label: "No-commit window",
+        unit: "working days",
+        min: 1,
+        max: 90,
+      },
     ],
   },
   {
@@ -180,7 +210,7 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
       {
         path: "toDoBeforeSprintEndLeadTimeHours",
         label: "ToDo alert lead time",
-        unit: "hours before sprint end",
+        unit: "working hours before sprint end",
         min: 1,
         max: 2000,
       },
@@ -212,19 +242,6 @@ export const RULE_DESCRIPTORS: RuleDescriptor[] = [
   },
 ];
 
-/**
- * The 21-SP bucket is a TWO-POSITION choice, not a free number.
- *
- * `"8_WORKING_DAYS"` is a sentinel the detector resolves against the sprint's
- * working-day calendar (`ticket-status-aging.ts:63-74`); "10 working days" is
- * not expressible without changing `defaults.ts` and the detector, so offering a
- * free number here would let the lead type something the system cannot mean.
- */
-export const SP21_CHOICES = [
-  { value: "120", label: "120 hours (5 days)" },
-  { value: "8_WORKING_DAYS", label: "8 working days" },
-] as const;
-
 /*
  * ---------------------------------------------------------------------------
  * Copy the lead cannot get anywhere else. LOAD-BEARING in the sense
@@ -238,6 +255,19 @@ export const SP21_CHOICES = [
  * ships there, so for that one rule the control can only ever move DOWN — worth
  * saying, or the lead hunts for a "critical" that does not exist.
  */
+/**
+ * WHERE THE CLOCK RUNS (S-28). Every budget on this page is spent in working
+ * time, and nothing on screen would otherwise say so — a lead reading "8 working
+ * hours" next to a ticket that has plainly been open since Friday would take the
+ * number for a bug. It names the three things that stop the clock and the one
+ * thing that does not: an individual absence never pauses a ticket's ageing,
+ * because the sprint is the team's and the inbox is an alert for the lead, not a
+ * device pointed at a person. (`DEVELOPER_INACTIVE` is the exception, and it
+ * says so on its own card: an absence suppresses that rule outright, FR-010.)
+ */
+export const WORKING_TIME_HINT =
+  "Time budgets are counted in working time: the clock runs from 08:00 to 16:00 in the team's time zone, only on the sprint's working days, and never on a company day off. An individual team member's absence does not pause it.";
+
 export const SEVERITY_HINT =
   "High is the top tier — a rule already set to High can only be moved down.";
 

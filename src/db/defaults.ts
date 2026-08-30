@@ -30,31 +30,36 @@ export type AnomalyDefault = {
 };
 
 /**
- * In-Progress time-in-status budget by story-point estimate (FR-009). Hours,
- * except the 21-SP bucket which is "8 working days" — represented as a sentinel
- * the detector resolves against the sprint's working-day calendar.
+ * In-Progress time-in-status budget by story-point estimate (FR-009), in
+ * WORKING hours — eight to the working day.
+ *
+ * Every bucket keeps the intent it shipped with and changes its unit: 24 h was
+ * meant as "a day", and a day is 8 working hours, so the number is 8. The 21-SP
+ * bucket stops being the `"8_WORKING_DAYS"` sentinel and becomes 64, an ordinary
+ * number like the other six — with the unit in working hours there is nothing
+ * left for a sentinel to say (S-28).
  */
-const IN_PROGRESS_HOURS_BY_SP: Record<number, number | "8_WORKING_DAYS"> = {
-  1: 24,
-  2: 24,
-  3: 48,
-  5: 72,
-  8: 120, // 5 days
-  13: 120, // 5 days
-  21: "8_WORKING_DAYS",
+const IN_PROGRESS_HOURS_BY_SP: Record<number, number> = {
+  1: 8, // 1 day
+  2: 8, // 1 day
+  3: 16, // 2 days
+  5: 24, // 3 days
+  8: 40, // 5 days
+  13: 40, // 5 days
+  21: 64, // 8 working days
 };
 
 export const DEFAULT_THRESHOLDS: Record<AnomalyTypeValue, AnomalyDefault> = {
   PR_REVIEW_STALLED: {
     severity: "MEDIUM",
-    thresholds: { hours: 24 },
+    thresholds: { hours: 8 }, // 1 day
   },
   TICKET_STATUS_AGING: {
     severity: "MEDIUM",
     thresholds: {
       inProgressHoursBySp: IN_PROGRESS_HOURS_BY_SP,
-      codeReviewHours: 24,
-      testingHours: 48,
+      codeReviewHours: 8, // 1 day
+      testingHours: 16, // 2 days
     },
   },
   DEVELOPER_INACTIVE: {
@@ -71,8 +76,9 @@ export const DEFAULT_THRESHOLDS: Record<AnomalyTypeValue, AnomalyDefault> = {
       // Max tickets a single developer may hold in parallel per category before
       // it counts toward sprint risk.
       maxParallelByCategory: { IN_PROGRESS: 2, CODE_REVIEW: 2, TESTING: 3 },
-      // Alert when ToDo tickets remain this close (hours) to sprint end.
-      toDoBeforeSprintEndLeadTimeHours: 48,
+      // Alert when ToDo tickets remain this close to sprint end, in WORKING
+      // hours — 16 is two working days, not two calendar days.
+      toDoBeforeSprintEndLeadTimeHours: 16,
     },
   },
   PR_TOO_BIG: {

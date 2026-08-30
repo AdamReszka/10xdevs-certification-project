@@ -124,7 +124,11 @@ async function seedScenario(withSprint = true): Promise<Seeded> {
     storyPoints: 3,
     currentCategory: "IN_PROGRESS",
     assigneeJiraAccountId: "jira-alex",
-    lastStatusChangeAt: new Date("2026-08-07T12:00:00.000Z"),
+    // WEDNESDAY noon. `NOW1` is Monday noon, so this is 24 WORKING hours (S-28)
+    // — past the 3-SP bucket's 16. The old Friday seed is now only 8, because
+    // the weekend no longer spends the budget; that is the point of the slice,
+    // not a regression.
+    lastStatusChangeAt: new Date("2026-08-05T12:00:00.000Z"),
     addedAfterSprintStart: false,
     sourceUrl: "https://acme.atlassian.net/browse/SF-1",
   });
@@ -159,7 +163,9 @@ async function seedScenario(withSprint = true): Promise<Seeded> {
     sourceUrl: "https://acme.atlassian.net/browse/SF-3",
   });
 
-  // PR #42: OPEN, ready 2d ago, no reviews → PR_REVIEW_STALLED.
+  // PR #42: OPEN, ready THURSDAY noon, no reviews → PR_REVIEW_STALLED.
+  // 16 working hours by Monday noon, twice the 8-working-hour budget. The old
+  // Saturday seed measures 4 under S-28 — a weekend is not review time.
   const [stalledPr] = await db
     .insert(githubPullRequest)
     .values({
@@ -174,8 +180,8 @@ async function seedScenario(withSprint = true): Promise<Seeded> {
       additions: 100,
       deletions: 20,
       changedFiles: 3,
-      openedAt: new Date("2026-08-08T12:00:00.000Z"),
-      readyForReviewAt: new Date("2026-08-08T12:00:00.000Z"),
+      openedAt: new Date("2026-08-06T12:00:00.000Z"),
+      readyForReviewAt: new Date("2026-08-06T12:00:00.000Z"),
       sourceUrl: "https://github.com/acme/app/pull/42",
     })
     .returning({ id: githubPullRequest.id });
@@ -308,7 +314,7 @@ describe("detectAnomalies", () => {
     // --- Recurrence: restore the condition → reactivated with a fresh detectedAt ---
     await db
       .update(githubPullRequest)
-      .set({ readyForReviewAt: new Date("2026-08-08T12:00:00.000Z") })
+      .set({ readyForReviewAt: new Date("2026-08-06T12:00:00.000Z") })
       .where(eq(githubPullRequest.id, stalledPrRowId));
     await detectAnomalies({ db, ownerId, now: NOW3 });
     const [reactivated] = await db

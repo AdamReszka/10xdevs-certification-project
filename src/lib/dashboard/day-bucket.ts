@@ -171,3 +171,84 @@ export function enumerateDayKeys(
 
   return keys;
 }
+
+/**
+ * The instant at which a given wall-clock hour begins on a given local day
+ * (S-28, FR-009).
+ *
+ * Returns the EARLIEST instant inside `dayKey`'s local range whose local hour is
+ * `>= hour`, and the day's exclusive end when the day holds no such instant.
+ * "`>=`" rather than "`===`" is what makes the spring-forward gap answerable: on
+ * 2026-03-29 in Warsaw the local clock steps 02:00 → 03:00, so hour 2 never
+ * occurs and the honest answer for "when does 02:00 begin" is 03:00 local — the
+ * first moment the team could have been working had the window started then.
+ *
+ * WHY NOT `dayRangeInTimeZone(dayKey, tz).from + hour × 3_600_000`: that is the
+ * formulation {@link localTimeOfDay}'s own doc block records as WRONG. Local
+ * midnight plus 8h is 07:00 or 09:00 local on a transition day, so a working-hours
+ * window built that way would drift by an hour twice a year — on exactly the two
+ * days a lead is least likely to check the arithmetic by hand.
+ *
+ * Found by binary search over {@link localTimeOfDay}'s reading, the same idiom
+ * {@link dayRangeInTimeZone} uses over day keys, and for the same reason: zone
+ * offsets are not all whole hours (Kathmandu is +05:45), so probing on the hour
+ * would miss the true boundary by up to 59 minutes. The predicate is monotone
+ * within a local day even across a fall-back — the wall clock repeats an hour
+ * (…1, 2, 2, 3…) but never runs backwards past a lower hour — so the search is
+ * well-defined on both transition days.
+ *
+ * Degrades to UTC through the shared `safeZone`, like every other helper here.
+ */
+// Same cache-per-resolved-zone rationale as the two formatter caches above, one
+// level up: a single call is ~28 `formatToParts` on top of a `dayRangeInTimeZone`
+// binary search, and the working-hours clock (S-28) asks for the SAME two hours
+// on the same handful of local days once per ticket, per PR and per developer in
+// a detect run. The answer is a pure function of (zone, day, hour), so a verdict
+// is safe to keep for the isolate's lifetime.
+const localHourInstants = new Map<string, number>();
+
+export function localHourInstant(
+  dayKey: DayKey,
+  hour: number,
+  timeZone?: string | null,
+): Date {
+  const zone = safeZone(timeZone);
+  const cacheKey = `${zone}|${dayKey}|${hour}`;
+  const cached = localHourInstants.get(cacheKey);
+  if (cached !== undefined) return new Date(cached);
+
+  const instant = computeLocalHourInstant(dayKey, hour, zone);
+  localHourInstants.set(cacheKey, instant);
+  return new Date(instant);
+}
+
+/** The uncached search. `zone` is ALREADY resolved by the caller. */
+function computeLocalHourInstant(
+  dayKey: DayKey,
+  hour: number,
+  zone: string,
+): number {
+  const { from, to } = dayRangeInTimeZone(dayKey, zone);
+  const dayStart = from.getTime();
+  // `to` is the last millisecond of the local day; callers want a half-open end.
+  const dayEnd = to.getTime() + 1;
+
+  // A local day can be empty when a zone skips a whole calendar date (Pacific/Apia
+  // had no 2011-12-30). `dayRangeInTimeZone` then reports `to < from`; reading the
+  // wall clock at `dayEnd - 1` would answer for the PREVIOUS day.
+  if (dayEnd <= dayStart) return dayEnd;
+
+  const reached = (t: number): boolean =>
+    localTimeOfDay(new Date(t), zone).hour >= hour;
+
+  if (!reached(dayEnd - 1)) return dayEnd;
+
+  let low = dayStart;
+  let high = dayEnd - 1;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (reached(mid)) high = mid;
+    else low = mid + 1;
+  }
+  return low;
+}

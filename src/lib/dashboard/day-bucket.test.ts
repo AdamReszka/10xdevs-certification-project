@@ -4,6 +4,7 @@ import {
   dayKeyInTimeZone,
   dayRangeInTimeZone,
   enumerateDayKeys,
+  localHourInstant,
 } from "@/lib/dashboard/day-bucket";
 
 /**
@@ -175,5 +176,75 @@ describe("enumerateDayKeys", () => {
         "Nowhere/Nothing",
       ),
     ).toEqual(["2026-08-19", "2026-08-20"]);
+  });
+});
+
+describe("localHourInstant", () => {
+  it("finds the wall-clock hour on an ordinary day", () => {
+    expect(localHourInstant("2026-08-03", 8, "UTC")).toEqual(
+      new Date("2026-08-03T08:00:00.000Z"),
+    );
+    // Warsaw is UTC+2 in August, so 08:00 local is 06:00Z.
+    expect(localHourInstant("2026-08-03", 8, "Europe/Warsaw")).toEqual(
+      new Date("2026-08-03T06:00:00.000Z"),
+    );
+    expect(localHourInstant("2026-08-03", 16, "Europe/Warsaw")).toEqual(
+      new Date("2026-08-03T14:00:00.000Z"),
+    );
+  });
+
+  it("finds a boundary in a zone whose offset is not a whole hour", () => {
+    // Asia/Kathmandu is UTC+05:45. Probing on the hour would land 45 minutes out.
+    expect(localHourInstant("2026-08-03", 8, "Asia/Kathmandu")).toEqual(
+      new Date("2026-08-03T02:15:00.000Z"),
+    );
+  });
+
+  it("answers the spring-forward gap with the first instant past it", () => {
+    // Europe/Warsaw steps 02:00 → 03:00 on 2026-03-29, so hour 2 never occurs
+    // locally. The earliest instant showing an hour >= 2 is 03:00 local = 01:00Z.
+    expect(localHourInstant("2026-03-29", 2, "Europe/Warsaw")).toEqual(
+      new Date("2026-03-29T01:00:00.000Z"),
+    );
+    // The shift boundaries themselves are past the transition: CEST, UTC+2.
+    expect(localHourInstant("2026-03-29", 8, "Europe/Warsaw")).toEqual(
+      new Date("2026-03-29T06:00:00.000Z"),
+    );
+  });
+
+  it("answers the fall-back repeat with the FIRST of the two hours", () => {
+    // Europe/Warsaw steps 03:00 → 02:00 on 2026-10-25, so 02:00 happens twice:
+    // 00:00Z (CEST) and 01:00Z (CET). The earliest is the honest answer.
+    expect(localHourInstant("2026-10-25", 2, "Europe/Warsaw")).toEqual(
+      new Date("2026-10-25T00:00:00.000Z"),
+    );
+    // …and by 16:00 the zone is back on CET, UTC+1.
+    expect(localHourInstant("2026-10-25", 16, "Europe/Warsaw")).toEqual(
+      new Date("2026-10-25T15:00:00.000Z"),
+    );
+  });
+
+  it("returns the day's exclusive end when no such hour exists", () => {
+    expect(localHourInstant("2026-08-03", 24, "UTC")).toEqual(
+      new Date("2026-08-04T00:00:00.000Z"),
+    );
+  });
+
+  it("degrades an absent or unrecognized zone to UTC", () => {
+    const utc = localHourInstant("2026-08-03", 8, "UTC");
+    expect(localHourInstant("2026-08-03", 8, null)).toEqual(utc);
+    expect(localHourInstant("2026-08-03", 8, undefined)).toEqual(utc);
+    expect(localHourInstant("2026-08-03", 8, "Nowhere/Nothing")).toEqual(utc);
+  });
+
+  it("hands every caller its own Date, so a memoized answer cannot be mutated", () => {
+    const first = localHourInstant("2026-08-03", 8, "UTC");
+    const second = localHourInstant("2026-08-03", 8, "UTC");
+    expect(second).toEqual(first);
+    expect(second).not.toBe(first);
+    first.setUTCFullYear(1999);
+    expect(localHourInstant("2026-08-03", 8, "UTC")).toEqual(
+      new Date("2026-08-03T08:00:00.000Z"),
+    );
   });
 });
