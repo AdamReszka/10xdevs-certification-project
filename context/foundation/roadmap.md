@@ -57,7 +57,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 | S-24 | destructive-action-confirmation | disconnecting GitHub or Jira asks first and says what will be destroyed, on every path that can lose data | S-02, S-03, S-08, S-16 | — (PRD Guardrails: graceful degradation, no silent data loss) | done     |
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
-| S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
+| S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | done |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
 | S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | active |
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
@@ -1180,7 +1180,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** disconnect-data-retention
 - **PRD refs:** FR-010
 - **Prerequisites:** S-08, S-16, S-24
-- **Status:** proposed
+- **Status:** done
 
 - **Split out of S-24 by the owner, deliberately** (2026-08-30,
   `context/changes/destructive-action-confirmation/frame.md`). S-24 settles the
@@ -1503,3 +1503,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-27: no screen rendered in demo mode can reach a mutation of the real account, and every sentence the demo surfaces show the user is true.** — Archived 2026-08-30 → `context/archive/2026-08-30-demo-boundary-enforcement/`. Lesson: —.
 - **S-21: (foundation) an authenticated request builds one pool for the app instead of three, and an authenticated Server Action one instead of four, so connection count stops scaling with pool multiplicity and is bounded by a single `POOL_MAX` ceiling.** — Archived 2026-08-30 → `context/archive/2026-08-19-db-pool-teardown/`. Lesson: "A request-scoped resource handle needs one identity per request, not a teardown" (`lessons.md` #3, rewritten in place by this slice — the original entry named the wrong mechanism and had steered five earlier decisions).
 - **S-20: `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every one of its seven sibling readers. An absence whose window crosses a sprint boundary now raises risk in whichever sprint its dates fall in — including one it was not recorded in, and one recorded when the owner had no sprint row at all.** — Archived 2026-08-30 → `context/archive/2026-08-30-absence-sprint-scoping/`. Lesson: —.
+- **S-26: disconnecting an integration removes what that integration supplied — the credential, the monitored selection, and the rows a future sync would rebuild. It stops taking data the lead typed themselves. Concretely: a Jira disconnect no longer deletes recorded absences.** — Archived 2026-08-30 → `context/archive/2026-08-30-disconnect-data-retention/`. Lesson: —.
