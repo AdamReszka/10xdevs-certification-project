@@ -1,10 +1,10 @@
 ---
 change_id: demo-boundary-enforcement
 title: The demo boundary is a gate, not a convention
-status: impl_reviewed
+status: archived
 created: 2026-08-30
 updated: 2026-08-30
-archived_at: null
+archived_at: 2026-08-30T13:49:59Z
 ---
 
 ## Notes
