@@ -315,8 +315,10 @@ automatycznych zielone. Instrukcje krok po kroku:
       przeglądu i testów. Podpowiedź jest edytowalna, więc to nie jest defekt —
       ale FR-005 opiera całą detekcję anomalii na tym mapowaniu.
 
-      🔵 **Trzecia obserwacja produktowa (ta sama sesja):**
-      `context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md` — nigdzie
+      🔵 **Trzecia obserwacja produktowa (ta sama sesja):** ✅ **ZAMKNIĘTA
+      2026-08-30 przez S-25** (`sprint-identity-visibility`, §18 poniżej);
+      notatka źródłowa skasowana razem z naprawą, opis żyje w pozycji S-25
+      roadmapy. Było tak: nigdzie
       nie widać wprost, **którego sprintu** dotyczy to, na co się patrzy. W kroku
       kadencji nazwa jest wpleciona w zdanie w `CardDescription`
       (`cadence-form.tsx:156`); na „Today" pada wyłącznie w opisie panelu
@@ -2161,3 +2163,102 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
 **Faza 1 nie ma własnych wierszy manualnych po stronie aplikacji** — to pomiar
 bazowy wykonany jednorazowym skryptem ze scratchpada, zapisany w
 `measurements.md` i celowo niecommitowany.
+
+---
+
+## 18. S-25 `sprint-identity-visibility` — otwarte (2026-08-30)
+
+Slice wzięty **z Twojego zgłoszenia** z 2026-08-30 (notatka źródłowa została
+skasowana razem z naprawą, zgodnie z konwencją w `CLAUDE.md`; opis znaleziska
+żyje dalej w pozycji **S-25** roadmapy): „na
+dashboardzie nie ma nazwy, nazwa jest dopiero w zakładce Sprint Detail ale jest
+mało widoczna". Odpowiedź nie jest kosmetyczna. Każdy ekran pokazujący dane
+sprintu ma teraz **jedną linię obok nagłówka: nazwa + zakres dat**, np.
+`PT Sprint 1 · 30.08 – 12.09`. Daty są czytane w **strefie czasowej Twojej
+Jiry**, żeby dało się je porównać jeden do jednego z Jirą — sama nazwa jest
+nieweryfikowalna, a to właśnie weryfikowalności zabrakło, gdy sync świecił
+zielono przy pustym dashboardzie.
+
+Pełne opisy: `context/changes/sprint-identity-visibility/MANUAL-CHECKLIST.md`.
+Źródło kanoniczne: `context/changes/sprint-identity-visibility/plan.md`
+`## Progress`.
+
+**Konta:** wiersze 18.A, 18.B i 18.D wymagają konta z **prawdziwą** Jirą i
+trwającym sprintem — to `demo@sprintflow.test` (mimo nazwy to ono ma prawdziwe
+tokeny). Wiersz 18.C wymaga konta **bez** aktywnego sprintu —
+`adam.reszka85@gmail.com` albo świeżo założone. Nic tu nie kasuje danych.
+
+- [ ] **18.A** (faza 3, `3.5`) **Gdzie:** `/dashboard`, konto z prawdziwą Jirą.
+      **Co zrobić:** wejdź i **nie klikaj żadnej zakładki**; popatrz obok
+      nagłówka „Dashboard — Today"; w drugiej karcie otwórz Jirę i znajdź
+      aktywny sprint.
+      **Co musi być prawdą:** obok nagłówka jest pogrubiona nazwa sprintu, a za
+      nią jaśniejszy zakres `DD.MM – DD.MM`; nazwa jest identyczna z Jirą znak w
+      znak, a data początku to **ten sam dzień**, który Jira pokazuje jako start
+      — nie dzień wcześniej.
+      *Dlaczego to łapie:* „Today" było jedynym ekranem, który nazwy nie miał
+      **wcale** — nie było czego pogrubić, trzeba było ją wprowadzić. Data o
+      jeden dzień wcześniejsza oznacza, że czytanie idzie w UTC zamiast w
+      strefie zespołu, i wtedy porównanie z Jirą przestaje cokolwiek
+      potwierdzać.
+
+- [ ] **18.B** (faza 3, `3.6`) **Gdzie:** `/dashboard/sprint-detail`, to samo
+      konto.
+      **Co zrobić:** zapamiętaj nazwę i daty obok nagłówka; z listy rozwijanej w
+      prawym rogu tego samego wiersza wybierz **inny, zamknięty** sprint;
+      poczekaj na przeładowanie.
+      **Co musi być prawdą:** nazwa i daty zmieniły się na te wybranego sprintu
+      (nie zostały poprzednie), a obok nadal jest plakietka **„Sprint closed"**.
+      *Dlaczego to łapie:* najłatwiejsza wpadka w tym slice to podmienić nazwę,
+      ale zostawić daty poprzedniego sprintu — wtedy liczby jednego sprintu są
+      podpisane datami innego i nie ma tego jak zauważyć. Dotyczy to zwłaszcza
+      sprintów, których surowe dane już zniknęły po zmianie projektu w Jirze:
+      ich daty muszą pochodzić z zapisanego pomiaru, nie z aktywnego sprintu.
+
+- [ ] **18.C** (faza 3, `3.7`; faza 4, `4.6`) **Gdzie:** konto **bez** aktywnego
+      sprintu; kolejno `/dashboard`, `/dashboard/sprint-detail`, zakładka
+      **„Reliability"** na `/dashboard`, oraz `/setup/team`.
+      **Co zrobić:** na każdym z trzech ekranów popatrz obok nagłówka (na
+      `/setup/team` — obok tytułu karty „Sprint cadence"); w kafelku
+      **„Estimated velocity"** przeczytaj cały tekst pod tytułem; na
+      `/setup/team` spróbuj zmienić dowolne pole rytmu sprintu.
+      **Co musi być prawdą:** wszędzie widnieje napis **„Sprint: none active"**
+      — puste miejsce jest opisane, a nie po prostu puste; kafelek „Estimated
+      velocity" **nigdzie** nie zawiera zwrotu **„the active sprint"**; pola
+      rytmu sprintu nadal się edytują.
+      *Dlaczego to łapie:* brak elementu na ekranie wygląda identycznie jak
+      element, który się nie wyrenderował z powodu błędu. A stary tekst „scaled
+      to what **the active sprint** actually has" twierdził, że aktywny sprint
+      istnieje, na koncie, na którym go nie ma — ta sama pomyłka co „pusty wynik
+      czytany jako sukces" z `lessons.md`.
+
+- [ ] **18.D** (faza 4, `4.5`) **Gdzie:** `/setup/team`, konto z prawdziwą Jirą.
+      **Co zrobić:** wejdź i **nie klikaj niczego**; przewiń do karty **„Sprint
+      cadence"** i popatrz na jej nagłówek; dopiero potem kliknij **„Pull from
+      Jira"**.
+      **Co musi być prawdą:** już przy pierwszym wejściu obok tytułu jest nazwa
+      sprintu i zakres dat — **te same** co w 18.A; po „Pull from Jira" nadal
+      tam są; zdanie pod tytułem nie zawiera już nazwy sprintu w cudzysłowie.
+      *Dlaczego to łapie:* to jest ekran z Twojego zgłoszenia. Jeśli nazwa
+      pojawia się dopiero po kliknięciu, znaczy to, że serwer jej nie policzył i
+      pierwsze wejście nadal nie odpowiada na pytanie „z którego sprintu to
+      jest". Ten krok przeszedł też na **wspólny** sposób ustalania aktywnego
+      sprintu — jeśli kreator i `/dashboard` pokazują **różne** sprinty, to jest
+      błąd, nie różnica ekranów.
+
+- [ ] **18.E** (faza 5, `5.5`) **Gdzie:** `/settings/recap/history`, dowolne
+      konto z zapisanymi recapami sprzed dzisiaj.
+      **Co zrobić:** otwórz **najstarszy** recap z listy.
+      **Co musi być prawdą:** strona szczegółów otwiera się i nadal pokazuje
+      nazwę sprintu oraz liczbę anomalii — **nie** komunikat o nieczytelnej
+      treści. Pusta lista historii ⇒ napisz „brak recapów", nie „zaliczone".
+      *Dlaczego to łapie:* faza 5 dołożyła dwa pola do zapisywanej treści
+      recapu. Podbicie numeru wersji formatu unieważniłoby **każdy** wcześniej
+      wysłany recap i wykasowałoby z historii nazwę sprintu oraz licznik
+      anomalii. Wersja została celowo niezmieniona — ten wiersz to sprawdza.
+
+**Wysyłki maila nie da się dziś przetestować manualnie** — Resend nie jest
+jeszcze podłączony. Nowa treść maila (nazwa sprintu w temacie także w dni bez
+anomalii, oraz linia tożsamości w obu wersjach treści) jest pokryta testami
+jednostkowymi w `src/lib/recap/render.test.ts`; 18.E sprawdza jedyną część,
+która ma widoczny skutek w aplikacji.

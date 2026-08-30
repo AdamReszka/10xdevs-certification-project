@@ -20,11 +20,15 @@
  * silently, and in exactly the case the notice was written for.
  */
 
+import { labelFor } from "@/lib/sprint-identity";
+
 /** A `sprint` row, narrowed to what this decision reads. */
 export type SprintRowRef = {
   id: string;
   jiraSprintId: string;
   name: string | null;
+  startDate: Date | null;
+  endDate: Date | null;
 };
 
 /** A `sprint_measurement` row, narrowed the same way. */
@@ -32,6 +36,7 @@ export type MeasurementRef = {
   jiraSprintId: string;
   sprintName: string | null;
   startDate: Date | null;
+  endDate: Date | null;
 };
 
 /**
@@ -50,6 +55,17 @@ export type SprintSelection = {
   name: string | null;
   /** The `sprint` row id the three reducers need. `null` ⇒ no raw data left. */
   sprintRowId: string | null;
+  /**
+   * The window the identity line prints (S-25).
+   *
+   * Carried here rather than read off `sprintRow` in the page, because the
+   * `measurement-only` branch has NO row to read — and the tempting fallback
+   * there is the active sprint's, which is the exact substitution the header of
+   * this file says must never happen. A date is one more field that can come
+   * from the wrong sprint silently.
+   */
+  startDate: Date | null;
+  endDate: Date | null;
   kind: SprintSelectionKind;
 };
 
@@ -57,6 +73,8 @@ const NONE: SprintSelection = {
   jiraSprintId: null,
   name: null,
   sprintRowId: null,
+  startDate: null,
+  endDate: null,
   kind: "none",
 };
 
@@ -94,10 +112,17 @@ export function resolveSprintSelection({
   // The row lookup is a separate query, so guard against it having answered
   // about a different sprint than the one asked for.
   if (requestedSprint && requestedSprint.jiraSprintId === requested.jiraSprintId) {
+    // Dates take the SAME shape as the name one line above: the row is
+    // preferred, the record fills a gap. `sprint.start_date` is nullable, so a
+    // row that exists without dates is reachable, not theoretical — and this is
+    // the one file where a branch's null case is settled by a test rather than
+    // by whoever reads it next (plan review F5).
     return {
       jiraSprintId: requestedSprint.jiraSprintId,
       name: requestedSprint.name ?? requested.sprintName,
       sprintRowId: requestedSprint.id,
+      startDate: requestedSprint.startDate ?? requested.startDate,
+      endDate: requestedSprint.endDate ?? requested.endDate,
       kind: "selected",
     };
   }
@@ -106,6 +131,8 @@ export function resolveSprintSelection({
     jiraSprintId: requested.jiraSprintId,
     name: requested.sprintName,
     sprintRowId: null,
+    startDate: requested.startDate,
+    endDate: requested.endDate,
     kind: "measurement-only",
   };
 }
@@ -116,6 +143,8 @@ function fromActive(activeSprint: SprintRowRef | null): SprintSelection {
     jiraSprintId: activeSprint.jiraSprintId,
     name: activeSprint.name,
     sprintRowId: activeSprint.id,
+    startDate: activeSprint.startDate,
+    endDate: activeSprint.endDate,
     kind: "active",
   };
 }
@@ -166,10 +195,9 @@ export function toSprintOptions({
   ];
 }
 
-/** Jira lets a sprint be nameless; the id is then the only thing to call it. */
-function labelFor(name: string | null, jiraSprintId: string): string {
-  return name ?? `Sprint ${jiraSprintId}`;
-}
+// `labelFor` used to live here. It moved to `@/lib/sprint-identity` (S-25
+// Phase 1) because the identity bar names the same nameless sprint two elements
+// away from the switcher entry, and one spelling has to serve both.
 
 /**
  * Whether the lead's manual entries are offered for the sprint on screen
