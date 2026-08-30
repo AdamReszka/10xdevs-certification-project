@@ -1,4 +1,5 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { redirect } from "next/navigation";
 
 import AnomalyInbox from "@/components/organisms/anomaly/anomaly-inbox";
 import Availability from "@/components/organisms/dashboard/availability";
@@ -20,6 +21,7 @@ import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { toVelocityEstimateView } from "@/lib/measurement/estimate";
 import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
+import { isOnboardingComplete } from "@/lib/onboarding";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getSyncState } from "@/lib/sync-state";
 import { resolveWorkspace } from "@/lib/workspace";
@@ -44,9 +46,30 @@ export default async function DashboardPage() {
   // the frozen anchor, so every reader below — the burndown, the "yesterday"
   // bucket, the capacity window — describes the same coherent moment however
   // long after loading the demo is viewed.
-  const { ownerId, now } = await resolveWorkspace();
+  const { ownerId, realOwnerId, isDemo, now } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
+
+  // FIRST-RUN GATE (`onboarding-routing` Phase 3). An account that has not
+  // finished the wizard would otherwise meet a dashboard of zeros — every panel
+  // below degrades honestly on an empty account, so this is a UX decision, not a
+  // correctness one. It sits before any data read so a redirected request pays
+  // for nothing it will not render.
+  //
+  // `isDemo` SHORT-CIRCUITS FIRST, and the ordering is load-bearing: the demo
+  // fixture writes rows satisfying all six of the predicate's conditions under
+  // the DEMO owner, so a predicate-first ordering would answer correctly by
+  // accident today and wrongly the moment the fixture changes. A visitor who
+  // deliberately chose "explore with demo data" (FR-008 / US-02) is never sent
+  // to the wizard they came here to avoid.
+  //
+  // The predicate therefore only ever sees `realOwnerId`, and runs on the
+  // request's EXISTING `db` handle — six `SELECT … LIMIT 1` at worst, one for a
+  // brand-new account, and no second `pg.Pool` (`lessons.md` #3).
+  if (!isDemo && !(await isOnboardingComplete({ db, ownerId: realOwnerId }))) {
+    redirect("/setup");
+  }
+
   const sprint = await getActiveSprintRow(db, ownerId);
 
   // "Yesterday" is a calendar day in the TEAM's zone, not a UTC one — resolving

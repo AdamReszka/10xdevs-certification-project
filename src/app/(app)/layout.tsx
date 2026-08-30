@@ -30,7 +30,7 @@ export default async function AppLayout({
   children: ReactNode;
 }) {
   const { user } = await requireSession();
-  const { isDemo, now } = await resolveWorkspace();
+  const { isDemo, now, realOnboarded } = await resolveWorkspace();
 
   return (
     <AppShell
@@ -43,7 +43,17 @@ export default async function AppLayout({
         </>
       }
     >
-      {isDemo ? <DemoBanner anchorLabel={formatDemoAnchor(now)} /> : null}
+      {isDemo ? (
+        <DemoBanner
+          anchorLabel={formatDemoAnchor(now)}
+          // Someone who took the demo door straight off the doorstep has no
+          // configured account to go back to; the banner is where the way back
+          // to the wizard belongs, because it is the one thing on every gated
+          // screen. Once the real account IS configured the link disappears and
+          // ongoing management stays in Settings.
+          needsSetup={!realOnboarded}
+        />
+      ) : null}
       {children}
     </AppShell>
   );

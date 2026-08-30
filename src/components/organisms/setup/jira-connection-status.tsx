@@ -87,8 +87,9 @@ export default function JiraConnectionStatus({
         >
           {isDisconnecting ? "Disconnecting…" : "Disconnect"}
         </Button>
-        {/* Forward to step 3 (S-04 roster/cadence), the final wizard step. The
-            returning-user routing (skip a completed wizard) is onboarding-routing's. */}
+        {/* Forward to step 4 (S-04 roster/cadence), the final wizard step. The
+            first-run routing that sends an un-onboarded account into the wizard
+            at all is `onboarding-routing`'s gate on `/dashboard`. */}
         <Button asChild>
           <Link href="/setup/team">
             Continue

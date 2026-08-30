@@ -73,7 +73,7 @@ export default function JiraConnectForm({
    * Where to go after a successful connect. Omitted (the wizard) → `refresh()`,
    * so the page re-renders into its connected-status card and the wizard's
    * "Continue" CTA. Set (Settings) → navigate there instead, because that
-   * caller asked to connect ONE integration, not to enter a 3-step flow.
+   * caller asked to connect ONE integration, not to enter the 4-step flow.
    *
    * A string, not a callback: this is a client component rendered from a server
    * component, and a function prop cannot cross that boundary.

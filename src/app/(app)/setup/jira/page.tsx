@@ -9,7 +9,7 @@ import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
- * Setup step 2 — Jira (S-03). Server component: loads any existing credential
+ * Setup step 3 — Jira (S-03). Server component: loads any existing credential
  * (owner-scoped) to decide which view to render — the connect form, or the
  * "Connected to …" status card. Reads only NON-secret columns (workspace, email,
  * last4, project key, mapping count); the encrypted token is never decrypted here.
@@ -49,9 +49,9 @@ export default async function JiraSetupPage() {
 
   return (
     <SetupWizardShell
-      step={2}
-      title="Connect Jira"
-      description="Connect your Jira Cloud workspace so SprintFlow can read your team's sprint, tickets, and workflow statuses."
+      step={3}
+      title="Podłącz Jirę"
+      description="Podłącz swoją przestrzeń Jira Cloud, żeby SprintFlow mógł czytać sprint, zadania i statusy przepływu pracy Twojego zespołu."
     >
       {credential ? (
         <JiraConnectionStatus

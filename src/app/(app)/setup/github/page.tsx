@@ -9,7 +9,7 @@ import { requireRealWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 
 /**
- * Setup step 1 — GitHub (S-02). Server component: loads any existing credential
+ * Setup step 2 — GitHub (S-02). Server component: loads any existing credential
  * (owner-scoped) to decide which view to render — the connect form, or the
  * "Connected as …" status card. Reads only NON-secret columns (login, last4,
  * repo count); the encrypted token is never decrypted here.
@@ -39,9 +39,9 @@ export default async function GithubSetupPage() {
 
   return (
     <SetupWizardShell
-      step={1}
-      title="Connect GitHub"
-      description="Connect a classic personal access token so SprintFlow can read your team's commits, pull requests, and reviews."
+      step={2}
+      title="Podłącz GitHuba"
+      description="Podaj klasyczny personal access token, żeby SprintFlow mógł czytać commity, pull requesty i przeglądy kodu Twojego zespołu."
     >
       {credential ? (
         <GithubConnectionStatus

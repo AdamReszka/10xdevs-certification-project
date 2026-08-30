@@ -5,13 +5,13 @@ import CadenceForm from "@/components/organisms/setup/cadence-form";
 import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { sprint } from "@/db/schema";
-import { requireRealWorkspace } from "@/lib/workspace";
+import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getDb } from "@/lib/db";
 import { listRosterForEditor } from "@/lib/roster";
 import type { Weekday } from "@/lib/validations/roster";
 
 /**
- * Setup step 3 — team roster + sprint cadence (S-04, FR-006/FR-007). The final
+ * Setup step 4 — team roster + sprint cadence (S-04, FR-006/FR-007). The final
  * wizard step. Server component under the gated `(app)` group (inherits
  * `requireSession()` + `force-dynamic`): it SELECTs only NON-secret existing
  * state (saved roster rows + the active sprint's cadence columns) and hands it to
@@ -20,6 +20,11 @@ import type { Weekday } from "@/lib/validations/roster";
  */
 export default async function TeamSetupPage() {
   const { ownerId } = await requireRealWorkspace();
+  // The wizard itself stays real (`requireRealWorkspace` above); this reads only
+  // WHICH workspace is active, so the last step can leave demo behind when it
+  // finishes. `resolveWorkspace` is `cache()`d and the `(app)` layout has
+  // already called it this render, so it costs no extra query and no extra pool.
+  const { isDemo } = await resolveWorkspace();
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
@@ -58,16 +63,16 @@ export default async function TeamSetupPage() {
 
   return (
     <SetupWizardShell
-      step={3}
+      step={4}
       // The roster grid is eight columns wide and one of them holds a
       // 43-character Jira account id — it needs the app shell's measure.
       wide
-      title="Team roster & sprint cadence"
-      description="Review the team we imported from GitHub and Jira, then confirm your sprint cadence. You can edit everything — SprintFlow keeps your changes."
+      title="Zespół i rytm sprintu"
+      description="Sprawdź skład zespołu zaciągnięty z GitHuba i Jiry, a potem potwierdź rytm sprintu. Wszystko możesz edytować — SprintFlow zapamięta Twoje zmiany."
     >
       <div className="flex flex-col gap-8">
         <RosterEditor initialMembers={initialMembers} />
-        <CadenceForm initialCadence={initialCadence} />
+        <CadenceForm initialCadence={initialCadence} inDemo={isDemo} />
       </div>
     </SetupWizardShell>
   );

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { user } from "@/db/schema";
 import { requireSession } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { isOnboardingComplete } from "@/lib/onboarding";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -32,6 +33,16 @@ export type Workspace = {
   realOwnerId: string;
   isDemo: boolean;
   /**
+   * Has the REAL account finished the setup wizard?
+   *
+   * Read ONLY in demo: it is what tells the demo banner whether to carry a way
+   * back to the wizard (`onboarding-routing` Phase 4). Outside demo the banner
+   * does not render at all, so nothing consults this — and rather than infer a
+   * `false` nobody asked the database for, the REAL path reports `true`,
+   * i.e. "there is nothing to prompt about".
+   */
+  realOnboarded: boolean;
+  /**
    * The clock to evaluate against: the frozen demo anchor in demo, the live
    * clock otherwise. Threading this instead of `new Date()` is what keeps the
    * demo a single coherent moment however long after loading it is viewed.
@@ -57,8 +68,14 @@ export function decideWorkspace(input: {
   activeWorkspace: "REAL" | "DEMO";
   demoOwner: DemoOwnerRow;
   liveNow: Date;
+  /**
+   * Whether the real account has finished the wizard. Passed IN — like
+   * `demoOwner` — so this stays a pure function with no database of its own.
+   * Consulted only on the demo path; see `Workspace.realOnboarded`.
+   */
+  realOnboarded: boolean;
 }): Workspace {
-  const { realOwnerId, activeWorkspace, demoOwner, liveNow } = input;
+  const { realOwnerId, activeWorkspace, demoOwner, liveNow, realOnboarded } = input;
 
   if (
     activeWorkspace === "DEMO" &&
@@ -69,11 +86,18 @@ export function decideWorkspace(input: {
       ownerId: demoOwner.id,
       realOwnerId,
       isDemo: true,
+      realOnboarded,
       now: demoOwner.demoAnchorAt,
     };
   }
 
-  return { ownerId: realOwnerId, realOwnerId, isDemo: false, now: liveNow };
+  return {
+    ownerId: realOwnerId,
+    realOwnerId,
+    isDemo: false,
+    realOnboarded: true,
+    now: liveNow,
+  };
 }
 
 /**
@@ -107,6 +131,7 @@ export const resolveWorkspace = cache(async (): Promise<Workspace> => {
       activeWorkspace: "REAL",
       demoOwner: null,
       liveNow,
+      realOnboarded: true,
     });
   }
 
@@ -116,11 +141,28 @@ export const resolveWorkspace = cache(async (): Promise<Workspace> => {
     .where(eq(user.demoOf, realOwnerId))
     .limit(1);
 
+  const demoOwnerRow = demoOwner ?? null;
+
+  // Demo only, and only once the demo scope is fully formed. The predicate reuses
+  // the `db` this function already built — the layout has no handle of its own
+  // and `getDb` IS the pool constructor (`db.ts`), so computing this one level up
+  // would leak a Hyperdrive-backed connection on every gated render in demo.
+  //
+  // The anchor guard mirrors `decideWorkspace`'s own condition on purpose: a
+  // half-formed demo falls back to REAL, where the field is reported `true`
+  // regardless — so running the query first would spend a round trip on an answer
+  // that is then discarded (impl-review F6).
+  const realOnboarded =
+    demoOwnerRow?.demoAnchorAt != null
+      ? await isOnboardingComplete({ db, ownerId: realOwnerId })
+      : true;
+
   return decideWorkspace({
     realOwnerId,
     activeWorkspace,
-    demoOwner: demoOwner ?? null,
+    demoOwner: demoOwnerRow,
     liveNow,
+    realOnboarded,
   });
 });
 

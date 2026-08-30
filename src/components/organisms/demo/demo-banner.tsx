@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FlaskConical, Loader2 } from "lucide-react";
@@ -21,15 +21,62 @@ import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
  * Rendered by the `(app)` layout above every gated route, so it cannot be missed
  * by navigating; the way out sits inside it rather than only on the settings tab.
  */
-export default function DemoBanner({ anchorLabel }: { anchorLabel: string | null }) {
+export default function DemoBanner({
+  anchorLabel,
+  needsSetup = false,
+}: {
+  anchorLabel: string | null;
+  /**
+   * True only while the REAL account behind this demo has not finished the
+   * wizard (`onboarding-routing` Phase 4). Then — and only then — the banner
+   * also carries the way back to `/setup`, because someone who entered demo
+   * from the doorstep has no other route to it: the doorstep is what they left,
+   * and Settings is the ONGOING-management surface, not the first-run one.
+   * Absent or false, the banner renders exactly as it did before.
+   */
+  needsSetup?: boolean;
+}) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
+  const [exiting, startExiting] = useTransition();
+  const [leaving, startLeaving] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function handleExit() {
-    startTransition(async () => {
-      await exitDemoAction();
+    startExiting(async () => {
+      setError(null);
+      const result = await exitDemoAction();
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
       // Nothing in the URL changes when the mode does, so the refresh is what
       // actually puts the real account back on screen.
+      router.refresh();
+    });
+  }
+
+  /**
+   * Leave demo, THEN go to the wizard — never the other way round.
+   *
+   * `/setup/**` is an always-real area, but `/setup/team`'s two save actions
+   * resolve their owner with `resolveWorkspace()` on purpose: `/settings/team`
+   * mounts the same organisms, and demo edits must land under the demo owner
+   * (`setup/team/actions.ts:44-60`). Walking into the wizard while still in DEMO
+   * would therefore save the roster against the demo owner, the `/dashboard`
+   * gate would find no real `team_member`, and the lead would be bounced back to
+   * the doorstep pointing at the page they just finished. Navigating only after
+   * the flip has committed is what makes "Dokończ konfigurację" configure the
+   * account the lead thinks it does.
+   */
+  function handleFinishSetup() {
+    startLeaving(async () => {
+      setError(null);
+      const result = await exitDemoAction();
+      if (!result.ok) {
+        setError(result.message);
+        return;
+      }
+      router.push("/setup");
       router.refresh();
     });
   }
@@ -50,11 +97,29 @@ export default function DemoBanner({ anchorLabel }: { anchorLabel: string | null
             .
           </span>
           <span>
-            <Button size="sm" variant="outline" onClick={handleExit} disabled={pending}>
-              {pending ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleExit}
+              disabled={exiting || leaving}
+            >
+              {exiting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
               Wyjdź z demo
             </Button>
+            {needsSetup ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleFinishSetup}
+                disabled={exiting || leaving}
+                className="ml-2"
+              >
+                {leaving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+                Dokończ konfigurację
+              </Button>
+            ) : null}
           </span>
+          {error ? <span className="text-destructive">{error}</span> : null}
         </AlertDescription>
       </Alert>
     </div>

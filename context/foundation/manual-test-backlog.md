@@ -1560,7 +1560,7 @@ zostało już pokryte gdzie indziej.
       *Dlaczego to łapie:* skrót do dashboardu zostawia konto bez rosteru, czyli w
       stanie, w którym detekcja nie ma kogo przypisać do anomalii.
 
-- [ ] **13.7** (5.6) Ukończenie rosteru + kadencji sprawia, że `isOnboardingComplete`
+- [x] **13.7** (5.6) Ukończenie rosteru + kadencji sprawia, że `isOnboardingComplete`
       zwraca `true` i przenosi na `/dashboard`.
       ⏸️ **NIE ODHACZONY 2026-08-29 — połowa wiersza jest dziś niesprawdzalna.**
       Przebieg wykonany w całości (sesja manualna, Ania, świeże konto): „Save &
@@ -1578,9 +1578,16 @@ zostało już pokryte gdzie indziej.
       kreatorze pochodzi z `cadence-form.tsx:142` (`router.push`), a nie z
       predykatu — więc obserwowalna połowa przeszłaby także wtedy, gdyby predykat
       w ogóle nie istniał.
-      **Do decyzji ownera:** wiersz zamknie się sam wraz z S-22; do tego czasu
-      przepisanie go na „kreator kończy się na `/dashboard`" odhaczyłoby coś, czego
-      on nie sprawdza.
+      **ZAMKNIĘTY 2026-08-30 — S-22 (`onboarding-routing`) dowieziony, wiersz
+      przeniesiony do §15.** Predykat ma dziś dwóch produkcyjnych konsumentów:
+      serwerową bramkę na `/dashboard` i wybór drzwi na progu `/setup`. To, czego
+      ten wiersz nie mógł sprawdzić — „predykat naprawdę bramkuje routing" — jest
+      teraz osobnym, wykonalnym wierszem **15.A** (świeże konto ląduje na progu,
+      a ręcznie wpisany `/dashboard` odbija z powrotem). Obserwowalna połowa
+      („kreator kończy się na `/dashboard`") żyje dalej jako **15.J**, bo
+      przekierowanie z `cadence-form.tsx` zmieniło zachowanie: z wnętrza demo
+      najpierw wychodzi z demo. Nic nie zostało odhaczone hurtem — wiersz jest
+      **zastąpiony**, nie zaliczony.
       *Dlaczego to łapie:* ⚠️ `isOnboardingComplete` to znany w tym repo przypadek
       szwu **zbudowanego i niepodpiętego** (S-22). Ten wiersz jest jedynym
       sprawdzianem, że predykat naprawdę bramkuje routing, a nie tylko istnieje.
@@ -1742,3 +1749,157 @@ rozpisana wersja tych samych siedmiu leży w
       *Co musi być prawdą, gdy ktoś to podejmie:* reguła datowa jest zapisana
       **zanim** powstanie kod kasujący, bo to kolejny krok, który trwale usuwa
       wiersze.
+
+---
+
+## 15. S-22 `onboarding-routing` — próg kreatora, otwarte (2026-08-30)
+
+Świeżo założone konto nie miało dokąd wylądować: rejestracja, logowanie i layout
+`(auth)` odsyłały na `/dashboard`, czyli na pełny ekran S-07/S-10 renderujący
+same zera, a `/setup` dało się otworzyć **wyłącznie** wpisując adres ręcznie.
+Ta zmiana buduje **próg**: pierwszy ekran pod `/setup` z dwojgiem drzwi
+(skonfiguruj prawdziwe dane albo zobacz demo) plus serwerową bramkę na
+`/dashboard`, która nieskonfigurowane **prawdziwe** konto odsyła na próg.
+Konto w demo bramka przepuszcza zawsze — ktoś, kto świadomie wybrał demo, nie
+może zostać wepchnięty do kreatora, który omijał.
+
+Cztery wiersze blokujące (**15.A–15.D**) mają pełną, rozpisaną wersję w
+`context/changes/onboarding-routing/MANUAL-CHECKLIST.md` (tam jako A–D).
+Pozostałe sześć (**15.E–15.J**) jest tylko tutaj — nie blokują slice'a, ale
+zamykają rzeczy, których automatyka nie widzi.
+
+Bramki automatyczne zielone w całości: 1057 testów jednostkowych, 335
+integracyjnych, 14 Playwrighta (w tym nowy `e2e/setup-doorstep.spec.ts` z trzema
+scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
+
+⚠️ **Migracji nie ma.** Ta zmiana nie dodaje ani jednej kolumny — predykat
+`isOnboardingComplete` czyta stan, który już jest w bazie. Nie ma więc kroku
+„zaaplikuj migrację przed testami".
+
+### Wiersze blokujące (te same, co w checkliście slice'a)
+
+- [ ] **15.A** (faza 3, `3.6`) **Gdzie:** okno prywatne, `/signup`, adres, którego
+      jeszcze nie ma (np. `prog-<data>@example.test`).
+      **Co zrobić:** zarejestruj konto, nie klikaj nic po drodze, a gdy wylądujesz
+      — wpisz ręcznie w pasku adresu `/dashboard`.
+      **Co musi być prawdą:** po rejestracji adres to `/setup`; widać dokładnie
+      dwa przyciski wyboru drogi (konfiguracja + „Zobacz demo"); u góry „Krok 1
+      z 4"; **nie ma górnej nawigacji**; ręcznie wpisany `/dashboard` wraca na
+      `/setup`.
+      *Dlaczego to łapie:* to cała teza zmiany. Pulpit po kroku 3 znaczy, że
+      bramka nie działa i pierwsze wrażenie z produktu to tabela zer; widoczna
+      nawigacja znaczy, że próg da się ominąć jednym kliknięciem.
+
+- [ ] **15.B** (faza 3, `3.7`) **Gdzie:** `/login`, konto z **prawdziwymi**
+      credentialami (to, na którym pulpit pokazuje realne dane).
+      **Co zrobić:** wyloguj się, zaloguj ponownie, popatrz na pasek adresu nie
+      klikając nic; potem wpisz ręcznie `/setup` (tylko podgląd — nic tam nie
+      zmieniaj).
+      **Co musi być prawdą:** po zalogowaniu adres to `/dashboard` z danymi
+      zespołu i **ani na moment** nie przewija się przez `/setup`.
+      *Dlaczego to łapie:* bramka czyta sześć warunków z bazy. Jeden źle odpytany
+      i konto, które przeszło cały kreator, zostaje wyrzucone z powrotem do
+      kreatora — ktoś z działającą integracją traci dostęp do własnego pulpitu.
+
+- [ ] **15.C** (faza 3, `3.8`) **Gdzie:** `/settings/connections/github`, konto z
+      prawdziwymi credentialami.
+      ⚠️ **Ten wiersz odłącza prawdziwą integrację i zaraz ją podłącza z powrotem
+      — miej ten sam PAT GitHuba pod ręką, zanim zaczniesz.**
+      **Co zrobić:** kliknij **Disconnect**, potwierdź, popatrz na pasek adresu
+      **zanim** klikniesz cokolwiek innego; potem podłącz GitHuba z powrotem tym
+      samym PAT-em i tymi samymi repozytoriami i wejdź na `/dashboard`.
+      **Co musi być prawdą:** po odłączeniu nadal jesteś na
+      `/settings/connections/github` z formularzem ponownego podłączenia — **nie**
+      na `/setup`; po ponownym podłączeniu `/dashboard` znów pokazuje dane.
+      *Dlaczego to łapie:* bramka pilnuje `/dashboard`, ale nie wolno jej pilnować
+      `/settings/**`. Zadziała szerzej — i lead rotujący wygasły token zostaje
+      wyrzucony z jedynej strony, na której jest przycisk „podłącz ponownie".
+
+- [ ] **15.D** (faza 4, `4.6` + `4.9`) **Gdzie:** to samo świeże konto co w
+      **15.A**, zaraz po nim.
+      **Co zrobić:** na progu kliknij „Zobacz demo"; obejrzyj kolejno
+      `/dashboard`, `/dashboard/sprint-detail` i `/settings/team`, patrząc za
+      każdym razem na baner demo; kliknij w banerze **„Dokończ konfigurację"**;
+      przejdź cały kreator (GitHub → Jira → Zespół) i kliknij **„Save & finish"**.
+      **Co musi być prawdą:** baner na **każdym z trzech** ekranów niesie przycisk
+      „Dokończ konfigurację" obok „Wyjdź z demo"; przycisk prowadzi na `/setup`,
+      nie do Ustawień, i po drodze **wychodzi z trybu demo — baner znika, i tak ma
+      być** (kreator konfiguruje prawdziwe konto; demo zostaje i wrócisz do niego
+      z Ustawień → Demo); po „Save & finish" jesteś na `/dashboard`, **banera demo
+      nie ma**, a dane pochodzą z właśnie podłączonej Jiry/GitHuba.
+      *Dlaczego to łapie:* bez tego przycisku osoba, która wybrała demo, nie ma
+      **żadnej** drogi z powrotem na próg. A bez wyjścia z demo na końcu kreatora
+      „Save & finish" odsyła pod baner demo, do fikcyjnych danych — lead kończy
+      konfigurację i nie dostaje sygnału, że zadziałała.
+
+### Wiersze nieblokujące (tylko tutaj)
+
+- [ ] **15.E** (faza 2, `2.6`) **Gdzie:** świeże konto, `/setup` → GitHub → Jira →
+      Zespół.
+      **Co zrobić:** przejdź kreator krok po kroku i na każdym ekranie odczytaj
+      napis nad paskiem postępu oraz sam pasek.
+      **Co musi być prawdą:** kolejno „Krok 1 z 4", „Krok 2 z 4", „Krok 3 z 4",
+      „Krok 4 z 4"; na ostatnim kroku pasek jest wypełniony w 100%. Nigdzie nie
+      pojawia się „of 3" ani „Step".
+      *Dlaczego to łapie:* próg dołożył czwarty krok. Licznik był wcześniej
+      wpisany na sztywno w czterech miejscach i już raz się rozjechał (4→3 przy
+      S-04); zły licznik to jedyna informacja, jaką ktoś ma o tym, ile mu jeszcze
+      zostało.
+
+- [ ] **15.F** (faza 2, `2.7`) **Gdzie:** `/settings/connections/github`, konto z
+      prawdziwymi credentialami.
+      **Co zrobić:** otwórz stronę i popatrz nad formularz.
+      **Co musi być prawdą:** **nie ma** żadnego wskaźnika kroku ani paska
+      postępu — Ustawienia to zarządzanie bieżące, nie kreator.
+      *Dlaczego to łapie:* renumeracja kroków dotyka wspólnej powłoki. Gdyby
+      przeciekła do Ustawień, lead rotujący token dostaje komunikat „Krok 1 z 4",
+      sugerujący, że musi przejść cały kreator od nowa.
+
+- [ ] **15.G** (faza 3, `3.9`) **Gdzie:** konto w trybie demo (wejdź przez
+      Ustawienia → Demo albo drzwiami z progu).
+      **Co zrobić:** będąc w demo wpisz ręcznie `/dashboard`.
+      **Co musi być prawdą:** pulpit demo otwiera się normalnie, pod banerem demo
+      — **żadnego** przekierowania na `/setup`.
+      *Dlaczego to łapie:* demo jest modelowane jako osobny najemca, a jego
+      fixture spełnia wszystkie sześć warunków predykatu pod **demowym** ownerem.
+      Bramka odpytana o złe konto albo wpuszcza każdego, albo zamyka demo na
+      głucho — ten wiersz rozróżnia te dwa błędy.
+
+- [ ] **15.H** (faza 4, `4.7`) **Gdzie:** konto z **prawdziwymi** credentialami,
+      wejdź w demo przez Ustawienia → Demo.
+      **Co zrobić:** popatrz na baner demo na `/dashboard`.
+      **Co musi być prawdą:** baner ma **tylko** „Wyjdź z demo" i odnośnik
+      „Ustawienia demo" — przycisku „Dokończ konfigurację" **nie ma**.
+      *Dlaczego to łapie:* odnośnik powrotny ma się pokazywać wyłącznie, dopóki
+      prawdziwe konto jest nieskonfigurowane. Widoczny na skonfigurowanym koncie
+      zaprasza leada do kreatora, z którego wychodzi się nadpisaniem działającej
+      konfiguracji — a bieżące zarządzanie ma zostać w Ustawieniach.
+
+- [ ] **15.I** (faza 4, `4.8`) **Gdzie:** świeże, nieskonfigurowane konto, które
+      weszło w demo drzwiami z progu.
+      **Co zrobić:** kliknij w banerze **„Wyjdź z demo"** i poczekaj, aż ekran się
+      odświeży.
+      **Co musi być prawdą:** lądujesz na progu `/setup`, a **nie** na pulpicie z
+      samymi zerami.
+      *Dlaczego to łapie:* wyjście z demo tylko przełącza aktywny workspace i nie
+      zmienia adresu. Bez bramki na `/dashboard` odświeżenie zostawia leada na
+      pustym pulpicie bez żadnej wskazówki, co dalej — czyli dokładnie w stanie,
+      dla którego ten slice powstał.
+
+- [ ] **15.J** (faza 4, `4.9`, druga połowa dawnego **13.7**) **Gdzie:** świeże
+      konto, ostatni krok kreatora `/setup/team`, **poza** demo.
+      **Co zrobić:** uzupełnij roster i kadencję, kliknij „Save & finish".
+      **Co musi być prawdą:** trafiasz na `/dashboard` i **zostajesz tam** — bramka
+      nie odbija cię z powrotem na `/setup`.
+      *Dlaczego to łapie:* to sprawdzian, że sześć warunków predykatu jest
+      naprawdę spełnionych w bazie po przejściu kreatora, a nie tylko wygląda na
+      spełnione. Odbicie tutaj oznacza pętlę: kreator kończy się i natychmiast
+      zaczyna od nowa. (Dawny wiersz **13.7** sprawdzał to samo w czasach, gdy
+      przekierowanie pochodziło wyłącznie z `router.push` i przeszłoby nawet bez
+      predykatu — teraz przechodzi tylko wtedy, gdy predykat naprawdę działa.)
+
+- [ ] **15.K** `MANUAL-CHECKLIST.md` tego slice'a jest podpisana w całości (A–D).
+      *Dlaczego to łapie:* to jedyny wiersz pilnujący, że pozostałe zostały
+      wykonane, a nie odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29
+      (68 otwartych wierszy w planach kontra 27 znanych backlogowi) wziął się
+      dokładnie stąd.

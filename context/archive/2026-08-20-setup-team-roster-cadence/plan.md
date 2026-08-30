@@ -423,5 +423,5 @@ No schema migration. All target columns exist through migration `0001`; `boardId
 #### Manual
 
 - [x] 5.5 Continue on the Jira card lands on `/setup/team` — manual 2026-08-29
-- [ ] 5.6 Completing roster + cadence makes `isOnboardingComplete` true and routes to `/dashboard`
+- [x] 5.6 Completing roster + cadence makes `isOnboardingComplete` true and routes to `/dashboard` — SUPERSEDED 2026-08-30 by S-22 (`onboarding-routing`), not passed. When this row was written the predicate had zero production callers, so the observable half would have passed with no predicate at all. It is now two executable rows in `manual-test-backlog.md` §15: **15.A** (the gate) and **15.J** (the wizard exit)
 - [x] 5.7 Coordination note filed with `onboarding-routing` confirming predicate name/location/shape

@@ -73,7 +73,7 @@ The insight is that the missing tool isn't another metrics dashboard — it's an
 ### US-02: New visitor explores the product end-to-end via demo data without any external integration
 
 - **Given** a new visitor who has just signed up and has connected no Jira or GitHub credentials
-- **When** they navigate to settings and click "Load demo team"
+- **When** they land on the setup doorstep at `/setup` — where sign-up puts them — and take its demo door ("Zobacz demo") instead of the configure door; the same demo remains loadable and resettable later from `/settings/demo`
 - **Then** Dashboard "Today" populates with a six-person team's simulated sprint combining healthy and crisis signals; the Anomaly Inbox shows anomalies of multiple distinct types out of the eight rules; Sprint Pulse and Yesterday's Activity render with realistic numbers; the visitor can click through to Dashboard "Sprint Detail" to see the workflow aging report, activity matrix, and per-technology sub-burndowns
 
 #### Acceptance Criteria
@@ -121,6 +121,7 @@ All FRs are `must-have` for the MVP. Each FR carries a `> Socratic:` blockquote 
 
 - FR-008: User can load and reset a single realistic demo dataset that combines healthy and crisis signals (some on-track tickets, some stalled PRs, some flagged anomalies across multiple rule types) showing the product's value in one viewing without an external API call. Priority: must-have
   > Socratic: Counter accepted: maintaining two distinct seed scenarios (Healthy + Crisis) doubles fixture work for the same demo outcome. One realistic mixed-state scenario carries both narratives — the lead sees healthy-flow elements *and* anomalies in the same dashboard, which is closer to real-team reality anyway.
+  > Socratic (extended 2026-08-30 — `context/changes/onboarding-routing/frame.md`): FR-008 and Access Control were in direct tension and nothing recorded it. Access Control promises that "on success, the user lands in the setup wizard", while US-02 promises the same person a path that exists precisely to AVOID the wizard's GitHub PAT + Jira token wall — and demo was reachable only through four unsignposted steps (nav → Settings → the sixth tab → the button), which no new visitor finds. A hard post-sign-up redirect would have honoured the first promise by burying the second. Resolution: the landing destination is a **doorstep**, not a credential form — `/setup` is a first screen offering exactly two doors, configure or demo. Both promises hold as written: the user does land in the setup wizard, and the demo is one click from the first screen they see. Two consequences are load-bearing rather than incidental: the un-onboarded gate on `/dashboard` must NOT fire in demo (a demo visitor deliberately chose to skip configuration, and the demo fixture satisfies the onboarding predicate under the DEMO owner anyway), and while the REAL account behind a demo is still un-onboarded the demo banner carries the way back to the wizard — otherwise the doorstep is a screen the visitor can never return to.
 
 ### Anomaly thresholds & inputs
 
