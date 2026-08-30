@@ -315,8 +315,10 @@ automatycznych zielone. Instrukcje krok po kroku:
       przeglądu i testów. Podpowiedź jest edytowalna, więc to nie jest defekt —
       ale FR-005 opiera całą detekcję anomalii na tym mapowaniu.
 
-      🔵 **Trzecia obserwacja produktowa (ta sama sesja):**
-      `context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md` — nigdzie
+      🔵 **Trzecia obserwacja produktowa (ta sama sesja):** ✅ **ZAMKNIĘTA
+      2026-08-30 przez S-25** (`sprint-identity-visibility`, §18 poniżej);
+      notatka źródłowa skasowana razem z naprawą, opis żyje w pozycji S-25
+      roadmapy. Było tak: nigdzie
       nie widać wprost, **którego sprintu** dotyczy to, na co się patrzy. W kroku
       kadencji nazwa jest wpleciona w zdanie w `CardDescription`
       (`cadence-form.tsx:156`); na „Today" pada wyłącznie w opisie panelu
@@ -2010,10 +2012,10 @@ wpisane nieobecności bezpowrotnie — żaden sync ich nie odtworzy.
       zdanie do tego, co kod naprawdę trzyma; zamknięcie luki to **S-27**. Jeśli
       kiedyś zobaczysz tu z powrotem mocniejsze zdanie o „nietkniętych
       integracjach", a S-27 nie jest zrobione — to jest błąd, zgłoś go.
-      ⚠️ **Nieaktualne od 2026-08-30: S-27 WESZŁO** (§18). Luka jest zamknięta,
+      ⚠️ **Nieaktualne od 2026-08-30: S-27 WESZŁO** (§19). Luka jest zamknięta,
       więc baner celowo mówi znowu mocniej — teraz ogólnie, że nic zrobione w
       demie nie zmienia prawdziwego konta ani jego integracji. **Nie zgłaszaj
-      tego jako błędu.** Ten wiersz zastępuje **18.F**, które sprawdza nową
+      tego jako błędu.** Ten wiersz zastępuje **19.F**, które sprawdza nową
       treść we wszystkich czterech miejscach naraz; 16.E rób tylko wtedy, gdy
       chcesz potwierdzić samą historię.
 
@@ -2170,13 +2172,114 @@ bazowy wykonany jednorazowym skryptem ze scratchpada, zapisany w
 
 ---
 
-## 18. S-27 `demo-boundary-enforcement` — otwarte w całości (2026-08-30)
+## 18. S-25 `sprint-identity-visibility` — otwarte (2026-08-30)
+
+Slice wzięty **z Twojego zgłoszenia** z 2026-08-30 (notatka źródłowa została
+skasowana razem z naprawą, zgodnie z konwencją w `CLAUDE.md`; opis znaleziska
+żyje dalej w pozycji **S-25** roadmapy): „na
+dashboardzie nie ma nazwy, nazwa jest dopiero w zakładce Sprint Detail ale jest
+mało widoczna". Odpowiedź nie jest kosmetyczna. Każdy ekran pokazujący dane
+sprintu ma teraz **jedną linię obok nagłówka: nazwa + zakres dat**, np.
+`PT Sprint 1 · 30.08 – 12.09`. Daty są czytane w **strefie czasowej Twojej
+Jiry**, żeby dało się je porównać jeden do jednego z Jirą — sama nazwa jest
+nieweryfikowalna, a to właśnie weryfikowalności zabrakło, gdy sync świecił
+zielono przy pustym dashboardzie.
+
+Pełne opisy: `context/archive/2026-08-30-sprint-identity-visibility/MANUAL-CHECKLIST.md`.
+Źródło kanoniczne: `context/archive/2026-08-30-sprint-identity-visibility/plan.md`
+`## Progress`. **Slice zarchiwizowany 2026-08-30 — to NIE zamyka tych wierszy.**
+Archiwizacja przenosi folder, nie odhacza testów; 18.A–18.E czekają tak samo jak
+przedtem. Odhaczając cokolwiek, odhacz też w powyższym `plan.md`.
+
+**Konta:** wiersze 18.A, 18.B i 18.D wymagają konta z **prawdziwą** Jirą i
+trwającym sprintem — to `demo@sprintflow.test` (mimo nazwy to ono ma prawdziwe
+tokeny). Wiersz 18.C wymaga konta **bez** aktywnego sprintu —
+`adam.reszka85@gmail.com` albo świeżo założone. Nic tu nie kasuje danych.
+
+- [ ] **18.A** (faza 3, `3.5`) **Gdzie:** `/dashboard`, konto z prawdziwą Jirą.
+      **Co zrobić:** wejdź i **nie klikaj żadnej zakładki**; popatrz obok
+      nagłówka „Dashboard — Today"; w drugiej karcie otwórz Jirę i znajdź
+      aktywny sprint.
+      **Co musi być prawdą:** obok nagłówka jest pogrubiona nazwa sprintu, a za
+      nią jaśniejszy zakres `DD.MM – DD.MM`; nazwa jest identyczna z Jirą znak w
+      znak, a data początku to **ten sam dzień**, który Jira pokazuje jako start
+      — nie dzień wcześniej.
+      *Dlaczego to łapie:* „Today" było jedynym ekranem, który nazwy nie miał
+      **wcale** — nie było czego pogrubić, trzeba było ją wprowadzić. Data o
+      jeden dzień wcześniejsza oznacza, że czytanie idzie w UTC zamiast w
+      strefie zespołu, i wtedy porównanie z Jirą przestaje cokolwiek
+      potwierdzać.
+
+- [ ] **18.B** (faza 3, `3.6`) **Gdzie:** `/dashboard/sprint-detail`, to samo
+      konto.
+      **Co zrobić:** zapamiętaj nazwę i daty obok nagłówka; z listy rozwijanej w
+      prawym rogu tego samego wiersza wybierz **inny, zamknięty** sprint;
+      poczekaj na przeładowanie.
+      **Co musi być prawdą:** nazwa i daty zmieniły się na te wybranego sprintu
+      (nie zostały poprzednie), a obok nadal jest plakietka **„Sprint closed"**.
+      *Dlaczego to łapie:* najłatwiejsza wpadka w tym slice to podmienić nazwę,
+      ale zostawić daty poprzedniego sprintu — wtedy liczby jednego sprintu są
+      podpisane datami innego i nie ma tego jak zauważyć. Dotyczy to zwłaszcza
+      sprintów, których surowe dane już zniknęły po zmianie projektu w Jirze:
+      ich daty muszą pochodzić z zapisanego pomiaru, nie z aktywnego sprintu.
+
+- [ ] **18.C** (faza 3, `3.7`; faza 4, `4.6`) **Gdzie:** konto **bez** aktywnego
+      sprintu; kolejno `/dashboard`, `/dashboard/sprint-detail`, zakładka
+      **„Reliability"** na `/dashboard`, oraz `/setup/team`.
+      **Co zrobić:** na każdym z trzech ekranów popatrz obok nagłówka (na
+      `/setup/team` — obok tytułu karty „Sprint cadence"); w kafelku
+      **„Estimated velocity"** przeczytaj cały tekst pod tytułem; na
+      `/setup/team` spróbuj zmienić dowolne pole rytmu sprintu.
+      **Co musi być prawdą:** wszędzie widnieje napis **„Sprint: none active"**
+      — puste miejsce jest opisane, a nie po prostu puste; kafelek „Estimated
+      velocity" **nigdzie** nie zawiera zwrotu **„the active sprint"**; pola
+      rytmu sprintu nadal się edytują.
+      *Dlaczego to łapie:* brak elementu na ekranie wygląda identycznie jak
+      element, który się nie wyrenderował z powodu błędu. A stary tekst „scaled
+      to what **the active sprint** actually has" twierdził, że aktywny sprint
+      istnieje, na koncie, na którym go nie ma — ta sama pomyłka co „pusty wynik
+      czytany jako sukces" z `lessons.md`.
+
+- [ ] **18.D** (faza 4, `4.5`) **Gdzie:** `/setup/team`, konto z prawdziwą Jirą.
+      **Co zrobić:** wejdź i **nie klikaj niczego**; przewiń do karty **„Sprint
+      cadence"** i popatrz na jej nagłówek; dopiero potem kliknij **„Pull from
+      Jira"**.
+      **Co musi być prawdą:** już przy pierwszym wejściu obok tytułu jest nazwa
+      sprintu i zakres dat — **te same** co w 18.A; po „Pull from Jira" nadal
+      tam są; zdanie pod tytułem nie zawiera już nazwy sprintu w cudzysłowie.
+      *Dlaczego to łapie:* to jest ekran z Twojego zgłoszenia. Jeśli nazwa
+      pojawia się dopiero po kliknięciu, znaczy to, że serwer jej nie policzył i
+      pierwsze wejście nadal nie odpowiada na pytanie „z którego sprintu to
+      jest". Ten krok przeszedł też na **wspólny** sposób ustalania aktywnego
+      sprintu — jeśli kreator i `/dashboard` pokazują **różne** sprinty, to jest
+      błąd, nie różnica ekranów.
+
+- [ ] **18.E** (faza 5, `5.5`) **Gdzie:** `/settings/recap/history`, dowolne
+      konto z zapisanymi recapami sprzed dzisiaj.
+      **Co zrobić:** otwórz **najstarszy** recap z listy.
+      **Co musi być prawdą:** strona szczegółów otwiera się i nadal pokazuje
+      nazwę sprintu oraz liczbę anomalii — **nie** komunikat o nieczytelnej
+      treści. Pusta lista historii ⇒ napisz „brak recapów", nie „zaliczone".
+      *Dlaczego to łapie:* faza 5 dołożyła dwa pola do zapisywanej treści
+      recapu. Podbicie numeru wersji formatu unieważniłoby **każdy** wcześniej
+      wysłany recap i wykasowałoby z historii nazwę sprintu oraz licznik
+      anomalii. Wersja została celowo niezmieniona — ten wiersz to sprawdza.
+
+**Wysyłki maila nie da się dziś przetestować manualnie** — Resend nie jest
+jeszcze podłączony. Nowa treść maila (nazwa sprintu w temacie także w dni bez
+anomalii, oraz linia tożsamości w obu wersjach treści) jest pokryta testami
+jednostkowymi w `src/lib/recap/render.test.ts`; 18.E sprawdza jedyną część,
+która ma widoczny skutek w aplikacji.
+
+---
+
+## 19. S-27 `demo-boundary-enforcement` — otwarte w całości (2026-08-30)
 
 Slice zamknięty 2026-08-30, pięć faz. Źródło kanoniczne:
 `context/changes/demo-boundary-enforcement/plan.md` `## Progress`. Wiersze
 blokujące mają pełne opisy w
-`context/changes/demo-boundary-enforcement/MANUAL-CHECKLIST.md` (18.A, 18.C,
-18.D, 18.E, 18.G); 18.B, 18.F i 18.H są tylko tutaj.
+`context/changes/demo-boundary-enforcement/MANUAL-CHECKLIST.md` (19.A, 19.C,
+19.D, 19.E, 19.G); 19.B, 19.F i 19.H są tylko tutaj.
 
 **O co chodzi, po ludzku.** Do tej pory tryb demo był umową, nie blokadą.
 Baner obiecywał, że nic prawdziwego się nie zmienia, a z ekranu demo dało się w
@@ -2188,23 +2291,23 @@ token), naprawia kasowanie świata demo przy ponownym wejściu w demo, i przesta
 obiecywać listę wyłączonych rzeczy — zamiast tego mówi jedno ogólne zdanie, które
 jest prawdziwe.
 
-**Konto:** 18.A wymaga konta z **prawdziwymi** credentialami GitHuba i Jiry (na
+**Konto:** 19.A wymaga konta z **prawdziwymi** credentialami GitHuba i Jiry (na
 lokalnej bazie to `demo@sprintflow.test` — nazwy są mylące, patrz §5,
-identyfikuj po `token_last4`). 18.C, 18.D i 18.E najlepiej na **świeżym koncie
+identyfikuj po `token_last4`). 19.C, 19.D i 19.E najlepiej na **świeżym koncie
 bez integracji** — to jest sytuacja, w której odwiedzający naprawdę ląduje w
 demie.
 
 ⚠️ **Nie odpalaj `db:seed:demo` na koncie z prawdziwymi tokenami** — seed je
 kasuje.
 
-⚠️ **18.G kończy się na „Anuluj".** Potwierdzenie kasuje cały świat demo (profil
+⚠️ **19.G kończy się na „Anuluj".** Potwierdzenie kasuje cały świat demo (profil
 demo i wszystko pod nim). To odwracalne tylko przez wczytanie demo od zera —
-stracisz każdą zmianę zrobioną wewnątrz dema. 18.H potwierdza świadomie i jest
+stracisz każdą zmianę zrobioną wewnątrz dema. 19.H potwierdza świadomie i jest
 osobnym wierszem właśnie dlatego.
 
 ### Blokujące (te same, co w checkliście slice'a)
 
-- [ ] **18.A** (faza 1, `1.5`) **Gdzie:** konto z **prawdziwie podłączonym**
+- [ ] **19.A** (faza 1, `1.5`) **Gdzie:** konto z **prawdziwie podłączonym**
       GitHubem i Jirą, przełączone w tryb demo (`/settings/demo` → „Wróć do
       demo" albo „Zobacz demo").
       **Co zrobić:** na `/settings/connections` zapisz sobie **cztery ostatnie
@@ -2220,7 +2323,7 @@ osobnym wierszem właśnie dlatego.
       mógł w trzech kliknięciach nadpisać własny, prawdziwy token — a przy Jirze
       zmiana projektu kasuje kaskadowo sprinty, zadania i historię statusów.
 
-- [ ] **18.C** (faza 2, `2.5`) **Gdzie:** dowolne konto w trybie demo.
+- [ ] **19.C** (faza 2, `2.5`) **Gdzie:** dowolne konto w trybie demo.
       **Co zrobić:** będąc w demie, wpisz w pasek adresu
       `/settings/connections/github` i zatwierdź.
       **Co musi być prawdą:** adres zmienia się na `/settings/connections`, a na
@@ -2230,7 +2333,7 @@ osobnym wierszem właśnie dlatego.
       wpisany adres dalej otwiera formularz, blokada nie istnieje — a to
       najkrótsza droga do nadpisania prawdziwego tokena z ekranu dema.
 
-- [ ] **18.D** (faza 2, `2.6`) **Gdzie:** **świeże konto bez żadnych
+- [ ] **19.D** (faza 2, `2.6`) **Gdzie:** **świeże konto bez żadnych
       integracji**, które weszło w demo przyciskiem „Zobacz demo" na `/setup`.
       **Co zrobić:** będąc w demie wejdź na `/setup` (Wstecz albo wpisany adres),
       kliknij przycisk na **lewej** karcie („Podłącz GitHuba").
@@ -2243,7 +2346,7 @@ osobnym wierszem właśnie dlatego.
       przycisk odbija z powrotem na `/setup`, odwiedzający jest zamknięty w demie
       bez żadnego komunikatu — dokładnie scenariusz, przed którym ostrzega FR-008.
 
-- [ ] **18.E** (faza 3, `3.4`) **Gdzie:** konto ze świeżo wczytanym demem.
+- [ ] **19.E** (faza 3, `3.4`) **Gdzie:** konto ze świeżo wczytanym demem.
       **Co zrobić:** w demie wejdź na `/settings/team`, **zmień imię jednej
       osoby** na rozpoznawalne (np. „TEST TEST") i zapisz; zapamiętaj datę z
       paska dema („stan na …"); wejdź na `/setup`; kliknij **„Zobacz demo"**;
@@ -2255,7 +2358,7 @@ osobnym wierszem właśnie dlatego.
       odwiedzający w nim poprzestawiał, i przesuwało zamrożoną datę. Utrata danych
       bez ostrzeżenia, wywołana przyciskiem, który brzmi jak „pokaż".
 
-- [ ] **18.G** (faza 4, `4.4`) **Gdzie:** `/settings/demo`, konto z wczytanym
+- [ ] **19.G** (faza 4, `4.4`) **Gdzie:** `/settings/demo`, konto z wczytanym
       demem.
       **Co zrobić:** kliknij **„Usuń dane demo"**, przeczytaj okno, kliknij
       **Anuluj**, potem wejdź na `/dashboard`.
@@ -2271,7 +2374,7 @@ osobnym wierszem właśnie dlatego.
 
 ### Nieblokujące (tylko tutaj)
 
-- [ ] **18.B** (faza 2, `2.4`) **Gdzie:** `/settings/connections`, konto w trybie
+- [ ] **19.B** (faza 2, `2.4`) **Gdzie:** `/settings/connections`, konto w trybie
       demo. Zrób to na **dwóch** kontach: raz z obiema integracjami podłączonymi,
       raz na świeżym koncie bez żadnej.
       **Co zrobić:** popatrz na obie karty integracji i spróbuj kliknąć każdy
@@ -2285,7 +2388,7 @@ osobnym wierszem właśnie dlatego.
       Ten wiersz pilnuje obu stanów karty, bo każdy pokazuje inny przycisk i
       wystarczy zabezpieczyć jeden z nich, żeby drugi został otwarty.
 
-- [ ] **18.F** (faza 4, `4.6`) **Gdzie:** cztery miejsca, w demie: pasek na górze
+- [ ] **19.F** (faza 4, `4.6`) **Gdzie:** cztery miejsca, w demie: pasek na górze
       `/dashboard`, panel na `/settings/demo`, karty na
       `/settings/connections`, prawa karta na `/setup`.
       **Co zrobić:** przeczytaj **całe** zdanie o demie w każdym z tych czterech
@@ -2300,7 +2403,7 @@ osobnym wierszem właśnie dlatego.
       zdanie jest jedynym, które da się utrzymać; jeśli lista wróci, wróci też ten
       błąd.
 
-- [ ] **18.H** (faza 4, `4.5`) ⚠️ **KASUJE ŚWIAT DEMO — rób jako ostatni z tej
+- [ ] **19.H** (faza 4, `4.5`) ⚠️ **KASUJE ŚWIAT DEMO — rób jako ostatni z tej
       sekcji.** **Gdzie:** `/settings/demo`, konto z wczytanym demem, na którym
       nie masz już nic do sprawdzenia.
       **Co zrobić:** kliknij **„Usuń dane demo"** i tym razem **potwierdź**.
@@ -2309,13 +2412,13 @@ osobnym wierszem właśnie dlatego.
       oferta to **wczytanie dema od nowa**, nie „wróć do demo". Baner dema
       zniknął, `/dashboard` zachowuje się jak na koncie bez dema. Kliknięcie
       „wczytaj" buduje świat demo od zera.
-      *Dlaczego to łapie:* to druga połowa 18.G — potwierdzenie musi naprawdę
+      *Dlaczego to łapie:* to druga połowa 19.G — potwierdzenie musi naprawdę
       kasować, a panel musi to zauważyć. Panel, który po skasowaniu dalej oferuje
       „wróć do demo", zostawia konto w stanie, którego nie da się otworzyć.
 
-- [ ] **18.I** `MANUAL-CHECKLIST.md` tego slice'a
+- [ ] **19.I** `MANUAL-CHECKLIST.md` tego slice'a
       (`context/changes/demo-boundary-enforcement/MANUAL-CHECKLIST.md`) jest
-      podpisana w całości (18.A, 18.C, 18.D, 18.E, 18.G).
+      podpisana w całości (19.A, 19.C, 19.D, 19.E, 19.G).
       *Dlaczego to łapie:* pilnuje, że wiersze zostały naprawdę wykonane, a nie
       odhaczone hurtem przy archiwizacji — rozjazd z 2026-08-29 wziął się dokładnie
       stąd.

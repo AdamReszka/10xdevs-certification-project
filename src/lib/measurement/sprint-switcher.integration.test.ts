@@ -413,8 +413,18 @@ describe("a sprint whose raw data is gone but whose measurement survives", () =>
       jiraSprintId: "899",
       name: "Sprint 899",
       sprintRowId: null,
+      // S-25: the identity line's dates come from the RECORD here, because the
+      // `sprint` row this branch exists for is gone. Asserted against the ACTIVE
+      // sprint's dates, not merely for being non-null — a plausible-looking date
+      // under the wrong sprint's name is the exact substitution this branch
+      // was written to prevent, and unlike the unit test these values have
+      // actually round-tripped through Postgres.
+      startDate: CLOSED_START,
+      endDate: CLOSED_END,
       kind: "measurement-only",
     });
+    expect(selection.startDate).not.toEqual(ACTIVE_START);
+    expect(selection.endDate).not.toEqual(ACTIVE_END);
     // `sprintRowId === null` is what makes the page skip all three reducers and
     // render the notice; it is also what withholds the adjustment form, because
     // `writeLeadColumn` would refuse the save.

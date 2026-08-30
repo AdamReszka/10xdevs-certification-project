@@ -69,7 +69,10 @@ function payload(over: Partial<RecapPayload> = {}): RecapPayload {
       ticketsMovedToDone: 3,
     },
     syncState: {
-      GITHUB: { lastSuccessfulSyncAt: "2026-08-26T12:45:00.000Z", status: "OK" },
+      GITHUB: {
+        lastSuccessfulSyncAt: "2026-08-26T12:45:00.000Z",
+        status: "OK",
+      },
       JIRA: { lastSuccessfulSyncAt: "2026-08-26T12:45:00.000Z", status: "OK" },
     },
     anomalies: [anomaly()],
@@ -84,12 +87,16 @@ describe("renderRecapEmail — subject", () => {
   });
 
   it("pluralizes correctly", () => {
-    const two = payload({ anomalies: [anomaly({ id: "a1" }), anomaly({ id: "a2" })] });
+    const two = payload({
+      anomalies: [anomaly({ id: "a1" }), anomaly({ id: "a2" })],
+    });
     expect(renderRecapEmail(two).subject).toContain("2 anomalies");
   });
 
   it("says so explicitly when there are none", () => {
-    expect(renderRecapEmail(payload({ anomalies: [] })).subject).toContain("no anomalies");
+    expect(renderRecapEmail(payload({ anomalies: [] })).subject).toContain(
+      "no anomalies",
+    );
   });
 });
 
@@ -170,7 +177,9 @@ describe("renderRecapEmail — null churn", () => {
 
   it("keeps a real zero as 0", () => {
     const { text } = renderRecapEmail(
-      payload({ activity: { ...payload().activity, additions: 0, deletions: 0 } }),
+      payload({
+        activity: { ...payload().activity, additions: 0, deletions: 0 },
+      }),
     );
     expect(text).toContain("lines changed: +0 / +0");
   });
@@ -181,8 +190,14 @@ describe("renderRecapEmail — integration health", () => {
     const { html, text } = renderRecapEmail(
       payload({
         syncState: {
-          GITHUB: { lastSuccessfulSyncAt: "2026-08-25T12:00:00.000Z", status: "ERROR" },
-          JIRA: { lastSuccessfulSyncAt: "2026-08-26T12:45:00.000Z", status: "OK" },
+          GITHUB: {
+            lastSuccessfulSyncAt: "2026-08-25T12:00:00.000Z",
+            status: "ERROR",
+          },
+          JIRA: {
+            lastSuccessfulSyncAt: "2026-08-26T12:45:00.000Z",
+            status: "OK",
+          },
         },
       }),
     );
@@ -252,14 +267,22 @@ describe("renderRecapEmail — severity order", () => {
       payload({
         anomalies: [
           anomaly({ id: "h", severity: "HIGH", description: "first-high" }),
-          anomaly({ id: "m", severity: "MEDIUM", description: "second-medium" }),
+          anomaly({
+            id: "m",
+            severity: "MEDIUM",
+            description: "second-medium",
+          }),
           anomaly({ id: "l", severity: "LOW", description: "third-low" }),
         ],
       }),
     );
 
-    expect(text.indexOf("first-high")).toBeLessThan(text.indexOf("second-medium"));
-    expect(text.indexOf("second-medium")).toBeLessThan(text.indexOf("third-low"));
+    expect(text.indexOf("first-high")).toBeLessThan(
+      text.indexOf("second-medium"),
+    );
+    expect(text.indexOf("second-medium")).toBeLessThan(
+      text.indexOf("third-low"),
+    );
   });
 });
 
@@ -283,7 +306,9 @@ describe("renderRecapEmail — escaping", () => {
   it("escapes a quote in a source URL rather than breaking out of href", () => {
     const { html } = renderRecapEmail(
       payload({
-        anomalies: [anomaly({ sourceUrl: 'https://x.test/a" onmouseover="evil()' })],
+        anomalies: [
+          anomaly({ sourceUrl: 'https://x.test/a" onmouseover="evil()' }),
+        ],
       }),
     );
 
@@ -328,5 +353,79 @@ describe("renderRecapEmail — missing sprint metadata", () => {
     expect(text).toContain("Sprint day — of —");
     expect(text).toContain("committed SP: —");
     expect(html).not.toContain("null");
+  });
+});
+
+describe("renderRecapEmail — sprint identity (S-25)", () => {
+  /** The range separator is invisible in a diff, so spell it in escapes. */
+  const RANGE = "17.08\u200A\u2013\u200A31.08";
+
+  /** A dated sprint, as a build writes one from `sprint.start_date`/`end_date`. */
+  const DATED = {
+    startDate: "2026-08-16T22:00:00.000Z",
+    endDate: "2026-08-30T22:00:00.000Z",
+  };
+
+  it("names the sprint in the ZERO-anomaly subject, not only when something fired", () => {
+    // The branch that was silently dropping it: every quiet day produced the
+    // same subject for every team, indistinguishable in an inbox.
+    const { subject } = renderRecapEmail(payload({ anomalies: [] }));
+
+    expect(subject).toContain("Sprint 11");
+    expect(subject).toContain("no anomalies today");
+  });
+
+  it("names the sprint and its range in both bodies", () => {
+    const { html, text } = renderRecapEmail(
+      payload({ sprint: { ...payload().sprint, ...DATED } }),
+    );
+
+    // Warsaw, not UTC — 22:00Z is already the next day there, and the email has
+    // to agree with the dashboards about which day the sprint started.
+    expect(text).toContain(`Sprint 11 · ${RANGE}`);
+    expect(html).toContain(`Sprint 11 · ${RANGE}`);
+  });
+
+  it("makes NO identity claim when the payload cannot name the sprint", () => {
+    const { subject, html, text } = renderRecapEmail(
+      payload({ sprint: { ...payload().sprint, ...DATED, name: null } }),
+    );
+
+    expect(subject).not.toContain("your sprint");
+    expect(html).not.toContain("your sprint");
+    expect(text).not.toContain("your sprint");
+    // And still says the useful part.
+    expect(subject).toContain("2026-08-26");
+  });
+
+  it("renders a payload written BEFORE this change — neither date key present", () => {
+    // The shape every stored recap has. `RECAP_SCHEMA_VERSION` stayed 1, so
+    // those payloads still pass the version gate and reach this renderer.
+    const legacy = payload();
+    expect("startDate" in legacy.sprint).toBe(false);
+
+    const { html, text } = renderRecapEmail(legacy);
+
+    expect(text).toContain("Sprint 11");
+    for (const body of [html, text]) {
+      expect(body).not.toContain("undefined");
+      expect(body).not.toContain("Invalid Date");
+      expect(body).not.toContain("NaN");
+    }
+  });
+
+  it("keeps the label and drops the range when only one endpoint is stored", () => {
+    const { text } = renderRecapEmail(
+      payload({
+        sprint: {
+          ...payload().sprint,
+          startDate: DATED.startDate,
+          endDate: null,
+        },
+      }),
+    );
+
+    expect(text).toContain("Sprint 11");
+    expect(text).not.toContain("17.08");
   });
 });

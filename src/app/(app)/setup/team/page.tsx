@@ -1,14 +1,15 @@
 import { redirect } from "next/navigation";
 import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { and, eq } from "drizzle-orm";
 
 import CadenceForm from "@/components/organisms/setup/cadence-form";
 import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
-import { sprint } from "@/db/schema";
 import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getDb } from "@/lib/db";
 import { listRosterForEditor } from "@/lib/roster";
+import { getActiveSprintRow } from "@/lib/sprint";
+import { toSprintIdentity } from "@/lib/sprint-identity";
 import type { Weekday } from "@/lib/validations/roster";
 
 /**
@@ -32,7 +33,13 @@ export default async function TeamSetupPage() {
   // `isDemo` is therefore always false below; it is still threaded to the child
   // rather than hard-coded, so the child keeps one contract with its
   // demo-aware siblings and the guard stays the single place demo is decided.
-  const { isDemo } = await resolveWorkspace();
+  //
+  // `now` is the same resolver's clock, which S-25 threads into the sprint
+  // identity bar. Past the redirect it is always the LIVE clock rather than a
+  // frozen demo anchor — which is what that bar should show on a real wizard
+  // step. `resolveWorkspace` is `cache()`d and the `(app)` layout has already
+  // called it this render, so it costs no extra query and no extra pool.
+  const { isDemo, now } = await resolveWorkspace();
   if (isDemo) redirect("/setup");
   const { env } = getCloudflareContext();
   const db = getDb(env);
@@ -40,19 +47,22 @@ export default async function TeamSetupPage() {
   // Shared with Settings → Team so the two editor mounts cannot drift.
   const initialMembers = await listRosterForEditor(db, ownerId);
 
-  // The owner's active sprint cadence, when one exists (between-sprints teams
-  // have none — the cadence form falls back to editable defaults).
-  const [activeSprint] = await db
-    .select({
-      lengthDays: sprint.lengthDays,
-      startDay: sprint.startDay,
-      workingDays: sprint.workingDays,
-      cadenceOverridden: sprint.cadenceOverridden,
-      name: sprint.name,
-    })
-    .from(sprint)
-    .where(and(eq(sprint.ownerId, ownerId), eq(sprint.state, "ACTIVE")))
-    .limit(1);
+  // ONE RESOLVER, NOT TWO (S-25, plan review F6). This page used to hand-roll
+  // `WHERE state = 'ACTIVE' … LIMIT 1` while Today asked `getActiveSprintRow`,
+  // whose second tier falls back to the most-recently-started sprint. On a
+  // between-sprints account that was Today naming a sprint while the wizard said
+  // there was none — two surfaces contradicting each other about identity,
+  // inside a slice whose premise is that identity is a fact the lead can check.
+  // The hand-rolled query also had no `ORDER BY`, so with two ACTIVE rows (which
+  // `importCadence` can create) Postgres could return either.
+  //
+  // The cadence VALUES read off the row are the same columns as before — the
+  // shared resolver returns a superset, not a different sprint, whenever an
+  // ACTIVE one exists.
+  const [activeSprint, timeZone] = await Promise.all([
+    getActiveSprintRow(db, ownerId),
+    getJiraTimeZone(db, ownerId),
+  ]);
 
   const initialCadence = activeSprint
     ? {
@@ -66,7 +76,17 @@ export default async function TeamSetupPage() {
           "FRI",
         ],
         cadenceOverridden: activeSprint.cadenceOverridden,
-        sprintName: activeSprint.name,
+        // Built on the SERVER so the identity is on screen at first paint, not
+        // only after a re-pull — and so no `Date` and no `Intl` call crosses
+        // into the client component.
+        sprintIdentity: toSprintIdentity({
+          name: activeSprint.name,
+          jiraSprintId: activeSprint.jiraSprintId,
+          startDate: activeSprint.startDate,
+          endDate: activeSprint.endDate,
+          timeZone,
+          now,
+        }),
       }
     : null;
 

@@ -56,7 +56,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-22 | onboarding-routing        | a newly signed-up user lands on a doorstep at `/setup` offering two doors — configure real data, or see the demo — instead of a dashboard of zeros | S-01, S-04, S-07, S-09, S-10 | PRD Access Control ("lands in the setup wizard"), FR-008, US-02 | done     |
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 | S-24 | destructive-action-confirmation | disconnecting GitHub or Jira asks first and says what will be destroyed, on every path that can lose data | S-02, S-03, S-08, S-16 | — (PRD Guardrails: graceful degradation, no silent data loss) | done     |
-| S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | proposed |
+| S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | proposed |
 
@@ -569,7 +569,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | done                   | ✅ Implemented & merged — PR #68 (2026-08-30), five phases; archived 2026-08-30 (PR #73). Shipped as a **doorstep**, not a redirect: `/setup` is a first screen offering two doors — configure real data, or see the demo — which is what let FR-008 and the Access Control promise ("lands in the setup wizard") both hold as written. Prerequisites were widened during the slice to S-01, S-04, S-07, S-09, S-10: S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on. `isOnboardingComplete` went from zero production callers to gating `/dashboard`. **Status corrected 2026-08-30** — this row still read `yes` (ready to start) after the slice shipped and was archived; the at-a-glance table, the S-22 body and `change.md` all said done |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
 | S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | done | ✅ Implemented 2026-08-30, four phases. **Raised by the tester**, framed and planned the same day. Pattern copied is `molecules/confirm-dialog.tsx` (S-15), NOT `jira-project-editor.tsx` — whose copy was wrong in both directions and is now rebuilt from the same source. The load-bearing half is `src/lib/integrations/disconnect-impact.ts`: one declaration of the blast radius that a hermetic test holds equal to the schema's FK graph, so a future slice hanging a cascading child under `sprint` or `monitored_repo` breaks the build instead of silently making the dialog lie. Phase 3 also closed the Connections tab against demo — all nine Server Actions refuse server-side, which delivers one of S-27's three items |
-| S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`). `sprint.start_date` / `end_date` are already populated from Jira and simply not rendered |
+| S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | done                   | ✅ Implemented 2026-08-30, five phases. **Raised by the tester** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`) and **reframed at `/10x-frame`:** the finding is not prominence — the three surfaces were in three different states of absence, and Today had no identity element to restyle at all. What ships is one fact (`PT Sprint 1 · 30.08 – 12.09`) computed once in a pure `src/lib/sprint-identity.ts` and rendered by one shared `molecules/sprint-identity-bar.tsx` on the cadence step, both dashboards and the Daily Recap. Two identity-fabricating fallbacks are gone (`?? "the active sprint"`, `?? "your sprint"`). Dates render in the team's Jira zone, correcting this entry's own UTC instruction (see the S-25 detail block). The wizard also stops hand-rolling its own `state = 'ACTIVE'` query, so it and Today can no longer disagree about which sprint exists |
 | S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | **blocked on S-20** | Prereqs S-08, S-16, S-24 all done (S-24 merged 2026-08-30). Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Sequence behind S-20** — both settle the meaning of `absence.sprint_id` and it must not be decided twice. Scope may shrink or grow with Open Roadmap Question 4 |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | yes | Prereqs S-09, S-22, S-24 all done (S-24 merged 2026-08-30). Raised at `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 takes the two items the owner scoped in (the dialog covers demo; the banner stops promising what is false); what remains is that `/setup/**` has no demo guard and the doorstep `push`es rather than `replace`s. **Third item DELIVERED by S-24 Phase 3 (2026-08-30):** `connections/page.tsx` documented a server-side refusal `connections/actions.ts` did not implement; all nine actions on that tab now return `demoRefusal()` / `DEMO_REFUSAL_MESSAGE`, each with a `*.demo.test.ts` sibling |
 
@@ -1015,7 +1015,8 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** sprint-identity-visibility
 - **PRD refs:** FR-007, FR-016, FR-017
 - **Prerequisites:** S-04, S-07, S-10, S-16
-- **Status:** proposed
+- **Status:** done — implemented 2026-08-30 in five phases; manual rows open
+  (`context/archive/2026-08-30-sprint-identity-visibility/MANUAL-CHECKLIST.md`, backlog §18)
 
 - **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`),
   in her own words: *"na dashboardzie nie ma nazwy, nazwa jest dopiero w zakładce
@@ -1040,10 +1041,26 @@ Foundations below assume these are present and do NOT re-scaffold them.
   every rollover.
 - **The dates are already there.** `sprint.start_date` / `end_date` are populated
   from Jira and never rendered. One line — `PT Sprint 1 · 30.08 – 12.09` — answers
-  both halves of the finding. ⚠️ The columns are `timestamp without time zone` in
-  UTC and the UI renders UTC deliberately (backlog §5); do not "fix" that here.
-- **Not checked, for planning:** whether the Daily Recap email names the sprint;
-  contrast of the Sprint Detail badge in dark mode; demo mode.
+  both halves of the finding.
+- **⚠️ CORRECTED AT IMPLEMENTATION (2026-08-30): sprint dates render in the
+  TEAM'S ZONE, not UTC.** This entry originally said *"the UI renders UTC
+  deliberately (backlog §5); do not 'fix' that here"*, and that rested on a
+  misread. Backlog §5 is about `sync_state.*_at` in `sync-status-bar.tsx` and
+  `integration-card.tsx`, and its reason is SSR/hydration determinism — a string
+  slice instead of `toLocaleString` — not a product decision about sprint dates,
+  which rendered nowhere at all. The real constraint is determinism, and
+  `dayKeyInTimeZone` satisfies it by pinning both the locale (`en-CA`) and an
+  explicit zone. Reading UTC would also have made one screen disagree with
+  itself: `cadence.ts` already derives the sprint's start WEEKDAY in the team's
+  zone. Concretely, the tester's sprint stored as `2026-08-29 22:46` is **30.08**
+  in Warsaw — the date this entry's own example line uses for the start, while
+  taking the UTC reading for the end. `sync_state.*_at` is untouched.
+- **Answered by the frame round (2026-08-30):** the Daily Recap email named the
+  sprint in its SUBJECT only, and only when at least one anomaly fired — neither
+  body named it and `RecapSprint` carried no dates. In scope, shipped as the
+  final separable phase.
+- **Not checked, for planning:** contrast of the Sprint Detail badge in dark
+  mode; demo mode.
 
 ---
 
@@ -1185,3 +1202,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-12: user can view a list of past daily recaps and drill into any recap; recaps older than the current sprint + 2 previous sprints are automatically purged.** — Archived 2026-08-29 → `context/archive/2026-08-29-recap-history/`. Lesson: —.
 - **S-22: a user who signs up lands on a **doorstep** at `/setup` — a first screen inside the wizard shell, with the navigation suppressed, that says what SprintFlow needs and offers exactly two doors: continue configuring (GitHub, or whichever step is actually still missing), or see the demo. A user whose onboarding is already complete lands on `/dashboard` as before. Today both go to `/dashboard` — the full S-07/S-10 surface rendering zeros — and `/setup` is reachable only by typing the URL.** — Archived 2026-08-30 → `context/archive/2026-08-19-onboarding-routing/`. Lesson: —.
 - **S-24: disconnecting GitHub or Jira — from the setup wizard or from Settings — asks for confirmation first and names what will be destroyed. No path that permanently deletes synced or hand-entered data fires on a single click.** — Archived 2026-08-30 → `context/archive/2026-08-30-destructive-action-confirmation/`. Lesson: —.
+- **S-25: every surface that renders sprint data names the sprint and shows its dates — the wizard's cadence step, Dashboard "Today", and Sprint Detail — prominently enough to answer "which sprint is this?" without hunting.** — Archived 2026-08-30 → `context/archive/2026-08-30-sprint-identity-visibility/`. Lesson: "A parallel worktree cannot run the suite that guards the shape it is changing" (`lessons.md` #9).
