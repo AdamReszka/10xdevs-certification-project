@@ -57,6 +57,8 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-23 | capacity-in-man-days      | capacity is measured in man-days and frozen per sprint next to delivered SP, so 100% reliability at full team stops looking identical to 100% at half team; the lead can enter per-sprint corrections and page back through closed sprints, and the history yields an estimated velocity | S-08, S-16 | FR-006, FR-007, FR-010, FR-016, FR-022, FR-023, FR-024 | done     |
 | S-24 | destructive-action-confirmation | disconnecting GitHub or Jira asks first and says what will be destroyed, on every path that can lose data | S-02, S-03, S-08, S-16 | — (PRD Guardrails: graceful degradation, no silent data loss) | proposed |
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | proposed |
+| S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | proposed |
+| S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | proposed |
 
 ## Streams
 
@@ -566,14 +568,17 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-21       | db-pool-teardown          | Request-path DB pool teardown (fix the per-invocation connection leak)  | yes                    | Prereq F-02 done. `lessons.md` #3, open since S-02's impl-review F3; S-05 fixed only the cron path |
 | S-22       | onboarding-routing        | First-run routing into the setup wizard                                 | yes                    | Prereqs S-01, S-04, S-07, S-09, S-10 all done. Half already shipped via S-10's Settings tab; `isOnboardingComplete` is built and has zero production callers. **Prerequisites widened 2026-08-30** — S-07/S-10 own the surface the gate protects and S-09 owns the rule it must not fire on; see the S-22 body |
 | S-23       | capacity-in-man-days      | Capacity in man-days + a per-sprint measurement record + a closed-sprint view | done              | ✅ Implemented, reviewed & merged — PR #55 (2026-08-28), seven phases. Not a unit swap: the substance is freezing a per-sprint record, written by an idempotent sweep rather than the `switched` hook (a hook loses the sprint outright when the cron is stalled at rollover). PRD amended across framing + planning: FR-022, FR-023, FR-024, the FR-007 days-off clause, plus the retention and forecasting non-goals. **Unblocks S-17**, and deliberately does NOT close S-18 (the estimate uses the ACTIVE sprint's capacity ratio; projecting an unstarted window is still S-18) |
-| S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md`). The pattern to copy already exists in-repo: `jira-project-editor.tsx:75-92` warns before a project switch |
+| S-24       | destructive-action-confirmation | Confirmation before any Disconnect that destroys synced or hand-entered data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-brak-potwierdzenia-disconnect.md`); framed 2026-08-30 (`context/changes/destructive-action-confirmation/frame.md`). Pattern to copy is `molecules/confirm-dialog.tsx` (S-15), NOT `jira-project-editor.tsx` — whose copy is wrong in both directions |
 | S-25       | sprint-identity-visibility | Name the sprint (and its dates) on every surface that shows its data | yes | Prereqs done. **Raised by the tester, 2026-08-30** (`context/manual-tests/S-16-4.6-tozsamosc-sprintu-niewidoczna.md`). `sprint.start_date` / `end_date` are already populated from Jira and simply not rendered |
+| S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | no | Prereq S-24 not shipped. Split out of S-24 by the owner at `/10x-frame` (2026-08-30) so consent ships without a migration. **Sequence behind S-20** — both settle the meaning of `absence.sprint_id` and it must not be decided twice. Scope may shrink or grow with Open Roadmap Question 4 |
+| S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | no | Prereq S-24 not shipped. Raised at `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 takes the two items the owner scoped in (the dialog covers demo; the banner stops promising what is false); what remains is that `/setup/**` has no demo guard, the doorstep `push`es rather than `replace`s, and `connections/page.tsx:34` documents a server-side refusal that `connections/actions.ts` does not implement |
 
 ## Open Roadmap Questions
 
 1. ~~**Demo data ↔ real integrations interaction**~~ — **RESOLVED 2026-08-29.** Answer: **any account may load demo data, including one with real Jira + GitHub credentials connected.** Owner: user (answered during `/10x-frame demo-mode`). Block: **none** — and the claim that it "determines demo-mode data routing architecture" did not survive the frame. It is a design input to S-09, not a precondition; the actual precondition is a demo/real discriminator that does not exist in the schema today. Consequence to carry into planning: under this answer, a load that clears the owner's rows destroys real credentials. Full reasoning: `context/changes/demo-mode/frame.md`.
 2. **5-category status mapping rigidity** — Should MVP keep the 5 standard categories (To Do / In Progress / Code Review / Testing / Done) or add a 6th "Blocked" bucket? A 6th bucket would suppress `TICKET_STATUS_AGING` for explicitly blocked tickets. Owner: user. Block: S-03 (no — MVP ships with 5 categories; 6th bucket is phase 2 per PRD; implementation can proceed; revisit after first real-team trial).
 3. **GitHub cache TTL default** — FR-011 commits to 15-minute default; confirm against actual rate-limit budget during S-05 implementation (classic PAT = 5,000 req/h; multi-user deployments may require a higher TTL). Owner: implementation planning (S-05). Block: no.
+4. **Should disconnecting an integration delete its data at all — and who actually disconnects?** — Raised by the owner during `/10x-frame destructive-action-confirmation` (2026-08-30). S-24 settles *consent*: the lead is asked, is told what goes, and can cancel. It deliberately does not ask whether the deletion is the right behaviour. Two halves, and the second is the one nobody has evidence on. (a) The cascade is currently justified by nothing written down; the only recorded framing of Disconnect is S-02/S-03's "I mistyped the token, let me re-enter it" (`context/archive/2026-06-14-setup-github-integration/plan.md:192`), a use case for which deleting the whole synced history is a strange response. (b) **Who is the user of this button?** A satisfied lead running one team has no reason to press it; the plausible pressers are someone rotating an expired token (who wants the data KEPT), someone repointing at a different project (which `jira-project-editor.tsx` already serves without a disconnect), and someone leaving the product (who does not care). If no real user wants the deletion, the question is not how loudly to warn but whether Disconnect should mean "forget the credential" rather than "forget everything". Owner: user. Block: **no** — S-24 ships consent regardless; the answer changes S-26's scope and could shrink it to nothing. Full evidence: `context/changes/destructive-action-confirmation/frame.md`.
 
 ### S-17: Working-days calendar
 
@@ -914,19 +919,47 @@ Foundations below assume these are present and do NOT re-scaffold them.
   reconstruct — and the GitHub path takes the entire commit/PR/review history.
   Two unconfirmed clicks reset an account to near-fresh. `daily_recap` survives
   with `sprint_id` nulled.
-- **The pattern to copy is already in the repo, one component away.**
-  `settings/jira-project-editor.tsx:75-92` warns before a *project switch* with a
-  destructive `Alert`, a destructive button and an after-the-fact summary of what
-  was discarded; `connection-service.ts:405-408` even cites it in a comment. The
-  product already decided that losing a synced sprint deserves a warning — and
-  then omitted it on the path that destroys strictly more.
+- **CORRECTED 2026-08-30 by `/10x-frame` — the pattern to copy is not
+  `jira-project-editor.tsx`.** That is the bespoke earlier instance (an inline
+  destructive `Alert` gating a multi-step flow a modal cannot serve), and its copy
+  is **wrong in both directions**: it names `daily_recap`, which survives
+  (`schema.ts:1037-1039`, `SET NULL`), and omits `absence` and `anomaly`, which
+  die. The actual house convention is `src/components/molecules/confirm-dialog.tsx`
+  (S-15) — *"so **every** destructive action in the app reads the same: it NAMES
+  what it is about to destroy"* — with three consumers and an established copy
+  shape. And the convention's own plan already named this gap:
+  `context/archive/2026-08-23-team-management-surface/plan.md:531-532` — "the
+  roster's three destructive actions **and the Disconnect button whenever someone
+  fixes it**". A documented, deferred omission, not an oversight.
+- **No layer of the code knows what Disconnect destroys.** Four independent
+  docstrings state a one-level cascade — `github-store.ts:174-179`,
+  `jira-store.ts:288-292`, `setup/{github,jira}/actions.ts:162,249` and both
+  wizard components. Actual depth: 4 tables (GitHub), 5 deep / 9 wide (Jira).
+  Nothing anywhere counts what an integration owns, though the machinery exists
+  for a smaller blast radius: `roster-store.ts:561` — *"What a permanent delete
+  would destroy, so the confirmation can name it."*
 - **This closes a hole S-16 left open by assumption.** S-16's checklist justified
   the wizard having no dialog by pointing at "the equivalent in
   `/settings/connections`". That equivalent guards the project switch, not the
   disconnect. The assumption was never verified.
-- **Scope note for planning:** demo mode was not checked —
-  `integration-card.tsx` disables *Test connection* in demo but does not appear
-  to disable *Disconnect*.
+- **Scope settled by the owner at `/10x-frame`, 2026-08-30**
+  (`context/changes/destructive-action-confirmation/frame.md`): the slice is
+  **consent only** — it does not touch the cascade or the schema. Pass condition:
+  the lead is asked, is told what will be removed, and can cancel; live counts are
+  not required, which makes the accuracy of the category list load-bearing. Demo
+  is in scope and takes the same dialog **plus** a truthful banner
+  (`demo-banner.tsx:93` and `demo-panel.tsx:108-112` currently promise that real
+  data and integrations are untouched while the button is live). Narrowing the
+  cascade moved to **S-26**; the structural demo boundary to **S-27**; whether the
+  deletion is right at all is **Open Roadmap Question 4**.
+- **Two consequences the plan must carry, not discover.** Four E2E specs encode
+  the unconfirmed click and will fail when the fix lands
+  (`e2e/setup-jira.spec.ts:27-33,46-52`, `e2e/setup-github.spec.ts:27-33,49-55`,
+  relied on by `e2e/seed.spec.ts:34` and `e2e/dashboard-sprint-detail.spec.ts:51`).
+  And **two documents already claim the confirmation exists** — the archived S-16
+  `MANUAL-CHECKLIST.md:129-131` and `manual-test-backlog.md:1808` row 15.C, which
+  instructs the tester to "kliknij **Disconnect**, potwierdź". Both are corrected
+  in the same commit as the fix.
 
 ---
 
@@ -967,6 +1000,108 @@ Foundations below assume these are present and do NOT re-scaffold them.
   UTC and the UI renders UTC deliberately (backlog §5); do not "fix" that here.
 - **Not checked, for planning:** whether the Daily Recap email names the sprint;
   contrast of the Sprint Detail badge in dark mode; demo mode.
+
+---
+
+### S-26: Disconnecting stops destroying the lead's own data
+
+- **Outcome:** disconnecting an integration removes what that integration
+  supplied — the credential, the monitored selection, and the rows a future sync
+  would rebuild. It stops taking data the lead typed themselves. Concretely: a
+  Jira disconnect no longer deletes recorded absences.
+- **Change ID:** disconnect-data-retention
+- **PRD refs:** FR-010
+- **Prerequisites:** S-08, S-16, S-24
+- **Status:** proposed
+
+- **Split out of S-24 by the owner, deliberately** (2026-08-30,
+  `context/changes/destructive-action-confirmation/frame.md`). S-24 settles the
+  *consent* question — the lead is asked and can cancel — and explicitly does not
+  touch the schema. This slice is the other half: a confirmation makes an
+  irreversible loss **conscious**, it does not make it **necessary**.
+- **The mechanism, precisely.** `absence.sprint_id` is `ON DELETE CASCADE` on
+  `sprint` (`src/db/schema.ts:642-644`), and `src/lib/absence-store.ts:157`
+  stamps every new absence with the active sprint id resolved by
+  `getActiveSprintRow` (`src/lib/sprint.ts:19-43`), whose two-tier fallback
+  returns "the most recently started sprint of any state" before it returns NULL.
+  `updateAbsence` never re-stamps it (`absence-store.ts:168-174`). So on any
+  account past first-run setup **essentially every absence the lead ever typed is
+  destroyed by a Jira disconnect**, and the handful that survive are an arbitrary
+  early-adopter subset — decided by *when the row was typed*, which nothing in the
+  UI exposes and no user could reason about.
+- **This is a known class in this repo, at a different layer.**
+  `context/foundation/lessons.md` — "Delete-then-insert is only safe for tables
+  with no hand-entered children" — was written about exactly this data
+  (`team_member` → `absence`, hand-entered FR-010 rows no sync can reconstruct)
+  and its rule is "check the referential actions on every inbound FK before
+  reaching for the idiom". The lesson's `Applies to` names store functions; the
+  FK that fires here was never re-examined when S-16 attached `sprint` beneath
+  `jira_project`.
+- **Scope note for planning:** the decision is what an orphaned absence means —
+  `SET NULL` on `absence.sprint_id` collides with **S-20**, which is already the
+  slice that decides what `sprint_id` is *for* and finds three consumers
+  disagreeing about it. Sequence S-20 first or fold the decision into it; do not
+  settle the same column twice. Also in range and not yet weighed: `status_mapping`
+  (the lead's status→category judgement, hand-entered, nowhere else), the frozen
+  `sprint.committed_sp` / `committed_frozen_at` and the hand-imported cadence
+  columns (`schema.ts:419-436`), and `anomaly.status` — the triaged/dismissed
+  state the lead set by hand.
+- **Blocked on Open Roadmap Question 4** in the useful sense: if the answer is
+  that Disconnect should mean "forget the credential", this slice grows; if the
+  deletion is affirmed as correct, it may shrink to `absence` alone.
+
+---
+
+### S-27: The demo boundary is a gate, not a convention
+
+- **Outcome:** no screen rendered in demo mode can reach a mutation of the real
+  account, and every sentence the demo surfaces show the user is true.
+- **Change ID:** demo-boundary-enforcement
+- **PRD refs:** FR-008, US-02
+- **Prerequisites:** S-09, S-22, S-24
+- **Status:** proposed
+
+- **Raised during `/10x-frame destructive-action-confirmation`** (2026-08-30).
+  S-24 takes the two demo items the owner put in its scope: the Disconnect dialog
+  covers the demo path like any other, and `demo-banner.tsx:93` gets a truthful
+  sentence. What is left here is the structural half.
+- **The gating criterion is written down and is the wrong criterion.**
+  `src/components/organisms/settings/integration-card.tsx:31-35` records the S-09
+  decision as "only the control that would reach the live API is disabled", which
+  is why `isDemo` is in Test connection's predicate (`:197`) and absent from
+  Disconnect's (`:205`). The rule was framed around **outbound calls**, so an
+  irreversible local DELETE passes it by construction. Any future destructive
+  action that calls nothing will pass it too.
+- **Demo is not a walled route.** Only `/dashboard` gates on onboarding and it
+  short-circuits on demo (`src/app/(app)/dashboard/page.tsx:69-70`); `/setup/**`
+  has no demo guard at all; the nav stays live on the wizard's sub-pages
+  (`main-nav.tsx:34`), so Settings → Connections is two clicks from anywhere; and
+  the doorstep's demo door `push`es rather than `replace`s
+  (`setup-doorstep.tsx:53-55`), so Back returns to the wizard still in DEMO. The
+  only thing keeping demo out of the wizard is one button's exit-then-navigate
+  ordering (`demo-banner.tsx:59-77`) — which is precisely the distinction
+  `src/lib/demo/refusal.ts:5-8` draws for itself: *"a `disabled` attribute is a
+  courtesy, not a boundary"*. Five actions have a server-side `demoRefusal`; the
+  wizard's own writes and both disconnects have none.
+- **A comment that documents a guard that does not exist.**
+  `src/app/(app)/settings/connections/page.tsx:34` says the disabled controls are
+  refused server-side too — "(the server refuses them too)". `settings/connections/actions.ts`
+  contains **zero** demo checks: `testGithubConnection` (`:57-58`) and
+  `testJiraConnection` (`:71-72`) call only `requireRealWorkspace()`. The claim
+  holds for `syncNowAction` (`src/lib/integrations/sync/actions.ts:96`) and for
+  nothing on that page. Same failure shape as the S-16 assumption behind S-24: a
+  comment asserting a guard nobody verified.
+- **Untested in both directions.** The `demoRefusal` suite covers sync,
+  refinement, recap and roster; the disconnect tests are IDOR-only
+  (`setup/github/actions.integration.test.ts:259,287`,
+  `setup/jira/actions.integration.test.ts:430,458`) with no demo dimension.
+- **Owner's position on demo lifecycle, recorded here because it constrains this
+  slice** (2026-08-30): demo data is meant to stay available so the model version
+  of the system can be looked at any time; leaving demo should stop *presenting*
+  it, not delete anything. Note that `resetDemo` (`src/lib/demo/load.ts:150-164`)
+  does delete the demo `user` row and everything under it, and `demo-panel.tsx:83-96`
+  fires it with no confirmation — worth checking against that intent before this
+  slice is planned.
 
 ## Done
 
