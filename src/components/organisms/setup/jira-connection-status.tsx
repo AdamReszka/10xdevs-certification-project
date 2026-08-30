@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * Connected-status card (S-03). Renders "Connected to {workspace} as {email}"
@@ -51,11 +52,11 @@ export default function JiraConnectionStatus({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleDisconnect() {
+  async function handleDisconnect(mode: DisconnectMode) {
     setIsDisconnecting(true);
     try {
       // The refusal is RETURNED, not thrown — see `github-connection-status.tsx`.
-      const result = await disconnectJira();
+      const result = await disconnectJira(mode);
       if (!result.ok) {
         toast.error(result.message);
         setIsDisconnecting(false);

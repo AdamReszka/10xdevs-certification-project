@@ -871,22 +871,22 @@ prefer rolling forward.
 
 #### Automated
 
-- [x] 2.1 Demo boundary guard still matches both actions
-- [x] 2.2 Unit suite passes
-- [x] 2.3 Integration suite passes with both modes covered
-- [x] 2.4 Type checking passes
-- [x] 2.5 Linting passes
-- [x] 2.6 A repo's synced history survives disconnect-with-keep and the reconnect that follows
+- [x] 2.1 Demo boundary guard still matches both actions — e2f78ae
+- [x] 2.2 Unit suite passes — e2f78ae
+- [x] 2.3 Integration suite passes with both modes covered — e2f78ae
+- [x] 2.4 Type checking passes — e2f78ae
+- [x] 2.5 Linting passes — e2f78ae
+- [x] 2.6 A repo's synced history survives disconnect-with-keep and the reconnect that follows — e2f78ae
 
 ### Phase 3: The dialog — two buttons
 
 #### Automated
 
-- [ ] 3.1 Copy tests pass
-- [ ] 3.2 Unit suite passes
-- [ ] 3.3 Type checking passes
-- [ ] 3.4 Linting passes
-- [ ] 3.5 Production build succeeds
+- [x] 3.1 Copy tests pass
+- [x] 3.2 Unit suite passes
+- [x] 3.3 Type checking passes
+- [x] 3.4 Linting passes
+- [x] 3.5 Production build succeeds
 
 #### Manual
 

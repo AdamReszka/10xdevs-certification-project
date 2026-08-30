@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * Connected-status card (S-02). Renders "Connected as {login} (ghp_••••{last4})"
@@ -47,12 +48,12 @@ export default function GithubConnectionStatus({
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function handleDisconnect() {
+  async function handleDisconnect(mode: DisconnectMode) {
     setIsDisconnecting(true);
     try {
       // The refusal is RETURNED, not thrown, so without this branch a demo
       // refusal would render as `toast.success` below.
-      const result = await disconnectGithub();
+      const result = await disconnectGithub(mode);
       if (!result.ok) {
         toast.error(result.message);
         setIsDisconnecting(false);

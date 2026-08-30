@@ -2,11 +2,13 @@
 
 import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import {
-  disconnectConfirmLabel,
+  disconnectClearLabel,
   disconnectDescription,
+  disconnectKeepLabel,
   disconnectTitle,
   type DisconnectIntegration,
 } from "@/components/molecules/disconnect-confirm-copy";
+import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
  * The confirmation in front of every Disconnect (S-24).
@@ -36,7 +38,9 @@ export default function DisconnectConfirmDialog({
   integration: DisconnectIntegration;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: () => Promise<void>;
+  /** Called with the outcome the lead picked. S-26: a disconnect no longer has
+   *  one meaning, so the dialog reports WHICH completion was chosen. */
+  onConfirm: (mode: DisconnectMode) => Promise<void>;
 }) {
   return (
     <ConfirmDialog
@@ -49,11 +53,20 @@ export default function DisconnectConfirmDialog({
       // browser breaks the list out of the paragraph, taking the accessible
       // description with it.
       description={disconnectDescription(integration)}
-      confirmLabel={disconnectConfirmLabel(integration)}
-      variant="destructive"
-      // No `secondary`: unlike a member delete, there is no safer alternative to
-      // offer here. Reconnect is a different button, not a way out of this one.
-      onConfirm={onConfirm}
+      // The primary action KEEPS, so it is not the destructive variant — the
+      // shape `roster-editor.tsx` already uses for Deactivate beside Delete
+      // permanently. Until S-26 this component passed no `secondary` at all,
+      // with a comment asserting there was no safer alternative to offer. There
+      // is one now: it is the default, and the irreversible branch is the one
+      // the lead has to reach for by name.
+      confirmLabel={disconnectKeepLabel(integration)}
+      variant="default"
+      onConfirm={() => onConfirm("keep")}
+      secondary={{
+        label: disconnectClearLabel(integration),
+        variant: "destructive",
+        onConfirm: () => onConfirm("clear"),
+      }}
     />
   );
 }
