@@ -85,14 +85,24 @@ function isWorkingDay(
  * overlap with `[from, to]` ∩ that day's `[08:00, 16:00)`. Nights, weekends and
  * team-wide days off contribute nothing. Returns 0 when `to <= from`.
  *
- * The result is in WALL-CLOCK hours, not elapsed real time, and the two differ
- * twice a year: a span whose working portion is 08:00–16:00 on a spring-forward
- * day is 8 working hours even though 7 hours of real time passed. That is the
- * intended reading — the budget is the shift the team worked, not the seconds the
- * planet turned.
+ * BOUNDED by wall-clock hours, MEASURED in elapsed real time (impl-review F6).
+ * The day's window is found by reading the local clock — `localHourInstant`
+ * binary-searches for 08:00 and 16:00 rather than adding to local midnight, which
+ * is what makes it right across DST — but the contribution is then
+ * `(hi - lo) / MS_PER_HOUR`, i.e. real milliseconds. The distinction is invisible
+ * today: no IANA zone transitions between 08:00 and 16:00 local, so every window
+ * measures 8. Were one ever to, this would return 7, not 8.
+ *
+ * That is stated precisely because an earlier draft of this comment claimed the
+ * opposite — that the span reads as 8 "even though 7 hours of real time passed".
+ * It does not, and the claim was dangerous rather than merely wrong: a future
+ * reader "repairing" the code to match it would break the round-trip property
+ * `shiftWorkingHours` depends on, since that function measures with the same
+ * real-elapsed formula. The two must agree; which of the two readings they
+ * agree on matters far less.
  *
  * `workingDays` falls back to Mon–Fri when Jira told us nothing, exactly as
- * `countWorkingDays` does. An unrecognized or absent zone degrades to UTC via
+ * `countWorkingDaysInclusive` does. An unrecognized or absent zone degrades to UTC via
  * `safeZone`; nothing here throws. Day enumeration is capped by
  * `enumerateDayKeys`, so a corrupt timestamp cannot spin.
  */
@@ -187,6 +197,32 @@ export function shiftWorkingHours(
       : dayRange.to.getTime() + 1;
   }
 
+  // THE CLAMP, AND WHY IT SPEAKS (impl-review F2). Falling out of the loop means
+  // the calendar could not supply the hours asked for within `maxDays` — every
+  // day in range was a weekend, a company day off, or outside `workingDays`. The
+  // instant returned is then NOT `hours` away from `from`; it is as far as the
+  // walk got, and it is shaped exactly like a successful answer.
+  //
+  // That matters because of the direction the failure takes. Both callers use
+  // this to open a lookback window (`developer-inactive.ts`,
+  // `ticket-no-commit-link.ts`), so a clamp WIDENS the window — the rule asks
+  // "any commit since a month ago?" instead of "since two working days ago",
+  // gets yes, and emits nothing. Silence reads as a healthy sprint. It is
+  // reachable with ordinary FR-007 data: a four-week company shutdown recorded
+  // as team-wide days off swallows a 16-working-hour lookback whole.
+  //
+  // `context/foundation/lessons.md` names this shape — an empty result that
+  // reads as success — and its obligation (a) is that the operator log must
+  // distinguish the cases. `thresholds.ts` honours it for a discarded override;
+  // this honours it for an unsatisfiable calendar. The value is still returned:
+  // a clamped window is a better answer than a thrown request, and the caller
+  // has nothing better to do with the failure than the log already does.
+  console.error(
+    `[anomaly/working-time] the calendar could not supply ${Math.abs(hours)} working ` +
+      `hours within ${maxDays} days of ${from.toISOString()} (zone ${zone}); ` +
+      `${remaining} working hours short, so the window was clamped and any rule ` +
+      `using it is measuring a WIDER span than it asked for`,
+  );
   return new Date(cursor);
 }
 

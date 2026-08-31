@@ -477,6 +477,29 @@ implementujący na końcu fazy 6.
       `jira-project-editor.tsx` — wymieniał raporty dzienne, które przeżywają, a
       pomijał nieobecności, które ginęły.
 
+**S-28 `working-day-aging` — dług przekrojowy znaleziony przy impl-review (F9).**
+Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
+odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
+
+- [ ] **28.A** Zmiana monitorowanego projektu Jira zeruje `jira_project.time_zone`
+      i cały zegar godzin roboczych przechodzi na UTC.
+      **Gdzie:** `src/lib/integrations/jira-store.ts:233` —
+      `...(projectChanged ? { boardId: null, timeZone: null } : {})`.
+      **Co się dzieje:** dopóki krok zespołu nie przeliczy strefy z Jiry
+      (`/myself`), `safeZone` degraduje do UTC, więc okno robocze to 08:00–16:00
+      **UTC**. Dla zespołu z US-Pacific to 01:00–09:00 czasu lokalnego: weekendy
+      dalej są wyłączone, więc główna obietnica S-28 się broni, ale **faza**
+      zegara jest przesunięta nawet o ~16 godzin i ticket może zestarzeć się o
+      prawie dobę za wcześnie albo za późno.
+      **Co musi być prawdą po naprawie:** albo strefa przeżywa zmianę projektu,
+      albo użytkownik jest o jej utracie poinformowany, albo reguły czasowe
+      wstrzymują się do czasu jej odtworzenia. Dziś nie ma ani bannera, ani logu.
+      **Dlaczego to ma znaczenie:** defekt jest sprzed S-28, ale to S-28 dał mu
+      zęby — wcześniej strefa wpływała tylko na kubełkowanie dni na dashboardzie,
+      teraz decyduje, kiedy każda z pięciu reguł czasowych się odzywa. Cichość
+      jest tu najgorszą częścią: nic nie odróżnia „strefa zespołu" od „UTC, bo
+      zgubiliśmy strefę".
+
 ## 4. Osobna kategoria: deploy
 
 `context/deployment/deploy-plan.md` ma **19** niezaznaczonych kroków, ale to

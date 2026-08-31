@@ -61,59 +61,42 @@ const WEEKDAY_BY_INDEX: WeekdayCode[] = [
 ];
 
 /**
- * Count working days between two instants, resolved in the TEAM's zone.
+ * Count working days across a CLOSED range, resolved in the TEAM's zone.
  *
- * TWO NAMED INTENTS, ONE IMPLEMENTATION (S-08). The boundary is explicit because
- * the two callers need different ones and the difference is a silent off-by-one:
+ * ONE INTENT SINCE S-28 (impl-review F5). There used to be two, sharing one
+ * implementation: an exclusive-start `countWorkingDays` for
+ * `TICKET_STATUS_AGING`, whose "day the ticket moved is not an elapsed day"
+ * needed a half-open range, and this closed-range sibling for capacity and the
+ * absence cost. S-28 moved every elapsed-time measurement onto
+ * `working-time.ts`'s working-HOUR clock, which left the exclusive variant with
+ * no caller at all. It was deleted rather than kept: an unread second counter is
+ * the "two counters that disagree" failure `context/foundation/lessons.md`
+ * records, with the disagreement guaranteed to go unnoticed.
  *
- *  - {@link countWorkingDays} counts days STRICTLY AFTER `from`, through `to`
- *    inclusive — a half-open range. `TICKET_STATUS_AGING` measures elapsed time
- *    since a movement, and the day the ticket moved is not an elapsed day.
- *    Mon→Fri is 4.
- *  - {@link countWorkingDaysInclusive} counts a CLOSED range, both ends included.
- *    An absence from Monday to Friday costs 5 working days, and a sprint's own
- *    working-day total is likewise closed. Mon→Fri is 5.
+ * Both ends are counted. An absence from Monday to Friday costs 5 working days,
+ * and a sprint's own working-day total is likewise closed. Mon→Fri is 5.
  *
  * WHY THE ZONE IS REQUIRED (and not optional): this used to bucket with
  * `setHours(0,0,0,0)` + `getDay()`, i.e. in whatever zone the server happened to
  * run in, while every dashboard day axis buckets in `jira_project.time_zone`
  * through `day-bucket.ts`. On Workers the server is UTC so the two agreed by
- * accident; a Warsaw team's absence would not. Two counters that disagree is a
- * failure mode `context/foundation/lessons.md` already records once — hence one
- * implementation, and a zone the caller cannot forget to pass. An unrecognized or
- * absent zone degrades to UTC via `safeZone`, never throws.
+ * accident; a Warsaw team's absence would not. An unrecognized or absent zone
+ * degrades to UTC via `safeZone`, never throws.
  *
  * `nonWorkingDays` is the team-wide day-off calendar (S-23, FR-007): the day keys
  * on which the WHOLE team is off. Declared as an empty seam in S-08 and filled in
- * by `team-day-off-store.ts`. A public holiday that is not a working day for
- * capacity but still an ageing day for `TICKET_STATUS_AGING` would be two
- * counters disagreeing, which is the failure `context/foundation/lessons.md`
- * already records once. Deriving these dates automatically from a country is
- * still S-17; this parameter is what that slice will populate.
+ * by `team-day-off-store.ts`. Deriving these dates automatically from a country
+ * is still S-17; this parameter is what that slice will populate.
  *
- * REQUIRED, not optional (impl-review F6). It was optional, every caller passed
- * it, and the guarantee therefore rested on a grep rather than on the compiler —
- * while `computeSprintCapacity` had already made the identical input required
- * for the identical reason. An omission reads as "no holidays" and is silent,
- * which is exactly the half-wiring this seam was landed in one phase to prevent.
- * Pass an empty set to mean "none".
+ * REQUIRED, not optional (impl-review F6 of S-08). It was optional, every caller
+ * passed it, and the guarantee therefore rested on a grep rather than on the
+ * compiler. An omission reads as "no holidays" and is silent. Pass an empty set
+ * to mean "none".
  *
- * Falls back to Mon–Fri when `workingDays` is empty/absent. Day enumeration is
- * capped by `enumerateDayKeys` so a corrupt date cannot spin.
+ * Falls back to Mon–Fri when `workingDays` is empty or carries no recognisable
+ * weekday code (see {@link workingDaySet}). Day enumeration is capped by
+ * `enumerateDayKeys` so a corrupt date cannot spin.
  */
-export function countWorkingDays(
-  from: Date,
-  to: Date,
-  workingDays: readonly string[] | null | undefined,
-  timeZone: string | null | undefined,
-  nonWorkingDays: ReadonlySet<DayKey>,
-): number {
-  if (to <= from) return 0;
-  // Drop the first day: it is the day of `from`, which a half-open range excludes.
-  return countDays(from, to, workingDays, timeZone, nonWorkingDays, 1);
-}
-
-/** The closed-range sibling of {@link countWorkingDays} — both ends counted. */
 export function countWorkingDaysInclusive(
   from: Date,
   to: Date,
@@ -122,7 +105,7 @@ export function countWorkingDaysInclusive(
   nonWorkingDays: ReadonlySet<DayKey>,
 ): number {
   if (to < from) return 0;
-  return countDays(from, to, workingDays, timeZone, nonWorkingDays, 0);
+  return countDays(from, to, workingDays, timeZone, nonWorkingDays);
 }
 
 /**
@@ -167,26 +150,47 @@ export function countTeamDaysOffInclusive(
 export function workingDaySet(
   workingDays: readonly string[] | null | undefined,
 ): Set<string> {
-  return new Set<string>(
-    workingDays && workingDays.length > 0
-      ? workingDays
-      : ["MON", "TUE", "WED", "THU", "FRI"],
+  const fallback = new Set<string>(["MON", "TUE", "WED", "THU", "FRI"]);
+  if (!workingDays || workingDays.length === 0) return fallback;
+
+  // THE INTERSECTION IS THE POINT (impl-review F3), not the defaulting above it.
+  // A stored array is only authoritative if `weekdayOf` can ever produce its
+  // members, and `weekdayOf` emits exactly WEEKDAY_BY_INDEX. An array of
+  // `["mon","tue",…]` or `["Monday",…]` matches nothing, so every day reads as
+  // non-working and `workingHoursBetween` returns 0 for EVERY span, forever —
+  // which silences the three time-based rules outright and collapses
+  // SPRINT_AT_RISK's `hoursLeft` to 0, firing `todo_near_end` on day one of
+  // every sprint. That reads as a quiet sprint with one nag, not as a stopped
+  // clock, and it is `lessons.md`'s empty-result-reads-as-success shape again.
+  //
+  // Both writers are canonical today (`deriveCadence`, and the roster form
+  // behind a zod enum), so this is a guard against the next writer — S-17 is
+  // scheduled to populate this column from a country calendar.
+  const known = new Set<string>(WEEKDAY_BY_INDEX);
+  const recognised = new Set<string>(workingDays.filter((d) => known.has(d)));
+  if (recognised.size > 0) return recognised;
+
+  console.error(
+    `[anomaly/helpers] sprint.working_days carried no recognisable weekday code ` +
+      `(${JSON.stringify(workingDays)}); expected ${JSON.stringify([...known])}. ` +
+      `Falling back to Mon–Fri rather than treating every day as non-working`,
   );
+  return fallback;
 }
 
-/** Shared iteration. `skipFirst` is what separates the two boundary semantics. */
+/** Shared iteration. Kept separate from its one caller so the day-key walk and
+ *  the two exclusions stay in one place as more counters arrive. */
 function countDays(
   from: Date,
   to: Date,
   workingDays: readonly string[] | null | undefined,
   timeZone: string | null | undefined,
   nonWorkingDays: ReadonlySet<DayKey> | undefined,
-  skipFirst: 0 | 1,
 ): number {
   const set = workingDaySet(workingDays);
 
   let count = 0;
-  for (const dayKey of enumerateDayKeys(from, to, timeZone).slice(skipFirst)) {
+  for (const dayKey of enumerateDayKeys(from, to, timeZone)) {
     if (nonWorkingDays?.has(dayKey)) continue;
     if (set.has(weekdayOf(dayKey))) count += 1;
   }
