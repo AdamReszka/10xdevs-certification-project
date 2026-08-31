@@ -8,6 +8,7 @@ import {
 } from "@/components/molecules/disconnect-confirm-copy";
 import type { SyncStatus } from "@/lib/integrations/failure-reason";
 import {
+  CADENCE_RETENTION_CLAUSE,
   COMMITMENT_FREEZE_CLAUSE,
   DISCONNECT_LABEL,
   RECONNECT_LABEL,
@@ -158,6 +159,18 @@ describe("reconnectCost", () => {
     // drift apart.
     for (const surface of ["settings", "wizard"] as const) {
       expect(reconnectCost("jira", surface)).toContain(COMMITMENT_FREEZE_CLAUSE);
+    }
+  });
+
+  it("jira: names the cadence the switch KEEPS, the other undrivable clause (S-30)", () => {
+    // `sprint_cadence_override` survives because it has NO foreign key into the
+    // sync graph. That is a NEGATIVE fact about the schema: a derivation over
+    // `collectEdges()` can say which tables an edge reaches, never that a table
+    // has no edge worth mentioning. Pinned against the exported constant, on
+    // `COMMITMENT_FREEZE_CLAUSE`'s precedent, so the sentence and the clause
+    // cannot drift apart.
+    for (const surface of ["settings", "wizard"] as const) {
+      expect(reconnectCost("jira", surface)).toContain(CADENCE_RETENTION_CLAUSE);
     }
   });
 

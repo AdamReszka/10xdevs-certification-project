@@ -179,6 +179,12 @@ export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot
     // UTC by default so every rule expectation reads as a plain calendar fact,
     // independent of the machine the suite runs on.
     timeZone: "UTC",
+    // Mon–Fri by default (S-30). It arrives RESOLVED — a rule never reads
+    // `sprint.working_days`, which is superseded and holds only this constant;
+    // the lead's chosen pattern comes from `sprint_cadence_override` through
+    // `resolveCadenceFor`. A test that cares about a different pattern passes
+    // `workingDays` here, NOT on `makeSprint`.
+    workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
     // EMPTY by default (S-23): the overwhelming majority of rule expectations are
     // about thresholds, not holidays, and a default calendar would make every one
     // of them depend on a date nobody chose. Tests that care pass their own.

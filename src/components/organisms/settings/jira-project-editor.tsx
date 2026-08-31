@@ -164,7 +164,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
               `onboarding-routing` F3 reasoning is reversed; its precondition
               simply stopped being true. */}
           <Button asChild>
-            <Link href="/team/cadence">Import sprint cadence</Link>
+            <Link href="/team/cadence">Review sprint cadence</Link>
           </Button>
           <Button variant="ghost" onClick={() => setStage({ kind: "closed" })}>
             Later

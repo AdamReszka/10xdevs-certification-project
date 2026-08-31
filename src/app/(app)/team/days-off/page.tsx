@@ -1,6 +1,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import TeamDaysOffEditor from "@/components/organisms/settings/team-days-off-editor";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { listTeamDaysOff } from "@/lib/team-day-off-store";
@@ -35,6 +36,11 @@ export default async function TeamDaysOffPage() {
     getActiveSprintRow(db, ownerId),
   ]);
 
+  // RESOLVED (S-30). This page's counter and the capacity engine must agree on
+  // which days are working days, and the lead's pattern is no longer a column on
+  // the sprint row.
+  const cadence = sprint ? await resolveCadenceFor(db, ownerId, sprint) : null;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
@@ -56,7 +62,7 @@ export default async function TeamDaysOffPage() {
           day: d.day,
           label: d.label,
         }))}
-        workingDays={sprint?.workingDays ?? null}
+        workingDays={cadence?.workingDays ?? null}
       />
     </div>
   );

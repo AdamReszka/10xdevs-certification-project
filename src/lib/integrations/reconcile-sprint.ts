@@ -9,6 +9,11 @@ import {
   sprintMeasurement,
   type SelectSprint,
 } from "@/db/schema";
+import {
+  clearCadenceOverrideFields,
+  resolveCadenceFor,
+  type CadenceSource,
+} from "@/lib/cadence-override";
 import type { getDb } from "@/lib/db";
 import {
   type JiraBoard,
@@ -69,8 +74,13 @@ export type ReconcileArgs = {
   /** Wizard-only: the board the user picked out of a multi-board project. */
   chosenBoardId?: number;
   /**
-   * S-29: refresh the cadence PAST an existing override, and clear the flag in
-   * the same statement — the "Restore Jira's values" path.
+   * S-29: refresh the cadence PAST an existing override — the "Restore Jira's
+   * values" path. Since S-30 its effect is to clear the override record's
+   * `length_days` and `start_day`, and DELIBERATELY NOT its working days: Jira
+   * exposes no working-days field, so "restoring from Jira" a value Jira does
+   * not have is not a restore, it is deleting the lead's choice under someone
+   * else's name. The dialog has promised exactly this since S-29 — the sentence
+   * becomes true here.
    *
    * It lives here, on the one function that already owns the flag, rather than
    * in a caller that clears it first: every Jira network call in this module
@@ -95,6 +105,20 @@ export type ReconcileResult =
       /** True when the upsert landed on a DIFFERENT row than the owner's
        *  previous ACTIVE one — i.e. a rollover actually happened. */
       switched: boolean;
+      /**
+       * WHICH TIER answered for this sprint's cadence (S-30).
+       *
+       * The reconciler does not resolve a cadence to do its job — it WRITES the
+       * derived one — so this is one extra read inside the transaction it
+       * already opens, taken against the row the upsert just returned and AFTER
+       * any restore's clear (reading before would report the pre-restore tier).
+       *
+       * It is a DIAGNOSTIC, not a write: a failure resolving it must not be able
+       * to roll the cycle back, so it degrades to `"source"` rather than
+       * throwing. `run-sync.ts` turns `source_with_prior_override` into the
+       * `cadence_default_fallback` token on `sync_attempt.outcome`.
+       */
+      cadenceSource: CadenceSource;
       boardId: number;
     }
   | { status: "board_ambiguous"; candidates: JiraBoard[] }
@@ -209,16 +233,17 @@ export async function reconcileActiveSprint({
   const reconciled = await db.transaction(async (tx) => {
     // The owner's most-recently-started row, NOT scoped to ACTIVE: the
     // `no_active_sprint` branch above may have demoted it to CLOSED on an
-    // earlier cycle, and the owner's cadence override must still survive the
-    // rollover that follows. The demotion below stays ACTIVE-scoped.
+    // earlier cycle.
+    //
+    // NARROWED at S-30 to the two things still read from it — `id` for
+    // `switched`, `jiraSprintId` for the `isRecreate` guard. The four cadence
+    // columns went with `carry`: inheritance is READ-TIME now
+    // (`pickCadence` tier 2), so a rollover needs no write to preserve the
+    // lead's pattern, and the previous row is no longer where that pattern
+    // lives.
     const [previous] = await tx
       .select({
         id: sprint.id,
-        state: sprint.state,
-        cadenceOverridden: sprint.cadenceOverridden,
-        lengthDays: sprint.lengthDays,
-        startDay: sprint.startDay,
-        workingDays: sprint.workingDays,
         jiraSprintId: sprint.jiraSprintId,
       })
       .from(sprint)
@@ -301,39 +326,24 @@ export async function reconcileActiveSprint({
           }
         : {};
 
-    // Persist the resolved board so the next cycle skips `listBoards`.
-    await tx
+    // Persist the resolved board so the next cycle skips `listBoards`. The
+    // JIRA-SIDE project id rides back on the same statement — the override
+    // record is filed under it (it carries no FK), and a second SELECT for a
+    // value this UPDATE already touches would be a round trip for nothing.
+    const [projectRow] = await tx
       .update(jiraProject)
       .set({ boardId: String(resolvedBoardId) })
-      .where(eq(jiraProject.ownerId, ownerId));
+      .where(eq(jiraProject.ownerId, ownerId))
+      .returning({ jiraProjectId: jiraProject.jiraProjectId });
 
-    // A rollover takes the INSERT branch (the conflict target is
-    // `(owner_id, jira_sprint_id)`), and `importCadence`'s INSERT hard-codes
-    // `cadenceOverridden: false`. Copied verbatim that would ERASE the owner's
-    // override at exactly the event this slice exists to handle — and they
-    // could not re-apply it, since /setup/team is the only mount of
-    // `CadenceForm`. So a carried override seeds the new row.
-    const carry =
-      // `forceCadenceRefresh` (S-29) takes the else-branch deliberately: a
-      // restore that races a rollover must not resurrect the override it was
-      // asked to drop.
-      !forceCadenceRefresh &&
-      previous?.cadenceOverridden === true &&
-      previous.lengthDays != null &&
-      previous.startDay != null
-        ? {
-            lengthDays: previous.lengthDays,
-            startDay: previous.startDay,
-            workingDays: (previous.workingDays as string[] | null) ?? cadence.workingDays,
-            cadenceOverridden: true,
-          }
-        : {
-            lengthDays: cadence.lengthDays,
-            startDay: cadence.startDay,
-            workingDays: cadence.workingDays,
-            cadenceOverridden: false,
-          };
-
+    // `carry` LIVED HERE UNTIL S-30, seeding a rollover's INSERT with the
+    // previous row's override so the lead's choice survived the new
+    // `jira_sprint_id`. Read-time inheritance replaces it, and deleting it also
+    // deletes, by construction, the hole it carried: its guard checked
+    // `lengthDays != null && startDay != null` but NOT `workingDays`, and then
+    // coalesced a NULL pattern to Mon–Fri — so an override with a lead-set
+    // length and NULL working days silently re-seeded Mon–Fri on every rollover
+    // while still writing `cadenceOverridden: true`.
     const [row] = await tx
       .insert(sprint)
       .values({
@@ -348,7 +358,12 @@ export async function reconcileActiveSprint({
         state: toSprintState(activeSprint.state) ?? "ACTIVE",
         startDate: new Date(startDate),
         endDate: new Date(endDate),
-        ...carry,
+        lengthDays: cadence.lengthDays,
+        startDay: cadence.startDay,
+        workingDays: cadence.workingDays,
+        // INERT since S-30 — written `false` on insert, never read. Provenance
+        // is per field now, which one boolean cannot express (`schema.ts`).
+        cadenceOverridden: false,
         // INSERT-ONLY on purpose: the conflict branch below deliberately omits
         // both columns, so an existing row's freeze is never touched by a
         // metadata refresh. `values()` that the conflict branch does not
@@ -363,25 +378,19 @@ export async function reconcileActiveSprint({
           state: toSprintState(activeSprint.state) ?? "ACTIVE",
           startDate: new Date(startDate),
           endDate: new Date(endDate),
-          // Cadence refreshes ONLY when the existing row was not user-overridden
-          // (FR-007). Unqualified column = existing row; `excluded` = proposed.
+          // UNCONDITIONAL since S-30. These three columns are the DERIVED
+          // CACHE of what Jira's dates say, nothing more: the lead's choice
+          // lives in `sprint_cadence_override`, which this statement cannot
+          // reach. The three-way `case when … cadence_overridden` SET that used
+          // to guard them is gone with the flag it read.
           //
-          // Under `forceCadenceRefresh` the guard is dropped and the flag is
-          // cleared in the SAME statement — that is the whole reason the flag
-          // is not cleared by a separate UPDATE beforehand. One statement, one
-          // transaction: a Jira call that throws leaves the row untouched.
-          ...(forceCadenceRefresh
-            ? {
-                lengthDays: cadence.lengthDays,
-                startDay: cadence.startDay,
-                workingDays: sql`${newWorkingDays}::jsonb`,
-                cadenceOverridden: false,
-              }
-            : {
-                lengthDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.lengthDays} else ${cadence.lengthDays} end`,
-                startDay: sql`case when ${sprint.cadenceOverridden} then ${sprint.startDay} else ${cadence.startDay} end`,
-                workingDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.workingDays} else ${newWorkingDays}::jsonb end`,
-              }),
+          // The `::jsonb` cast stays because the parameter is a
+          // `JSON.stringify`'d literal, not an array.
+          lengthDays: cadence.lengthDays,
+          startDay: cadence.startDay,
+          workingDays: sql`${newWorkingDays}::jsonb`,
+          // `cadenceOverridden` is deliberately ABSENT: inert, and leaving a
+          // pre-S-30 `true` in place costs nothing since nothing reads it.
         },
       })
       .returning();
@@ -415,13 +424,60 @@ export async function reconcileActiveSprint({
         ),
       );
 
-    return { row, switched: previous != null && previous.id !== row.id };
+    // S-30 — the restore, inside the transaction that already exists.
+    //
+    // ITS POSITION AS AN ARGUMENT IS THE POINT, and it is not about one
+    // statement being safer than two. All four of `board_ambiguous`, `no_board`,
+    // `no_active_sprint` and `sprint_undated` return BEFORE this transaction
+    // opens, successfully, having written nothing and with no exception for a
+    // caller to catch — so a caller-side pre-clear would commit "auto-pull is
+    // back on" and then be told nothing was pulled.
+    //
+    // The clear CREATES the row when absent, which is what makes it safe against
+    // a restore racing a rollover: the new `jira_sprint_id` has no record of its
+    // own, and a clear that no-oped there would let the resolver's tier 2
+    // resurrect from the previous sprint exactly the override the restore was
+    // asked to drop.
+    if (forceCadenceRefresh && projectRow) {
+      // Read BEFORE the clear: this is the value being PRESERVED, so a create
+      // can materialise the working days the lead would otherwise lose along
+      // with the inherited length. The whole `ResolvedCadence` goes in, not just
+      // its three values — the clear materialises ONLY the fields its
+      // `provenance` marks as the lead's, so a restore on an account that never
+      // chose a pattern records no choice.
+      const before = await resolveCadenceFor(tx, ownerId, row);
+      await clearCadenceOverrideFields(tx, {
+        ownerId,
+        jiraProjectId: projectRow.jiraProjectId,
+        jiraSprintId: row.jiraSprintId,
+        startDate: new Date(startDate),
+        resolved: before,
+        fields: ["lengthDays", "startDay"],
+      });
+    }
+
+    // AFTER the clear, deliberately (plan review F7): reading before it would
+    // report the tier the restore was in the middle of dropping. Wrapped
+    // because a diagnostic must never be able to fail the cycle it describes.
+    let cadenceSource: CadenceSource = "source";
+    try {
+      cadenceSource = (await resolveCadenceFor(tx, ownerId, row)).source;
+    } catch {
+      // Leave the neutral value: no token beats a wrong one.
+    }
+
+    return {
+      row,
+      switched: previous != null && previous.id !== row.id,
+      cadenceSource,
+    };
   });
 
   return {
     status: "reconciled",
     sprint: reconciled.row,
     switched: reconciled.switched,
+    cadenceSource: reconciled.cadenceSource,
     boardId: resolvedBoardId,
   };
 }

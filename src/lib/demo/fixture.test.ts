@@ -117,6 +117,10 @@ function snapshotOf(fx: DemoFixture): SprintSnapshot {
     teamMembers: fx.teamMembers as SelectTeamMember[],
     absences: fx.absences as SelectAbsence[],
     timeZone: "Europe/Warsaw",
+    // RESOLVED, exactly as `loadSprintSnapshot` hands it over (S-30). The demo
+    // owner holds no `sprint_cadence_override` record, so the resolver lands on
+    // its default — the same Mon–Fri the fixture's own sprint row carries.
+    workingDays: [...(fx.sprint.workingDays ?? [])],
     nonWorkingDays: new Set(fx.teamDaysOff.map((t) => t.day as DayKey)),
   };
 }

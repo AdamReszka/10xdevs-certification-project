@@ -94,6 +94,28 @@ describe("project-switch outcome summary", () => {
     expect(text).not.toContain("cannot be synced back");
   });
 
+  it.each(["keep", "clear"] as const)(
+    "%s: says the cadence STAYS WITH the old project, never that it reattaches (S-30)",
+    (mode) => {
+      // The record is filed under the JIRA-SIDE project id and every tier of
+      // `resolveCadenceFor` is scoped to it, so a switch leaves the cadence with
+      // the project it was set for — it does NOT come back on the new project's
+      // first sprint. This screen promised that it would, and its own button
+      // then sent the lead to `/team/cadence`, where `survivingCadenceProvenance`
+      // finds nothing under the new project and the page says the opposite.
+      //
+      // `DISCONNECT_IMPACT.projectSwitch.keeps` has said it correctly since S-30
+      // landed; asserted against that entry so the two cannot drift apart again.
+      const text = projectSwitchDiscardedDescription(mode);
+
+      expect(text).toContain("stays with the project you set it for");
+      expect(DISCONNECT_IMPACT.projectSwitch.keeps.join(" ")).toContain(
+        "stays with the project you set it for",
+      );
+      expect(text).not.toMatch(/reattach/i);
+    },
+  );
+
   it.each(["keep", "clear"] as const)("%s: reads as prose", (mode) => {
     const text = projectSwitchDiscardedDescription(mode);
 

@@ -435,9 +435,34 @@ export const sprint = pgTable(
      */
     committedFrozenAt: timestamp("committed_frozen_at"),
     completedSp: integer("completed_sp"),
+    /**
+     * The DERIVED cadence cache (S-04, FR-007) — what `deriveCadence` computed
+     * from this sprint's own Jira dates. Still written on every reconcile and
+     * still read, as tier 3 of `pickCadence` (`src/lib/cadence-override.ts`).
+     */
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
+    /**
+     * SUPERSEDED by `sprint_cadence_override.working_days` (S-30). Written but
+     * NEVER READ: the resolver deliberately skips this column, because Jira has
+     * no working-days field, so every writer here writes the same
+     * `DEFAULT_CADENCE.workingDays` constant and a second copy of a constant is
+     * exactly the duplicate that produced the S-29 defect one layer up. The
+     * lead's chosen pattern lives in the override record, which has no foreign
+     * key into the sync graph and therefore survives a disconnect.
+     *
+     * Kept rather than dropped so a revert of S-30 is a code revert; the DROP is
+     * roadmap S-32. `src/lib/cadence-override-readers.test.ts` fails the build
+     * if a new reader picks up this stale copy.
+     */
     workingDays: jsonb("working_days").$type<string[]>(),
+    /**
+     * SUPERSEDED by row existence in `sprint_cadence_override` (S-30). Written
+     * `false` on insert and left alone thereafter; NEVER READ. Provenance is now
+     * per field, which a single boolean cannot express — a team whose working
+     * days are hand-set while length and start day still follow Jira has no
+     * representation here at all. See the resolver's `CadenceSource`.
+     */
     cadenceOverridden: boolean("cadence_overridden").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
@@ -540,6 +565,79 @@ export const sprintMeasurement = pgTable(
     // UNIQUE dedup key never collides, so the constraint silently fails to dedup.
     unique("sprint_measurement_owner_sprint_uq").on(table.ownerId, table.jiraSprintId),
     index("sprint_measurement_series_idx").on(
+      table.ownerId,
+      table.jiraProjectId,
+      table.startDate,
+    ),
+  ],
+);
+
+/**
+ * What the LEAD CHOSE for a sprint's cadence (S-30, FR-007) — the durable record
+ * that replaces `sprint.working_days` / `cadence_overridden`.
+ *
+ * The columns it supersedes lived on `sprint`, which cascades off `jira_project`
+ * off `jira_credential`, so BOTH S-26 disconnect outcomes destroyed them, and two
+ * further explicit deletes fire on a project switch. `sprint.id` is a
+ * `randomUUID()` a reconnect regenerates, so carry-forward could not find the
+ * previous row either: the override was not lost loudly, it was replaced by a
+ * plausible wrong number. This table takes the `sprint_measurement` shape for
+ * exactly the same reason that one has it — see its header — and the house rule
+ * for outliving a sync-lifecycle parent is "carry no foreign key at all", not
+ * "soften the cascade" (`context/archive/2026-08-30-disconnect-data-retention/`).
+ *
+ * THREE NULLABLE FIELDS, where NULL means "follow the source for THIS field".
+ * One boolean over three columns could not express the state this table exists
+ * to create: a Mon–Thu team whose working days are hand-set while length and
+ * start day still auto-pull from Jira (FR-007). Working days have no upstream at
+ * all — Jira exposes no working-days field — so their protection is independent
+ * of the auto-pull flag governing the other two.
+ *
+ * ROW EXISTENCE MEANS "THE LEAD HAS SPOKEN FOR THIS SPRINT", deliberately NOT
+ * `anomaly_settings`' "the value differs from the default". That rule is safe
+ * only for a table with no inheritance tier. Here a lead on Mon–Thu at sprint N
+ * who saves Mon–Fri at sprint N+1 writes three source-equal fields; delete the
+ * row and the recency fallback hands Mon–Thu back, silently reverting the save.
+ * So a row of three NULLs is a meaningful state — *for this sprint, follow the
+ * source and do not inherit* — and NO write path in this slice deletes a row.
+ */
+export const sprintCadenceOverride = pgTable(
+  "sprint_cadence_override",
+  {
+    id: text("id").primaryKey(),
+    /** The ONLY foreign key, and it points at the account, not the sync graph. */
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** Jira-side project id — see `sprint_measurement`'s header for both halves. */
+    jiraProjectId: text("jira_project_id").notNull(),
+    jiraSprintId: text("jira_sprint_id").notNull(),
+    /**
+     * The sprint's start, carried so the recency fallback can order without
+     * touching `sprint`. NOT NULL because it is the ORDERING key of that
+     * fallback: a NULL here makes `start_date <= ?` return no rows rather than
+     * erroring, which is inheritance silently disappearing instead of failing.
+     */
+    startDate: timestamp("start_date").notNull(),
+    lengthDays: integer("length_days"),
+    startDay: text("start_day"),
+    workingDays: jsonb("working_days").$type<string[]>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [
+    // The ON CONFLICT key the upsert's idempotence rests on. Both columns NOT
+    // NULL per `context/foundation/lessons.md` #1.
+    unique("sprint_cadence_override_owner_sprint_uq").on(
+      table.ownerId,
+      table.jiraSprintId,
+    ),
+    // Tier 2 of the resolver: the latest earlier record for this owner and this
+    // JIRA-SIDE project. Mirrors `sprint_measurement_series_idx`.
+    index("sprint_cadence_override_series_idx").on(
       table.ownerId,
       table.jiraProjectId,
       table.startDate,
@@ -1337,6 +1435,8 @@ export type SelectSprint = typeof sprint.$inferSelect;
 export type InsertSprint = typeof sprint.$inferInsert;
 export type SelectSprintMeasurement = typeof sprintMeasurement.$inferSelect;
 export type InsertSprintMeasurement = typeof sprintMeasurement.$inferInsert;
+export type SelectSprintCadenceOverride = typeof sprintCadenceOverride.$inferSelect;
+export type InsertSprintCadenceOverride = typeof sprintCadenceOverride.$inferInsert;
 export type SelectSyncState = typeof syncState.$inferSelect;
 
 export type SelectSyncAttempt = typeof syncAttempt.$inferSelect;

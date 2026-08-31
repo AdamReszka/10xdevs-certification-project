@@ -10,12 +10,15 @@ import {
   jiraCredential,
   jiraProject,
   sprint,
+  sprintCadenceOverride,
   sprintMeasurement,
   statusMapping,
   teamDayOff,
   teamMember,
   user,
 } from "@/db/schema";
+import { resolveCadenceFor } from "@/lib/cadence-override";
+import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { JiraAuthError } from "@/lib/jira";
 import {
   disconnectJira,
@@ -352,12 +355,16 @@ describe("jira-store service — credential security (integration)", () => {
   // project: `project_key` flips while `jira_sprint_id` stays `1001`, the
   // documented "green sync, empty dashboard" incident.
   describe("S-16 changing the monitored project discards the previous sprint", () => {
-    async function connect(ownerId: string, jiraProjectId: string) {
+    async function connect(
+      ownerId: string,
+      jiraProjectId: string,
+      workspaceUrl = BASE,
+    ) {
       await storeJiraIntegration({
         db,
         ownerId,
         baseUrl: BASE,
-        workspaceUrl: BASE,
+        workspaceUrl,
         creds: CREDS,
         jiraProjectId,
         mappings: FULL_MAPPINGS,
@@ -434,6 +441,94 @@ describe("jira-store service — credential security (integration)", () => {
         .from(jiraProject)
         .where(eq(jiraProject.ownerId, ownerId));
       expect(proj.boardId).toBe("77");
+    });
+
+    // S-30 — the workspace-URL identity gap.
+    it("re-pointing at a DIFFERENT workspace with the SAME project id is a switch", async () => {
+      // Jira Cloud project ids are unique per INSTANCE, not globally, and
+      // conventionally start at `10000` — so `10000` on a second Atlassian site
+      // is somebody else's project. Compared on the id alone this read as "same
+      // project" and kept the previous workspace's synced history.
+      const ownerId = await seedUser();
+      owners.push(ownerId);
+
+      const projA = await connect(ownerId, "10000");
+      await seedSprintFor(ownerId, projA.id);
+      await db
+        .update(jiraProject)
+        .set({ boardId: "77", timeZone: "Europe/Warsaw" })
+        .where(eq(jiraProject.id, projA.id));
+
+      await connect(ownerId, "10000", "https://other.atlassian.net");
+
+      const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+      expect(rows).toHaveLength(0);
+      const [proj] = await db
+        .select()
+        .from(jiraProject)
+        .where(eq(jiraProject.ownerId, ownerId));
+      expect(proj.boardId).toBeNull();
+      expect(proj.timeZone).toBeNull();
+    });
+
+    it("does not inherit the OLD workspace's cadence onto the new one", async () => {
+      // Until S-30 the switch-delete masked the collision for the cadence.
+      // It no longer does — the record deliberately SURVIVES that delete — so a
+      // colliding sprint id would let one team's cadence carry onto another
+      // workspace's sprint. The resolver's project scope is the other half; this
+      // is the half that makes the Jira-side project id actually change.
+      const ownerId = await seedUser();
+      owners.push(ownerId);
+
+      const projA = await connect(ownerId, "10000");
+      await seedSprintFor(ownerId, projA.id);
+      await db.insert(sprintCadenceOverride).values({
+        id: randomUUID(),
+        ownerId,
+        jiraProjectId: "10000",
+        jiraSprintId: "1001",
+        startDate: new Date("2026-08-17T08:00:00.000Z"),
+        workingDays: ["MON", "TUE", "WED"],
+      });
+
+      await connect(ownerId, "10001", "https://other.atlassian.net");
+
+      // The record SURVIVES — that is the point of the table …
+      const kept = await db
+        .select()
+        .from(sprintCadenceOverride)
+        .where(eq(sprintCadenceOverride.ownerId, ownerId));
+      expect(kept).toHaveLength(1);
+
+      // … and does not apply to the new workspace's sprint.
+      const [proj] = await db
+        .select()
+        .from(jiraProject)
+        .where(eq(jiraProject.ownerId, ownerId));
+      const [newSprint] = await db
+        .insert(sprint)
+        .values({
+          id: randomUUID(),
+          ownerId,
+          jiraProjectId: proj.id,
+          jiraSprintId: "1001", // the SAME Jira sprint id, a different Jira
+          name: "Their Sprint 3",
+          state: "ACTIVE",
+          startDate: new Date("2026-09-01T08:00:00.000Z"),
+          endDate: new Date("2026-09-15T08:00:00.000Z"),
+        })
+        .returning();
+
+      const resolved = await resolveCadenceFor(db, ownerId, newSprint);
+      expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
+      // … AND SAYS NOTHING ABOUT IT. Re-pointing the account at another
+      // workspace goes down the same `projectChanged` branch as an ordinary
+      // project switch, whose promised outcome is that the cadence stays with
+      // the project it was set for. `source_with_prior_override` is reserved for
+      // a record belonging to the project being monitored NOW that still failed
+      // to attach; reported here it would make every subsequent cycle of a
+      // deliberately re-pointed account log `cadence_default_fallback` forever.
+      expect(resolved.source).toBe("source");
     });
   });
 

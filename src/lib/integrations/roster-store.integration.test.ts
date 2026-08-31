@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -13,9 +13,11 @@ import {
   jiraProject,
   monitoredRepo,
   sprint,
+  sprintCadenceOverride,
   teamMember,
   user,
 } from "@/db/schema";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { encryptToken } from "@/lib/crypto";
 import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import {
@@ -83,6 +85,8 @@ const JIRA_MEMBERS = [
 ];
 
 const BOARD = { id: 77, name: "SF Scrum", type: "scrum" };
+/** A second sprint-capable board, so `board_ambiguous` is reachable. */
+const SECOND_BOARD = { id: 78, name: "SF Delivery", type: "scrum" };
 
 /** Fixed active sprint: 2026-08-17T00:00Z (Mon UTC) → +14d. */
 const ACTIVE_SPRINT = {
@@ -119,7 +123,12 @@ function githubFetch(opts?: { status?: number }): typeof fetch {
  * /user/assignable/search. `noActiveSprint` empties the sprint response;
  * `timeZone` seeds /myself.
  */
-function jiraFetch(opts?: { noActiveSprint?: boolean; timeZone?: string }): typeof fetch {
+function jiraFetch(opts?: {
+  noActiveSprint?: boolean;
+  timeZone?: string;
+  /** More than one makes the reconcile return `board_ambiguous`. */
+  boards?: Array<{ id: number; name: string; type: string }>;
+}): typeof fetch {
   return (async (input: Parameters<typeof fetch>[0]) => {
     const url = typeof input === "string" ? input : (input as Request).url;
     if (url.includes("/user/assignable/search")) {
@@ -130,7 +139,7 @@ function jiraFetch(opts?: { noActiveSprint?: boolean; timeZone?: string }): type
       return jsonRes({ values: opts?.noActiveSprint ? [] : [ACTIVE_SPRINT] });
     }
     if (url.includes("/board")) {
-      return jsonRes({ isLast: true, values: [BOARD] });
+      return jsonRes({ isLast: true, values: opts?.boards ?? [BOARD] });
     }
     if (url.includes("/myself")) {
       return jsonRes({ accountId: "acc-owner", timeZone: opts?.timeZone ?? "UTC" });
@@ -197,6 +206,25 @@ async function newOwner(): Promise<string> {
   const id = await seedOwner();
   owners.push(id);
   return id;
+}
+
+/** The owner's override records — what the engine actually reads since S-30. */
+function recordsFor(ownerId: string) {
+  return db
+    .select()
+    .from(sprintCadenceOverride)
+    .where(eq(sprintCadenceOverride.ownerId, ownerId));
+}
+
+/** The cadence in force for the owner's resolved sprint row. */
+async function resolvedFor(ownerId: string) {
+  const [row] = await db
+    .select()
+    .from(sprint)
+    .where(eq(sprint.ownerId, ownerId))
+    .orderBy(desc(sprint.startDate))
+    .limit(1);
+  return resolveCadenceFor(db, ownerId, row);
 }
 
 afterEach(async () => {
@@ -489,11 +517,17 @@ describe("importCadence — board + sprint persistence (FR-007)", () => {
       jiraOpts: { fetchImpl: jiraFetch() },
     });
 
+    // ASSERTED ON THE RECORD, not on `sprint.cadence_overridden` (S-30). The
+    // flag is inert now: provenance is per field, which one boolean cannot
+    // express, and the values live where a disconnect cannot reach them.
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      source: "own",
+    });
+
     const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(true);
-    expect(row.lengthDays).toBe(21);
-    expect(row.startDay).toBe("WED");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
     // Metadata still refreshed from the sprint.
     expect(row.name).toBe("Sprint 7");
     expect(row.state).toBe("ACTIVE");
@@ -554,16 +588,55 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
     });
 
     expect(result.updated).toBe(1);
-    expect(result.overridden).toBe(true);
+    expect(result.provenance).toEqual({
+      lengthDays: true,
+      startDay: true,
+      workingDays: true,
+    });
 
     const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
     expect(row.lengthDays).toBe(21);
     expect(row.startDay).toBe("WED");
     expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
-    expect(row.cadenceOverridden).toBe(true);
+    // The DURABLE record is what the engine reads (S-30); the columns above are
+    // the derived cache that a disconnect is allowed to destroy.
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      source: "own",
+    });
   });
 
-  it("an unchanged confirm does NOT set the flag — finishing the wizard is not overriding", async () => {
+  it("records ONLY the working days when only they differ from the source (S-30)", async () => {
+    // The state that was unreachable in either direction until this slice: a
+    // Mon–Thu team whose length and start day still auto-pull from Jira.
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const result = await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...DERIVED, workingDays: ["MON", "TUE", "WED", "THU"] },
+    });
+
+    expect(result.provenance).toEqual({
+      lengthDays: false,
+      startDay: false,
+      workingDays: true,
+    });
+    const [record] = await recordsFor(ownerId);
+    expect(record.lengthDays).toBeNull();
+    expect(record.startDay).toBeNull();
+    expect(record.workingDays).toEqual(["MON", "TUE", "WED", "THU"]);
+  });
+
+  it("an unchanged confirm records nothing as hand-set — finishing the wizard is not overriding", async () => {
     const ownerId = await newOwner();
     await importCadence({
       db,
@@ -579,13 +652,22 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
     });
 
     expect(result.updated).toBe(1);
-    expect(result.overridden).toBe(false);
+    expect(result.provenance).toEqual({
+      lengthDays: false,
+      startDay: false,
+      workingDays: false,
+    });
 
-    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(false);
+    // A row of three NULLs, NOT an absent row. It is the record of the lead
+    // having chosen the source FOR THIS SPRINT, and it is the only thing that
+    // stops the resolver's tier 2 handing an earlier pattern back.
+    const [record] = await recordsFor(ownerId);
+    expect(record.lengthDays).toBeNull();
+    expect(record.startDay).toBeNull();
+    expect(record.workingDays).toBeNull();
   });
 
-  it("an unchanged re-save does NOT un-override a lead who genuinely overrode", async () => {
+  it("an unchanged re-save keeps the lead's values, compared against the SOURCE", async () => {
     const ownerId = await newOwner();
     await importCadence({
       db,
@@ -596,16 +678,55 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
     const override = { lengthDays: 21, startDay: "WED" as const, workingDays: ["MON", "TUE", "WED"] as const };
     await saveCadence({ db, ownerId, cadence: { ...override, workingDays: [...override.workingDays] } });
 
-    // Re-submitting exactly what is stored must OMIT the column, not write false.
+    // The comparison basis is the SOURCE, not the stored row, so re-submitting
+    // an override still scores as an override on its own — which is what retires
+    // the caller-side sticky OR the old return shape needed.
     const again = await saveCadence({
       db,
       ownerId,
       cadence: { ...override, workingDays: [...override.workingDays] },
     });
-    expect(again.overridden).toBe(false);
+    expect(again.provenance).toEqual({
+      lengthDays: true,
+      startDay: true,
+      workingDays: true,
+    });
 
-    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(true);
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
+  });
+
+  it("saving the SOURCE values over an override hands them back rather than sticking", async () => {
+    // The failure the retired sticky OR would have preserved: a lead who set
+    // Mon–Thu and then deliberately saves Mon–Fri writes three source-equal
+    // NULLs, and must be told so.
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...DERIVED, workingDays: ["MON", "TUE", "WED", "THU"] },
+    });
+
+    const back = await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...DERIVED, workingDays: [...DERIVED.workingDays] },
+    });
+
+    expect(back.provenance.workingDays).toBe(false);
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      workingDays: [...DEFAULT_CADENCE.workingDays],
+      source: "own",
+    });
   });
 
   it("a NULL-cadence row confirmed with the readers' defaults is not an edit (plan-review F4)", async () => {
@@ -629,9 +750,11 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
       cadence: { ...DERIVED, workingDays: [...DERIVED.workingDays] },
     });
 
-    expect(result.overridden).toBe(false);
-    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(false);
+    expect(result.provenance).toEqual({
+      lengthDays: false,
+      startDay: false,
+      workingDays: false,
+    });
   });
 
   it("a reordered but identical working-day set is not an edit", async () => {
@@ -649,7 +772,7 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
       cadence: { lengthDays: 14, startDay: "MON", workingDays: ["FRI", "THU", "WED", "TUE", "MON"] },
     });
 
-    expect(result.overridden).toBe(false);
+    expect(result.provenance.workingDays).toBe(false);
   });
 
   it("refuses by name when the owner has no sprint row at all", async () => {
@@ -686,7 +809,13 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
     return ownerId;
   }
 
-  it("refreshes the cadence PAST the override and clears the flag", async () => {
+  it("restores length and start day and PRESERVES the working days (S-30)", async () => {
+    // THE REVERSED ASSERTION. This case used to pin `["MON","TUE","WED","THU",
+    // "FRI"]` here, under the comment "back to what the sprint's own Jira dates
+    // derive" — which was false: Mon–Fri is derived from nothing, because Jira
+    // has no working-days field. `cadence-editor.tsx`'s own dialog has promised
+    // "Working days are not pulled from Jira and stay as they are" since S-29,
+    // and the code contradicted it. The sentence becomes true here.
     const ownerId = await overriddenOwner();
 
     const result = await restoreCadenceFromJira({
@@ -698,12 +827,45 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
 
     expect(result.noActiveSprint).toBe(false);
 
-    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    // Back to what the sprint's own Jira dates derive.
-    expect(row.lengthDays).toBe(14);
-    expect(row.startDay).toBe("MON");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
-    expect(row.cadenceOverridden).toBe(false);
+    const resolved = await resolvedFor(ownerId);
+    // Length and start day DO go back to what the sprint's Jira dates derive.
+    expect(resolved.lengthDays).toBe(14);
+    expect(resolved.startDay).toBe("MON");
+    expect(resolved.provenance.lengthDays).toBe(false);
+    expect(resolved.provenance.startDay).toBe(false);
+    // The lead's own pattern survives — restoring from Jira a field Jira does
+    // not have is not a restore, it is deleting their choice under another name.
+    expect(resolved.workingDays).toEqual(["MON", "TUE", "WED"]);
+    expect(resolved.provenance.workingDays).toBe(true);
+  });
+
+  it("materialises an INHERITED pattern when the restored sprint has no record of its own", async () => {
+    // A clear against a missing row would be a no-op, and the resolver's tier 2
+    // would go on returning the inherited length the restore was asked to drop.
+    const ownerId = await overriddenOwner();
+    const [own] = await recordsFor(ownerId);
+    // Re-key the record onto an EARLIER sprint, so the active one inherits it.
+    await db
+      .update(sprintCadenceOverride)
+      .set({
+        jiraSprintId: "4141",
+        startDate: new Date("2026-08-03T08:00:00.000Z"),
+      })
+      .where(eq(sprintCadenceOverride.id, own.id));
+
+    expect((await resolvedFor(ownerId)).source).toBe("inherited");
+
+    await restoreCadenceFromJira({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const resolved = await resolvedFor(ownerId);
+    expect(resolved.source).toBe("own");
+    expect(resolved.lengthDays).toBe(14); // the inherited 21 did NOT survive
+    expect(resolved.workingDays).toEqual(["MON", "TUE", "WED"]); // the pattern did
   });
 
   it("a FAILED Jira call leaves both the values and the flag exactly as they were", async () => {
@@ -722,13 +884,44 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
       }),
     ).rejects.toThrow();
 
-    // This is the case a pre-clear would fail: the flag would already be gone,
-    // and the next 15-minute sync would overwrite a cadence the lead chose.
+    // This is the case a pre-clear would fail: the record would already be
+    // cleared, and the next 15-minute sync would overwrite a cadence the lead
+    // chose. Extended to the record, which is what the engine now reads.
     const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(true);
     expect(row.lengthDays).toBe(21);
     expect(row.startDay).toBe("WED");
     expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
+
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      provenance: { lengthDays: true, startDay: true, workingDays: true },
+    });
+  });
+
+  it("a BOARD_AMBIGUOUS restore writes nothing and the override stands", async () => {
+    // The no-exception case, and reachable from the button: `importCadence`
+    // passes `storedBoardId: null` unconditionally, so the restore always
+    // re-discovers boards. It returns successfully having written nothing, with
+    // nothing for a caller to catch — which is the whole reason the intent is an
+    // argument rather than a caller-side pre-clear.
+    const ownerId = await overriddenOwner();
+
+    const result = await restoreCadenceFromJira({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch({ boards: [BOARD, SECOND_BOARD] }) },
+    });
+
+    expect(result.boardCandidates.length).toBeGreaterThan(1);
+    expect(result.jiraSprintId).toBeNull();
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
   });
 
   it("refuses by name when there is no sprint row to restore", async () => {
@@ -755,9 +948,12 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
       jiraOpts: { fetchImpl: jiraFetch() },
     });
 
-    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(row.cadenceOverridden).toBe(true);
-    expect(row.lengthDays).toBe(21);
+    expect(await resolvedFor(ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      provenance: { lengthDays: true, startDay: true, workingDays: true },
+    });
   });
 });
 

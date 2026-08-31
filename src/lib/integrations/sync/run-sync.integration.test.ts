@@ -16,6 +16,7 @@ import {
   jiraTicket,
   monitoredRepo,
   sprint,
+  sprintCadenceOverride,
   sprintMeasurement,
   statusMapping,
   syncAttempt,
@@ -1027,6 +1028,98 @@ describe("syncOwner — added_after_sprint_start from the Sprint changelog", () 
       },
     });
     expect(healthy).toBeNull();
+  });
+
+  it("records `cadence_default_fallback` when THIS project's record fails to apply (S-30)", async () => {
+    // The same `lessons.md` obligation, pointed at S-30's own failure mode: the
+    // cycle resolved a cadence from the DEFAULT while this account holds a
+    // record for the project it is monitoring RIGHT NOW — the recency predicate
+    // having failed to find what the lead chose. Reported, rather than finalized
+    // as an ordinary green run.
+    const { ownerId } = await newOwner();
+    // SEEDED BEFORE THE ONE CYCLE, not between two: `baseArgs` pins the same
+    // `NOW` on every call, so a second `syncOwner` in the same test is skipped
+    // on a still-fresh lease and writes no attempt row at all.
+    //
+    // SAME Jira-side project as `seedOwner`'s, a different sprint, and dated
+    // AFTER the fixture's active sprint (2026-08-17) — a record this account
+    // owns that `start_date <=` correctly refuses to inherit, which is precisely
+    // "we hold your cadence and could not attach it".
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "9999",
+      startDate: new Date("2026-08-24T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(rows.at(-1)?.outcome).toContain("cadence_default_fallback");
+  });
+
+  it("stays silent for a record left behind by a DIFFERENT Jira-side project", async () => {
+    // The shape of a project switch, which `DISCONNECT_IMPACT.projectSwitch`
+    // promises the lead BEFORE they commit to it: the cadence stays with the
+    // project it was set for, and the new project follows Jira until they set
+    // one. Counting those records made EVERY cycle of a deliberately switched
+    // account report a failure, indefinitely — the lead has no reason to open
+    // `/team/cadence` again, and nothing else clears it.
+    const { ownerId } = await newOwner();
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "99999",
+      jiraSprintId: "9999",
+      startDate: new Date("2026-08-01T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(rows.at(-1)?.outcome).toBeNull();
+  });
+
+  it("stays silent when the cadence resolves from a record that DOES apply", async () => {
+    // A signal that fires on a healthy account is not a signal.
+    //
+    // ONE CYCLE, with the record seeded first, for the reason the sibling above
+    // records: a second `syncOwner` under the same pinned `NOW` is skipped on a
+    // fresh lease and writes no attempt, so a two-cycle version of this would
+    // assert `null` against the FIRST cycle and pass whatever the resolver did.
+    const { ownerId } = await newOwner();
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "10000",
+      // The fixture's active sprint, at its own start date: tier 1 answers.
+      jiraSprintId: String(JIRA_ACTIVE_SPRINT.id),
+      startDate: new Date(JIRA_ACTIVE_SPRINT.startDate),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(rows.at(-1)?.outcome).toBeNull();
   });
 });
 

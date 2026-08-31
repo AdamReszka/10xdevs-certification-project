@@ -8,6 +8,7 @@ import {
   jiraTicket,
   teamMember,
 } from "@/db/schema";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -62,6 +63,7 @@ export async function loadSprintSnapshot(
     timeZone,
     absences,
     nonWorkingDays,
+    cadence,
   ] = await Promise.all([
     db
       .select()
@@ -102,6 +104,11 @@ export async function loadSprintSnapshot(
     // predate `commitsSince`, and a set narrowed to the sprint would quietly
     // stop excluding holidays outside it.
     getNonWorkingDays({ db, ownerId }),
+    // S-30 (FR-007): the working-day pattern the LEAD chose, which no longer
+    // lives on the sprint row — it survives a disconnect and a project switch
+    // precisely because it does not. Joins this `Promise.all` rather than adding
+    // serial latency, for the same reason the zone does.
+    resolveCadenceFor(db, ownerId, chosen),
   ]);
 
   const reviewsByPr = new Map<string, typeof reviews>();
@@ -123,6 +130,7 @@ export async function loadSprintSnapshot(
     teamMembers,
     absences,
     timeZone,
+    workingDays: cadence.workingDays,
     nonWorkingDays,
   };
 }

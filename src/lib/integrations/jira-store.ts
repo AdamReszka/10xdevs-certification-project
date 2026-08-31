@@ -171,6 +171,33 @@ export async function storeJiraIntegration({
 
   // --- DB-only work inside the transaction --------------------------------
   const mappedCount = await db.transaction(async (tx) => {
+    // READ BEFORE THE UPSERT BELOW, which overwrites the column in place.
+    //
+    // S-30 — the workspace-URL identity gap. `projectChanged` compared the
+    // Jira-side project id ALONE, and `workspace_url` was stored, normalized and
+    // displayed but compared nowhere in `src/`. Jira Cloud project ids are
+    // unique per INSTANCE and conventionally start at `10000`, and
+    // `/settings/connections/jira` explicitly offers "Reconnect Jira" over an
+    // existing credential — so re-pointing at a different Atlassian site can
+    // collide on `10000` and read as "same project".
+    //
+    // Until this slice the switch-delete masked that for the cadence. It no
+    // longer does: the override record deliberately SURVIVES that delete, so a
+    // colliding sprint id would let one team's cadence carry onto another
+    // workspace's sprint. Same class as S-26 impl-review F2, which this slice
+    // would otherwise re-create for a new payload.
+    //
+    // A STRING EQUALITY, not a new normalizer: both sides are already canonical
+    // (`normalizeWorkspaceUrl`, applied at `setup/jira/actions.ts` before the
+    // value ever reaches here).
+    const [priorCred] = await tx
+      .select({ workspaceUrl: jiraCredential.workspaceUrl })
+      .from(jiraCredential)
+      .where(eq(jiraCredential.ownerId, ownerId))
+      .limit(1);
+    const workspaceChanged =
+      priorCred != null && priorCred.workspaceUrl !== workspaceUrl;
+
     const [cred] = await tx
       .insert(jiraCredential)
       .values({
@@ -208,7 +235,8 @@ export async function storeJiraIntegration({
       .where(eq(jiraProject.ownerId, ownerId))
       .limit(1);
     const projectChanged =
-      previous != null && previous.jiraProjectId !== project.jiraProjectId;
+      previous != null &&
+      (previous.jiraProjectId !== project.jiraProjectId || workspaceChanged);
 
     const [proj] = await tx
       .insert(jiraProject)

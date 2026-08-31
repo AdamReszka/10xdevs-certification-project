@@ -82,7 +82,25 @@ export function projectSwitchDiscardedDescription(mode: DisconnectMode): string 
     `As warned, this discarded ${joinClauses(PROJECT_SWITCH.destroys)}. ` +
     cleared +
     `Your past daily recaps were kept, but are no longer linked to a sprint. ` +
-    `Nothing has imported a sprint for the new project yet, so both dashboards ` +
-    `will stay empty until you re-run the cadence import.`
+    // S-30. This used to end by sending the lead to a control they could not
+    // operate: with every `sprint` row deleted, `/team/cadence` renders its
+    // `no_sprint` state, the restore button is `disabled` and a save throws.
+    // What is true instead is that the cadence they set SURVIVED the switch —
+    // it is stored against the Jira sprint, not against the rows just deleted.
+    //
+    // WHAT IT DOES NOT DO IS REATTACH HERE. The record is filed under the
+    // JIRA-SIDE project id and every tier of the resolver is scoped to it
+    // (`cadence-override.ts`), so a switch leaves it with the project it was set
+    // for and the NEW project's sprints follow Jira until the lead sets one.
+    // Promising a reattachment sent the lead to `/team/cadence` to be told the
+    // opposite by `survivingCadenceProvenance`, which finds nothing under the
+    // new project — two screens of this slice contradicting each other one click
+    // apart. `DISCONNECT_IMPACT.projectSwitch.keeps` had it right: it "stays
+    // with the project you set it for".
+    `The sprint cadence you set by hand stays with the project you set it for — ` +
+    `point the account back at it and it is still there. The new project starts ` +
+    `out following Jira's own sprint dates. Nothing has imported a sprint for it ` +
+    `yet, so both dashboards will stay empty until the next sync brings one in, ` +
+    `and the cadence is yours to set once it has.`
   );
 }

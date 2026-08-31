@@ -6,8 +6,8 @@ import RosterEditor from "@/components/organisms/setup/roster-editor";
 import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
-import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { listRosterForEditor } from "@/lib/roster";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { toSprintIdentity } from "@/lib/sprint-identity";
@@ -65,18 +65,20 @@ export default async function TeamSetupPage() {
     getJiraTimeZone(db, ownerId),
   ]);
 
-  const initialCadence = activeSprint
+  // RESOLVED, not coalesced off the row (S-30): the wizard prefills what the
+  // engine actually uses. The lead's working-day pattern lives in
+  // `sprint_cadence_override` now, which is what lets it outlive the Jira
+  // cascade.
+  const resolved = activeSprint
+    ? await resolveCadenceFor(db, ownerId, activeSprint)
+    : null;
+
+  const initialCadence =
+    activeSprint && resolved
     ? {
-        // Coalesced through the SAME constant `saveCadence`'s dirty-check
-        // normalises against, so confirming the derived values without editing
-        // is never scored as an override (impl-review F2).
-        lengthDays: activeSprint.lengthDays ?? DEFAULT_CADENCE.lengthDays,
-        startDay:
-          (activeSprint.startDay as Weekday | null) ?? DEFAULT_CADENCE.startDay,
-        workingDays: (activeSprint.workingDays as Weekday[] | null) ?? [
-          ...DEFAULT_CADENCE.workingDays,
-        ],
-        cadenceOverridden: activeSprint.cadenceOverridden,
+        lengthDays: resolved.lengthDays,
+        startDay: resolved.startDay as Weekday,
+        workingDays: [...resolved.workingDays] as Weekday[],
         // Built on the SERVER so the identity is on screen at first paint, not
         // only after a re-pull — and so no `Date` and no `Intl` call crosses
         // into the client component.

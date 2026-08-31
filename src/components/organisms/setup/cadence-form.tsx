@@ -73,7 +73,6 @@ type InitialCadence = {
   lengthDays: number;
   startDay: Weekday;
   workingDays: Weekday[];
-  cadenceOverridden: boolean;
   /** Already formatted server-side — this component does no `Intl` work. */
   sprintIdentity: SprintIdentityView;
 };

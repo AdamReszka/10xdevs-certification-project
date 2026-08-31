@@ -1,9 +1,15 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { eq } from "drizzle-orm";
+
+import { jiraProject } from "@/db/schema";
 
 import CadenceEditor from "@/components/organisms/settings/cadence-editor";
+import {
+  resolveCadenceFor,
+  survivingCadenceProvenance,
+} from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
-import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { toSprintIdentity } from "@/lib/sprint-identity";
 import type { Weekday } from "@/lib/validations/roster";
@@ -37,23 +43,31 @@ export default async function TeamCadencePage() {
   const db = getDb(env);
   const { ownerId, now } = await resolveWorkspace();
 
-  const [activeSprint, timeZone] = await Promise.all([
+  const [activeSprint, timeZone, project] = await Promise.all([
     getActiveSprintRow(db, ownerId),
     getJiraTimeZone(db, ownerId),
+    db
+      .select({ id: jiraProject.id })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
   ]);
 
-  const initialCadence = activeSprint
+  // RESOLVED, not coalesced off the row (S-30). The form must prefill what the
+  // engine actually uses, and the lead's chosen working-day pattern no longer
+  // lives on `sprint` — it lives in `sprint_cadence_override`, which is what
+  // survives a disconnect and a project switch.
+  const resolved = activeSprint
+    ? await resolveCadenceFor(db, ownerId, activeSprint)
+    : null;
+
+  const initialCadence =
+    activeSprint && resolved
     ? {
-        // The same coalescing every other reader applies, through the SAME
-        // constant `saveCadence`'s dirty-check normalises against — so a
-        // confirmation is never mistaken for an edit (impl-review F2).
-        lengthDays: activeSprint.lengthDays ?? DEFAULT_CADENCE.lengthDays,
-        startDay:
-          (activeSprint.startDay as Weekday | null) ?? DEFAULT_CADENCE.startDay,
-        workingDays: (activeSprint.workingDays as Weekday[] | null) ?? [
-          ...DEFAULT_CADENCE.workingDays,
-        ],
-        cadenceOverridden: activeSprint.cadenceOverridden,
+        lengthDays: resolved.lengthDays,
+        startDay: resolved.startDay as Weekday,
+        workingDays: [...resolved.workingDays] as Weekday[],
         sprintState: activeSprint.state,
         sprintIdentity: toSprintIdentity({
           name: activeSprint.name,
@@ -65,6 +79,14 @@ export default async function TeamCadencePage() {
         }),
       }
     : null;
+
+  // A SIBLING of `initialCadence`, because the override record outlives every
+  // `sprint` row: after a project switch there is no cadence to show and there
+  // IS a surviving choice to report, which is what the `no_sprint` state says
+  // (S-30). With a sprint row present the resolver's own answer is used.
+  const provenance =
+    resolved?.provenance ??
+    (await survivingCadenceProvenance(db, ownerId, project?.id ?? null));
 
   return (
     <div className="flex flex-col gap-6">
@@ -79,7 +101,7 @@ export default async function TeamCadencePage() {
         </p>
       </div>
 
-      <CadenceEditor initialCadence={initialCadence} />
+      <CadenceEditor initialCadence={initialCadence} provenance={provenance} />
     </div>
   );
 }

@@ -10,10 +10,12 @@ import {
   jiraCredential,
   jiraProject,
   sprint,
+  sprintCadenceOverride,
   sprintMeasurement,
   user,
   type SelectSprint,
 } from "@/db/schema";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { encryptToken } from "@/lib/crypto";
 import { JiraUnavailableError } from "@/lib/jira";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -161,7 +163,13 @@ afterEach(async () => {
 
 function run(
   seeded: Seeded,
-  opts?: Parameters<typeof jiraFetch>[0] & { chosenBoardId?: number },
+  opts?: Parameters<typeof jiraFetch>[0] & {
+    chosenBoardId?: number;
+    forceCadenceRefresh?: boolean;
+    /** `importCadence` passes null unconditionally, so the restore path always
+     *  re-discovers boards — which is what makes `board_ambiguous` reachable. */
+    storedBoardId?: number | null;
+  },
 ) {
   return reconcileActiveSprint({
     db,
@@ -170,11 +178,49 @@ function run(
     creds: CREDS,
     projectId: seeded.projectId,
     projectKey: "SF",
-    storedBoardId: BOARD.id,
+    storedBoardId: opts?.storedBoardId === undefined ? BOARD.id : opts.storedBoardId,
     timeZone: "UTC",
     chosenBoardId: opts?.chosenBoardId,
+    forceCadenceRefresh: opts?.forceCadenceRefresh,
     jiraOpts: { fetchImpl: jiraFetch(opts) },
   });
+}
+
+/** Write an override record directly — the durable half, since S-30. */
+async function seedOverride(
+  seeded: Seeded,
+  values: {
+    jiraSprintId: string;
+    startDate?: Date;
+    lengthDays?: number | null;
+    startDay?: string | null;
+    workingDays?: string[] | null;
+  },
+): Promise<void> {
+  await db.insert(sprintCadenceOverride).values({
+    id: randomUUID(),
+    ownerId: seeded.ownerId,
+    jiraProjectId: "10000",
+    jiraSprintId: values.jiraSprintId,
+    startDate: values.startDate ?? new Date("2026-08-17T08:00:00.000Z"),
+    lengthDays: values.lengthDays ?? null,
+    startDay: values.startDay ?? null,
+    workingDays: values.workingDays ?? null,
+  });
+}
+
+function overridesOf(ownerId: string) {
+  return db
+    .select()
+    .from(sprintCadenceOverride)
+    .where(eq(sprintCadenceOverride.ownerId, ownerId));
+}
+
+/** The cadence in force for the owner's resolved sprint row. */
+async function resolvedFor(ownerId: string) {
+  const row = await getActiveSprintRow(db, ownerId);
+  if (!row) throw new Error("no sprint row to resolve against");
+  return resolveCadenceFor(db, ownerId, row);
 }
 
 /** Insert a stored sprint row directly, bypassing the reconciler. */
@@ -254,45 +300,180 @@ describe("reconcileActiveSprint — creation and refresh (C1, C4)", () => {
   });
 
   // FR-007 "the override persists" — the CONFLICT branch (same sprint).
-  it("(c) cadence_overridden=true: cadence columns hold, metadata refreshes", async () => {
+  //
+  // REWRITTEN AT S-30. It used to assert the override on the `sprint` COLUMNS,
+  // guarded by the `case when cadence_overridden` three-way SET. Both are gone:
+  // the columns are the derived cache and refresh unconditionally, and the
+  // lead's choice lives in `sprint_cadence_override`, which this statement
+  // cannot reach at all. That is the whole point — the record has no foreign key
+  // into the sync graph, so nothing here can destroy it.
+  it("(c) an override record holds while the derived columns refresh", async () => {
     const seeded = await newOwner();
     await seedSprint(seeded, {
       jiraSprintId: "4242",
       name: "Stale name",
       lengthDays: 21,
       startDay: "WED",
+    });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      lengthDays: 21,
+      startDay: "WED",
       workingDays: ["MON", "TUE", "WED"],
-      cadenceOverridden: true,
     });
 
-    await run(seeded);
+    const result = await run(seeded);
 
     const [row] = await rows(seeded.ownerId);
-    expect(row.lengthDays).toBe(21);
-    expect(row.startDay).toBe("WED");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
-    expect(row.cadenceOverridden).toBe(true);
+    // The CACHE went back to what Jira's dates derive …
+    expect(row.lengthDays).toBe(14);
+    expect(row.startDay).toBe("MON");
+    // … and the lead's cadence is untouched.
+    expect(await resolvedFor(seeded.ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      source: "own",
+    });
+    if (result.status === "reconciled") expect(result.cadenceSource).toBe("own");
     // Metadata still refreshes from Jira.
     expect(row.name).toBe("Sprint 7");
     expect(row.state).toBe("ACTIVE");
   });
 
-  it("(d) cadence_overridden=false: cadence columns refresh from Jira", async () => {
+  it("(d) with no record at all, the cadence columns refresh from Jira", async () => {
     const seeded = await newOwner();
     await seedSprint(seeded, {
       jiraSprintId: "4242",
       lengthDays: 21,
       startDay: "WED",
       workingDays: ["MON", "TUE", "WED"],
-      cadenceOverridden: false,
     });
 
-    await run(seeded);
+    const result = await run(seeded);
 
     const [row] = await rows(seeded.ownerId);
     expect(row.lengthDays).toBe(14);
     expect(row.startDay).toBe("MON");
     expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
+    if (result.status === "reconciled") expect(result.cadenceSource).toBe("source");
+  });
+});
+
+describe("reconcileActiveSprint — forceCadenceRefresh, directly (S-30)", () => {
+  // THE BRANCH HAD NO DIRECT TEST until S-30: it was exercised only indirectly
+  // through `restoreCadenceFromJira`, so nothing pinned what it does to the
+  // record itself.
+  it("clears length and start day, and leaves the working days alone", async () => {
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await run(seeded, { forceCadenceRefresh: true });
+
+    const [record] = await overridesOf(seeded.ownerId);
+    expect(record.lengthDays).toBeNull();
+    expect(record.startDay).toBeNull();
+    // Jira has no working-days field, so there is nothing to restore them FROM;
+    // clearing them would be deleting the lead's choice under another name.
+    expect(record.workingDays).toEqual(["MON", "TUE", "WED"]);
+  });
+
+  it("writes NOTHING when Jira comes back board_ambiguous", async () => {
+    // The no-exception case, and the reason the intent is an ARGUMENT rather
+    // than a caller-side pre-clear: this returns successfully, before the
+    // transaction opens, having written nothing and with nothing to catch.
+    const seeded = await newOwner({ boardId: null });
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    const result = await run(seeded, {
+      forceCadenceRefresh: true,
+      storedBoardId: null,
+      boards: [BOARD, SECOND_BOARD],
+    });
+
+    expect(result.status).toBe("board_ambiguous");
+    const [record] = await overridesOf(seeded.ownerId);
+    expect(record.lengthDays).toBe(21);
+    expect(record.startDay).toBe("WED");
+    expect(record.workingDays).toEqual(["MON", "TUE", "WED"]);
+  });
+
+  it("leaves an ordinary cycle's record untouched — the default is off", async () => {
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await run(seeded); // no `forceCadenceRefresh`: what the 15-minute cycle calls
+
+    const [record] = await overridesOf(seeded.ownerId);
+    expect(record.lengthDays).toBe(21);
+    expect(record.startDay).toBe("WED");
+  });
+
+  it("reports `source_with_prior_override` when THIS project's record does not apply", async () => {
+    // The exact condition `run-sync.ts` turns into `cadence_default_fallback`:
+    // the account holds a cadence for the project it is monitoring right now and
+    // the recency predicate could not attach it.
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId: seeded.ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "9999",
+      // AFTER the sprint being reconciled, so `start_date <=` refuses it.
+      startDate: new Date("2026-12-03T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    const result = await run(seeded);
+
+    expect(result.status).toBe("reconciled");
+    if (result.status === "reconciled") {
+      expect(result.cadenceSource).toBe("source_with_prior_override");
+    }
+  });
+
+  it("says NOTHING about a record left behind by a different Jira-side project", async () => {
+    // That is a project switch, whose outcome `DISCONNECT_IMPACT.projectSwitch`
+    // promises the lead before they commit to it — the cadence stays with the
+    // project it was set for. Counted as a fallback it made every cycle of a
+    // switched account report a failure indefinitely, and a signal that fires on
+    // a healthy account is not a signal.
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId: seeded.ownerId,
+      jiraProjectId: "20000",
+      jiraSprintId: "9999",
+      startDate: new Date("2026-08-03T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    const result = await run(seeded);
+
+    expect(result.status).toBe("reconciled");
+    if (result.status === "reconciled") {
+      expect(result.cadenceSource).toBe("source");
+    }
   });
 });
 
@@ -451,28 +632,45 @@ describe("reconcileActiveSprint — a stale board_id degrades, never fails (Phas
 
 describe("reconcileActiveSprint — an override survives a ROLLOVER (plan-review F1)", () => {
   // The case (c) cannot reach: (c) exercises the CONFLICT branch, this one the
-  // INSERT branch. `importCadence`'s INSERT hard-codes cadenceOverridden:false,
-  // so a verbatim copy would erase the override at exactly the event this slice
-  // exists to handle — and the owner could not re-apply it, since /setup/team is
-  // the only mount of CadenceForm.
-  it("(i) rollover carries cadence_overridden and its columns onto the NEW row", async () => {
+  // INSERT branch.
+  //
+  // AT S-30 THIS STOPPED BEING A WRITE. The reconciler's `carry` — which seeded
+  // the new row's columns from the previous one — is deleted; inheritance is
+  // read-time (`pickCadence` tier 2), keyed by the Jira-side project and ordered
+  // against the sprint's own start date. So the assertion moves off the new row
+  // and onto what the engine resolves for it, and NO record is written at the
+  // rollover.
+  it("(i) rollover inherits the override through the resolver, with no write", async () => {
     const seeded = await newOwner();
-    await seedSprint(seeded, {
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await seedOverride(seeded, {
       jiraSprintId: "4242",
       lengthDays: 21,
       startDay: "WED",
       workingDays: ["MON", "TUE", "WED"],
-      cadenceOverridden: true,
     });
 
-    await run(seeded, { sprint: SPRINT_8 });
+    const result = await run(seeded, { sprint: SPRINT_8 });
 
     const all = await rows(seeded.ownerId);
     const created = all.find((r) => r.jiraSprintId === "4343")!;
-    expect(created.cadenceOverridden).toBe(true);
-    expect(created.lengthDays).toBe(21);
-    expect(created.startDay).toBe("WED");
-    expect(created.workingDays).toEqual(["MON", "TUE", "WED"]);
+    // The new row's own columns are Jira's, as they should be — they are a cache.
+    expect(created.lengthDays).toBe(14);
+    expect(created.startDay).toBe("MON");
+    // What the lead chose still applies to the new sprint …
+    expect(await resolvedFor(seeded.ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+      source: "inherited",
+    });
+    if (result.status === "reconciled") {
+      expect(result.cadenceSource).toBe("inherited");
+    }
+    // … and the rollover wrote NO new record to make that true.
+    const records = await overridesOf(seeded.ownerId);
+    expect(records).toHaveLength(1);
+    expect(records[0].jiraSprintId).toBe("4242");
     // Metadata comes from Jira, not from the outgoing row.
     expect(created.name).toBe("Sprint 8");
     expect(created.state).toBe("ACTIVE");
@@ -509,9 +707,10 @@ describe("reconcileActiveSprint — between sprints closes an ENDED row (plan-re
     expect(resolved?.id).toBe(before.id);
   });
 
-  // The interaction between (i) and (j): the carry-forward read is scoped to
-  // "most-recently-started", NOT to state='ACTIVE', precisely so an override
-  // survives a rollover that FOLLOWS a between-sprints demotion.
+  // The interaction between (i) and (j): an override must survive a rollover
+  // that FOLLOWS a between-sprints demotion. Under `carry` that rested on the
+  // previous-row read being state-unscoped; under read-time inheritance it rests
+  // on the record having no tie to sprint state at all.
   it("(k) rollover after a demotion still carries the override forward", async () => {
     const seeded = await newOwner();
     await seedSprint(seeded, {
@@ -519,21 +718,52 @@ describe("reconcileActiveSprint — between sprints closes an ENDED row (plan-re
       state: "ACTIVE",
       startDate: new Date(Date.now() - 20 * 86_400_000),
       endDate: new Date(Date.now() - 3 * 86_400_000),
+    });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      startDate: new Date(Date.now() - 20 * 86_400_000),
       lengthDays: 21,
       startDay: "WED",
       workingDays: ["MON", "TUE", "WED"],
-      cadenceOverridden: true,
     });
 
     await run(seeded, { sprint: null }); // demotes to CLOSED
     await run(seeded, { sprint: SPRINT_8 }); // then the new sprint goes active
 
-    const all = await rows(seeded.ownerId);
-    const created = all.find((r) => r.jiraSprintId === "4343")!;
-    expect(created.cadenceOverridden).toBe(true);
-    expect(created.lengthDays).toBe(21);
-    expect(created.startDay).toBe("WED");
     expect(await activeCount(seeded.ownerId)).toHaveLength(1);
+    expect(await resolvedFor(seeded.ownerId)).toMatchObject({
+      lengthDays: 21,
+      startDay: "WED",
+      // ASSERTED HERE FOR THE FIRST TIME. This case pinned only the flag,
+      // `lengthDays` and `startDay` — the one field the frame identifies as
+      // consequential is the one the carry-forward test omitted, which is
+      // exactly how `carry`'s unguarded `workingDays` hole stayed invisible.
+      workingDays: ["MON", "TUE", "WED"],
+      source: "inherited",
+    });
+  });
+
+  it("(k2) a restore RACING a rollover cannot be resurrected by inheritance", async () => {
+    // The guarantee `carry`'s `!forceCadenceRefresh` branch held deliberately,
+    // re-expressed for read-time inheritance: the new sprint has no record of
+    // its own, so a clear that no-oped there would let tier 2 hand back exactly
+    // the override the restore was asked to drop.
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
+    await seedOverride(seeded, {
+      jiraSprintId: "4242",
+      lengthDays: 21,
+      startDay: "WED",
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await run(seeded, { sprint: SPRINT_8, forceCadenceRefresh: true });
+
+    const resolved = await resolvedFor(seeded.ownerId);
+    expect(resolved.source).toBe("own");
+    expect(resolved.lengthDays).toBe(14); // Jira's again
+    expect(resolved.startDay).toBe("MON");
+    expect(resolved.workingDays).toEqual(["MON", "TUE", "WED"]); // preserved
   });
 });
 

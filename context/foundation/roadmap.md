@@ -61,7 +61,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
 | S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | done |
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | done |
-| S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | proposed |
+| S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | done |
 | S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | done |
 
 ## Streams
@@ -579,7 +579,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
 | S-28       | working-day-aging         | Anomaly aging respects the team's working-day calendar | done| ✅ Implemented, reviewed, merged & archived — PR #89 (2026-08-30), five phases; impl-review fixes + archive in PR #93 (2026-08-31). All five elapsed-time rules are denominated in WORKING hours — the clock advances only 08:00–16:00 in the team's zone, only on `sprint.working_days`, never on a company day off, and an individual absence does not pause it. Every threshold kept its unit name and was recalibrated to the intent it shipped with (24 h meant "a day", a day is 8 working hours), so the `"8_WORKING_DAYS"` sentinel dissolved into the ordinary number 64 and S-14's parked "10 working days is inexpressible" problem stopped existing; PRD FR-009 amended in the same slice. No migration. The impl-review found three silent-suppression paths — a clamp that gave up without saying so, a non-canonical `working_days` array that zeroed the clock forever, and stored numeric overrides now read ~3× longer (empty blast radius: production held zero rows). `day-bucket.ts` joined the mutation glob; gate holds at 85.34. Left behind: backlog row **28.A** |
 | S-29       | post-setup-cadence-surface | Sprint cadence editable after setup, outside the wizard | done | ✅ Implemented, reviewed & merged — PR #96 (2026-08-31), five phases. **The screen was the smallest part.** The slice fixed the lifecycle first: `saveCadence` used to set `cadence_overridden = true` unconditionally, and that action IS what finishes the wizard — so *confirming* the derived values was recorded as *overriding* them, and every account that completed setup was cut off FR-007's auto-pull for its lifetime, frozen at whatever `deriveCadence` produced that minute. The flag now flips only on a real edit (a dirty-check normalising both sides through the same defaults the read applies, weekdays canonicalised so a reordered set is not an edit). The between-sprints defect is closed at its root: the write resolves through `getActiveSprintRow` — the SAME resolver the page, the anomaly snapshot and the days-off editor already use — and keys the UPDATE on `id`, so "the row the lead is looking at" and "the row the save writes" became one sentence; zero rows now raises `NoSprintRowError` → `no_sprint` instead of `{ok:true}`. Data-only migration `0022` unfreezes every existing row (**applied to production 2026-08-31**; that database holds zero `sprint` rows, so it landed as bookkeeping — the fleet-wide unfreeze is real only for the local/dev accounts the frame examined). "Restore Jira's values" passes `forceCadenceRefresh` INTO the reconcile rather than pre-clearing the flag, so the clear and the refresh ride one statement inside one transaction and a failed Jira call leaves the row untouched — the plan-review's only CRITICAL. Impl-review found two more: the Phase 1 comment rewrite never landed (the docblock still claimed the action "flips" the flag), and the cadence defaults lived in four hand-copied places, so changing a page's prefill alone would have re-created this very defect one layer up with no suite going red — `DEFAULT_CADENCE` is now exported from `cadence.ts` and spread by all four consumers. **Does NOT close S-30**: the write still keys on `sprint.id`, so a disconnect still loses the override |
-| S-30       | cadence-override-retention | A hand-entered sprint cadence survives a disconnect and a project switch | yes | Prereqs S-16, S-26 done. Found while framing S-26 (`context/changes/disconnect-data-retention/frame.md`) and deliberately left out of it: S-26 narrowed the cascade for `absence`, but `sprint` rows still die with the Jira credential in BOTH outcomes, and cadence carry-forward reads the *previous* sprint row (`reconcile-sprint.ts:190-231`). With that row gone the next reconcile reseeds from Jira's defaults with `cadenceOverridden: false`, so the lead's override is not lost loudly — it is replaced by a plausible wrong number. Unlike `absence`, this one cannot be fixed by a referential action: the values live ON the deleted row, so it needs the `sprint_measurement` treatment (a record that carries no FK into the sync lifecycle) or a cadence that belongs to the account rather than to a sprint. Overlaps S-29, which is where post-setup cadence UI now lives (that clause was split out of S-19 on the same day) |
+| S-30       | cadence-override-retention | A hand-entered sprint cadence survives a disconnect and a project switch | done | ✅ Implemented 2026-08-31, six phases. The cadence stops being four columns on a row the Jira sync owns and becomes `sprint_cadence_override` — the `sprint_measurement` shape, keyed Jira-side, no FK into the sync graph, three independently nullable fields so **working days can be hand-set while length and start day still auto-pull** (a state FR-007 implied and no code path could reach). Row existence means "the lead has spoken for this sprint", NOT "the values differ" — copying `anomaly_settings`' rule would make *stop inheriting* inexpressible under a read-time inheritance tier (plan review F1). Three copy↔code contradictions closed: the restore was deleting the working days its own dialog promised to keep (pinned green by a test whose comment was false), every pre-action copy module returned zero hits for `cadence` while the values died with the credential, and the project-switch editor led to a disabled control. Two defects surfaced only by implementation — `saveCadence` compared against the very column it writes (the source is now derived), and the resolver's tier 1 was not project-scoped, re-creating S-26 impl-review F2's cross-workspace collision for a new payload. `carry` deleted with the unguarded `workingDays` hole it carried. `0023` additive, backfill a measured no-op. **Does NOT close S-32.** Original framing: Prereqs S-16, S-26 done. Found while framing S-26 (`context/changes/disconnect-data-retention/frame.md`) and deliberately left out of it: S-26 narrowed the cascade for `absence`, but `sprint` rows still die with the Jira credential in BOTH outcomes, and cadence carry-forward reads the *previous* sprint row (`reconcile-sprint.ts:190-231`). With that row gone the next reconcile reseeds from Jira's defaults with `cadenceOverridden: false`, so the lead's override is not lost loudly — it is replaced by a plausible wrong number. Unlike `absence`, this one cannot be fixed by a referential action: the values live ON the deleted row, so it needs the `sprint_measurement` treatment (a record that carries no FK into the sync lifecycle) or a cadence that belongs to the account rather than to a sprint. Overlaps S-29, which is where post-setup cadence UI now lives (that clause was split out of S-19 on the same day) |
 | S-31       | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision | done                   | ✅ Implemented, reviewed, merged & archived — PR #97 (2026-08-31), five phases. The half of Open Roadmap Question 4(b) that S-26 answered but could not fix: **token rotation was already lossless** and nothing on the card said so. Copy and layout only — no schema, store or Server Action change. `Reconnect` becomes the single emphasised control, `Test connection` moves above the row as the diagnostic it is, and `Disconnect` **stays** `ghost` — S-24's "no visual re-weighting" is reversed only in its first half, by promoting the safe sibling rather than demoting the destructive one. The load-bearing half is `integration-card-copy.ts`: every string on the card, with `jobsIntro` and `reconnectCost` DERIVED from `DISCONNECT_IMPACT`, so the promise cannot outlive the FK graph it describes. One clause — the FR-023 commitment freeze — is hand-written and declares itself, because it is a re-computation rather than a table in the graph. Both wizard status cards gained the same route; until now the only way to enter a fresh token from `/setup/jira` was to press the button that destroys the sprint. Impl-review caught two real copy defects the tests could not: in demo the settings card quoted a selection editor demo does not render, and the GitHub promise reused the disconnect-CLEAR fragments, claiming that deselecting one repository clears the whole monitored list |
 
 ## Open Roadmap Questions
@@ -1456,7 +1456,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** cadence-override-retention
 - **PRD refs:** FR-007
 - **Prerequisites:** S-16, S-26
-- **Status:** proposed
+- **Status:** done
 
 - **Found while framing S-26, and deliberately left out of it** (2026-08-30,
   `context/changes/disconnect-data-retention/frame.md`). S-26 answered "what
@@ -1492,6 +1492,85 @@ Foundations below assume these are present and do NOT re-scaffold them.
   reusing here — `getActiveSprintRow` as the single resolver both the read and
   the write go through, and `forceCadenceRefresh`, which already gives the
   reconcile a way to be told what to do with the flag.
+- **✅ Implemented 2026-08-31, six phases.** The modelling question above is
+  answered in the `sprint_measurement` shape: `sprint_cadence_override` is keyed
+  by the JIRA-SIDE sprint id, its only foreign key points at the account, and its
+  three fields are independently NULLABLE — where NULL means *follow the source
+  for THIS field*. That last part is what makes the state FR-007 always implied
+  reachable for the first time: **a Mon–Thu team whose length and start day still
+  auto-pull from Jira.** One boolean over three columns could not express that
+  account, so it described it wrongly.
+  **Row existence means "the lead has spoken for this sprint", deliberately NOT
+  `anomaly_settings`' "the value differs from the default"** (plan review F1):
+  with a read-time inheritance tier, delete-when-equal makes *stop inheriting*
+  inexpressible, and a lead saving their way back to the default would have it
+  silently undone. So no write path deletes a row, and a three-NULL row is a
+  meaningful state.
+  **Three contradictions closed along the way**, none of them in the original
+  outcome: "Restore Jira's values" was deleting the working-day pattern its own
+  dialog promised to leave alone (Jira has no working-days field, so there was
+  nothing to restore *from*) — pinned green by an integration test whose comment
+  was false; every pre-action copy module returned **zero** hits for `cadence`
+  while the values died with the credential; and the project-switch editor sent
+  the lead to a screen whose restore button was disabled and whose save threw.
+  **Two defects found only by writing the code.** `saveCadence` both wrote
+  `sprint.length_days` and compared against it, so a second save of an unchanged
+  override read as source-equal and dropped it — the source is now DERIVED
+  (`deriveCadence` is pure and the row carries both dates, so it costs no network
+  call). And the resolver's tier 1 keyed on `(owner, jira_sprint_id)` alone,
+  which after a workspace re-point with a colliding sprint id handed the old
+  team's cadence to the new sprint — the same collision S-26's impl-review F2
+  found for `sprint_measurement`, now guarded by the same bridge.
+  `carry` is deleted (inheritance is read-time), taking with it the unguarded
+  hole it carried: its guard checked length and start day but **not** working
+  days, then coalesced a NULL pattern to Mon–Fri on every rollover while writing
+  `cadenceOverridden: true`. Migration `0023` is additive with a measured-no-op
+  backfill. **Does NOT close S-32** — the superseded columns stay, held by a
+  hermetic reader guard whose allowlist is the contract.
+
+---
+
+### S-32: Retire what S-30 leaves behind
+
+- **Outcome:** the cadence a lead chose has exactly one home in the database —
+  the superseded copy on `sprint` is gone, and the override table holds no rows
+  that describe sprints nobody will ask about again.
+- **Change ID:** —
+- **PRD refs:** FR-007
+- **Prerequisites:** S-30
+- **Status:** proposed
+
+- **Two deliberate leftovers, from the same decision.** S-30 moves the cadence
+  override into `sprint_cadence_override` and does **not** drop
+  `sprint.working_days` / `sprint.cadence_overridden` (owner's call: an additive
+  migration keeps a revert to a code revert). The columns become
+  written-but-never-read, and the whole thing standing between them and a future
+  reader picking up the stale copy is one hermetic test — the reader guard in
+  S-30's Phase 5 (`src/lib/cadence-override-readers.test.ts`), whose allowlist IS
+  the contract. That is a fine bridge and a bad permanent arrangement: a guard can
+  be deleted by anyone who reads its failure as noise, and the question "which
+  copy is true" comes straight back. **Read its stated blind spot before relying
+  on it**: it keys on the RECEIVER's name (`*sprint*` / `row`), because twenty
+  receivers in the repo end in `.workingDays` and all but the sprint row's are
+  legitimate — so a sprint row bound to some other name is invisible to it.
+- **The second leftover is the price of S-30's plan review F1** (2026-08-31,
+  `context/changes/cadence-override-retention/reviews/plan-review.md`). Row
+  existence there means *"the lead has spoken for this sprint"*, not *"the values
+  differ from the source"* — because with a read-time inheritance tier the
+  `anomaly_settings` delete-when-equal rule makes "stop inheriting" inexpressible,
+  and a lead saving their way back to the default would have it silently undone.
+  The consequence is rows holding three NULLs that no write path ever deletes. At
+  one per sprint the lead touched that is the `sprint_measurement` order of
+  magnitude and not a scaling problem — it is a tidiness problem with a real edge:
+  nothing prunes records for sprints that fell out of the PRD's current-plus-two
+  retention window, or for a Jira project the account no longer monitors.
+- **Shape:** one migration dropping the two columns and deleting the reader guard
+  in the same commit (the guard exists to hold the line until this lands, so
+  outliving its cause makes it misleading), plus a decision on when a cadence
+  record stops being worth keeping. Note the second half is genuinely a decision,
+  not a chore: an override for a long-closed sprint is what tier-2 inheritance
+  reads to carry a Mon–Thu pattern forward, so a prune that is too eager is the
+  S-30 defect rebuilt in a cron job.
 
 ---
 

@@ -39,7 +39,7 @@ export const detectTicketNoCommitLink: Detector = (snapshot, effective, now) => 
   const windowStart = workingHoursBefore(
     now,
     windowHours,
-    snapshot.sprint.workingDays,
+    snapshot.workingDays,
     snapshot.timeZone,
     snapshot.nonWorkingDays,
   );
@@ -53,7 +53,7 @@ export const detectTicketNoCommitLink: Detector = (snapshot, effective, now) => 
     const hoursInProgress = workingHoursBetween(
       since,
       now,
-      snapshot.sprint.workingDays,
+      snapshot.workingDays,
       snapshot.timeZone,
       snapshot.nonWorkingDays,
     );

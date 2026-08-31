@@ -54,6 +54,17 @@ export type SprintSnapshot = {
    */
   timeZone: string | null;
   /**
+   * The working-day pattern that applies to this sprint (S-30, FR-007).
+   *
+   * TOP-LEVEL, beside `timeZone` and `nonWorkingDays`, for exactly their reason:
+   * rules are pure over the snapshot, so anything they need has to be handed to
+   * them resolved. It is deliberately NOT `sprint.working_days` — that column is
+   * superseded and holds only the Mon–Fri constant (`schema.ts`). The lead's
+   * chosen pattern lives in `sprint_cadence_override`, which outlives the Jira
+   * cascade, and `resolveCadenceFor` is the one place that reads it.
+   */
+  workingDays: string[];
+  /**
    * Days the WHOLE team is off — public holidays, company days off (S-23,
    * FR-007).
    *

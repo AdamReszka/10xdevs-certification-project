@@ -5,6 +5,7 @@ import {
   countTeamDaysOffInclusive,
   countWorkingDaysInclusive,
 } from "@/lib/anomaly/rules/helpers";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import type { DayKey } from "@/lib/dashboard/day-bucket";
 import type { getDb } from "@/lib/db";
 import { toFte } from "@/lib/fte";
@@ -232,7 +233,7 @@ export async function getSprintCapacityFor(
   // Far edge of the "next window" the tab also draws.
   const lookahead = new Date(sprintEnd.getTime() + (sprintEnd.getTime() - sprintStart.getTime()));
 
-  const [rows, absences, timeZone, nonWorkingDays] = await Promise.all([
+  const [rows, absences, timeZone, nonWorkingDays, cadence] = await Promise.all([
     db
       .select({
         id: teamMember.id,
@@ -261,6 +262,12 @@ export async function getSprintCapacityFor(
     // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
     // inside the reducer for the same reason the zone is: the reducer is pure.
     getNonWorkingDays({ db, ownerId }),
+    // S-30 (FR-007): the working-day pattern the LEAD chose. ONE call covers
+    // both callers of this function — the dashboard and the measurement sweep —
+    // and it is the sweep that makes the resolver's `start_date <=` ordering
+    // load-bearing: an unfinalized closed sprint is recomputed on every cycle,
+    // so a later record must not reach back over it.
+    resolveCadenceFor(db, ownerId, sprint),
   ]);
 
   // The driver hands `numeric` back as a string. Converting once, HERE, is what
@@ -276,7 +283,7 @@ export async function getSprintCapacityFor(
       absences,
       sprintStart,
       sprintEnd,
-      workingDays: sprint.workingDays,
+      workingDays: cadence.workingDays,
       timeZone,
       nonWorkingDays,
     }),

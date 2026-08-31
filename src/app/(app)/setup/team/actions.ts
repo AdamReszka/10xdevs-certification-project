@@ -7,6 +7,10 @@ import { teamMember } from "@/db/schema";
 
 import { demoRefusal } from "@/lib/demo/refusal";
 import { TokenCryptoError } from "@/lib/crypto";
+import type {
+  CadenceProvenance,
+  ResolvedCadence,
+} from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import {
   GithubAuthError,
@@ -49,7 +53,6 @@ import {
 } from "@/lib/validations/roster";
 import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 
-import type { DerivedCadence } from "@/lib/integrations/cadence";
 
 /**
  * S-04 setup mutations — deliberately thin, mirroring `setup/github/actions.ts`
@@ -158,7 +161,7 @@ export type SaveRosterResult = { ok: true; ids: string[] } | ActionFailure;
 export type ImportCadenceResult =
   | {
       ok: true;
-      cadence: DerivedCadence;
+      cadence: ResolvedCadence;
       boardId: number | null;
       jiraSprintId: string | null;
       /**
@@ -182,7 +185,7 @@ export type ImportCadenceResult =
  * returning — finishing setup must no longer read as an override.
  */
 export type SaveCadenceResult =
-  { ok: true; overridden: boolean } | ActionFailure;
+  { ok: true; provenance: CadenceProvenance } | ActionFailure;
 
 export type SetMemberActiveResult =
   { ok: true; isActive: boolean } | ActionFailure;
@@ -412,11 +415,13 @@ export async function restoreCadenceAction(): Promise<ImportCadenceResult> {
 /**
  * Persist the lead's cadence (FR-007).
  *
- * `cadence_overridden` flips ONLY on a real edit (S-29). This action used to set
- * it unconditionally, and since it is also what finishes the wizard, merely
- * CONFIRMING the derived values was recorded as overriding them — freezing the
- * account off FR-007's auto-pull for its lifetime. The dirty-check now lives in
- * `saveCadence`, and the `overridden` it returns is carried back to the caller.
+ * A field is recorded as the lead's ONLY when it differs from the source for
+ * that field (S-29, then per field in S-30). This action used to record an
+ * override unconditionally, and since it is also what finishes the wizard,
+ * merely CONFIRMING the derived values froze the account off FR-007's auto-pull
+ * for its lifetime. The comparison lives in `saveCadence`; the PER-FIELD
+ * provenance it returns is carried back verbatim, unchanged in every other
+ * respect.
  */
 export async function saveCadenceAction(
   input: unknown,
@@ -467,7 +472,7 @@ export async function saveCadenceAction(
   }
 
   try {
-    const { overridden } = await saveCadenceService({
+    const { provenance } = await saveCadenceService({
       db,
       ownerId,
       cadence: {
@@ -476,7 +481,7 @@ export async function saveCadenceAction(
         workingDays: parsed.data.workingDays,
       },
     });
-    return { ok: true, overridden };
+    return { ok: true, provenance };
   } catch (err) {
     return toFailure(err, "[setup/team] saveCadence");
   }

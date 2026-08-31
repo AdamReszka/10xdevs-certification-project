@@ -93,7 +93,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
     const hoursLeft = workingHoursBetween(
       now,
       endDate,
-      snapshot.sprint.workingDays,
+      snapshot.workingDays,
       snapshot.timeZone,
       snapshot.nonWorkingDays,
     );
@@ -155,7 +155,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
     const workingDaysLeft = countWorkingDaysInclusive(
       now,
       endDate,
-      snapshot.sprint.workingDays,
+      snapshot.workingDays,
       snapshot.timeZone,
       snapshot.nonWorkingDays,
     );
@@ -177,7 +177,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
       const workingDaysLost = countWorkingDaysInclusive(
         lostFrom,
         lostTo,
-        snapshot.sprint.workingDays,
+        snapshot.workingDays,
         snapshot.timeZone,
         snapshot.nonWorkingDays,
       );

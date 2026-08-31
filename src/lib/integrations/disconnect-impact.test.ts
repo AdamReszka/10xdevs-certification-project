@@ -168,6 +168,33 @@ describe("DISCONNECT_IMPACT matches the schema's foreign-key graph", () => {
     expect(deriveImpact("jira_credential", edges).destroyed).toContain("anomaly");
   });
 
+  it("the cadence override is outside EVERY root's cascade, and stays that way (S-30)", () => {
+    // THE STRUCTURAL REGRESSION, and the only column-level loss this guard can
+    // ever see. `deriveImpact` accumulates TABLE names from
+    // `getTableConfig(t).foreignKeys`, so it could never notice that four
+    // columns ON a destroyed table were the lead's rather than Jira's — which is
+    // why the cadence died silently for S-26, S-29 and every slice before them
+    // while this file stayed green.
+    //
+    // What it CAN see is the property S-30 rests on: the record survives because
+    // it has no foreign key into the sync graph at all. Give the table one — a
+    // convenience FK to `sprint`, an FK to `jira_project` "for integrity" — and
+    // it re-enters the closure and the whole slice is undone. This fails then.
+    for (const root of ["jira_credential", "github_credential", "sprint"]) {
+      expect(deriveImpact(root, edges).destroyed).not.toContain(
+        "sprint_cadence_override",
+      );
+    }
+    for (const key of keys) {
+      expect(DISCONNECT_IMPACT[key].destroyedTables).not.toContain(
+        "sprint_cadence_override",
+      );
+      expect(DISCONNECT_IMPACT[key].clearedTables).not.toContain(
+        "sprint_cadence_override",
+      );
+    }
+  });
+
   it("daily_recap is weakened, not destroyed (the jira-project-editor error)", () => {
     const derived = deriveImpact("jira_credential", edges);
     expect(derived.destroyed).not.toContain("daily_recap");
@@ -239,6 +266,16 @@ describe("the copy lists", () => {
   it("both Jira roots name the surviving absences among what stays", () => {
     for (const key of ["jira", "projectSwitch"] as const) {
       expect(DISCONNECT_IMPACT[key].keeps.join(" ")).toContain("absences");
+    }
+  });
+
+  it("both Jira roots name the surviving cadence among what stays (S-30)", () => {
+    // `keeps` is built entirely around the hand-entered/durable distinction, and
+    // the cadence became exactly that kind of thing when it left the `sprint`
+    // row. Before S-30 `grep -i cadence` over every pre-action copy module
+    // returned zero hits while the values died with the credential.
+    for (const key of ["jira", "projectSwitch"] as const) {
+      expect(DISCONNECT_IMPACT[key].keeps.join(" ")).toContain("cadence");
     }
   });
 

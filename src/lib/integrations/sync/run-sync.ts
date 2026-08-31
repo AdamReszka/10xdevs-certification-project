@@ -46,6 +46,7 @@ import {
   loadGithubToken,
   loadJiraCredentials,
 } from "@/lib/integrations/credentials";
+import type { CadenceSource } from "@/lib/cadence-override";
 import {
   coerceStoredBoardId,
   reconcileActiveSprint,
@@ -704,6 +705,13 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
       // the history rather than looking like a normal successful pull. Since
       // S-16 the reason names the reconcile's own verdict where it has one,
       // which is what makes `board_ambiguous` reachable by an operator at all.
+      // THE `"reconciled"` ARM IS DEAD AT RUNTIME: if the status is
+      // `reconciled` then `chosenSprint` is `reconcile.sprint`, which is never
+      // null, so this block is not entered. It is kept because the compiler
+      // cannot correlate the two ternaries on the same discriminant — dropping
+      // it would mean either fabricating a different status here or throwing on
+      // a state that cannot occur, and neither is an improvement over one dead
+      // token. `"no_sprint"` therefore stays in both unions (S-30).
       const reason = reconcile.status === "reconciled" ? "no_sprint" : reconcile.status;
       await finalizeSyncState(db, ownerId, "JIRA", { status: "OK", now, outcome: reason });
       return { status: "SKIPPED", reason };
@@ -926,7 +934,11 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
       now,
       jiraHistoryCursor: now.toISOString(),
       jiraCursorSprintId: chosenSprint.id,
-      outcome: jiraCycleOutcome(sprintFieldId, sprintChangesNamingNoSprint),
+      outcome: jiraCycleOutcome(
+        sprintFieldId,
+        sprintChangesNamingNoSprint,
+        reconcile.status === "reconciled" ? reconcile.cadenceSource : null,
+      ),
     });
     return { status: "OK" };
   } catch (err) {
@@ -956,11 +968,26 @@ async function syncJira(args: SyncOwnerArgs, now: Date): Promise<IntegrationOutc
 function jiraCycleOutcome(
   sprintFieldId: string | null,
   sprintChangesNamingNoSprint: number,
+  cadenceSource: CadenceSource | null,
 ): string | null {
   const notes: string[] = [];
   if (sprintFieldId === null) notes.push("sprint_field_unresolved");
   if (sprintChangesNamingNoSprint > 0) {
     notes.push(`sprint_changes_naming_no_sprint=${sprintChangesNamingNoSprint}`);
+  }
+  // S-30. The narrow, exact condition worth acting on: the cycle resolved a
+  // cadence from the DEFAULT while this account holds a record for THIS SAME
+  // Jira-side project that did not apply. That is the recency predicate having
+  // failed to find what the lead chose — the failure mode the whole slice exists
+  // to prevent, reported instead of finalized as an ordinary green run.
+  //
+  // A record left by a DIFFERENT project deliberately does NOT reach here
+  // (`CadenceSource`): that is the outcome a project switch promises the lead in
+  // advance, and counting it made every cycle of a switched account report a
+  // failure until they next visited `/team/cadence`. Every other `CadenceSource`
+  // is a normal outcome and says nothing.
+  if (cadenceSource === "source_with_prior_override") {
+    notes.push("cadence_default_fallback");
   }
   return notes.length > 0 ? notes.join(";") : null;
 }
