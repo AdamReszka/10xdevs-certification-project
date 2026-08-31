@@ -12,11 +12,13 @@ import {
   deleteAbsence as deleteAbsenceService,
   updateAbsence as updateAbsenceService,
 } from "@/lib/absence-store";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { holidaysForYear } from "@/lib/holidays";
 import {
   approveHolidayYear as approveHolidayYearService,
   setHolidayCountry as setHolidayCountryService,
 } from "@/lib/holidays/calendar-store";
+import { holidayYears } from "@/lib/holidays/proposal";
 import { UnknownMemberError } from "@/lib/integrations/roster-store";
 import {
   UnknownTeamDayOffError,
@@ -33,6 +35,7 @@ import {
   teamDayOffIdSchema,
   teamDayOffSaveSchema,
 } from "@/lib/validations/team-day-off";
+import { getActiveSprintRow } from "@/lib/sprint";
 import { resolveWorkspace } from "@/lib/workspace";
 
 /**
@@ -262,6 +265,15 @@ export async function saveHolidayCountryAction(
  * dates into the account's calendar under a year stamp that then closes the
  * question forever.
  *
+ * AND THE SUBMITTED `years` ARE THEMSELVES RE-DERIVED (impl-review F3). Checking
+ * the days against the years the CLIENT sent left the years unchecked, so a
+ * crafted payload could stamp a year the surface never offered — closing it
+ * before its holidays were ever proposed, and therefore for good. The server now
+ * recomputes the window from the owner's own sprint row with {@link holidayYears}
+ * and refuses anything outside it. That check is only safe BECAUSE that function
+ * always includes today's year (F1): an account between sprints must still be
+ * able to approve the year it is living in.
+ *
  * A YEAR WITH NO KEPT DAYS IS STILL STAMPED. That is a real decision — a team
  * that works every public holiday — and leaving it unstamped would re-propose
  * the whole calendar on the very next render.
@@ -281,26 +293,44 @@ export async function approveHolidayYearAction(
   const { countryCode, years, days } = parsed.data;
   const submittedYears = new Set(years);
 
-  // The calendar of each submitted year, once, so the check below is a lookup
-  // rather than a recomputation per day.
-  const allowed = new Map<string, string>();
-  for (const year of years) {
-    for (const holiday of holidaysForYear(countryCode, year)) {
-      allowed.set(holiday.day, holiday.label);
-    }
-  }
-
-  for (const day of days) {
-    const year = Number(day.slice(0, 4));
-    if (!submittedYears.has(year) || !allowed.has(day)) {
-      return invalidInput("That list is out of date. Reload the page and try again.");
-    }
-  }
-
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
   try {
+    // The window the SERVER derives, not the one the client claims. Read before
+    // anything is written, so a refusal costs no transaction.
+    const [sprint, timeZone] = await Promise.all([
+      getActiveSprintRow(db, ownerId),
+      getJiraTimeZone(db, ownerId),
+    ]);
+    const reviewable = new Set(
+      holidayYears({
+        sprintStart: sprint?.startDate ?? null,
+        sprintEnd: sprint?.endDate ?? null,
+        now,
+        timeZone,
+      }),
+    );
+    if (years.some((year) => !reviewable.has(year))) {
+      return invalidInput("That list is out of date. Reload the page and try again.");
+    }
+
+    // The calendar of each submitted year, once, so the check below is a lookup
+    // rather than a recomputation per day.
+    const allowed = new Map<string, string>();
+    for (const year of years) {
+      for (const holiday of holidaysForYear(countryCode, year)) {
+        allowed.set(holiday.day, holiday.label);
+      }
+    }
+
+    for (const day of days) {
+      const year = Number(day.slice(0, 4));
+      if (!submittedYears.has(year) || !allowed.has(day)) {
+        return invalidInput("That list is out of date. Reload the page and try again.");
+      }
+    }
+
     await db.transaction(async (tx) => {
       await createDerivedDaysOff({
         db: tx,

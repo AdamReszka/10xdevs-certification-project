@@ -26,22 +26,34 @@ export type ProposedHoliday = {
 };
 
 /**
- * The years a proposal must cover: every year the ACTIVE SPRINT touches.
+ * The years a proposal must cover: TODAY'S year, plus every year the sprint
+ * window touches.
  *
  * NOT JUST THE YEAR `now` FALLS IN, and the difference is a guaranteed annual
  * failure rather than an edge case. In mid-December the current year is approved,
  * so a single-year proposal is empty and every surface goes quiet — while the
- * active sprint runs on into January and its capacity divisor and all five aging
- * budgets count 1 and 6 January as ordinary working days. "On 2027-01-01 the
- * question answers itself" is true, and it answers itself one to three weeks
- * after the lead committed to that sprint.
+ * sprint runs on into January and its capacity divisor and all five aging budgets
+ * count 1 and 6 January as ordinary working days. "On 2027-01-01 the question
+ * answers itself" is true, and it answers itself one to three weeks after the
+ * lead committed to that sprint.
+ *
+ * AND NOT JUST THE SPRINT'S YEARS EITHER (impl-review F1). The callers feed this
+ * `getActiveSprintRow`, whose rule is "prefer the ACTIVE sprint; ELSE the
+ * most-recently-started one" — so between sprints, after a stalled sync, or after
+ * a disconnect that left the last synced sprint behind, the window belongs to a
+ * sprint that is over. Taking it alone reproduced the very failure the paragraph
+ * above exists to prevent, one level up: a team whose last sprint ended in
+ * December 2026, opening the dashboard on 5 January 2027, was asked about 2026 —
+ * already approved — and told nothing, while 1 and 6 January went on counting as
+ * ordinary working days.
+ *
+ * `now` IS THEREFORE UNCONDITIONAL, not a fallback. The union is monotonic: a
+ * sprint spanning today already contributes today's year, so this adds a year in
+ * exactly the stale case and in no other. The module still owns no clock — `now`
+ * is a parameter, as it was.
  *
  * Read in the TEAM's zone, so a sprint ending just after midnight UTC on 1
  * January is not silently attributed to the wrong year.
- *
- * With no active sprint there is no window, and the caller gets the single year
- * `now` falls in — there is nothing else to go on, and offering the current year
- * is right far more often than offering nothing.
  */
 export function holidayYears({
   sprintStart,
@@ -54,8 +66,7 @@ export function holidayYears({
   now: Date;
   timeZone: string | null;
 }): number[] {
-  const dates =
-    sprintStart && sprintEnd ? [sprintStart, sprintEnd] : [now];
+  const dates = [now, ...(sprintStart && sprintEnd ? [sprintStart, sprintEnd] : [])];
   const years = dates.map((d) => Number(dayKeyInTimeZone(d, timeZone).slice(0, 4)));
   return [...new Set(years)].sort((a, b) => a - b);
 }

@@ -576,6 +576,13 @@ decided here rather than discovered:
 | # | Condition | Result | Why it sits here |
 | --- | --- | --- | --- |
 | 0 | `isDemo` | `null` | A demo visitor deliberately skipped configuration; an offer to pick a country is a prompt to configure the tenant they chose not to configure. This is what keeps Progress row 1.8 true after Phase 4, rather than a Phase 1 criterion that Phase 4 quietly reverses. |
+
+**Addendum (impl-review F4, 2026-08-31).** Row 0 as written silences the NOTICE
+in demo. The implementation also withholds the EDITOR itself
+(`days-off/page.tsx`), which this table did not ask for. It is the same argument
+carried one step: leaving the country picker on screen would keep exactly the
+prompt row 0 exists to remove. Recorded here so the plan stays ground truth for
+later reviews; manual row 28.C asserts the shipped behaviour.
 | 1 | `holidaysForYear(countryCode, …)` is empty for every year asked about, and `countryCode !== null` | `"country_unavailable"` | The lead picked a jurisdiction and we have no rules for it — reachable only if a code is dropped from `SUPPORTED_COUNTRIES` after being stored. Without this row the lead reviews an empty list and approves a year with zero holidays, which is `lessons.md` #42 exactly: a wrong value narrowed into an empty result that reads as success. |
 | 2 | `countryCode === null` | `"no_country"` | Outranks `calendarIsEmpty` deliberately: an account that typed holidays by hand still has no jurisdiction, no recurrence, and no answer for next January — which is the state this slice exists to close. |
 | 3 | a year asked about is not approved | `"year_unapproved"` | Names the year and offers the review. |

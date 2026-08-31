@@ -819,6 +819,20 @@ export const teamDayOff = pgTable(
      * correctly without a backfill: everything in this table today was typed by
      * a human, and `'manual'` is what they are.
      *
+     * `text` AND NOT A `pgEnum`, WHICH IS THE ODD ONE OUT IN THIS FILE and is
+     * recorded here rather than left to be re-discovered (impl-review F2). Every
+     * other closed-value column is an enum — including two named `source`
+     * ({@link memberSource}, {@link refinementSource}) — so the enum is the house
+     * pattern and this deviates from it. What buys the deviation is the DEPLOY:
+     * `text` + `NOT NULL DEFAULT` made `0025` a zero-backfill, reversible
+     * migration, and reversible is the property that mattered on a table whose
+     * rows the lead entered by hand. Postgres cannot drop an enum value, so a
+     * later correction to this vocabulary is a harder migration as an enum than
+     * as a string. The cost is real and paid in one place: the `=== "derived"`
+     * test in `team-days-off-view.ts` stays load-bearing, because the type system
+     * does not narrow this to two values. Revisit if a third provenance ever
+     * appears — at that point the enum's exhaustiveness is worth the migration.
+     *
      * DELIBERATELY NOT THE THING THAT STOPS A DELETED HOLIDAY COMING BACK. It
      * is tempting to read provenance as the resurrection guard — "do not
      * re-derive a row the lead removed" — but a deleted row leaves nothing

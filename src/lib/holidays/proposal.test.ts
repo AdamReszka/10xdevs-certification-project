@@ -152,6 +152,35 @@ describe("holidayYears", () => {
     ).toEqual([2026]);
   });
 
+  it("still asks about today's year when the sprint window is stale", () => {
+    // IMPL-REVIEW F1. `getActiveSprintRow` returns the most-recently-started
+    // sprint when none is ACTIVE, so this window belongs to a sprint that ended
+    // a fortnight ago. Taking it alone left 2026 — already approved — as the
+    // only year asked about, and both surfaces went silent while 1 and 6
+    // January 2027 counted as ordinary working days.
+    expect(
+      holidayYears({
+        sprintStart: new Date("2026-12-07T08:00:00.000Z"),
+        sprintEnd: new Date("2026-12-20T08:00:00.000Z"),
+        now: new Date("2027-01-05T09:00:00.000Z"),
+        timeZone: "Europe/Warsaw",
+      }),
+    ).toEqual([2026, 2027]);
+  });
+
+  it("adds no year when the sprint already spans today", () => {
+    // The union is monotonic: it widens the window in the stale case and in no
+    // other, so the ordinary mid-sprint account is unaffected.
+    expect(
+      holidayYears({
+        sprintStart: new Date("2026-08-24T08:00:00.000Z"),
+        sprintEnd: new Date("2026-09-04T08:00:00.000Z"),
+        now: NOW,
+        timeZone: "Europe/Warsaw",
+      }),
+    ).toEqual([2026]);
+  });
+
   it("falls back when a sprint row carries only one of the two dates", () => {
     expect(
       holidayYears({

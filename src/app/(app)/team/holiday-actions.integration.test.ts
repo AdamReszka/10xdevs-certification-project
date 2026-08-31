@@ -5,7 +5,15 @@ import { and, eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { holidayYearApproval, teamDayOff, user } from "@/db/schema";
+import {
+  holidayYearApproval,
+  jiraCredential,
+  jiraProject,
+  sprint,
+  teamDayOff,
+  user,
+} from "@/db/schema";
+import { encryptToken } from "@/lib/crypto";
 import { holidaysForYear } from "@/lib/holidays";
 import { holidayProposal } from "@/lib/holidays/proposal";
 
@@ -97,6 +105,55 @@ afterEach(async () => {
     await db.delete(user).where(eq(user.id, id));
   }
 });
+
+/**
+ * Give an owner a sprint running 2026-12-21 → 2027-01-04.
+ *
+ * Needed since impl-review F3: the server re-derives the reviewable years from
+ * the owner's OWN sprint row, so a two-year approval is only legitimate for an
+ * account whose sprint actually crosses the boundary. Before F3 this test passed
+ * against an owner with no sprint at all — it asserted its name rather than its
+ * subject.
+ */
+async function seedCrossingSprint(ownerId: string): Promise<void> {
+  const [cred] = await db
+    .insert(jiraCredential)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      encryptedToken: encryptToken("jira_HolidayActionTok123456789", {
+        ownerId,
+        provider: "JIRA",
+      }),
+      tokenLast4: "6789",
+      workspaceUrl: "https://acme.atlassian.net",
+      jiraEmail: "lead@example.com",
+    })
+    .returning({ id: jiraCredential.id });
+
+  const [project] = await db
+    .insert(jiraProject)
+    .values({
+      id: randomUUID(),
+      ownerId,
+      credentialId: cred.id,
+      jiraProjectId: "10000",
+      projectKey: "SF",
+      timeZone: "Europe/Warsaw",
+    })
+    .returning({ id: jiraProject.id });
+
+  await db.insert(sprint).values({
+    id: randomUUID(),
+    ownerId,
+    jiraProjectId: project.id,
+    jiraSprintId: `ha-${ownerId}`,
+    name: "Crosses new year",
+    state: "ACTIVE",
+    startDate: new Date("2026-12-21T08:00:00.000Z"),
+    endDate: new Date("2027-01-04T08:00:00.000Z"),
+  });
+}
 
 /** Every 2026 Polish holiday, as the editor would submit them. */
 const DAYS_2026 = holidaysForYear("PL", 2026).map((h) => h.day);
@@ -218,6 +275,7 @@ describe("approveHolidayYearAction", () => {
 
   it("approves two years in one transaction when the sprint crosses a boundary", async () => {
     const ownerId = await newOwner();
+    await seedCrossingSprint(ownerId);
 
     const result = await approveHolidayYearAction({
       countryCode: "PL",
@@ -292,6 +350,49 @@ describe("approveHolidayYearAction", () => {
         .from(holidayYearApproval)
         .where(eq(holidayYearApproval.ownerId, ownerId)),
     ).toHaveLength(0);
+  });
+
+  it("refuses a year the account's own window does not reach", async () => {
+    // IMPL-REVIEW F3. The days are real holidays and internally consistent —
+    // only the YEAR is one the surface never offered. Stamping it would close
+    // 2028 before its calendar was ever proposed, and therefore for good.
+    const ownerId = await newOwner();
+
+    const result = await approveHolidayYearAction({
+      countryCode: "PL",
+      years: [2028],
+      days: holidaysForYear("PL", 2028).map((h) => h.day),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      await db
+        .select()
+        .from(holidayYearApproval)
+        .where(eq(holidayYearApproval.ownerId, ownerId)),
+    ).toHaveLength(0);
+    expect(
+      await db.select().from(teamDayOff).where(eq(teamDayOff.ownerId, ownerId)),
+    ).toHaveLength(0);
+  });
+
+  it("still lets an account with no sprint approve the year it is living in", async () => {
+    // The other half of F3, and the reason the window includes `now`'s year
+    // unconditionally: a refusal that locked out an account between sprints
+    // would be worse than the hole it closed.
+    const ownerId = await newOwner();
+    const thisYear = new Date().getUTCFullYear();
+
+    const result = await approveHolidayYearAction({
+      countryCode: "PL",
+      years: [thisYear],
+      days: [],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      (await listApprovedYears({ db, ownerId, countryCode: "PL" })).has(thisYear),
+    ).toBe(true);
   });
 
   it("does not touch another account", async () => {
