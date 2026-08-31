@@ -1,7 +1,7 @@
 ---
 change_id: cadence-override-retention
 title: A hand-entered sprint cadence survives a disconnect and a project switch
-status: implementing
+status: implemented
 created: 2026-08-31
 updated: 2026-08-31
 archived_at: null

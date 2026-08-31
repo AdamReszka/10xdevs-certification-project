@@ -1163,9 +1163,9 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 6.1 Full suite green (lint, typecheck, unit, integration)
-- [x] 6.2 E2E spec passes
-- [x] 6.3 `node scripts/manual-test-sweep.mjs` exits zero
+- [x] 6.1 Full suite green (lint, typecheck, unit, integration) — de66408
+- [x] 6.2 E2E spec passes — de66408
+- [x] 6.3 `node scripts/manual-test-sweep.mjs` exits zero — de66408
 
 #### Manual
 
