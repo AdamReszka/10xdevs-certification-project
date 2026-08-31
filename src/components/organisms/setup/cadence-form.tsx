@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { InfoIcon, OctagonXIcon, RefreshCwIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 
 import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
 import {
@@ -12,6 +12,7 @@ import {
   saveCadenceAction,
 } from "@/app/(app)/setup/team/actions";
 import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
+import CadenceFields from "@/components/organisms/setup/cadence-fields";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -31,8 +31,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -53,18 +51,17 @@ import {
  * active sprint (auto-pulled on first visit), each field overridable. A board
  * chooser appears only when the project has multiple scrum boards; a
  * no-active-sprint banner + editable defaults appears when the team is between
- * sprints. Save flips `cadence_overridden` and FINISHES the wizard → /dashboard.
+ * sprints. Save FINISHES the wizard → /dashboard.
+ *
+ * Since S-29 the three controls come from `CadenceFields`, shared with
+ * `/team/cadence` so the wizard and the post-setup editor cannot drift into two
+ * spellings of one cadence. Everything wizard-specific stays here: the board
+ * chooser, the auto-pull effect, `exitDemoAction`, and the redirect.
+ *
+ * The save no longer flips `cadence_overridden` unconditionally — confirming the
+ * derived values unchanged leaves the account on FR-007's auto-pull, and only a
+ * real edit records an override (S-29 Phase 1).
  */
-
-const WEEKDAYS: { value: Weekday; label: string }[] = [
-  { value: "MON", label: "Mon" },
-  { value: "TUE", label: "Tue" },
-  { value: "WED", label: "Wed" },
-  { value: "THU", label: "Thu" },
-  { value: "FRI", label: "Fri" },
-  { value: "SAT", label: "Sat" },
-  { value: "SUN", label: "Sun" },
-];
 
 const DEFAULTS: CadenceValues = {
   lengthDays: 14,
@@ -199,9 +196,13 @@ export default function CadenceForm({
               <SprintIdentityBar view={sprintIdentity} />
             </div>
             <CardDescription>
+              {/* It used to say all three values were "pulled from your active
+                  sprint". That was false for working days — Jira has no such
+                  field (`cadence.ts`) — so the provenance now lives per field on
+                  `/team/cadence`, and this line only frames the step. */}
               {sprintIdentity.kind === "identified"
-                ? "Pulled from your active sprint. Override anything that doesn’t match your real cadence."
-                : "Confirm your sprint cadence. SprintFlow keeps your overrides across future syncs."}
+                ? "Sprint length and start day come from your active sprint; working days are our Mon–Fri default. Change anything that doesn’t match your real cadence."
+                : "Confirm your sprint cadence. You can change it later under Team → Sprint cadence."}
             </CardDescription>
           </div>
           <Button
@@ -277,91 +278,7 @@ export default function CadenceForm({
               />
             ) : null}
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="lengthDays"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sprint length (days)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={90}
-                        {...field}
-                        onChange={(e) => field.onChange(Number(e.target.value))}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="startDay"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sprint start day</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {WEEKDAYS.map((d) => (
-                          <SelectItem key={d.value} value={d.value}>
-                            {d.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <Controller
-              control={form.control}
-              name="workingDays"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Working days</FormLabel>
-                  <div className="flex flex-wrap gap-3">
-                    {WEEKDAYS.map((d) => {
-                      const checked = field.value?.includes(d.value) ?? false;
-                      return (
-                        <Label
-                          key={d.value}
-                          className="flex items-center gap-2 rounded-md border px-3 py-2 font-normal"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(c) => {
-                              const set = new Set(field.value ?? []);
-                              if (c) set.add(d.value);
-                              else set.delete(d.value);
-                              // Preserve Mon→Sun order.
-                              field.onChange(
-                                WEEKDAYS.filter((w) => set.has(w.value)).map(
-                                  (w) => w.value,
-                                ),
-                              );
-                            }}
-                            aria-label={d.label}
-                          />
-                          {d.label}
-                        </Label>
-                      );
-                    })}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <CadenceFields control={form.control} />
           </CardContent>
 
           <CardFooter className="justify-end">

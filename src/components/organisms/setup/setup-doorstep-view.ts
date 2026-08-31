@@ -96,9 +96,14 @@ export function configureDoor(steps: DoorstepSteps): ConfigureDoor {
   return {
     href: "/dashboard",
     label: "Przejdź do panelu",
+    // "w Ustawieniach" was self-refuting for the sprint cadence until S-29:
+    // Settings held no cadence surface at all, and the wizard's last step was
+    // the only mount of the form. Naming BOTH sections is what makes the
+    // sentence true — integrations live in Settings, the team and the sprint's
+    // rhythm live in Team.
     detail:
-      "Konfiguracja jest kompletna. Zmiany w integracjach i zespole zrobisz " +
-      "później w Ustawieniach.",
+      "Konfiguracja jest kompletna. Integracje zmienisz później w Ustawieniach, " +
+      "a skład zespołu, nieobecności i rytm sprintu w sekcji Zespół.",
   };
 }
 

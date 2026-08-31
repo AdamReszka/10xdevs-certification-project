@@ -3238,3 +3238,99 @@ konta i **tego samego PAT-a GitHuba pod ręką**.
       **wyróżniony** przycisk `Reconnect` z obu kart Ustawień **i** z obu kart
       kreatora. Wiersz przestał więc dotyczyć jednej ścieżki brzegowej i zaczął
       dotyczyć głównej.
+
+---
+
+## 25. S-29 `post-setup-cadence-surface` — otwarte (2026-08-31)
+
+Slice zamknięty 2026-08-31, pięć faz. Źródło kanoniczne:
+`context/changes/post-setup-cadence-surface/plan.md` `## Progress`. Pełne opisy
+wierszy blokujących: `context/changes/post-setup-cadence-surface/MANUAL-CHECKLIST.md`
+(pięć wierszy — te są u testera pierwsze, a **pierwszy z nich musi pójść przed
+wszystkimi pozostałymi w tym paragrafie**).
+
+**O co chodzi, po ludzku.** Rytm sprintu — długość, dzień startu, dni robocze —
+dało się ustawić **wyłącznie w kreatorze**, na jego ostatnim kroku. Formularz
+miał w całym repo dokładnie jedno miejsce montażu, a onboardowany lead nie ma do
+kreatora drogi powrotnej. FR-007 obiecuje, że lead może nadpisać rytm zaciągnięty
+z Jiry, więc obietnica była spełniona **formalnie**, a nie **praktycznie**.
+
+Pod spodem siedziały jednak dwie gorsze rzeczy niż brak ekranu. Po pierwsze,
+zapis rytmu ustawiał flagę „lead nadpisał to ręcznie" **zawsze** — a to ten sam
+przycisk, który kończy kreator. Czyli samo *potwierdzenie* zaciągniętych wartości
+było zapisywane jako *świadome nadpisanie*, i konto zostawało odcięte od
+auto-pullu FR-007 na zawsze, z wartościami z tej jednej minuty. Po drugie, między
+sprintami zapis **mówił „zapisano" i nie zapisywał nic**: celował w sprint
+`ACTIVE`, podczas gdy formularz czytał z ostatniego, już zamkniętego. To ta sama
+wada co w `lessons.md` („pusty wynik czyta się jak sukces"), tylko o warstwę
+niżej.
+
+**Migracja `0022` (tylko dane).** Czyści flagę na **każdym** wierszu `sprint`.
+Nikt jej świadomie nie ustawiał, a Jira jest źródłem prawdy dla FR-007. Wiersz
+produkcyjny jest w MANUAL-CHECKLIST i idzie **pierwszy**; bez niego reszta
+sprawdza zachowanie, którego na produkcji jeszcze nie ma.
+
+**Czego NIE oczekiwać.** `start_day` prawdziwego konta **nie musi** się zmienić
+po migracji. Jest wyliczany z daty startu sprintu w Jirze, więc sprint
+faktycznie wystartowany w piątek dalej da `FRI`. Migracja przywraca *połączenie*
+z Jirą, nie *poprawia wartości* — poprawia je lead, na nowym ekranie.
+
+**Uwaga na wagę zmiany.** Od S-28 `working_days` nie jest już tylko mnożnikiem
+capacity — decyduje, kiedy odpala **pięć czasowych reguł anomalii**. Zła edycja
+na tym ekranie jest dziś głośniejsza niż była dwa slice'y temu.
+
+**Konto:** 25.A wymaga prawdziwego konta z podłączoną Jirą. 25.B wymaga tego
+samego konta z **załadowanym demo**. 25.C i 25.D są do zrobienia na dowolnym
+prawdziwym koncie.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **25.A** (faza 2, `plan.md` `2.5`) **Gdzie:** produkcyjna baza, po
+      zastosowaniu `0022` i po przejściu przynajmniej jednego cyklu synchronizacji
+      (15 minut).
+      **Co zrobić:** odczytaj `length_days`, `start_day` i `cadence_overridden`
+      prawdziwego konta onboardowanego, a potem porównaj je z datami aktywnego
+      sprintu w Jirze.
+      **Co musi być prawdą:** flaga dalej `f`, a `length_days` odpowiada różnicy
+      między datą startu a datą końca sprintu w Jirze; `start_day` odpowiada dniu
+      tygodnia daty startu. **`FRI` ma prawo zostać `FRI`** — to nie jest błąd,
+      tylko prawda o tym sprincie.
+      **Dlaczego to ma znaczenie:** to jedyny wiersz, który potwierdza, że
+      auto-pull FR-007 znowu **dosięga** tego konta. Sama flaga `f` mówi tylko,
+      że nikt nie blokuje zapisu; dopiero zgodność wartości z Jirą mówi, że zapis
+      się odbywa.
+
+- [ ] **25.B** (faza 4, `plan.md` `4.10`) **Gdzie:** `/team/cadence` na koncie z
+      **załadowanym demo** (baner demo widoczny).
+      **Co zrobić:** kliknij **Restore Jira's values** i potwierdź.
+      **Co musi być prawdą:** akcja **odmawia** komunikatem o trybie
+      demonstracyjnym; nic się nie zmienia, żadne pole nie skacze.
+      **Dlaczego to ma znaczenie:** restore wydaje **prawdziwe** poświadczenia
+      Jiry konta. Gdyby zadziałał z ekranu opisanego jako demo, lead zapłaciłby
+      prawdziwym requestem do Jiry za akcję wykonaną na fikcyjnych danych — i
+      mógłby nadpisać rytm prawdziwego zespołu, patrząc na cudzy.
+
+- [ ] **25.C** (faza 5, `plan.md` `5.8`) **Gdzie:** kreator, `/setup/team`, na
+      koncie w trakcie konfiguracji.
+      **Co zrobić:** popatrz na kartę **Sprint cadence** i przejdź kreator do
+      końca.
+      **Co musi być prawdą:** trzy pola (długość, dzień startu, dni robocze)
+      wyglądają i działają dokładnie jak wcześniej, przycisk dalej mówi **Save &
+      finish setup**, a zapis dalej ląduje na `/dashboard`. Opis nad polami
+      **nie** twierdzi już, że wszystkie trzy wartości pochodzą z aktywnego
+      sprintu.
+      **Dlaczego to ma znaczenie:** pola kreatora zostały **wyjęte do wspólnego
+      komponentu** dzielonego z nowym ekranem. To miała być zmiana bez żadnego
+      efektu widocznego dla użytkownika, a w tym repo nie ma testów komponentów —
+      więc jedyne, co to sprawdzi, to czyjeś oczy.
+
+- [ ] **25.D** (faza 5, `plan.md` `5.9`) **Gdzie:** `/settings/connections`,
+      prawdziwe konto z podłączoną Jirą.
+      **Co zrobić:** zmień monitorowany projekt Jiry na inny i doprowadź do
+      ekranu, na którym pojawia się przycisk **Import sprint cadence**. Kliknij go.
+      **Co musi być prawdą:** lądujesz na `/team/cadence` — angielskim ekranie w
+      sekcji **Team** — a **nie** w kreatorze na polskim „Krok 4 z 4".
+      **Dlaczego to ma znaczenie:** to było jedyne przejście z Ustawień prosto do
+      kreatora i jedyny szew, w którym aplikacja zmieniała język w środku zadania.
+      Zostawiono go świadomie, bo rytmu nie dało się ustawić nigdzie indziej.
+      Teraz się da, więc powód zniknął.

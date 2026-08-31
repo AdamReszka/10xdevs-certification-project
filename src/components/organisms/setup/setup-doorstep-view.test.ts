@@ -73,6 +73,18 @@ describe("configureDoor", () => {
     ).toBe("/setup/jira");
   });
 
+  it("the onboarded door points at BOTH sections, not just Ustawienia (S-29)", () => {
+    // Nothing asserted this string before, which is part of why it went stale:
+    // it promised that changes are made "w Ustawieniach", and for the sprint
+    // cadence there was no such surface anywhere until /team/cadence shipped.
+    const door = configureDoor(ALL_DONE);
+
+    expect(door.href).toBe("/dashboard");
+    expect(door.detail).toContain("Ustawieniach");
+    expect(door.detail).toContain("Zespół");
+    expect(door.detail).toContain("rytm sprintu");
+  });
+
   it("always offers a label and a detail line", () => {
     for (const steps of [NONE, GITHUB_DONE, GITHUB_AND_JIRA_DONE, ALL_DONE]) {
       const door = configureDoor(steps);

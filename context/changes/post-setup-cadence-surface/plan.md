@@ -792,11 +792,11 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [x] 4.1 Linting passes: `npm run lint`
-- [x] 4.2 Type checking passes: `npm run typecheck`
-- [x] 4.3 Unit tests pass, including `cadence-editor-view.test.ts`: `npm test`
-- [x] 4.4 Integration tests pass: `npm run test:integration`
-- [x] 4.5 Production build succeeds: `npm run build`
+- [x] 4.1 Linting passes: `npm run lint` — 52429f2
+- [x] 4.2 Type checking passes: `npm run typecheck` — 52429f2
+- [x] 4.3 Unit tests pass, including `cadence-editor-view.test.ts`: `npm test` — 52429f2
+- [x] 4.4 Integration tests pass: `npm run test:integration` — 52429f2
+- [x] 4.5 Production build succeeds: `npm run build` — 52429f2
 
 #### Manual
 
@@ -810,13 +810,13 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [ ] 5.1 Linting passes: `npm run lint`
-- [ ] 5.2 Type checking passes: `npm run typecheck`
-- [ ] 5.3 Unit tests pass: `npm test`
-- [ ] 5.4 Integration tests pass: `npm run test:integration`
-- [ ] 5.5 E2E passes: `npm run test:e2e`
-- [ ] 5.6 Manual backlog is complete: `node scripts/manual-test-sweep.mjs` exits 0
-- [ ] 5.7 Production build succeeds: `npm run build`
+- [x] 5.1 Linting passes: `npm run lint`
+- [x] 5.2 Type checking passes: `npm run typecheck`
+- [x] 5.3 Unit tests pass: `npm test`
+- [x] 5.4 Integration tests pass: `npm run test:integration`
+- [x] 5.5 E2E passes: `npm run test:e2e`
+- [x] 5.6 Manual backlog is complete: `node scripts/manual-test-sweep.mjs` exits 0
+- [x] 5.7 Production build succeeds: `npm run build`
 
 #### Manual
 
