@@ -766,9 +766,9 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [x] 2.1 Migration applies cleanly locally: `npm run db:migrate`
-- [x] 2.2 Integration tests pass against the migrated database: `npm run test:integration`
-- [x] 2.3 Type checking passes: `npm run typecheck`
+- [x] 2.1 Migration applies cleanly locally: `npm run db:migrate` — 2c3bdc2
+- [x] 2.2 Integration tests pass against the migrated database: `npm run test:integration` — 2c3bdc2
+- [x] 2.3 Type checking passes: `npm run typecheck` — 2c3bdc2
 
 #### Manual
 
