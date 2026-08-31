@@ -116,10 +116,12 @@ export type ResolvedCadence = DerivedCadence & {
  *    record for the same owner and the same Jira-side project. This is
  *    inheritance, and it is what replaces the reconciler's write-time `carry`.
  * 3. `sprint.length_days` / `sprint.start_day` for those two — a genuine derived
- *    cache of what Jira's dates say. `sprint.working_days` is deliberately NOT
- *    consulted: it can only ever hold the Mon–Fri constant, and consulting a
- *    second copy of a constant is precisely the duplicate that produced the S-29
- *    defect one layer up.
+ *    cache of what Jira's dates say. THERE IS NO WORKING-DAYS INPUT AT THIS TIER
+ *    AT ALL, by construction: Jira exposes no working-days field, so nothing can
+ *    be derived. `sprint.working_days` held a second copy of the Mon–Fri
+ *    constant until S-32 (`0024`) dropped it — consulting a second copy of a
+ *    constant is precisely the duplicate that produced the S-29 defect one layer
+ *    up.
  * 4. `DEFAULT_CADENCE` for anything still null.
  */
 export function pickCadence(input: {
@@ -500,57 +502,3 @@ export async function clearCadenceOverrideFields(
       },
     });
 }
-
-/**
- * The `0023` backfill, authored HERE and executed by the migration verbatim.
- *
- * A test cannot otherwise observe it: `db:migrate` runs BEFORE the integration
- * suite, so by the time a test seeds a row the migration has already run against
- * an empty table. Exporting the statement is what lets the test re-execute it
- * over its own seed — and `on conflict do nothing` is what makes that second
- * execution safe, so it is load-bearing rather than defensive.
- *
- * EACH FIELD IS WRITTEN ONLY WHEN IT DIFFERS FROM WHAT THE SOURCE DERIVES; a
- * source-equal field is written NULL. Otherwise the backfill would assert on day
- * one a choice nobody made — a lead who overrode only the length would get a
- * record claiming they also chose Mon–Fri, and would be pinned to it forever
- * after. That is the same invariant every write path here holds, applied to the
- * one write the migration performs.
- *
- * Measured no-op in every known database at the time of writing (local: six
- * `sprint` rows, all `cadence_overridden = f`; production: zero `sprint` rows),
- * so this is correctness, not repair.
- */
-export const BACKFILL_CADENCE_OVERRIDES = `
-insert into "sprint_cadence_override"
-  ("id", "owner_id", "jira_project_id", "jira_sprint_id", "start_date",
-   "length_days", "start_day", "working_days")
-select
-  gen_random_uuid()::text,
-  s."owner_id",
-  p."jira_project_id",
-  s."jira_sprint_id",
-  s."start_date",
-  case when s."length_days" is not distinct from d."derived_length"
-       then null else s."length_days" end,
-  case when s."start_day" is not distinct from d."derived_start_day"
-       then null else s."start_day" end,
-  case when s."working_days" is not distinct from '["MON","TUE","WED","THU","FRI"]'::jsonb
-       then null else s."working_days" end
-from "sprint" s
-join "jira_project" p on p."id" = s."jira_project_id"
-cross join lateral (
-  select
-    case
-      when s."end_date" is null then null
-      else greatest(1, round(extract(epoch from (s."end_date" - s."start_date")) / 86400))::int
-    end as "derived_length",
-    upper(trim(to_char(
-      (s."start_date" at time zone 'UTC') at time zone coalesce(p."time_zone", 'UTC'),
-      'DY'
-    ))) as "derived_start_day"
-) d
-where s."cadence_overridden" = true
-  and s."start_date" is not null
-on conflict ("owner_id", "jira_sprint_id") do nothing
-`.trim();

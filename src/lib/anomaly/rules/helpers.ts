@@ -163,15 +163,16 @@ export function workingDaySet(
   // every sprint. That reads as a quiet sprint with one nag, not as a stopped
   // clock, and it is `lessons.md`'s empty-result-reads-as-success shape again.
   //
-  // Both writers are canonical today (`deriveCadence`, and the roster form
-  // behind a zod enum), so this is a guard against the next writer — S-17 is
-  // scheduled to populate this column from a country calendar.
+  // Every writer is canonical today — `DEFAULT_CADENCE` and the cadence form
+  // behind a zod enum, both funnelled through `resolveCadenceFor` — so this is a
+  // guard against the NEXT writer of the pattern, not against today's.
   const known = new Set<string>(WEEKDAY_BY_INDEX);
   const recognised = new Set<string>(workingDays.filter((d) => known.has(d)));
   if (recognised.size > 0) return recognised;
 
   console.error(
-    `[anomaly/helpers] sprint.working_days carried no recognisable weekday code ` +
+    `[anomaly/helpers] the sprint's resolved working days carried no ` +
+      `recognisable weekday code ` +
       `(${JSON.stringify(workingDays)}); expected ${JSON.stringify([...known])}. ` +
       `Falling back to Mon–Fri rather than treating every day as non-working`,
   );

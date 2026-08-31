@@ -240,8 +240,6 @@ async function seedSprint(
       endDate: new Date("2026-08-31T08:00:00.000Z"),
       lengthDays: 14,
       startDay: "MON",
-      workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
-      cadenceOverridden: false,
       ...values,
     })
     .returning();
@@ -347,7 +345,6 @@ describe("reconcileActiveSprint — creation and refresh (C1, C4)", () => {
       jiraSprintId: "4242",
       lengthDays: 21,
       startDay: "WED",
-      workingDays: ["MON", "TUE", "WED"],
     });
 
     const result = await run(seeded);
@@ -355,7 +352,6 @@ describe("reconcileActiveSprint — creation and refresh (C1, C4)", () => {
     const [row] = await rows(seeded.ownerId);
     expect(row.lengthDays).toBe(14);
     expect(row.startDay).toBe("MON");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
     if (result.status === "reconciled") expect(result.cadenceSource).toBe("source");
   });
 });

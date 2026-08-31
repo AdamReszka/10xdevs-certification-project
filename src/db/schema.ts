@@ -443,27 +443,14 @@ export const sprint = pgTable(
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
     /**
-     * SUPERSEDED by `sprint_cadence_override.working_days` (S-30). Written but
-     * NEVER READ: the resolver deliberately skips this column, because Jira has
-     * no working-days field, so every writer here writes the same
-     * `DEFAULT_CADENCE.workingDays` constant and a second copy of a constant is
-     * exactly the duplicate that produced the S-29 defect one layer up. The
-     * lead's chosen pattern lives in the override record, which has no foreign
-     * key into the sync graph and therefore survives a disconnect.
-     *
-     * Kept rather than dropped so a revert of S-30 is a code revert; the DROP is
-     * roadmap S-32. `src/lib/cadence-override-readers.test.ts` fails the build
-     * if a new reader picks up this stale copy.
+     * `working_days` and `cadence_overridden` LIVED HERE UNTIL S-32 (`0024`).
+     * Both were superseded by `sprint_cadence_override` at S-30 and kept only so
+     * a revert of S-30 would be a code revert. Neither is coming back: working
+     * days have no upstream in Jira, so this column could only ever hold a
+     * second copy of `DEFAULT_CADENCE.workingDays` — the duplicate that produced
+     * the S-29 defect one layer up — and provenance is per field now, which one
+     * boolean cannot express.
      */
-    workingDays: jsonb("working_days").$type<string[]>(),
-    /**
-     * SUPERSEDED by row existence in `sprint_cadence_override` (S-30). Written
-     * `false` on insert and left alone thereafter; NEVER READ. Provenance is now
-     * per field, which a single boolean cannot express — a team whose working
-     * days are hand-set while length and start day still follow Jira has no
-     * representation here at all. See the resolver's `CadenceSource`.
-     */
-    cadenceOverridden: boolean("cadence_overridden").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -574,7 +561,8 @@ export const sprintMeasurement = pgTable(
 
 /**
  * What the LEAD CHOSE for a sprint's cadence (S-30, FR-007) — the durable record
- * that replaces `sprint.working_days` / `cadence_overridden`.
+ * that replaced `sprint.working_days` / `cadence_overridden`, dropped at S-32
+ * (`0024`) once nothing read them.
  *
  * The columns it supersedes lived on `sprint`, which cascades off `jira_project`
  * off `jira_credential`, so BOTH S-26 disconnect outcomes destroyed them, and two
@@ -599,7 +587,26 @@ export const sprintMeasurement = pgTable(
  * who saves Mon–Fri at sprint N+1 writes three source-equal fields; delete the
  * row and the recency fallback hands Mon–Thu back, silently reverting the save.
  * So a row of three NULLs is a meaningful state — *for this sprint, follow the
- * source and do not inherit* — and NO write path in this slice deletes a row.
+ * source and do not inherit* — and NO write path deletes a row, ever.
+ *
+ * NOTHING PRUNES THIS TABLE, AND THAT IS A DECISION (S-32), not an omission the
+ * next slice should tidy up. The PRD's retention non-goal was extended to name
+ * this record alongside `sprint_measurement` (§ Non-Goals, 2026-08-31). Two
+ * edges are the reason a prune was REJECTED rather than deferred:
+ *
+ *  - The inheritance tier's lookback has NO FLOOR by construction — it orders on
+ *    `start_date <= <this sprint's>` — so the record carrying a Mon–Thu pattern
+ *    into today's sprint is routinely one from a long-closed sprint. Pruning by
+ *    age hands the team back Mon–Fri without telling them: the S-30 defect
+ *    rebuilt on a timer.
+ *  - A record for a project the account NO LONGER MONITORS is a promise made to
+ *    the lead in copy — `disconnect-impact.ts` tells them a project switch keeps
+ *    "the sprint cadence you set by hand" — and the resolver's `sameProject`
+ *    LEFT JOIN exists precisely so those rows stay visible.
+ *
+ * There is also no regime to be out of line with: `purgeOldRecaps` is the only
+ * age-based delete in the repo, and no current-plus-two purge exists for
+ * `sprint`, `jira_ticket`, `pull_request` or `commit`.
  */
 export const sprintCadenceOverride = pgTable(
   "sprint_cadence_override",

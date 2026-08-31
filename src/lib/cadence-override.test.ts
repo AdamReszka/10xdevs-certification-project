@@ -144,10 +144,11 @@ describe("pickCadence — tier 3: the sprint's own derived cache", () => {
     });
   });
 
-  it("NEVER consults `sprint.working_days` — it can only hold the constant", () => {
-    // Tier 3 has no working-days input at all, by construction: Jira exposes no
-    // working-days field, so that column is a second copy of a constant, and
-    // consulting it is the duplicate that produced the S-29 defect one layer up.
+  it("has NO working-days input at tier 3 — it can only be the constant", () => {
+    // By construction: Jira exposes no working-days field, so there is nothing
+    // to derive. `sprint.working_days` carried a second copy of that constant
+    // until S-32 dropped it, and consulting a second copy of a constant is the
+    // duplicate that produced the S-29 defect one layer up.
     const resolved = pickCadence({
       ...NONE,
       ownerHasAnyRecord: false,

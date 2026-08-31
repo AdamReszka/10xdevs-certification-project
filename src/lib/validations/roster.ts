@@ -18,7 +18,7 @@ export const technologyTrackSchema = z.enum([
   "QA",
 ]);
 
-/** Weekday codes stored in `sprint.start_day` / `sprint.working_days`. */
+/** Weekday codes stored in `sprint.start_day` / `sprint_cadence_override`. */
 export const weekdaySchema = z.enum([
   "MON",
   "TUE",

@@ -1087,8 +1087,10 @@ export function cadenceOverrideFields(
  *  - It opens a TRANSACTION, which it did not need while it was one statement
  *    and does need for a two-table save.
  *
- * The three values are still written to `sprint` as before, so the derived cache
- * stays populated and a rollback of S-30 is a code revert.
+ * Length and start day are still written to `sprint`, so the derived cache the
+ * resolver falls back on stays populated. The working days are NOT — S-32
+ * dropped `sprint.working_days`, and `sprint_cadence_override` is now the only
+ * place a lead's chosen pattern lives.
  */
 export async function saveCadence({
   db,
@@ -1140,8 +1142,9 @@ export async function saveCadence({
       (row.startDay as WeekdayCode | null) ??
       DEFAULT_CADENCE.startDay,
     // Jira has no working-days field, so there is nothing to derive: the
-    // constant IS the source. `sprint.working_days` is deliberately not
-    // consulted — see its docblock.
+    // constant IS the source. The lead's own pattern is not read here either —
+    // it lives in `sprint_cadence_override`, which is what this comparison
+    // exists to decide the contents of.
     workingDays: [...DEFAULT_CADENCE.workingDays],
   };
   const fields = cadenceOverrideFields(cadence, source);
@@ -1157,7 +1160,6 @@ export async function saveCadence({
       .set({
         lengthDays: cadence.lengthDays,
         startDay: cadence.startDay,
-        workingDays: cadence.workingDays,
       })
       .where(and(eq(sprint.id, row.id), eq(sprint.ownerId, ownerId)))
       .returning({ id: sprint.id });
@@ -1170,7 +1172,8 @@ export async function saveCadence({
     // ordering key of the resolver's inheritance tier and is NOT NULL by design.
     // No writer can produce such a row — the reconciler refuses it outright
     // (`sprint_undated`) and `importCadence` refuses it before that — so this is
-    // a guard, not a path, and the `sprint` columns above still took the values.
+    // a guard, not a path, and the two `sprint` columns above still took the
+    // values.
     if (project && row.startDate) {
       await writeCadenceOverride(tx, {
         ownerId,

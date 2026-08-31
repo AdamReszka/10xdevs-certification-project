@@ -3491,3 +3491,88 @@ której jest aktywny sprint. 26.B jest do zrobienia na dowolnym prawdziwym konci
       ten sam niezmiennik, który migracja `0023` opisuje w swoim własnym
       nagłówku — pole równe źródłu zapisuje się jako puste. W repo nie ma testów
       komponentów, więc to zdanie na banerze sprawdzą tylko czyjeś oczy.
+
+---
+
+## 27. S-32 `cadence-single-home` — otwarte (2026-08-31)
+
+Slice zamknięty 2026-08-31, trzy fazy. Źródło kanoniczne:
+`context/changes/cadence-single-home/plan.md` `## Progress`. Pełne opisy wierszy
+blokujących: `context/changes/cadence-single-home/MANUAL-CHECKLIST.md` (trzy
+wiersze — te są u testera pierwsze).
+
+**O co chodzi, po ludzku.** S-30 przeniosło rytm sprintu ustawiony ręcznie przez
+lidera do osobnej tabeli (`sprint_cadence_override`), ale **celowo zostawiło
+starą kopię** na wierszu `sprint` — jako furtkę na wypadek wycofania zmiany.
+Przez chwilę ta sama informacja mieszkała więc w dwóch miejscach, a linii między
+nimi pilnował jeden test skanujący kod źródłowy. To dobry most i zła konstrukcja
+na stałe: test może skasować każdy, kto uzna jego awarię za szum, a pytanie
+„która kopia jest prawdziwa" wraca.
+
+**Co się zmieniło.** Migracja `0024` kasuje obie kolumny (`sprint.working_days`,
+`sprint.cadence_overridden`), a test-strażnik zniknął razem z nimi. Od teraz
+gwarancję „jest tylko jedno miejsce" daje sam schemat bazy, a nie skan po kodzie.
+Kolumny `length_days` i `start_day` **zostają** — to wyliczona z dat Jiry pamięć
+podręczna, którą resolver nadal czyta.
+
+**Druga połowa: nic nie kasuje rekordów kadencji i to jest decyzja.** Roadmapa
+pytała, kiedy rekord przestaje być wart trzymania. Odpowiedź brzmi: **nigdy**, i
+została zapisana w PRD (§ Non-Goals) oraz w docblocku tabeli, żeby następna osoba
+znalazła odpowiedź zamiast pytania. Powód jest konkretny: dziedziczenie wzorca
+sięga wstecz **bez dolnej granicy**, więc to właśnie rekord ze starego,
+zamkniętego sprintu przenosi Mon–Thu na dziś — kasowanie po wieku byłoby tym samym
+błędem, który naprawiało S-30, tylko odpalanym z zegara. Do tego rekord dla
+projektu, z którego lead się przepiął, to obietnica złożona mu wprost w oknie
+zmiany projektu („zachowujemy kadencję, którą ustawiłeś ręcznie").
+
+**Migracja `0024` (kasująca, nie dodająca).** W przeciwieństwie do wszystkich
+poprzednich ta migracja **niczego nie zepsuje, jeśli dojedzie na produkcję
+później niż kod**: usuwane kolumny były nullowalne albo miały wartość domyślną,
+a kod przestał do nich pisać w tym samym PR. Dlatego wiersz 27.A **nie blokuje**
+wierszy 27.B i 27.C — inaczej niż wiersz 1 w §26.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **27.A** (`MANUAL-CHECKLIST` wiersz 1, faza 2) **Gdzie:** produkcyjna baza
+      Supabase — **nie** lokalna (lokalnie `0024` jest już zastosowana). Trasa jak
+      dla `0021`–`0023`: pooler + `DATABASE_URL_OVERRIDE` albo Supabase MCP
+      `apply_migration` z ręcznym wpisem bookkeepingowym.
+      **Co zrobić:** zastosuj `src/db/migrations/0024_watery_rocket_racer.sql`
+      (dwa `ALTER TABLE "sprint" DROP COLUMN`, nic więcej), dopisz wpis idx 24 w
+      `drizzle.__drizzle_migrations`, a potem odczytaj listę kolumn tabeli
+      `sprint`.
+      **Co musi być prawdą:** nie ma ani `working_days`, ani
+      `cadence_overridden`; **są** `length_days` i `start_day`.
+      **Dlaczego to ma znaczenie:** deploy na Cloudflare wysyła kod, nie migracje.
+      Tu nie zastosowana migracja niczego nie wywali — zostawi dwie martwe
+      kolumny — ale schemat rozjedzie się z kodem i następna migracja generowana
+      z `schema.ts` zacznie opisywać bazę, której nie ma. „Bez migracji
+      produkcyjnej" nie jest trasą.
+
+- [ ] **27.B** (`MANUAL-CHECKLIST` wiersz 2, faza 2, zamyka `2.8`)
+      **Gdzie:** `/team/cadence`, **prawdziwe** konto z podłączoną Jirą i aktywnym
+      sprintem.
+      **Co zrobić:** odznacz **Friday** w „Working days", tak by zostało
+      Mon–Tue–Wed–Thu; **nie ruszaj** „Sprint length" ani „Start day"; zapisz;
+      odśwież stronę (F5).
+      **Co musi być prawdą:** po odświeżeniu zaznaczone są dokładnie Mon, Tue,
+      Wed, Thu, a opis na górze mówi, że **dni robocze** są ustawione ręcznie,
+      podczas gdy **długość sprintu i dzień startu nadal podążają za Jirą** — nie
+      „wszystko ręcznie" i nie „wszystko z Jiry".
+      **Dlaczego to ma znaczenie:** to jedyne miejsce, w którym objawiłaby się
+      ścieżka zapisu albo odczytu po cichu opierająca się na skasowanej kolumnie.
+      Jest to zarazem stan, którego stara pojedyncza flaga **nie umiała wyrazić**
+      (FR-007), więc ten wiersz jest dowodem, że nowy model naprawdę działa.
+
+- [ ] **27.C** (`MANUAL-CHECKLIST` wiersz 3, faza 2, zamyka `2.9`)
+      **Gdzie:** `/settings/demo`, a potem `/dashboard`.
+      **Co zrobić:** wczytaj dane demo (jeśli już są — najpierw „Reset", potem
+      wczytaj ponownie), przejdź na `/dashboard`.
+      **Co musi być prawdą:** `/dashboard` renderuje się bez błędu, widać sprint
+      demo i **niepustą** skrzynkę anomalii. Żadnego białego ekranu.
+      **Dlaczego to ma znaczenie:** fikstura demo wstawia wiersz `sprint` w
+      całości, jednym insertem — rozjazd jej literału z kształtem tabeli wywaliłby
+      wczytywanie demo, czyli jedyną ścieżkę, którą nowy odwiedzający ogląda
+      produkt (US-02). Dodatkowo dni robocze do liczenia wieku anomalii biorą się
+      teraz ze stałej, a nie z wiersza fikstury: niepusta skrzynka jest dowodem,
+      że ta podmiana nie zmieniła wyniku.

@@ -63,7 +63,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | done |
 | S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | done |
 | S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | done |
-| S-32 | —                         | the cadence a lead chose has exactly ONE home in the database — the superseded copy on `sprint` is dropped, the reader guard holding the line goes with it, and a decision is made about when an override record stops being worth keeping | S-30               | FR-007                                          | proposed |
+| S-32 | cadence-single-home       | the cadence a lead chose has exactly ONE home in the database — the superseded copy on `sprint` is dropped, the reader guard holding the line goes with it, and the retention question is answered: nothing prunes the record, on purpose | S-30               | FR-007                                          | proposed |
 
 ## Streams
 
@@ -1535,9 +1535,10 @@ Foundations below assume these are present and do NOT re-scaffold them.
 ### S-32: Retire what S-30 leaves behind
 
 - **Outcome:** the cadence a lead chose has exactly one home in the database —
-  the superseded copy on `sprint` is gone, and the override table holds no rows
-  that describe sprints nobody will ask about again.
-- **Change ID:** —
+  the superseded copy on `sprint` is gone, and the retention question the second
+  half posed is answered in writing: nothing prunes the override table, on
+  purpose, and the PRD and the table's own docblock now say why.
+- **Change ID:** cadence-single-home
 - **PRD refs:** FR-007
 - **Prerequisites:** S-30
 - **Status:** proposed
@@ -1555,6 +1556,13 @@ Foundations below assume these are present and do NOT re-scaffold them.
   on it**: it keys on the RECEIVER's name (`*sprint*` / `row`), because twenty
   receivers in the repo end in `.workingDays` and all but the sprint row's are
   legitimate — so a sprint row bound to some other name is invisible to it.
+  **Corrected at delivery:** the guard held the line for READERS only, which is
+  all it ever claimed. It had two blind spots, and both were writers — the
+  snake-case SQL of the `0023` backfill (its flag pattern is camelCase), and
+  `saveCadence`'s `update(sprint).set({ workingDays })`, a write by object key
+  that neither regex matches. Anyone reasoning about total coverage from its
+  allowlist would have missed a whole file. That is why `0024` replaces a source
+  scan with a schema constraint rather than renewing the guard.
 - **The second leftover is the price of S-30's plan review F1** (2026-08-31,
   `context/changes/cadence-override-retention/reviews/plan-review.md`). Row
   existence there means *"the lead has spoken for this sprint"*, not *"the values
@@ -1573,6 +1581,20 @@ Foundations below assume these are present and do NOT re-scaffold them.
   not a chore: an override for a long-closed sprint is what tier-2 inheritance
   reads to carry a Mon–Thu pattern forward, so a prune that is too eager is the
   S-30 defect rebuilt in a cron job.
+- **Delivered (2026-08-31, `context/changes/cadence-single-home/`).** Both
+  leftovers closed. `0024_watery_rocket_racer.sql` drops `sprint.working_days`
+  and `sprint.cadence_overridden`; the reader guard went in the same PR, one
+  phase earlier because its own allowlist self-check fails the moment the writes
+  it names are removed. **The retention half was closed by deciding NOT to
+  prune**, on evidence rather than by deferral: the inheritance tier's lookback
+  has no floor by construction, so pruning by age is exactly the S-30 defect on a
+  timer, and a record for a no-longer-monitored project is a promise the product
+  makes to the lead in copy. The rule is now written where it gets re-opened
+  from — the PRD's retention non-goal (§ Non-Goals, extended 2026-08-31) and the
+  table's own docblock — so the next reader finds the answer instead of the
+  question. `0024` rides the next ordinary production migration run; the drop
+  degrades cleanly if code gets there first, since production holds zero `sprint`
+  rows.
 
 ---
 

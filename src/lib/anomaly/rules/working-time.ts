@@ -21,7 +21,8 @@ import { safeZone } from "@/lib/time-zone";
  * Monday morning-sync inbox that FR-016 calls the product's headline surface,
  * having consumed nothing but a weekend. Measured here, the clock advances only
  * between {@link WORK_DAY_START_HOUR} and {@link WORK_DAY_END_HOUR} in the team's
- * zone, only on days in `sprint.working_days`, and never on a day the lead has
+ * zone, only on days in the sprint's RESOLVED working-day pattern (handed to
+ * the rules as `SprintSnapshot.workingDays`), and never on a day the lead has
  * marked as a team-wide day off (S-23, FR-007).
  *
  * WHAT DOES NOT STOP THE CLOCK: an individual's recorded absence. The sprint is

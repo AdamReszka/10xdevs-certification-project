@@ -461,8 +461,6 @@ describe("importCadence — board + sprint persistence (FR-007)", () => {
     expect(row.state).toBe("ACTIVE");
     expect(row.lengthDays).toBe(14);
     expect(row.startDay).toBe("MON");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
-    expect(row.cadenceOverridden).toBe(false);
   });
 
   it("no active sprint: persists board_id but writes NO sprint row (F1)", async () => {
@@ -597,7 +595,6 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
     const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
     expect(row.lengthDays).toBe(21);
     expect(row.startDay).toBe("WED");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
     // The DURABLE record is what the engine reads (S-30); the columns above are
     // the derived cache that a disconnect is allowed to destroy.
     expect(await resolvedFor(ownerId)).toMatchObject({
@@ -737,11 +734,11 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
       jiraBaseUrl: JIRA_BASE,
       jiraOpts: { fetchImpl: jiraFetch() },
     });
-    // All three columns are nullable and every reader coalesces them; comparing
+    // Both columns are nullable and every reader coalesces them; comparing
     // a submitted 14 against a stored NULL would score this as an override.
     await db
       .update(sprint)
-      .set({ lengthDays: null, startDay: null, workingDays: null })
+      .set({ lengthDays: null, startDay: null })
       .where(eq(sprint.ownerId, ownerId));
 
     const result = await saveCadence({
@@ -890,7 +887,6 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
     const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
     expect(row.lengthDays).toBe(21);
     expect(row.startDay).toBe("WED");
-    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
 
     expect(await resolvedFor(ownerId)).toMatchObject({
       lengthDays: 21,
