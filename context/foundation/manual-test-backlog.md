@@ -3610,8 +3610,25 @@ store'u.
 
 ### 🔴 Blokujący wszystko poniżej — migracja `0025` na produkcję
 
-- [ ] **28.0** (`MANUAL-CHECKLIST` wiersz 0, faza 2) — **URUCHAM PRZED KAŻDYM
-      INNYM WIERSZEM Z §28.**
+- [x] **28.0** (`MANUAL-CHECKLIST` wiersz 0, faza 2) — **zrobione 2026-08-31,
+      trasą Supabase MCP.** Odczyt przed: żadnej z dwóch tabel, brak kolumny
+      `source`, **0** wierszy `team_day_off`, **0** użytkowników, ostatni wpis
+      drizzle to id 25 (`0024`). Odczyt po: `holiday_calendar` i
+      `holiday_year_approval` istnieją, oba klucze `UNIQUE` i oba FK do `user`
+      na miejscu, indeks `holiday_year_approval_ownerId_idx` założony, a
+      `team_day_off.source` jest `text NOT NULL DEFAULT 'manual'::text`. Wpis
+      bookkeepingowy dopisany ręcznie: `drizzle.__drizzle_migrations` id 26,
+      hash `1f64267c…`, `created_at` 1788208223340 — kolejny `db:migrate`
+      pominie `0025`. Metoda liczenia hasha zweryfikowana przez przeliczenie
+      `0023` i `0024` lokalnie i porównanie z wierszami, które już były na
+      produkcji (drizzle liczy `sha256` **całej treści pliku**). Uprawnienia
+      nowych tabel są bajt w bajt takie same jak `team_day_off` (anon /
+      authenticated / service_role / postgres), więc model izolacji się nie
+      zmienia — Data API pozostaje wyłączone, aplikacja chodzi przez Hyperdrive.
+      **Produkcja i lokalna baza mają teraz ten sam kształt.**
+      ⚠️ Ten krok jest **odwracalny**: kolumna jest addytywna z wartością
+      domyślną, a obie tabele są nowe i puste, więc cofnięcie kodu nie wymaga
+      cofania schematu.
       **Gdzie:** produkcyjna baza Supabase — **nie** lokalna (lokalnie `0025`
       jest już zastosowana). Trasa jak dla `0021`–`0024`: pooler +
       `DATABASE_URL_OVERRIDE` albo Supabase MCP `apply_migration` z ręcznym
