@@ -571,6 +571,7 @@ was protecting has been proven unnecessary by a green suite.
 - [x] 3.1 Linting passes: `npm run lint` — ca29a93
 - [x] 3.2 Unit tests pass: `npm test` — ca29a93
 - [x] 3.3 Manual-test sweep is clean: `node scripts/manual-test-sweep.mjs` — ca29a93
+- [x] 3.5 Comments naming `sprint.working_days` as a live column are corrected (added after the epilogue; eleven prose sites, two of them more than wording — an operator log naming the dropped column, and a false claim that S-17 would write to it) — 7f913fc
 
 #### Manual
 

@@ -854,9 +854,9 @@ export type ImportCadenceResult = {
  * Since S-16 this is a THIN WRAPPER over `reconcileActiveSprint`: it resolves the
  * wizard's credentials + project row and maps the reconciler's discriminated
  * union back onto `ImportCadenceResult`, which the chooser UI depends on. The
- * board selection, the upsert, and the `cadence_overridden` three-way SET all
- * live in `reconcile-sprint.ts` now, so the headless sync cycle and the wizard
- * cannot drift apart (FR-007 "on each sync").
+ * board selection, the upsert, and the cadence refresh all live in
+ * `reconcile-sprint.ts` now, so the headless sync cycle and the wizard cannot
+ * drift apart (FR-007 "on each sync").
  *
  * What the wizard gains for free from the shared path: the previous ACTIVE row
  * is demoted rather than accumulating a second one, and an override carried on
@@ -1069,8 +1069,9 @@ export function cadenceOverrideFields(
  * came from an owner-scoped read — `lessons.md`'s corollary (a).
  *
  * **The record (S-30).** The lead's choice now lands in
- * `sprint_cadence_override`, per field, and `sprint.cadence_overridden` is no
- * longer written by this path at all. Three consequences worth stating:
+ * `sprint_cadence_override`, per field. `sprint.cadence_overridden` — the single
+ * boolean this replaced — is not written by any path, because S-32 dropped it.
+ * Three consequences worth stating:
  *
  *  - The comparison basis moved from "the stored row" to "the SOURCE value for
  *    that field", which is what lets a Mon–Thu team's working days coexist with

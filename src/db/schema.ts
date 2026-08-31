@@ -442,15 +442,14 @@ export const sprint = pgTable(
      */
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
-    /**
-     * `working_days` and `cadence_overridden` LIVED HERE UNTIL S-32 (`0024`).
-     * Both were superseded by `sprint_cadence_override` at S-30 and kept only so
-     * a revert of S-30 would be a code revert. Neither is coming back: working
-     * days have no upstream in Jira, so this column could only ever hold a
-     * second copy of `DEFAULT_CADENCE.workingDays` — the duplicate that produced
-     * the S-29 defect one layer up — and provenance is per field now, which one
-     * boolean cannot express.
-     */
+    // NO `working_days` / `cadence_overridden` COLUMNS (dropped by S-32,
+    // `0024`): both were superseded by `sprint_cadence_override` at S-30 and kept
+    // only so a revert of S-30 would be a code revert. Neither is coming back —
+    // working days have no upstream in Jira, so that column could only ever hold
+    // a second copy of `DEFAULT_CADENCE.workingDays`, the duplicate that produced
+    // the S-29 defect one layer up; and provenance is per field now, which one
+    // boolean cannot express. Line comments, not a docblock: a `/** */` here
+    // would bind to `createdAt` below (same reason as `anomaly_settings`).
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()

@@ -53,6 +53,13 @@ samym ekranem.
   `schema.ts` zaczyna opisywać bazę, której nie ma. „Bez migracji produkcyjnej"
   nie jest trasą — dlatego ten wiersz istnieje.
 
+  **Jedna rzecz, o której warto wiedzieć zanim to zrobisz:** ten krok jest
+  jednokierunkowy. Kolumny były trzymane po to, żeby wycofanie S-30 było zwykłym
+  cofnięciem kodu. Po zastosowaniu `0024` powrót do dowolnego commita sprzed S-32
+  **wywala się głośno** — kod z tamtego commita wstawia do `sprint` obie kolumny i
+  każdy reconcile kończy się błędem 42703 („column does not exist"). Odzyskanie to
+  ręcznie napisana migracja dodająca kolumny z powrotem, nie `git revert`.
+
 ---
 
 ## Faza 2 — kadencja czyta się z jedynego już miejsca
