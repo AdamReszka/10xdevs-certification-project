@@ -3285,7 +3285,12 @@ prawdziwym koncie.
 
 ### Nieblokujące (tylko tutaj)
 
-- [ ] **25.A** (faza 2, `plan.md` `2.5`) **Gdzie:** produkcyjna baza, po
+- [ ] **25.A** (faza 2, `plan.md` `2.5`) ⚠️ **NIE DA SIĘ JESZCZE WYKONAĆ** —
+      migracja `0022` poszła na produkcję 2026-08-31, ale ta baza ma **zero kont
+      i zero wierszy `sprint`**. Ten wiersz sprawdza, że auto-pull FR-007 znowu
+      *dosięga* prawdziwego konta; dopóki nikt się na produkcji nie zarejestruje
+      i nie podłączy Jiry, nie ma czego sprawdzać. Zostaw nieodhaczony i wróć,
+      gdy takie konto powstanie. **Gdzie:** produkcyjna baza, po
       zastosowaniu `0022` i po przejściu przynajmniej jednego cyklu synchronizacji
       (15 minut).
       **Co zrobić:** odczytaj `length_days`, `start_day` i `cadence_overridden`

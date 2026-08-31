@@ -772,7 +772,7 @@ refresh are ones no lead chose.
 
 #### Manual
 
-- [ ] 2.4 `0022` applied to production; the real onboarded account reads `cadence_overridden = f`
+- [x] 2.4 `0022` applied to production; the real onboarded account reads `cadence_overridden = f` — applied 2026-08-31 via Supabase MCP + hand-written `drizzle.__drizzle_migrations` row (23 bookkeeping rows = 23 journal entries). ⚠️ Production holds **zero** `sprint` rows and zero users, so the UPDATE touched nothing and the clause about "the real onboarded account" has no subject there — that account is on the LOCAL database. Migration applied and recorded: yes. Fleet unfrozen on production: vacuously.
 - [ ] 2.5 After the next sync, that account's cadence matches what its Jira dates derive (`FRI` may legitimately stay)
 
 ### Phase 3: Hand the cadence back to Jira
