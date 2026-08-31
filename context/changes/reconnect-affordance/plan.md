@@ -801,9 +801,9 @@ Phase 1 test encodes: a future slice that changes the FK graph must update
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `npm test`
-- [x] 3.2 Type checking passes: `npm run typecheck`
-- [x] 3.3 Linting passes: `npm run lint`
+- [x] 3.1 Unit tests pass: `npm test` — cd06ac2
+- [x] 3.2 Type checking passes: `npm run typecheck` — cd06ac2
+- [x] 3.3 Linting passes: `npm run lint` — cd06ac2
 
 #### Manual
 
@@ -816,14 +816,14 @@ Phase 1 test encodes: a future slice that changes the FK graph must update
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass: `npm test`
-- [ ] 4.2 Type checking passes: `npm run typecheck`
-- [ ] 4.3 Linting passes: `npm run lint`
-- [ ] 4.4 Full E2E suite passes: `npm run test:e2e` (single local run, other session idle)
+- [x] 4.1 Unit tests pass: `npm test`
+- [x] 4.2 Type checking passes: `npm run typecheck`
+- [x] 4.3 Linting passes: `npm run lint`
+- [x] 4.4 Full E2E suite passes: `npm run test:e2e` (single local run, other session idle)
 
 #### Manual
 
-- [ ] 4.5 Owner confirms the other worktree session was idle for the run
+- [x] 4.5 Owner confirms the other worktree session was idle for the run
 
 ### Phase 5: The manual backlog is brought back to equal
 
