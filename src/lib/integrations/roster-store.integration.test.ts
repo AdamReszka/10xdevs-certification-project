@@ -17,15 +17,18 @@ import {
   user,
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
+import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import {
   LastMemberError,
   MemberHasHistoryError,
+  NoSprintRowError,
   UnknownMemberError,
   deleteMember,
   getMemberHistory,
   importCadence,
   previewRosterImport,
   mergeMembers,
+  restoreCadenceFromJira,
   saveCadence,
   saveRoster,
   setMemberActive,
@@ -514,6 +517,250 @@ describe("importCadence — board + sprint persistence (FR-007)", () => {
  * must reject any submitted `id` outside the owner's current set rather than
  * treating it as new (PRD cross-account-isolation guardrail).
  */
+describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
+  // Spread from the shipped constant, not restated: the NULL-row case below
+  // asserts that a confirmation through the READERS' defaults is not an edit, so
+  // pinning a literal here would let the pages and the dirty-check drift apart
+  // while this test stayed green (impl-review F2).
+  const DERIVED = {
+    lengthDays: DEFAULT_CADENCE.lengthDays,
+    startDay: DEFAULT_CADENCE.startDay,
+    workingDays: [...DEFAULT_CADENCE.workingDays] as const,
+  };
+
+  /** An owner whose only sprint row is CLOSED — the between-sprints state. */
+  async function ownerBetweenSprints(): Promise<string> {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    await db
+      .update(sprint)
+      .set({ state: "CLOSED" })
+      .where(eq(sprint.ownerId, ownerId));
+    return ownerId;
+  }
+
+  it("persists onto a CLOSED row — the path that used to report success and write nothing", async () => {
+    const ownerId = await ownerBetweenSprints();
+
+    const result = await saveCadence({
+      db,
+      ownerId,
+      cadence: { lengthDays: 21, startDay: "WED", workingDays: ["MON", "TUE", "WED"] },
+    });
+
+    expect(result.updated).toBe(1);
+    expect(result.overridden).toBe(true);
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.lengthDays).toBe(21);
+    expect(row.startDay).toBe("WED");
+    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
+    expect(row.cadenceOverridden).toBe(true);
+  });
+
+  it("an unchanged confirm does NOT set the flag — finishing the wizard is not overriding", async () => {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const result = await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...DERIVED, workingDays: [...DERIVED.workingDays] },
+    });
+
+    expect(result.updated).toBe(1);
+    expect(result.overridden).toBe(false);
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(false);
+  });
+
+  it("an unchanged re-save does NOT un-override a lead who genuinely overrode", async () => {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    const override = { lengthDays: 21, startDay: "WED" as const, workingDays: ["MON", "TUE", "WED"] as const };
+    await saveCadence({ db, ownerId, cadence: { ...override, workingDays: [...override.workingDays] } });
+
+    // Re-submitting exactly what is stored must OMIT the column, not write false.
+    const again = await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...override, workingDays: [...override.workingDays] },
+    });
+    expect(again.overridden).toBe(false);
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(true);
+  });
+
+  it("a NULL-cadence row confirmed with the readers' defaults is not an edit (plan-review F4)", async () => {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    // All three columns are nullable and every reader coalesces them; comparing
+    // a submitted 14 against a stored NULL would score this as an override.
+    await db
+      .update(sprint)
+      .set({ lengthDays: null, startDay: null, workingDays: null })
+      .where(eq(sprint.ownerId, ownerId));
+
+    const result = await saveCadence({
+      db,
+      ownerId,
+      cadence: { ...DERIVED, workingDays: [...DERIVED.workingDays] },
+    });
+
+    expect(result.overridden).toBe(false);
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(false);
+  });
+
+  it("a reordered but identical working-day set is not an edit", async () => {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const result = await saveCadence({
+      db,
+      ownerId,
+      cadence: { lengthDays: 14, startDay: "MON", workingDays: ["FRI", "THU", "WED", "TUE", "MON"] },
+    });
+
+    expect(result.overridden).toBe(false);
+  });
+
+  it("refuses by name when the owner has no sprint row at all", async () => {
+    const ownerId = await newOwner();
+
+    await expect(
+      saveCadence({
+        db,
+        ownerId,
+        cadence: { ...DERIVED, workingDays: [...DERIVED.workingDays] },
+      }),
+    ).rejects.toThrow(NoSprintRowError);
+
+    const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)", () => {
+  /** An overridden account whose stored cadence differs from what Jira derives. */
+  async function overriddenOwner(): Promise<string> {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    await saveCadence({
+      db,
+      ownerId,
+      cadence: { lengthDays: 21, startDay: "WED", workingDays: ["MON", "TUE", "WED"] },
+    });
+    return ownerId;
+  }
+
+  it("refreshes the cadence PAST the override and clears the flag", async () => {
+    const ownerId = await overriddenOwner();
+
+    const result = await restoreCadenceFromJira({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    expect(result.noActiveSprint).toBe(false);
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    // Back to what the sprint's own Jira dates derive.
+    expect(row.lengthDays).toBe(14);
+    expect(row.startDay).toBe("MON");
+    expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
+    expect(row.cadenceOverridden).toBe(false);
+  });
+
+  it("a FAILED Jira call leaves both the values and the flag exactly as they were", async () => {
+    const ownerId = await overriddenOwner();
+
+    const exploding = (async () => {
+      throw new Error("jira is down");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      restoreCadenceFromJira({
+        db,
+        ownerId,
+        jiraBaseUrl: JIRA_BASE,
+        jiraOpts: { fetchImpl: exploding },
+      }),
+    ).rejects.toThrow();
+
+    // This is the case a pre-clear would fail: the flag would already be gone,
+    // and the next 15-minute sync would overwrite a cadence the lead chose.
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(true);
+    expect(row.lengthDays).toBe(21);
+    expect(row.startDay).toBe("WED");
+    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
+  });
+
+  it("refuses by name when there is no sprint row to restore", async () => {
+    const ownerId = await newOwner();
+
+    await expect(
+      restoreCadenceFromJira({
+        db,
+        ownerId,
+        jiraBaseUrl: JIRA_BASE,
+        jiraOpts: { fetchImpl: jiraFetch() },
+      }),
+    ).rejects.toThrow(NoSprintRowError);
+  });
+
+  it("an ORDINARY import still preserves the override — the default left the sync path alone", async () => {
+    const ownerId = await overriddenOwner();
+
+    // No `forceCadenceRefresh`: this is what the 15-minute cycle calls.
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(true);
+    expect(row.lengthDays).toBe(21);
+  });
+});
+
 describe("saveRoster — differential upsert (S-15 Phase 1)", () => {
   /** Seed one member plus the `sprint` chain an anomaly row needs (sprint_id NOT NULL). */
   async function seedMemberWithHistory(ownerId: string) {

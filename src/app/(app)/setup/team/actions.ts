@@ -27,12 +27,14 @@ import {
   LastMemberError,
   type MemberHistory,
   MemberHasHistoryError,
+  NoSprintRowError,
   type PreviewMember,
   UnknownMemberError,
   confirmAllFte as confirmAllFteService,
   deleteMember as deleteMemberService,
   getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
+  restoreCadenceFromJira as restoreCadenceService,
   previewRosterImport as previewRosterImportService,
   mergeMembers as mergeMembersService,
   saveCadence as saveCadenceService,
@@ -113,7 +115,9 @@ export type ActionFailure = {
     /** S-09: the action reaches outside the app and the account is in demo. */
     | "demo_mode"
     /** The wizard's last step ran with no saved roster (`onboarding-routing` F2). */
-    | "no_roster";
+    | "no_roster"
+    /** Cadence is stored on the `sprint` row and this account has none yet (S-29). */
+    | "no_sprint";
   message: string;
 };
 
@@ -171,7 +175,14 @@ export type ImportCadenceResult =
     }
   | ActionFailure;
 
-export type SaveCadenceResult = { ok: true } | ActionFailure;
+/**
+ * `overridden` reports what the save DECIDED, not what was submitted: `false`
+ * means the lead confirmed the stored values unchanged and the account stays on
+ * FR-007's auto-pull. The wizard's last step is the reason this is worth
+ * returning — finishing setup must no longer read as an override.
+ */
+export type SaveCadenceResult =
+  { ok: true; overridden: boolean } | ActionFailure;
 
 export type SetMemberActiveResult =
   { ok: true; isActive: boolean } | ActionFailure;
@@ -351,7 +362,62 @@ export async function importCadenceAction(
   }
 }
 
-/** Persist the user-confirmed / overridden cadence (flips `cadence_overridden`). */
+/**
+ * "Restore Jira's values" (S-29): drop the lead's cadence override and go back
+ * to FR-007's auto-pull.
+ *
+ * Same guards as `importCadenceAction`, because it spends the account's real
+ * Jira credentials: `workspaceForImport` (real workspace + demo flag), and a
+ * demo refusal rather than a call that reaches outside the app.
+ *
+ * `noActiveSprint: true` in the result means Jira had nothing to restore FROM —
+ * nothing was written and the override still stands. The surface renders that as
+ * its own outcome; it is not a success and not a failure.
+ */
+export async function restoreCadenceAction(): Promise<ImportCadenceResult> {
+  const { ownerId, isDemo, now } = await workspaceForImport();
+  if (isDemo) return demoRefusal();
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const result = await restoreCadenceService({
+      db,
+      ownerId,
+      env,
+      jiraBaseUrl: jiraBaseOverride(),
+    });
+    return {
+      ok: true,
+      cadence: result.cadence,
+      boardId: result.boardId,
+      jiraSprintId: result.jiraSprintId,
+      sprintIdentity: toSprintIdentity({
+        name: result.sprintName,
+        jiraSprintId: result.jiraSprintId,
+        startDate: result.startDate,
+        endDate: result.endDate,
+        timeZone: result.timeZone,
+        now,
+      }),
+      boardCandidates: result.boardCandidates,
+      noActiveSprint: result.noActiveSprint,
+    };
+  } catch (err) {
+    return toFailure(err, "[setup/team] restoreCadence");
+  }
+}
+
+/**
+ * Persist the lead's cadence (FR-007).
+ *
+ * `cadence_overridden` flips ONLY on a real edit (S-29). This action used to set
+ * it unconditionally, and since it is also what finishes the wizard, merely
+ * CONFIRMING the derived values was recorded as overriding them — freezing the
+ * account off FR-007's auto-pull for its lifetime. The dirty-check now lives in
+ * `saveCadence`, and the `overridden` it returns is carried back to the caller.
+ */
 export async function saveCadenceAction(
   input: unknown,
 ): Promise<SaveCadenceResult> {
@@ -370,14 +436,22 @@ export async function saveCadenceAction(
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  // THIS IS WHAT FINISHES THE WIZARD, and the last step has TWO independent
-  // saves — the roster editor's own button and this one. A lead who reviews the
-  // imported roster without pressing "Save roster" would otherwise be pushed to
-  // `/dashboard`, bounced back by the first-run gate (no `team_member`), and
-  // handed a door pointing at this very page, with nothing naming the missing
-  // condition (`onboarding-routing` impl-review F2). Refusing here says it once,
-  // where the lead can act on it. The cadence is deliberately NOT saved yet: the
-  // form keeps its values, so nothing is lost by making this the first step.
+  // TWO CALLERS since S-29, and this guard is for the first one only:
+  // `CadenceForm` on the wizard's last step, and `CadenceEditor` on
+  // `/team/cadence`. Only the wizard's call FINISHES SETUP, and its last step has
+  // TWO independent saves — the roster editor's own button and this one. A lead
+  // who reviews the imported roster without pressing "Save roster" would
+  // otherwise be pushed to `/dashboard`, bounced back by the first-run gate (no
+  // `team_member`), and handed a door pointing at this very page, with nothing
+  // naming the missing condition (`onboarding-routing` impl-review F2). Refusing
+  // here says it once, where the lead can act on it. The cadence is deliberately
+  // NOT saved yet: the form keeps its values, so nothing is lost by making this
+  // the first step.
+  //
+  // From `/team/cadence` the refusal is UNREACHABLE rather than merely unlikely:
+  // an onboarded lead always has a `team_member` row (the first-run gate is what
+  // let them past `/setup`), so the wizard-specific copy below never renders
+  // there. That is why it stays worded for the wizard.
   const [member] = await db
     .select({ id: teamMember.id })
     .from(teamMember)
@@ -393,7 +467,7 @@ export async function saveCadenceAction(
   }
 
   try {
-    await saveCadenceService({
+    const { overridden } = await saveCadenceService({
       db,
       ownerId,
       cadence: {
@@ -402,7 +476,7 @@ export async function saveCadenceAction(
         workingDays: parsed.data.workingDays,
       },
     });
-    return { ok: true };
+    return { ok: true, overridden };
   } catch (err) {
     return toFailure(err, "[setup/team] saveCadence");
   }
@@ -610,6 +684,17 @@ function toFailure(err: unknown, tag: string): ActionFailure {
       error: "invalid_input",
       message:
         "This is your only team member. Add someone else before removing them.",
+    };
+  }
+  // Named rather than swallowed: the write this replaces matched zero rows and
+  // still reported success. Mapped here, not in one action, so the S-29 restore
+  // path inherits the same refusal.
+  if (err instanceof NoSprintRowError) {
+    return {
+      ok: false,
+      error: "no_sprint",
+      message:
+        "Sprint cadence is stored against a sprint, and none has been imported from Jira yet. Import the sprint cadence first, then set the rhythm.",
     };
   }
   console.error(`${tag} unexpected error:`, err);
