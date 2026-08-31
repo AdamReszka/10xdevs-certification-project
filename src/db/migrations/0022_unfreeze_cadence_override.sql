@@ -1,0 +1,28 @@
+-- S-29 Phase 2 — unfreeze the accounts that never chose.
+--
+-- Until this slice, `saveCadence` set `cadence_overridden = true`
+-- unconditionally, and that action IS what finishes the setup wizard. So every
+-- account that completed setup was opted out of FR-007's auto-pull for its
+-- lifetime, frozen at whatever `deriveCadence` produced at that minute — and
+-- the only surface that could correct it was unreachable. Nobody set this flag
+-- deliberately; Jira is FR-007's source of truth, so the accounts go back to it.
+--
+-- UNQUALIFIED ON PURPOSE. The flag is currently unreliable for EVERY row: there
+-- is no stored signal distinguishing "the lead overrode" from "the lead pressed
+-- Save". A narrowing predicate would only re-introduce the guessing this slice
+-- removes. Verified against the live database before writing this: the one real
+-- onboarded account carries `t` from the wizard, and the five rows that never
+-- went through it are already `f`.
+--
+-- VALUES ARE DELIBERATELY NOT RESET. Clearing the flag is what lets the next
+-- reconcile refresh `length_days` / `start_day` from Jira, and only for accounts
+-- whose Jira actually has an active sprint. Note that `start_day` will not
+-- necessarily CHANGE: it is derived from the sprint's own start date
+-- (`cadence.ts`), so a sprint genuinely started on a Friday keeps `FRI`. What
+-- changes is that Jira can reach the row again, and that a lead correcting it on
+-- `/team/cadence` now records an override that means something.
+--
+-- ONE-WAY IN PRACTICE. Re-setting the flag would restore the freeze but not the
+-- values, which the next reconcile will already have refreshed. Accepted: those
+-- values were never chosen by anyone.
+UPDATE "sprint" SET "cadence_overridden" = false;

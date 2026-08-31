@@ -750,13 +750,13 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [x] 1.1 Linting passes: `npm run lint`
-- [x] 1.2 Type checking passes: `npm run typecheck`
-- [x] 1.3 Unit tests pass: `npm test`
-- [x] 1.4 Integration tests pass: `npm run test:integration`
-- [x] 1.5 A CLOSED-only account's cadence save persists (`updated: 1`)
-- [x] 1.6 No sprint row yields `{ok: false, error: "no_sprint"}`, not `{ok: true}`
-- [x] 1.7 Unchanged submit preserves the flag from both values and on a NULL-cadence row; changed submit sets it true
+- [x] 1.1 Linting passes: `npm run lint` — 4b67b4f
+- [x] 1.2 Type checking passes: `npm run typecheck` — 4b67b4f
+- [x] 1.3 Unit tests pass: `npm test` — 4b67b4f
+- [x] 1.4 Integration tests pass: `npm run test:integration` — 4b67b4f
+- [x] 1.5 A CLOSED-only account's cadence save persists (`updated: 1`) — 4b67b4f
+- [x] 1.6 No sprint row yields `{ok: false, error: "no_sprint"}`, not `{ok: true}` — 4b67b4f
+- [x] 1.7 Unchanged submit preserves the flag from both values and on a NULL-cadence row; changed submit sets it true — 4b67b4f
 
 #### Manual
 
@@ -766,9 +766,9 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [ ] 2.1 Migration applies cleanly locally: `npm run db:migrate`
-- [ ] 2.2 Integration tests pass against the migrated database: `npm run test:integration`
-- [ ] 2.3 Type checking passes: `npm run typecheck`
+- [x] 2.1 Migration applies cleanly locally: `npm run db:migrate`
+- [x] 2.2 Integration tests pass against the migrated database: `npm run test:integration`
+- [x] 2.3 Type checking passes: `npm run typecheck`
 
 #### Manual
 
