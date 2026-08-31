@@ -715,12 +715,12 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [x] 2.1 Migration generates and applies cleanly: `npm run db:generate` then `npm run db:migrate`
-- [x] 2.2 Integration tests pass, including a repeated `approveHolidayYear` being a no-op: `npm run test:integration`
-- [x] 2.3 Cross-account isolation is asserted for every new store function
-- [x] 2.4 Type checking passes: `npm run typecheck`
-- [x] 2.5 Linting passes: `npm run lint`
-- [x] 2.6 Unit tests pass: `npm test`
+- [x] 2.1 Migration generates and applies cleanly: `npm run db:generate` then `npm run db:migrate` — 6a76fcb
+- [x] 2.2 Integration tests pass, including a repeated `approveHolidayYear` being a no-op: `npm run test:integration` — 6a76fcb
+- [x] 2.3 Cross-account isolation is asserted for every new store function — 6a76fcb
+- [x] 2.4 Type checking passes: `npm run typecheck` — 6a76fcb
+- [x] 2.5 Linting passes: `npm run lint` — 6a76fcb
+- [x] 2.6 Unit tests pass: `npm test` — 6a76fcb
 
 #### Manual
 
@@ -731,13 +731,13 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [ ] 3.1 Unit tests pass: `npm test`
-- [ ] 3.2 `easterSunday` matches six known years including both March and April Easters
-- [ ] 3.3 `holidaysForYear('PL', 2026)` returns 14 dates with Easter Monday 2026-04-06 and Boże Ciało 2026-06-04
-- [ ] 3.4 `holidaysForYear('PL', 2024)` returns 13 and `('PL', 2025)` returns 14
-- [ ] 3.5 `holidaysForYear('XX', 2026)` returns `[]` and does not throw
-- [ ] 3.6 Type checking passes: `npm run typecheck`
-- [ ] 3.7 Linting passes: `npm run lint`
+- [x] 3.1 Unit tests pass: `npm test`
+- [x] 3.2 `easterSunday` matches six known years including both March and April Easters
+- [x] 3.3 `holidaysForYear('PL', 2026)` returns 14 dates with Easter Monday 2026-04-06 and Boże Ciało 2026-06-04
+- [x] 3.4 `holidaysForYear('PL', 2024)` returns 13 and `('PL', 2025)` returns 14
+- [x] 3.5 `holidaysForYear('XX', 2026)` returns `[]` and does not throw
+- [x] 3.6 Type checking passes: `npm run typecheck`
+- [x] 3.7 Linting passes: `npm run lint`
 
 ### Phase 4: The proposal and its approval
 
