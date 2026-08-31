@@ -59,7 +59,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-25 | sprint-identity-visibility | every surface that shows sprint data names WHICH sprint, with its dates — the cadence step, Today, and Sprint Detail | S-04, S-07, S-10, S-16 | FR-007, FR-016, FR-017 | done |
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | done |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
-| S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | active |
+| S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | done |
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
 | S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | proposed |
 | S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | proposed |
@@ -1312,7 +1312,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** working-day-aging
 - **PRD refs:** FR-009, FR-013, FR-016
 - **Prerequisites:** S-06, S-14, S-23
-- **Status:** active
+- **Status:** done
 
 - **Why this exists (owner, 2026-08-30, confirmed at `/10x-frame team-navigation-section`):**
   the owner reported that the mechanism counts Saturdays and Sundays as working
@@ -1505,3 +1505,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-20: `SPRINT_AT_RISK` matches a recorded absence by its DATES, like every one of its seven sibling readers. An absence whose window crosses a sprint boundary now raises risk in whichever sprint its dates fall in — including one it was not recorded in, and one recorded when the owner had no sprint row at all.** — Archived 2026-08-30 → `context/archive/2026-08-30-absence-sprint-scoping/`. Lesson: —.
 - **S-26: disconnecting an integration removes what that integration supplied — the credential, the monitored selection, and the rows a future sync would rebuild. It stops taking data the lead typed themselves. Concretely: a Jira disconnect no longer deletes recorded absences.** — Archived 2026-08-30 → `context/archive/2026-08-30-disconnect-data-retention/`. Lesson: —.
 - **S-19: roster and absences live under a first-class **Team** section instead of being two tabs inside Settings.** — Archived 2026-08-31 → `context/archive/2026-08-30-team-navigation-section/`. Lesson: —. Note: this slice made the first licensed edit inside `context/archive/` — two ticked S-15 manual rows asserting a navigation path it deleted, marked `SUPERSEDED` and replaced by backlog rows 23.A/23.B. The carve-out is written into `CLAUDE.md` so it stops being a silent precedent.
+- **S-28: an anomaly's elapsed-time budget is spent only on days the team could have worked, so a Monday inbox no longer holds items that accrued over the weekend.** — Archived 2026-08-31 → `context/archive/2026-08-30-working-day-aging/`. Lesson: —.

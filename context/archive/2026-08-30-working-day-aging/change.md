@@ -1,10 +1,10 @@
 ---
 change_id: working-day-aging
 title: Anomaly aging stops counting the weekend as work
-status: impl_reviewed
+status: archived
 created: 2026-08-30
 updated: 2026-08-31
-archived_at: null
+archived_at: 2026-08-31T06:52:44Z
 ---
 
 ## Notes
