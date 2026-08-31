@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import RepoSelector from "@/components/organisms/setup/repo-selector";
+import { selectionEditorLabel } from "@/components/organisms/settings/integration-card-copy";
 import {
   loadAvailableRepos,
   updateMonitoredRepos,
@@ -57,7 +58,7 @@ export default function RepoSelectionEditor() {
   if (!open) {
     return (
       <Button variant="outline" onClick={handleOpen}>
-        Change monitored repositories
+        {selectionEditorLabel("github")}
       </Button>
     );
   }
