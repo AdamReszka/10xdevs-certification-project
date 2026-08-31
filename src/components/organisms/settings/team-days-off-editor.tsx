@@ -72,6 +72,8 @@ export type SerializedTeamDayOff = {
   id: string;
   day: string;
   label: string | null;
+  /** `'manual'` or `'derived'` (S-17). See `team_day_off.source`. */
+  source: string;
 };
 
 export default function TeamDaysOffEditor({
@@ -176,6 +178,12 @@ export default function TeamDaysOffEditor({
                             working day to begin with, so capacity does not move. */}
                         {row.costsNothing ? (
                           <Badge variant="outline">Not a working day anyway</Badge>
+                        ) : null}
+                        {/* Quiet, and only on the generated rows: the list of an
+                            account that has never approved a year must look
+                            exactly as it did before S-17. */}
+                        {row.isDerived ? (
+                          <Badge variant="secondary">From the holiday calendar</Badge>
                         ) : null}
                       </span>
                     </TableCell>

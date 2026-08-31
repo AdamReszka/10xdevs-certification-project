@@ -78,6 +78,24 @@ export type SprintCapacity = {
    * calendar suggests. Without it, a holiday looks like an arithmetic error.
    */
   teamDaysOff: number;
+  /**
+   * Does the account hold NO team-wide day off at all, on any date (S-17,
+   * FR-007)?
+   *
+   * A THIRD fact rather than a reading of {@link teamDaysOff}, because that one
+   * cannot answer the question. `teamDaysOff` is zero for two different
+   * accounts: one with a full calendar whose sprint happens to span no holiday,
+   * and one that has never recorded a day off in its life. Only the second
+   * deserves to be told that its capacity and its aging budgets assume nobody
+   * is ever off; saying it to the first aims the sentence at the lead who
+   * already did the work.
+   *
+   * Sound because the set it is derived from is UNBOUNDED BY DATE by
+   * construction (`team-day-off-store.ts:93-97`), so an empty set means the
+   * account holds no rows at all rather than "none in this window". Costs no
+   * query — the reducer already receives the set.
+   */
+  calendarIsEmpty: boolean;
 };
 
 /**
@@ -182,7 +200,13 @@ export function computeSprintCapacity({
     adjustedMd += member.fte * available;
   }
 
-  return { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff };
+  return {
+    adjustedMd,
+    nominalMd,
+    sprintWorkingDays,
+    teamDaysOff,
+    calendarIsEmpty: nonWorkingDays.size === 0,
+  };
 }
 
 export type CapacityReadResult = {

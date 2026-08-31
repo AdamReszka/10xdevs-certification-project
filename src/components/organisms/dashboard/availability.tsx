@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -16,6 +17,7 @@ import {
   buildAvailabilityGrid,
   nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { SprintCapacity } from "@/lib/dashboard/capacity";
+import { holidayCalendarNotice } from "@/lib/holidays/calendar-notice";
 import { cn } from "@/lib/utils";
 
 /**
@@ -60,6 +63,22 @@ export type SprintAdjustments = {
 };
 
 /**
+ * The holiday-calendar facts the notice needs, as plain data (S-17).
+ *
+ * ARRAYS RATHER THAN A `Set` across the boundary: the house convention is that
+ * only plain JSON-ish values cross into a client component, the same rule that
+ * turns `Date` into an ISO string two types above. The component rebuilds the
+ * set once.
+ */
+export type HolidayCalendarFacts = {
+  countryCode: string | null;
+  /** Every year the active sprint touches (`holidayYears`). */
+  years: number[];
+  /** Which of them the lead has already decided about, under `countryCode`. */
+  approvedYears: number[];
+};
+
+/**
  * Availability — the fifth tab on Dashboard "Today" (S-08, FR-010/FR-016).
  *
  * A tab rather than an always-on card, because FR-016 is explicit that the
@@ -81,6 +100,8 @@ export default function Availability({
   capacity,
   jiraSprintId,
   adjustments,
+  holidayCalendar,
+  isDemo,
 }: {
   members: AvailabilityMember[];
   absences: SerializedAbsence[];
@@ -100,6 +121,10 @@ export default function Availability({
    * an error, and one the override form itself can resolve by creating one.
    */
   adjustments: SprintAdjustments | null;
+  /** S-17: what the panel needs to say about the working-day calendar. */
+  holidayCalendar: HolidayCalendarFacts;
+  /** Silences the calendar notice outright — see the notice module's row 0. */
+  isDemo: boolean;
 }) {
   const windows = useMemo(() => {
     if (!sprintStart || !sprintEnd) return null;
@@ -170,6 +195,8 @@ export default function Availability({
               capacity={capacity}
               jiraSprintId={jiraSprintId}
               adjustments={adjustments}
+              holidayCalendar={holidayCalendar}
+              isDemo={isDemo}
             />
             <AvailabilitySection title="This sprint" grid={windows.current} />
             <AvailabilitySection title="Next window" grid={windows.next} />
@@ -197,19 +224,40 @@ export default function Availability({
  * every active member contributes something; a member the migration guessed at
  * is surfaced by the `/settings/team` banner instead, where it can actually be
  * fixed.
+ *
+ * AN UNREVIEWED CALENDAR NOW SPEAKS (S-17, FR-007). Until this slice, zero team
+ * days off rendered as silence — the same silence as a calendar the lead had
+ * checked and found genuinely holiday-free — while the capacity above and all
+ * five elapsed-time anomaly rules were being computed as though nobody is ever
+ * off. What separates the states is the APPROVAL RECORD rather than the row
+ * count, and the whole precedence table (demo first, then a country we have no
+ * rules for, then no country, then an unreviewed year) lives in
+ * `lib/holidays/calendar-notice.ts` because this file has no test harness.
  */
 function CapacitySummary({
   capacity,
   jiraSprintId,
   adjustments,
+  holidayCalendar,
+  isDemo,
 }: {
   capacity: SprintCapacity | null;
   jiraSprintId: string | null;
   adjustments: SprintAdjustments | null;
+  holidayCalendar: HolidayCalendarFacts;
+  isDemo: boolean;
 }) {
   if (!capacity) return null;
 
-  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff } = capacity;
+  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff, calendarIsEmpty } =
+    capacity;
+  const notice = holidayCalendarNotice({
+    isDemo,
+    countryCode: holidayCalendar.countryCode,
+    years: holidayCalendar.years,
+    approvedYears: new Set(holidayCalendar.approvedYears),
+    calendarIsEmpty,
+  });
   const headline = toCapacityHeadline({
     adjustedMd,
     nominalMd,
@@ -264,6 +312,23 @@ function CapacitySummary({
           </p>
         ) : null}
       </div>
+
+      {/* Below the numbers rather than above them: the panel's headline is the
+          capacity figure, and the notice explains what that figure assumed. The
+          two are NOT written as an either/or — the component must not assume
+          the mutual exclusion that happens to hold today. */}
+      {notice ? (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{notice.title}</AlertTitle>
+          <AlertDescription>
+            <span>{notice.body}</span>
+            <Link href="/team/days-off" className="underline underline-offset-4">
+              Record your team days off
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {jiraSprintId === null ? null : (
         <CapacityAdjustments

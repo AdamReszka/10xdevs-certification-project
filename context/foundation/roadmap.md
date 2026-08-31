@@ -601,11 +601,29 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-08, S-23
 - **Status:** proposed
 
-- **Why this exists (S-08, 2026-08-25):** S-08 built the seam and left it empty.
-  `countWorkingDays` / `countWorkingDaysInclusive` take an optional
-  `nonWorkingDays: Set<DayKey>`; every S-08 caller passes nothing, so a Polish
-  team's 15 August currently counts as a full working day in the capacity number
-  and in every aging budget.
+- **Why this exists (S-08, 2026-08-25; CORRECTED 2026-08-31).** As written, this
+  bullet said S-08 "built the seam and left it empty — every S-08 caller passes
+  nothing, so a Polish team's 15 August currently counts as a full working day in
+  the capacity number and in every aging budget". **The second half stopped being
+  true at S-23 and the first half is now history.** The seam is fed:
+  `load-snapshot.ts:65,134` puts `nonWorkingDays` into the anomaly snapshot, where
+  all five elapsed-time rules read it, and `capacity.ts:236,288` passes the same
+  set into the capacity divisor — both from `team_day_off`, entered by the lead at
+  `/team/days-off`. So 15 August already costs the team a working day, **provided
+  somebody typed it in.** The bullet is corrected rather than deleted because the
+  paragraph below always described the post-S-23 state, and the two disagreed —
+  a plan written straight from this block would have inherited a false premise
+  about what is unbuilt.
+- **What is actually left, therefore:** not "make holidays count" but **stop
+  making the lead type them**, one country at a time, every year. And with it the
+  question S-23 could leave alone: once rows are GENERATED, the absence of a
+  `team_day_off` row means two different things — "not generated yet" and
+  "generated, then deleted because this team works that day" — which the table
+  cannot currently tell apart (`unique(owner_id, day)`, a free-text `label`, no
+  provenance column). A regeneration that resurrects a deleted holiday is the S-30
+  defect in a new place: the lead's choice replaced by a plausible wrong value,
+  with nothing said. That is the decision this slice owes, and it is why it is
+  worth framing before planning.
 - **Why it was not done in S-08:** it needs data the app does not store. Deriving
   holidays requires a COUNTRY, and the only geographic signal on the account is
   `jira_project.time_zone` — which is a zone, not a jurisdiction, and gets a team
@@ -620,6 +638,16 @@ Foundations below assume these are present and do NOT re-scaffold them.
   the account; what remains here is DERIVING those dates from a country the
   account still does not store. The `At a glance` row said this from 2026-08-27;
   this block did not, and the two disagreed until now.
+- **Two constraints worth carrying into planning, both already fixed by the
+  codebase.** A bundled holiday dataset costs no network path and no secret on
+  Workers, and CI's bundle tripwire is 5000 KiB gzip
+  (`.github/workflows/ci.yml:75`), which a few countries' tables are nowhere near
+  — so "call an API at sync time" is a choice to justify, not a default. And the
+  country cannot be inferred: `jira_project.time_zone` is a ZONE, not a
+  jurisdiction (Vienna and Warsaw share one and differ on holidays), so a new
+  field is unavoidable. Whether regional variation — German Länder, Swiss cantons
+  — is in scope is a boundary to set deliberately rather than to discover
+  mid-build.
 
 ---
 

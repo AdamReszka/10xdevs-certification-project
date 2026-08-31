@@ -86,6 +86,41 @@ describe("toTeamDayOffRows", () => {
     expect(rows[0].label).toBeNull();
     expect(rows[1].label).toBe("Assumption of Mary");
   });
+
+  /**
+   * S-17 — provenance. `team_day_off.source` is written by the generator and
+   * read here; the three cases below are the whole contract, and the last two
+   * are what keeps a marker off a row the lead typed themselves.
+   */
+  it("marks a generated row as derived", () => {
+    const rows = toTeamDayOffRows({
+      daysOff: [{ id: "a", day: "2026-08-15", label: "Wniebowzięcie", source: "derived" }],
+      workingDays: WEEK,
+    });
+    expect(rows[0].isDerived).toBe(true);
+  });
+
+  it("does not mark a hand-entered row", () => {
+    const rows = toTeamDayOffRows({
+      daysOff: [{ id: "a", day: "2026-08-15", label: "Offsite", source: "manual" }],
+      workingDays: WEEK,
+    });
+    expect(rows[0].isDerived).toBe(false);
+  });
+
+  it("reads an absent or unrecognised source as the lead's own", () => {
+    // Every row written before the migration, and any value a later country
+    // might introduce. Guessing "derived" here would take credit for work the
+    // lead did by hand.
+    const rows = toTeamDayOffRows({
+      daysOff: [
+        { id: "a", day: "2026-08-05", label: null },
+        { id: "b", day: "2026-08-15", label: null, source: "something-else" },
+      ],
+      workingDays: WEEK,
+    });
+    expect(rows.map((r) => r.isDerived)).toEqual([false, false]);
+  });
 });
 
 describe("day key ↔ picker date", () => {
