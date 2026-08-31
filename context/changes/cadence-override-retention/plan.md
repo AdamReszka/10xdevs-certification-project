@@ -1132,13 +1132,13 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 4.1 Type checking and linting pass
-- [x] 4.2 Unit suite green
-- [x] 4.3 Integration suite green, including reconcile cases (c), (d), (i), (k)
-- [x] 4.4 A direct test for the force branch, which has none today
-- [x] 4.5 Case (k) asserts `workingDays`
-- [x] 4.6 Rollover integration case: inheritance with no write at rollover
-- [x] 4.7 A default-fallback cycle finalizes with `cadence_default_fallback`
+- [x] 4.1 Type checking and linting pass — f6eb9d9
+- [x] 4.2 Unit suite green — f6eb9d9
+- [x] 4.3 Integration suite green, including reconcile cases (c), (d), (i), (k) — f6eb9d9
+- [x] 4.4 A direct test for the force branch, which has none today — f6eb9d9
+- [x] 4.5 Case (k) asserts `workingDays` — f6eb9d9
+- [x] 4.6 Rollover integration case: inheritance with no write at rollover — f6eb9d9
+- [x] 4.7 A default-fallback cycle finalizes with `cadence_default_fallback` — f6eb9d9
 
 #### Manual
 
@@ -1149,10 +1149,10 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [ ] 5.1 Type checking and linting pass
-- [ ] 5.2 Unit suite green, including the disconnect-impact regression, the clause pin and the reader guard
-- [ ] 5.3 `disconnect-confirm-copy` and `integration-card-copy` suites green
-- [ ] 5.4 Integration test: reconnect against a different workspace URL takes the changed branch
+- [x] 5.1 Type checking and linting pass
+- [x] 5.2 Unit suite green, including the disconnect-impact regression, the clause pin and the reader guard
+- [x] 5.3 `disconnect-confirm-copy` and `integration-card-copy` suites green
+- [x] 5.4 Integration test: reconnect against a different workspace URL takes the changed branch
 
 #### Manual
 

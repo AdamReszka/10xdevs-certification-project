@@ -151,6 +151,13 @@ export const DISCONNECT_IMPACT: Record<DisconnectImpactKey, DisconnectImpact> = 
       "the recorded absences you entered by hand, which stay with the team and stop being linked to a sprint",
       "your team roster",
       "the team-wide days off",
+      // S-30. `keeps` is built entirely around the hand-entered/durable
+      // distinction, and the cadence became exactly that kind of thing when it
+      // moved off the `sprint` row into `sprint_cadence_override` — which has no
+      // foreign key into the sync graph, so this delete cannot reach it. Before
+      // S-30, `grep -i cadence` over every pre-action copy module returned zero
+      // hits while the values it describes died with the credential.
+      "the sprint cadence you set by hand, which reattaches when the next sprint is imported",
       "the capacity and velocity measured for closed sprints",
       "your GitHub connection",
       "past daily recaps, which stay readable but stop being linked to a sprint",
@@ -193,6 +200,11 @@ export const DISCONNECT_IMPACT: Record<DisconnectImpactKey, DisconnectImpact> = 
       "the recorded absences, which stay with the team rather than with the project",
       "your Jira token and workspace URL",
       "your team roster and the team-wide days off",
+      // S-30, and scoped differently from the Jira root's on purpose: the record
+      // is filed under the JIRA-SIDE project id, so it survives the switch but
+      // is NOT inherited by the new project's sprints. A switch away and back
+      // finds its own cadence again and nobody else's.
+      "the sprint cadence you set by hand, which stays with the project you set it for",
       "the capacity and velocity measured for closed sprints",
       "the status mapping, which you re-enter for the new project rather than lose",
       "past daily recaps, which stay readable but stop being linked to a sprint",

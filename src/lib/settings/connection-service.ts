@@ -428,6 +428,12 @@ export async function updateJiraProject({
     .limit(1);
   if (!existing) throw new MissingCredentialError("No Jira project is configured.");
 
+  // NO WORKSPACE COMPARISON HERE, unlike `jira-store.ts` (S-30), and the absence
+  // is deliberate rather than an oversight. This is the SETTINGS project switch:
+  // it never touches `jira_credential`, so the workspace URL cannot move on this
+  // path and a second predicate for it would be unreachable code guarding a
+  // state this function cannot produce. The reconnect form is where an owner
+  // re-points at a different Atlassian site, and that is where the check lives.
   const projectChanged = existing.jiraProjectId !== target.jiraProjectId;
 
   await db.transaction(async (tx) => {

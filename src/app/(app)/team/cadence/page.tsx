@@ -1,7 +1,13 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { eq } from "drizzle-orm";
+
+import { jiraProject } from "@/db/schema";
 
 import CadenceEditor from "@/components/organisms/settings/cadence-editor";
-import { resolveCadenceFor } from "@/lib/cadence-override";
+import {
+  resolveCadenceFor,
+  survivingCadenceProvenance,
+} from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -37,9 +43,15 @@ export default async function TeamCadencePage() {
   const db = getDb(env);
   const { ownerId, now } = await resolveWorkspace();
 
-  const [activeSprint, timeZone] = await Promise.all([
+  const [activeSprint, timeZone, project] = await Promise.all([
     getActiveSprintRow(db, ownerId),
     getJiraTimeZone(db, ownerId),
+    db
+      .select({ id: jiraProject.id })
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId))
+      .limit(1)
+      .then((rows) => rows[0] ?? null),
   ]);
 
   // RESOLVED, not coalesced off the row (S-30). The form must prefill what the
@@ -56,7 +68,6 @@ export default async function TeamCadencePage() {
         lengthDays: resolved.lengthDays,
         startDay: resolved.startDay as Weekday,
         workingDays: [...resolved.workingDays] as Weekday[],
-        provenance: resolved.provenance,
         sprintState: activeSprint.state,
         sprintIdentity: toSprintIdentity({
           name: activeSprint.name,
@@ -68,6 +79,14 @@ export default async function TeamCadencePage() {
         }),
       }
     : null;
+
+  // A SIBLING of `initialCadence`, because the override record outlives every
+  // `sprint` row: after a project switch there is no cadence to show and there
+  // IS a surviving choice to report, which is what the `no_sprint` state says
+  // (S-30). With a sprint row present the resolver's own answer is used.
+  const provenance =
+    resolved?.provenance ??
+    (await survivingCadenceProvenance(db, ownerId, project?.id ?? null));
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,7 +101,7 @@ export default async function TeamCadencePage() {
         </p>
       </div>
 
-      <CadenceEditor initialCadence={initialCadence} />
+      <CadenceEditor initialCadence={initialCadence} provenance={provenance} />
     </div>
   );
 }

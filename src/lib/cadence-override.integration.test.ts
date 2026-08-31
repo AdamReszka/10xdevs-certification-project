@@ -274,6 +274,26 @@ describe("resolveCadenceFor — tiers against real Postgres", () => {
     expect(resolved.source).toBe("source");
   });
 
+  it("never applies a record for THIS sprint id under a DIFFERENT Jira-side project", async () => {
+    // Tier 1 is project-scoped too, not just tier 2. A Jira sprint id is unique
+    // per Jira INSTANCE, so an owner who re-points at a different Atlassian site
+    // can collide on the id — and the record deliberately survives that switch.
+    const seeded = await newOwner({ jiraProjectId: "20000" });
+    const row = await seedSprint(seeded, { jiraSprintId: "4343" });
+    await seedRecord({
+      ownerId: seeded.ownerId,
+      jiraSprintId: "4343", // the SAME id, the OLD workspace's project
+      startDate: SPRINT_START,
+      jiraProjectId: "10000",
+      fields: { workingDays: MON_THU },
+    });
+
+    const resolved = await resolveCadenceFor(db, seeded.ownerId, row);
+
+    expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
+    expect(resolved.source).toBe("source_with_prior_override");
+  });
+
   it("never inherits a record left behind by a DIFFERENT Jira-side project", async () => {
     // Twin of case (t). The record survives a project switch BY DESIGN — that is
     // the point of this table — so the project scope is the only thing stopping

@@ -195,6 +195,14 @@ export async function resolveCadenceFor(
     sprintStartDay: sprintRow.startDay,
   };
 
+  // PROJECT-SCOPED, like tier 2 and for the same reason. A Jira sprint id is
+  // unique per Jira INSTANCE, not globally, so `(owner, jira_sprint_id)` alone
+  // would hand an owner who re-pointed at a different Atlassian site the OLD
+  // team's cadence for a colliding id. The unique constraint stays on those two
+  // columns — it is the upsert's dedup key, and re-homing a record on a switch
+  // is what its `ON CONFLICT` SET is for — but the READ adds the project. Same
+  // bridge, same collision, as `sprint_measurement`'s recovery read
+  // (`reconcile-sprint.ts`, S-26 impl-review F2).
   const [own] = await db
     .select({
       lengthDays: sprintCadenceOverride.lengthDays,
@@ -202,10 +210,15 @@ export async function resolveCadenceFor(
       workingDays: sprintCadenceOverride.workingDays,
     })
     .from(sprintCadenceOverride)
+    .innerJoin(
+      jiraProject,
+      eq(jiraProject.jiraProjectId, sprintCadenceOverride.jiraProjectId),
+    )
     .where(
       and(
         eq(sprintCadenceOverride.ownerId, ownerId),
         eq(sprintCadenceOverride.jiraSprintId, sprintRow.jiraSprintId),
+        eq(jiraProject.id, sprintRow.jiraProjectId),
       ),
     )
     .limit(1);
@@ -265,6 +278,53 @@ export async function resolveCadenceFor(
     ownerHasAnyRecord: candidate != null,
     ...tier3,
   });
+}
+
+/**
+ * What the account has chosen, when there is NO sprint row to resolve against.
+ *
+ * A project switch deletes every `sprint` row while the override record
+ * survives — that is the point of the table — so `/team/cadence` would otherwise
+ * have to describe the surviving cadence without being able to see it, and its
+ * `no_sprint` state would go on implying the values were gone.
+ *
+ * Scoped to the owner's CURRENT Jira-side project, so a record left behind by a
+ * workspace the account no longer points at is not reported as surviving.
+ */
+export async function survivingCadenceProvenance(
+  db: Db | Tx,
+  ownerId: string,
+  /** `jira_project.id` — the internal row id, as every caller holds it. */
+  jiraProjectRowId: string | null,
+): Promise<CadenceProvenance> {
+  if (jiraProjectRowId == null) return { ...FOLLOWS_SOURCE };
+
+  const [latest] = await db
+    .select({
+      lengthDays: sprintCadenceOverride.lengthDays,
+      startDay: sprintCadenceOverride.startDay,
+      workingDays: sprintCadenceOverride.workingDays,
+    })
+    .from(sprintCadenceOverride)
+    .innerJoin(
+      jiraProject,
+      eq(jiraProject.jiraProjectId, sprintCadenceOverride.jiraProjectId),
+    )
+    .where(
+      and(
+        eq(sprintCadenceOverride.ownerId, ownerId),
+        eq(jiraProject.id, jiraProjectRowId),
+      ),
+    )
+    .orderBy(desc(sprintCadenceOverride.startDate))
+    .limit(1);
+
+  if (!latest) return { ...FOLLOWS_SOURCE };
+  return {
+    lengthDays: latest.lengthDays != null,
+    startDay: latest.startDay != null,
+    workingDays: latest.workingDays != null && latest.workingDays.length > 0,
+  };
 }
 
 /**

@@ -206,6 +206,25 @@ export const COMMITMENT_FREEZE_CLAUSE =
   "the next sync re-freezes the sprint's committed scope at whatever tickets it then finds, so the sprint's reliability figure is measured against a new commitment";
 
 /**
+ * The SECOND clause the foreign-key graph cannot guard, marked the same way and
+ * for the same reason (S-30).
+ *
+ * `sprint_cadence_override` survives this delete because it has NO FOREIGN KEY
+ * AT ALL into the sync graph — its only reference is to the account. That is a
+ * NEGATIVE fact about the schema, and a derivation over `collectEdges()` can
+ * only ever say which tables an edge reaches; there is no edge here to derive a
+ * survival from. `disconnect-impact.test.ts` guards the structure — it fails the
+ * build if the table ever acquires a foreign key that puts it back in the
+ * cascade — but only this constant can put the promise into a sentence.
+ *
+ * Declared rather than dropped, on `COMMITMENT_FREEZE_CLAUSE`'s precedent: the
+ * cadence is the one thing a switch KEEPS that a lead would reasonably assume it
+ * destroys, having just been told the sprints are going.
+ */
+export const CADENCE_RETENTION_CLAUSE =
+  "the sprint cadence you set by hand is kept and reattaches when the next sprint is imported, because it is stored against the Jira sprint rather than against the rows being deleted";
+
+/**
  * Which `DISCONNECT_IMPACT` entry describes what a RECONNECT can cost.
  *
  * Written out per integration rather than inferred from `DISCONNECT_IMPACT[integration]`,
@@ -286,7 +305,8 @@ export function reconnectCost(
   const body =
     `Re-submitting the form with the same project replaces the stored token and ` +
     `costs you nothing. Pointing it at a different project deletes ` +
-    `${joinClauses(RECONNECT_COST_SOURCE.jira)}, and ${COMMITMENT_FREEZE_CLAUSE}.`;
+    `${joinClauses(RECONNECT_COST_SOURCE.jira)}, and ${COMMITMENT_FREEZE_CLAUSE}. ` +
+    `On the other side of that, ${CADENCE_RETENTION_CLAUSE}.`;
   const routing = ` “${editor}” makes that same change, with the cost stated before you commit to it.`;
   return surface === "settings" ? body + routing : body;
 }

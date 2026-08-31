@@ -82,7 +82,14 @@ export function projectSwitchDiscardedDescription(mode: DisconnectMode): string 
     `As warned, this discarded ${joinClauses(PROJECT_SWITCH.destroys)}. ` +
     cleared +
     `Your past daily recaps were kept, but are no longer linked to a sprint. ` +
-    `Nothing has imported a sprint for the new project yet, so both dashboards ` +
-    `will stay empty until you re-run the cadence import.`
+    // S-30. This used to end by sending the lead to a control they could not
+    // operate: with every `sprint` row deleted, `/team/cadence` renders its
+    // `no_sprint` state, the restore button is `disabled` and a save throws.
+    // What is true instead is that the cadence they set SURVIVED the switch —
+    // it is stored against the Jira sprint, not against the rows just deleted —
+    // and that the next sync is what creates a sprint for it to attach to.
+    `The sprint cadence you set by hand was kept. Nothing has imported a sprint ` +
+    `for the new project yet, so both dashboards will stay empty until the next ` +
+    `sync brings one in — the cadence reattaches when it does.`
   );
 }

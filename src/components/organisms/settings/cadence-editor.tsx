@@ -30,7 +30,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
-import { FOLLOWS_SOURCE, type CadenceProvenance } from "@/lib/cadence-override";
+import type { CadenceProvenance } from "@/lib/cadence-override";
 import type { SprintIdentityView } from "@/lib/sprint-identity";
 import {
   cadenceSchema,
@@ -60,8 +60,6 @@ export type InitialCadence = {
   lengthDays: number;
   startDay: Weekday;
   workingDays: Weekday[];
-  /** PER FIELD since S-30 — see `CadenceProvenance`. */
-  provenance: CadenceProvenance;
   /** `sprint.state` of the row this screen writes to. */
   sprintState: string | null;
   /** Already formatted server-side — this component does no `Intl` work. */
@@ -76,9 +74,16 @@ const DEFAULTS: CadenceValues = {
 
 export default function CadenceEditor({
   initialCadence,
+  provenance: initialProvenance,
 }: {
   /** `null` when the account has no `sprint` row at all — the `no_sprint` state. */
   initialCadence: InitialCadence | null;
+  /**
+   * PER FIELD since S-30, and a SIBLING of `initialCadence` rather than a member
+   * of it: the override record outlives every `sprint` row, so the `no_sprint`
+   * state has provenance to report precisely when there is no cadence to show.
+   */
+  provenance: CadenceProvenance;
 }) {
   const [formError, setFormError] = useState<string | null>(null);
   const [saved, setSaved] = useState<CadenceProvenance | null>(null);
@@ -88,7 +93,7 @@ export default function CadenceEditor({
   // Seeded from the server render, then replaced by whatever a save or a restore
   // returns.
   const [provenance, setProvenance] = useState<CadenceProvenance>(
-    initialCadence?.provenance ?? FOLLOWS_SOURCE,
+    initialProvenance,
   );
   const [sprintIdentity, setSprintIdentity] = useState<SprintIdentityView>(
     initialCadence?.sprintIdentity ?? { kind: "none" },

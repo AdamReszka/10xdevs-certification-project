@@ -79,7 +79,6 @@ export default async function TeamSetupPage() {
         lengthDays: resolved.lengthDays,
         startDay: resolved.startDay as Weekday,
         workingDays: [...resolved.workingDays] as Weekday[],
-        provenance: resolved.provenance,
         // Built on the SERVER so the identity is on screen at first paint, not
         // only after a re-pull — and so no `Date` and no `Intl` call crosses
         // into the client component.

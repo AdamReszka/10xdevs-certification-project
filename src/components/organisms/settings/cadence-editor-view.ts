@@ -54,13 +54,25 @@ export function cadenceEditorState(input: {
     provenance.workingDays && !provenance.lengthDays && !provenance.startDay;
 
   if (!hasSprintRow) {
+    // S-30 — this used to be a dead end. A project switch deletes every `sprint`
+    // row, the editor sent the lead here, and this state met them with a
+    // disabled restore button and a save that throws. The cadence they set now
+    // OUTLIVES that delete, so where one survives this says so rather than
+    // implying it is gone.
     return {
       kind: "no_sprint",
-      title: "No sprint to store a cadence against",
-      body:
-        "SprintFlow keeps the cadence on the sprint it was imported with, and " +
-        "this account has not imported one from Jira yet. Import the sprint " +
-        "cadence first — the rhythm you set here would have nothing to attach to.",
+      title: handSet
+        ? "Your cadence is kept, waiting for a sprint"
+        : "No sprint to store a cadence against",
+      body: handSet
+        ? "SprintFlow still has the cadence you set by hand — it is stored " +
+          "against the Jira sprint rather than against the synced rows, so a " +
+          "disconnect or a project switch does not take it. There is no sprint " +
+          "here right now, so there is nothing to edit against; the next sync " +
+          "brings one in and your values attach to it."
+        : "SprintFlow keeps the cadence on the sprint it was imported with, and " +
+          "this account has not imported one from Jira yet. Import the sprint " +
+          "cadence first — the rhythm you set here would have nothing to attach to.",
     };
   }
 
