@@ -31,10 +31,11 @@ import { deriveCadence } from "./cadence";
  *
  * ONE owner-scoped function that asks Jira which sprint is active and makes the
  * database agree. Both callers use it — the setup wizard (`importCadence`) and
- * the headless sync cycle (`syncJira`) — so the `cadence_overridden` three-way
- * SET, the "at most one ACTIVE row per owner" invariant, and the rollover
- * anomaly sweep exist in exactly ONE place rather than being re-derived per
- * call-site.
+ * the headless sync cycle (`syncJira`) — so the cadence refresh, the "at most one
+ * ACTIVE row per owner" invariant, and the rollover anomaly sweep exist in
+ * exactly ONE place rather than being re-derived per call-site. (Until S-30 the
+ * first of those was a three-way `case when … cadence_overridden` SET; the flag
+ * it read was dropped at S-32.)
  *
  * ORDERING (hard, lesson: reads-before-transaction): every network read
  * completes BEFORE `db.transaction` opens. A `fetch` nested in a transaction
@@ -82,8 +83,8 @@ export type ReconcileArgs = {
    * else's name. The dialog has promised exactly this since S-29 — the sentence
    * becomes true here.
    *
-   * It lives here, on the one function that already owns the flag, rather than
-   * in a caller that clears it first: every Jira network call in this module
+   * It lives here, on the one function that already owns the cadence refresh,
+   * rather than in a caller that clears the lead's choice first: every Jira network call in this module
    * completes BEFORE the transaction opens, so a pre-clear followed by a failed
    * pull would commit "auto-pull is back on" and then throw. The lead would read
    * "restore failed" while the next 15-minute sync quietly overwrote the cadence

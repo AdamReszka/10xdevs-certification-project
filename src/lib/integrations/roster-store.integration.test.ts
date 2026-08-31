@@ -865,7 +865,7 @@ describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)"
     expect(resolved.workingDays).toEqual(["MON", "TUE", "WED"]); // the pattern did
   });
 
-  it("a FAILED Jira call leaves both the values and the flag exactly as they were", async () => {
+  it("a FAILED Jira call leaves both the columns and the override record exactly as they were", async () => {
     const ownerId = await overriddenOwner();
 
     const exploding = (async () => {

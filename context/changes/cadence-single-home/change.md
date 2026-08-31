@@ -1,7 +1,7 @@
 ---
 change_id: cadence-single-home
 title: The cadence a lead chose has exactly one home in the database
-status: implemented
+status: impl_reviewed
 created: 2026-08-31
 updated: 2026-08-31
 archived_at: null

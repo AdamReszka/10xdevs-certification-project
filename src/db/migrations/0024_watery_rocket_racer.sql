@@ -18,6 +18,12 @@
 --
 -- `0023_flowery_flatman.sql` still reads both columns and stays correct: the
 -- chain runs it before this file, against a database that still has them.
+--
+-- APPLYING THIS SPENDS S-30's ESCAPE HATCH. The columns were kept so a revert of
+-- S-30 would be a code revert; once this runs, reverting to any pre-S-32 commit
+-- fails HARD rather than silently — `reconcile-sprint.ts` at that commit emits an
+-- INSERT naming both columns, so every reconcile errors 42703 (column does not
+-- exist). Recovery is a hand-written re-add migration, not `git revert`.
 
 ALTER TABLE "sprint" DROP COLUMN "working_days";--> statement-breakpoint
 ALTER TABLE "sprint" DROP COLUMN "cadence_overridden";
