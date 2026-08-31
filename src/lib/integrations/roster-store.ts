@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import type { getDb } from "@/lib/db";
 import { fteToColumn, toFte } from "@/lib/fte";
+import { getActiveSprintRow } from "@/lib/sprint";
 import {
   type GithubClientOpts,
   GithubAuthError,
@@ -571,6 +572,25 @@ export class LastMemberError extends Error {
   }
 }
 
+/**
+ * No `sprint` row to write a cadence onto.
+ *
+ * Cadence is stored ON the sprint row (S-29 deliberately did not move it to the
+ * account — that is S-30's modelling question), so an account whose Jira import
+ * has never run has nothing to key the write on. Refusing by NAME is the whole
+ * point: the previous code UPDATEd `where state = 'ACTIVE'`, matched zero rows
+ * and still returned `{ok: true}` — `lessons.md`'s "a narrowing predicate turns
+ * 'wrong value' into 'empty result', which reads as success", at a third layer.
+ */
+export class NoSprintRowError extends Error {
+  constructor(
+    message = "There is no sprint to store this cadence against yet.",
+  ) {
+    super(message);
+    this.name = "NoSprintRowError";
+  }
+}
+
 /** What a permanent delete would destroy, so the confirmation can name it. */
 export type MemberHistory = {
   absences: number;
@@ -974,10 +994,66 @@ function cadenceFromRow(row: SelectSprint): DerivedCadence {
 // Cadence save (user-confirmed / overridden)
 // ============================================================================
 
+/** Mon→Sun, so a reordered but identical working-day set is not an edit. */
+const WEEKDAY_ORDER: readonly string[] = [
+  "MON",
+  "TUE",
+  "WED",
+  "THU",
+  "FRI",
+  "SAT",
+  "SUN",
+];
+
+function canonicalWorkingDays(days: readonly string[]): string {
+  return [...days]
+    .sort((a, b) => WEEKDAY_ORDER.indexOf(a) - WEEKDAY_ORDER.indexOf(b))
+    .join(",");
+}
+
 /**
- * Persist the user's confirmed/overridden cadence onto the owner's ACTIVE sprint
- * row and flip `cadence_overridden = true` so it survives every future re-import
- * (FR-007). A no-op when the owner has no active sprint (nothing to key on).
+ * Did the lead actually CHANGE anything?
+ *
+ * Both sides go through `cadenceFromRow`'s defaults, not just the stored one.
+ * All three cadence columns are nullable, and every reader coalesces them to
+ * 14 / MON / Mon–Fri before a human ever sees a value — so comparing a
+ * submitted `14` against a stored `NULL` would score an untouched confirmation
+ * as an edit and re-freeze the account. That is the same read-wider-than-write
+ * asymmetry this function exists to close, one layer down (plan-review F4).
+ */
+function sameCadence(a: DerivedCadence, b: DerivedCadence): boolean {
+  return (
+    a.lengthDays === b.lengthDays &&
+    a.startDay === b.startDay &&
+    canonicalWorkingDays(a.workingDays) === canonicalWorkingDays(b.workingDays)
+  );
+}
+
+/**
+ * Persist the lead's confirmed / overridden cadence (FR-007).
+ *
+ * TWO defects are closed here, and both were the same shape.
+ *
+ * **The row.** This used to UPDATE `where owner_id AND state = 'ACTIVE'` while
+ * every reader — the wizard page, the anomaly snapshot, the days-off editor —
+ * resolves through `getActiveSprintRow`, whose second tier is state-unscoped.
+ * Between sprints the form therefore pre-filled from a CLOSED row and the write
+ * matched nothing, silently. It now resolves through the SAME reader and keys
+ * the UPDATE on `id`, so "the row the lead is looking at" and "the row the save
+ * writes" are one sentence. Resolving INSIDE the service rather than taking a
+ * `sprintId` argument is what stops the wizard action and the Settings action
+ * from drifting apart again. The `owner_id` predicate stays even though the id
+ * came from an owner-scoped read — `lessons.md`'s corollary (a) on differential
+ * upserts.
+ *
+ * **The flag.** It used to be set to `true` unconditionally, and this action IS
+ * what finishes the setup wizard — so merely *confirming* the derived values was
+ * recorded as *overriding* them, and `reconcileActiveSprint` then faithfully
+ * preserved that freeze on every future sync. `cadence_overridden` now means
+ * "the lead deliberately changed this". Note the asymmetry in the SET: an
+ * unchanged save OMITS the column rather than writing `false`, because writing
+ * `false` would silently un-override a lead who genuinely overrode earlier and
+ * then re-saved without touching anything.
  */
 export async function saveCadence({
   db,
@@ -991,17 +1067,27 @@ export async function saveCadence({
     startDay: WeekdayCode;
     workingDays: WeekdayCode[];
   };
-}): Promise<{ updated: number }> {
+}): Promise<{ updated: number; overridden: boolean }> {
+  const row = await getActiveSprintRow(db, ownerId);
+  if (!row) throw new NoSprintRowError();
+
+  const overridden = !sameCadence(cadence, cadenceFromRow(row));
+
   const rows = await db
     .update(sprint)
     .set({
       lengthDays: cadence.lengthDays,
       startDay: cadence.startDay,
       workingDays: cadence.workingDays,
-      cadenceOverridden: true,
+      // Only on a real edit. Omitted — not `false` — otherwise.
+      ...(overridden ? { cadenceOverridden: true } : {}),
     })
-    .where(and(eq(sprint.ownerId, ownerId), eq(sprint.state, "ACTIVE")))
+    .where(and(eq(sprint.id, row.id), eq(sprint.ownerId, ownerId)))
     .returning({ id: sprint.id });
 
-  return { updated: rows.length };
+  // Unreachable after a by-id UPDATE of a row we just read. Kept because the
+  // whole point of this function is that an empty result is never success.
+  if (rows.length === 0) throw new NoSprintRowError();
+
+  return { updated: rows.length, overridden };
 }

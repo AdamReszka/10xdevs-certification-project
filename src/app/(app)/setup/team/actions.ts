@@ -27,6 +27,7 @@ import {
   LastMemberError,
   type MemberHistory,
   MemberHasHistoryError,
+  NoSprintRowError,
   type PreviewMember,
   UnknownMemberError,
   confirmAllFte as confirmAllFteService,
@@ -113,7 +114,9 @@ export type ActionFailure = {
     /** S-09: the action reaches outside the app and the account is in demo. */
     | "demo_mode"
     /** The wizard's last step ran with no saved roster (`onboarding-routing` F2). */
-    | "no_roster";
+    | "no_roster"
+    /** Cadence is stored on the `sprint` row and this account has none yet (S-29). */
+    | "no_sprint";
   message: string;
 };
 
@@ -171,7 +174,14 @@ export type ImportCadenceResult =
     }
   | ActionFailure;
 
-export type SaveCadenceResult = { ok: true } | ActionFailure;
+/**
+ * `overridden` reports what the save DECIDED, not what was submitted: `false`
+ * means the lead confirmed the stored values unchanged and the account stays on
+ * FR-007's auto-pull. The wizard's last step is the reason this is worth
+ * returning — finishing setup must no longer read as an override.
+ */
+export type SaveCadenceResult =
+  { ok: true; overridden: boolean } | ActionFailure;
 
 export type SetMemberActiveResult =
   { ok: true; isActive: boolean } | ActionFailure;
@@ -393,7 +403,7 @@ export async function saveCadenceAction(
   }
 
   try {
-    await saveCadenceService({
+    const { overridden } = await saveCadenceService({
       db,
       ownerId,
       cadence: {
@@ -402,7 +412,7 @@ export async function saveCadenceAction(
         workingDays: parsed.data.workingDays,
       },
     });
-    return { ok: true };
+    return { ok: true, overridden };
   } catch (err) {
     return toFailure(err, "[setup/team] saveCadence");
   }
@@ -610,6 +620,17 @@ function toFailure(err: unknown, tag: string): ActionFailure {
       error: "invalid_input",
       message:
         "This is your only team member. Add someone else before removing them.",
+    };
+  }
+  // Named rather than swallowed: the write this replaces matched zero rows and
+  // still reported success. Mapped here, not in one action, so the S-29 restore
+  // path inherits the same refusal.
+  if (err instanceof NoSprintRowError) {
+    return {
+      ok: false,
+      error: "no_sprint",
+      message:
+        "Sprint cadence is stored against a sprint, and none has been imported from Jira yet. Import the sprint cadence first, then set the rhythm.",
     };
   }
   console.error(`${tag} unexpected error:`, err);

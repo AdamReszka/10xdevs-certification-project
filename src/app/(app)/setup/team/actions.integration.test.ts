@@ -277,6 +277,10 @@ describe("team actions — happy path", () => {
       workingDays: ["MON", "TUE", "WED"],
     });
     expect(savedCadence.ok).toBe(true);
+    // A CHANGED submit records a deliberate override (S-29); confirming the
+    // derived values unchanged would report `false` and leave auto-pull on.
+    if (!savedCadence.ok) throw new Error("expected success");
+    expect(savedCadence.overridden).toBe(true);
 
     const [sprintRow] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
     expect(sprintRow.cadenceOverridden).toBe(true);
@@ -311,6 +315,29 @@ describe("team actions — failure mapping", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected failure");
     expect(result.error).toBe("invalid_input");
+  });
+
+  it("saveCadence refuses with no_sprint when nothing has been imported (S-29)", async () => {
+    const ownerId = await newOwner();
+    // A roster exists, so the wizard's `no_roster` pre-check passes and the
+    // refusal under test is genuinely the missing sprint row — the case that
+    // used to return `{ok: true}` having written nothing.
+    await db.insert(teamMember).values({
+      id: randomUUID(),
+      ownerId,
+      name: "Mia",
+      source: "JIRA",
+    });
+
+    const result = await saveCadenceAction({
+      lengthDays: 14,
+      startDay: "MON",
+      workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected failure");
+    expect(result.error).toBe("no_sprint");
   });
 
   it("surfaces GitHub 403 as githubDegraded (not a hard failure)", async () => {
