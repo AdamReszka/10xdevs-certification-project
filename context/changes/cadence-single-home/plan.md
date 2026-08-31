@@ -540,24 +540,24 @@ was protecting has been proven unnecessary by a green suite.
 
 #### Automated
 
-- [x] 1.1 Type checking passes: `npm run typecheck`
-- [x] 1.2 Linting passes: `npm run lint`
-- [x] 1.3 Unit tests pass: `npm test`
-- [x] 1.4 Integration tests pass: `npm run test:integration`
-- [x] 1.5 No live reference survives outside `schema.ts` (grep for `cadenceOverridden|BACKFILL_CADENCE_OVERRIDES` returns `schema.ts` plus only the two kept comment lines)
-- [x] 1.6 `src/lib/cadence-override-readers.test.ts` does not exist
+- [x] 1.1 Type checking passes: `npm run typecheck` — 8455a8f
+- [x] 1.2 Linting passes: `npm run lint` — 8455a8f
+- [x] 1.3 Unit tests pass: `npm test` — 8455a8f
+- [x] 1.4 Integration tests pass: `npm run test:integration` — 8455a8f
+- [x] 1.5 No live reference survives outside `schema.ts` (grep for `cadenceOverridden|BACKFILL_CADENCE_OVERRIDES` returns `schema.ts` plus only the two kept comment lines) — 8455a8f
+- [x] 1.6 `src/lib/cadence-override-readers.test.ts` does not exist — 8455a8f
 
 ### Phase 2: Drop the columns
 
 #### Automated
 
-- [ ] 2.1 Migration applies cleanly: `npm run db:migrate`
-- [ ] 2.2 Columns are gone from `\d sprint`
-- [ ] 2.3 Type checking passes: `npm run typecheck`
-- [ ] 2.4 Linting passes: `npm run lint`
-- [ ] 2.5 Unit tests pass: `npm test`
-- [ ] 2.6 Integration tests pass: `npm run test:integration`
-- [ ] 2.7 Generated SQL contains exactly two `DROP COLUMN` statements and no other DDL
+- [x] 2.1 Migration applies cleanly: `npm run db:migrate`
+- [x] 2.2 Columns are gone from `\d sprint`
+- [x] 2.3 Type checking passes: `npm run typecheck`
+- [x] 2.4 Linting passes: `npm run lint`
+- [x] 2.5 Unit tests pass: `npm test`
+- [x] 2.6 Integration tests pass: `npm run test:integration`
+- [x] 2.7 Generated SQL contains exactly two `DROP COLUMN` statements and no other DDL
 
 #### Manual
 

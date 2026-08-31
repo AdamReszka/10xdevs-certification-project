@@ -169,6 +169,13 @@
       "when": 1788185516599,
       "tag": "0023_flowery_flatman",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788199814434,
+      "tag": "0024_watery_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

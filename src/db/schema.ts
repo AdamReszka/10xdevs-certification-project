@@ -443,27 +443,14 @@ export const sprint = pgTable(
     lengthDays: integer("length_days"),
     startDay: text("start_day"),
     /**
-     * SUPERSEDED by `sprint_cadence_override.working_days` (S-30). Written but
-     * NEVER READ: the resolver deliberately skips this column, because Jira has
-     * no working-days field, so every writer here writes the same
-     * `DEFAULT_CADENCE.workingDays` constant and a second copy of a constant is
-     * exactly the duplicate that produced the S-29 defect one layer up. The
-     * lead's chosen pattern lives in the override record, which has no foreign
-     * key into the sync graph and therefore survives a disconnect.
-     *
-     * Kept rather than dropped so a revert of S-30 is a code revert; the DROP is
-     * roadmap S-32. `src/lib/cadence-override-readers.test.ts` fails the build
-     * if a new reader picks up this stale copy.
+     * `working_days` and `cadence_overridden` LIVED HERE UNTIL S-32 (`0024`).
+     * Both were superseded by `sprint_cadence_override` at S-30 and kept only so
+     * a revert of S-30 would be a code revert. Neither is coming back: working
+     * days have no upstream in Jira, so this column could only ever hold a
+     * second copy of `DEFAULT_CADENCE.workingDays` — the duplicate that produced
+     * the S-29 defect one layer up — and provenance is per field now, which one
+     * boolean cannot express.
      */
-    workingDays: jsonb("working_days").$type<string[]>(),
-    /**
-     * SUPERSEDED by row existence in `sprint_cadence_override` (S-30). Written
-     * `false` on insert and left alone thereafter; NEVER READ. Provenance is now
-     * per field, which a single boolean cannot express — a team whose working
-     * days are hand-set while length and start day still follow Jira has no
-     * representation here at all. See the resolver's `CadenceSource`.
-     */
-    cadenceOverridden: boolean("cadence_overridden").default(false).notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")
       .defaultNow()
@@ -599,7 +586,9 @@ export const sprintMeasurement = pgTable(
  * who saves Mon–Fri at sprint N+1 writes three source-equal fields; delete the
  * row and the recency fallback hands Mon–Thu back, silently reverting the save.
  * So a row of three NULLs is a meaningful state — *for this sprint, follow the
- * source and do not inherit* — and NO write path in this slice deletes a row.
+ * source and do not inherit* — and NO write path deletes a row, ever. That is
+ * the permanent rule, settled at S-32 rather than left open; the reasoning is
+ * below.
  */
 export const sprintCadenceOverride = pgTable(
   "sprint_cadence_override",
