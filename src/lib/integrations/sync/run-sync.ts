@@ -976,11 +976,16 @@ function jiraCycleOutcome(
     notes.push(`sprint_changes_naming_no_sprint=${sprintChangesNamingNoSprint}`);
   }
   // S-30. The narrow, exact condition worth acting on: the cycle resolved a
-  // cadence from the DEFAULT while this account holds a cadence record
-  // somewhere else. That is the recency predicate having failed to find what
-  // the lead chose — the failure mode the whole slice exists to prevent,
-  // reported instead of finalized as an ordinary green run. Every other
-  // `CadenceSource` is a normal outcome and says nothing.
+  // cadence from the DEFAULT while this account holds a record for THIS SAME
+  // Jira-side project that did not apply. That is the recency predicate having
+  // failed to find what the lead chose — the failure mode the whole slice exists
+  // to prevent, reported instead of finalized as an ordinary green run.
+  //
+  // A record left by a DIFFERENT project deliberately does NOT reach here
+  // (`CadenceSource`): that is the outcome a project switch promises the lead in
+  // advance, and counting it made every cycle of a switched account report a
+  // failure until they next visited `/team/cadence`. Every other `CadenceSource`
+  // is a normal outcome and says nothing.
   if (cadenceSource === "source_with_prior_override") {
     notes.push("cadence_default_fallback");
   }

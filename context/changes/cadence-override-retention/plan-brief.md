@@ -42,8 +42,11 @@ Mon–Thu while length and start day still auto-pull from Jira. That combined st
 is unreachable today in either direction. "Restore Jira's values" returns length
 and start day and leaves the working days alone, which is what its dialog has
 promised since S-29. A cycle that resolves a cadence from the default while the
-account holds a record elsewhere says so in the operator log instead of
-finalizing as `OK`.
+account holds a record FOR THAT SAME JIRA-SIDE PROJECT says so in the operator
+log instead of finalizing as `OK`. (Scoped to the project at impl-review: a
+record left by a project the account switched away from is the outcome
+`DISCONNECT_IMPACT.projectSwitch` promises in advance, and counting it made every
+cycle of a deliberately switched account report a failure indefinitely.)
 
 ## Key Decisions Made
 

@@ -291,7 +291,10 @@ describe("resolveCadenceFor — tiers against real Postgres", () => {
     const resolved = await resolveCadenceFor(db, seeded.ownerId, row);
 
     expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
-    expect(resolved.source).toBe("source_with_prior_override");
+    // PLAIN `source`, not the fallback diagnostic. The record belongs to another
+    // Jira-side project, which is what a switch promises the lead it will do —
+    // see the sibling case below.
+    expect(resolved.source).toBe("source");
   });
 
   it("never inherits a record left behind by a DIFFERENT Jira-side project", async () => {
@@ -311,8 +314,35 @@ describe("resolveCadenceFor — tiers against real Postgres", () => {
     const resolved = await resolveCadenceFor(db, seeded.ownerId, row);
 
     expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
-    // The record exists, it just does not apply — which is exactly what the
-    // diagnostic reports rather than hiding behind a green cycle.
+    // AND IT SAYS NOTHING ABOUT IT. This is the shape of a project switch — the
+    // record stays with the project it was set for, which
+    // `DISCONNECT_IMPACT.projectSwitch.keeps` promises the lead BEFORE they
+    // commit to it. Reporting it as a fallback made every cycle of a switched
+    // account cry failure until the lead next opened `/team/cadence`, and a
+    // signal that fires on a healthy account is not a signal.
+    expect(resolved.source).toBe("source");
+  });
+
+  it("reports the fallback when THIS project's own record fails to apply", async () => {
+    // The narrow case the diagnostic is actually for, and the only one left
+    // after the project scope: the account holds a cadence for the project it is
+    // monitoring RIGHT NOW, and the recency predicate could not attach it. That
+    // is the failure this slice exists to prevent, so it must not resolve to the
+    // default behind a green cycle.
+    const seeded = await newOwner();
+    const row = await seedSprint(seeded, { jiraSprintId: "4343" });
+    await seedRecord({
+      ownerId: seeded.ownerId,
+      jiraSprintId: "4444",
+      // LATER than this sprint's start: a record for this project that the
+      // `start_date <=` predicate correctly refuses to inherit.
+      startDate: new Date("2026-09-14T08:00:00.000Z"),
+      fields: { workingDays: MON_THU },
+    });
+
+    const resolved = await resolveCadenceFor(db, seeded.ownerId, row);
+
+    expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
     expect(resolved.source).toBe("source_with_prior_override");
   });
 

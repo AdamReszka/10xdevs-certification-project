@@ -102,8 +102,9 @@ Jira-keyed lookup finds nothing.
   and a structural regression fails the build if the new table ever acquires a
   foreign key that puts it back in the cascade.
 - A sync cycle that resolves a cadence from the default while the account holds a
-  cadence record elsewhere says so in `sync_attempt.outcome` instead of
-  finalizing as `status: OK, outcome: null`.
+  cadence record FOR THE SAME JIRA-SIDE PROJECT says so in `sync_attempt.outcome`
+  instead of finalizing as `status: OK, outcome: null`. (Narrowed from "a record
+  elsewhere" at impl-review — see Phase 4.)
 - Re-pointing at a DIFFERENT Jira instance with a colliding sprint id no longer
   lets one team's cadence carry onto another workspace's sprint.
 
@@ -677,9 +678,17 @@ select (`:214-227`) is kept but narrowed to what still uses it — `id` and
 predicate produced the result, so "nothing matched" is never reported as an
 ordinary successful run. The condition worth acting on under the new model is
 narrow and exact: **the cycle resolved a cadence from the default while this
-account holds a cadence record somewhere else.** That is the recency predicate
-having failed to find what the lead chose — the failure mode this whole slice
-exists to prevent, reported instead of hidden.
+account holds a cadence record for the SAME JIRA-SIDE PROJECT.** That is the
+recency predicate having failed to find what the lead chose — the failure mode
+this whole slice exists to prevent, reported instead of hidden.
+
+**Narrowed at impl-review**, from "a record somewhere else". A record left behind
+by a project the account switched AWAY from is not a failure at all: it is the
+outcome `DISCONNECT_IMPACT.projectSwitch.keeps` promises the lead before they
+commit to it — the cadence stays with the project it was set for, and the new
+project follows Jira until they set one. Counted, it made every cycle of a
+deliberately switched account log `cadence_default_fallback` indefinitely, since
+nothing clears it but a visit to `/team/cadence` the lead has no reason to make.
 
 **Contract**: `ReconcileResult`'s `"reconciled"` variant gains
 `cadenceSource: CadenceSource` (the four-value union from Phase 1) — `switched` is

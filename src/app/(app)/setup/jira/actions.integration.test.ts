@@ -521,7 +521,14 @@ describe("jira-store service — credential security (integration)", () => {
 
       const resolved = await resolveCadenceFor(db, ownerId, newSprint);
       expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
-      expect(resolved.source).toBe("source_with_prior_override");
+      // … AND SAYS NOTHING ABOUT IT. Re-pointing the account at another
+      // workspace goes down the same `projectChanged` branch as an ordinary
+      // project switch, whose promised outcome is that the cadence stays with
+      // the project it was set for. `source_with_prior_override` is reserved for
+      // a record belonging to the project being monitored NOW that still failed
+      // to attach; reported here it would make every subsequent cycle of a
+      // deliberately re-pointed account log `cadence_default_fallback` forever.
+      expect(resolved.source).toBe("source");
     });
   });
 

@@ -53,11 +53,20 @@ export type OverrideFields = {
  * Which tier answered.
  *
  * `source_with_prior_override` is the one worth acting on: the cadence resolved
- * from the source while this account holds a record SOMEWHERE ELSE — the recency
- * predicate having failed to find what the lead chose, which is the failure mode
- * this whole slice exists to prevent. It reaches `sync_attempt.outcome` as
- * `cadence_default_fallback` rather than finalizing as an ordinary green run
- * (`lessons.md`, obligation (a)).
+ * from the source while this account holds a record FOR THIS SAME JIRA-SIDE
+ * PROJECT that did not apply — the recency predicate having failed to find what
+ * the lead chose, which is the failure mode this whole slice exists to prevent.
+ * It reaches `sync_attempt.outcome` as `cadence_default_fallback` rather than
+ * finalizing as an ordinary green run (`lessons.md`, obligation (a)).
+ *
+ * SCOPED TO THE PROJECT, and that scope is the difference between a signal and
+ * noise. A record left behind by a DIFFERENT Jira-side project is the documented
+ * outcome of a project switch — `DISCONNECT_IMPACT.projectSwitch.keeps` promises
+ * the lead in advance that their cadence "stays with the project you set it
+ * for", and the new project follows Jira until they set one. Counting those
+ * records made every cycle of a deliberately switched account report a failure,
+ * for as long as the lead never revisited `/team/cadence` — and a signal that
+ * fires on a healthy account is not a signal.
  */
 export type CadenceSource =
   | "own"
@@ -117,9 +126,14 @@ export function pickCadence(input: {
   own: OverrideFields | null;
   inherited: OverrideFields | null;
   /**
-   * Does this owner hold ANY record, applicable or not? Only consulted when
-   * neither tier 1 nor tier 2 answered — it is what separates "this account has
-   * never set a cadence" from "this account set one and we could not find it".
+   * Does this owner hold a record FOR THIS JIRA-SIDE PROJECT, applicable or not?
+   * Only consulted when neither tier 1 nor tier 2 answered — it is what
+   * separates "this account has never set a cadence for this project" from "it
+   * set one and we could not find it".
+   *
+   * A record belonging to a DIFFERENT Jira-side project must NOT count. That is
+   * the promised outcome of a project switch, not a failure — see
+   * {@link CadenceSource}.
    */
   ownerHasAnyRecord: boolean;
   sprintLengthDays: number | null;
@@ -235,10 +249,22 @@ export async function resolveCadenceFor(
   // still asks whether a record exists, so the cycle reports the fallback.
   const startDate = sprintRow.startDate;
   if (startDate == null) {
+    // PROJECT-SCOPED like the dated path below, and for the same reason: a
+    // record belonging to a project the account no longer monitors is the
+    // promised outcome of a switch, not a fallback worth reporting.
     const [any] = await db
       .select({ id: sprintCadenceOverride.id })
       .from(sprintCadenceOverride)
-      .where(eq(sprintCadenceOverride.ownerId, ownerId))
+      .innerJoin(
+        jiraProject,
+        eq(jiraProject.jiraProjectId, sprintCadenceOverride.jiraProjectId),
+      )
+      .where(
+        and(
+          eq(sprintCadenceOverride.ownerId, ownerId),
+          eq(jiraProject.id, sprintRow.jiraProjectId),
+        ),
+      )
       .limit(1);
     return pickCadence({
       own: null,
@@ -248,7 +274,14 @@ export async function resolveCadenceFor(
     });
   }
 
-  const applies = sql<boolean>`coalesce(${jiraProject.id} = ${sprintRow.jiraProjectId}, false) and ${sprintCadenceOverride.startDate} <= ${startDate.toISOString()}::timestamp`;
+  // TWO PREDICATES, not one, because they answer two different questions and
+  // only the first is about inheritance. `sameProject` alone is what separates a
+  // deliberate project switch (the record stays with the project it was set for
+  // — silent) from this project's own cadence failing to attach (the fallback
+  // worth reporting). Folding them together made every cycle of a switched
+  // account cry `cadence_default_fallback` forever.
+  const sameProject = sql<boolean>`coalesce(${jiraProject.id} = ${sprintRow.jiraProjectId}, false)`;
+  const applies = sql<boolean>`${sameProject} and ${sprintCadenceOverride.startDate} <= ${startDate.toISOString()}::timestamp`;
 
   const [candidate] = await db
     .select({
@@ -256,11 +289,13 @@ export async function resolveCadenceFor(
       startDay: sprintCadenceOverride.startDay,
       workingDays: sprintCadenceOverride.workingDays,
       applies,
+      sameProject,
     })
     .from(sprintCadenceOverride)
     // LEFT, not INNER: a record whose Jira-side project no longer matches any
-    // `jira_project` row must still count as "a record exists elsewhere".
-    // `jira_project.owner_id` is UNIQUE, so this cannot fan out.
+    // `jira_project` row must still be SEEN here, so that `sameProject` can
+    // score it false rather than the row vanishing and taking the distinction
+    // with it. `jira_project.owner_id` is UNIQUE, so this cannot fan out.
     .leftJoin(
       jiraProject,
       and(
@@ -269,13 +304,21 @@ export async function resolveCadenceFor(
       ),
     )
     .where(eq(sprintCadenceOverride.ownerId, ownerId))
-    .orderBy(desc(applies), desc(sprintCadenceOverride.startDate))
+    // THREE KEYS, so ONE row answers both questions. An applicable record wins
+    // outright; failing that, a same-project record outranks a foreign one, so
+    // the top row still tells us which of the two "no inheritance" cases this
+    // is. `start_date` breaks the remaining tie, which is the recency rule.
+    .orderBy(
+      desc(applies),
+      desc(sameProject),
+      desc(sprintCadenceOverride.startDate),
+    )
     .limit(1);
 
   return pickCadence({
     own: null,
     inherited: candidate?.applies ? candidate : null,
-    ownerHasAnyRecord: candidate != null,
+    ownerHasAnyRecord: candidate?.sameProject === true,
     ...tier3,
   });
 }

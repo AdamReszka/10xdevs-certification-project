@@ -427,11 +427,38 @@ describe("reconcileActiveSprint — forceCadenceRefresh, directly (S-30)", () =>
     expect(record.startDay).toBe("WED");
   });
 
-  it("reports `source_with_prior_override` when a record exists but none applies", async () => {
-    // The exact condition `run-sync.ts` turns into `cadence_default_fallback`.
+  it("reports `source_with_prior_override` when THIS project's record does not apply", async () => {
+    // The exact condition `run-sync.ts` turns into `cadence_default_fallback`:
+    // the account holds a cadence for the project it is monitoring right now and
+    // the recency predicate could not attach it.
     const seeded = await newOwner();
     await seedSprint(seeded, { jiraSprintId: "4242" });
-    // A record for a DIFFERENT Jira-side project: it exists, it does not apply.
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId: seeded.ownerId,
+      jiraProjectId: "10000",
+      jiraSprintId: "9999",
+      // AFTER the sprint being reconciled, so `start_date <=` refuses it.
+      startDate: new Date("2026-12-03T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    const result = await run(seeded);
+
+    expect(result.status).toBe("reconciled");
+    if (result.status === "reconciled") {
+      expect(result.cadenceSource).toBe("source_with_prior_override");
+    }
+  });
+
+  it("says NOTHING about a record left behind by a different Jira-side project", async () => {
+    // That is a project switch, whose outcome `DISCONNECT_IMPACT.projectSwitch`
+    // promises the lead before they commit to it — the cadence stays with the
+    // project it was set for. Counted as a fallback it made every cycle of a
+    // switched account report a failure indefinitely, and a signal that fires on
+    // a healthy account is not a signal.
+    const seeded = await newOwner();
+    await seedSprint(seeded, { jiraSprintId: "4242" });
     await db.insert(sprintCadenceOverride).values({
       id: randomUUID(),
       ownerId: seeded.ownerId,
@@ -445,7 +472,7 @@ describe("reconcileActiveSprint — forceCadenceRefresh, directly (S-30)", () =>
 
     expect(result.status).toBe("reconciled");
     if (result.status === "reconciled") {
-      expect(result.cadenceSource).toBe("source_with_prior_override");
+      expect(result.cadenceSource).toBe("source");
     }
   });
 });
