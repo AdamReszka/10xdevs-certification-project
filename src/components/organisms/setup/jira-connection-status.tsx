@@ -17,6 +17,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DISCONNECTING_LABEL,
+  DISCONNECT_LABEL,
+  RECONNECT_LABEL,
+  reconnectCost,
+} from "@/components/organisms/settings/integration-card-copy";
 import type { DisconnectMode } from "@/lib/validations/disconnect";
 
 /**
@@ -36,6 +42,26 @@ import type { DisconnectMode } from "@/lib/validations/disconnect";
  * `0021`) and go only down the dialog's second, explicitly destructive
  * completion. Since S-24 the button opens a confirmation first; since S-26 that
  * confirmation offers two outcomes, and the primary one keeps.
+ *
+ * S-31: THE WIZARD STOPS MAKING DISCONNECT THE ONLY WAY TO ROTATE A TOKEN.
+ * Until now this footer offered `Disconnect` and `Continue` and nothing else, so
+ * a lead whose token had expired mid-wizard had to press the destructive control
+ * to reach a form that would take a fresh one — on Jira, the path that costs the
+ * FR-023 commitment freeze. `Reconnect` links to `/settings/connections/{name}`,
+ * which is the reason that route exists: it renders the connect form even when a
+ * credential is already stored, while `/setup/{name}` swaps the form for this
+ * card. `Disconnect` drops to `ghost` so the destructive control is the quietest
+ * one here too, and `Continue` keeps `default` — the wizard's job is to move
+ * forward.
+ *
+ * The promise line below the identity is `reconnectCost(..., "wizard")`. The
+ * `"wizard"` variant drops the clause quoting `Change monitored …`: that control
+ * is not on this screen, and a promise naming a button the reader cannot see is
+ * the same defect as one naming a button that no longer exists.
+ *
+ * `<Button asChild><a>` ignores `disabled`, so in demo `Reconnect` is rendered
+ * as a real disabled `<button>` rather than as a navigable link — the pattern
+ * `integration-card.tsx` already uses for the same control.
  */
 export default function JiraConnectionStatus({
   workspaceUrl,
@@ -101,16 +127,32 @@ export default function JiraConnectionStatus({
           <span className="font-medium text-foreground">{mappedCount}</span>{" "}
           {mappedCount === 1 ? "status" : "statuses"} mapped.
         </p>
+        {/* The same promise the settings card makes, so the two cannot
+            drift — minus the clause naming a control this screen lacks. */}
+        <p className="mt-3 text-sm text-muted-foreground">
+          {reconnectCost("jira", "wizard")}
+        </p>
       </CardContent>
-      <CardFooter className="flex items-center justify-between gap-3">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setConfirmOpen(true)}
-          disabled={isDisconnecting || isDemo}
-        >
-          {isDisconnecting ? "Disconnecting…" : "Disconnect"}
-        </Button>
+      <CardFooter className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {isDemo ? (
+            <Button type="button" variant="outline" disabled>
+              {RECONNECT_LABEL}
+            </Button>
+          ) : (
+            <Button variant="outline" asChild>
+              <Link href="/settings/connections/jira">{RECONNECT_LABEL}</Link>
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setConfirmOpen(true)}
+            disabled={isDisconnecting || isDemo}
+          >
+            {isDisconnecting ? DISCONNECTING_LABEL : DISCONNECT_LABEL}
+          </Button>
+        </div>
         {/* The dialog owns its own pending state while the action runs;
             `isDisconnecting` is the trigger's post-confirm feedback. */}
         <DisconnectConfirmDialog
