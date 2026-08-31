@@ -568,9 +568,9 @@ was protecting has been proven unnecessary by a green suite.
 
 #### Automated
 
-- [x] 3.1 Linting passes: `npm run lint`
-- [x] 3.2 Unit tests pass: `npm test`
-- [x] 3.3 Manual-test sweep is clean: `node scripts/manual-test-sweep.mjs`
+- [x] 3.1 Linting passes: `npm run lint` — ca29a93
+- [x] 3.2 Unit tests pass: `npm test` — ca29a93
+- [x] 3.3 Manual-test sweep is clean: `node scripts/manual-test-sweep.mjs` — ca29a93
 
 #### Manual
 
