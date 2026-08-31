@@ -3533,7 +3533,18 @@ wierszy 27.B i 27.C — inaczej niż wiersz 1 w §26.
 
 ### Blokujące (te same, co w checkliście slice'a)
 
-- [ ] **27.A** (`MANUAL-CHECKLIST` wiersz 1, faza 2) **Gdzie:** produkcyjna baza
+- [x] **27.A** (`MANUAL-CHECKLIST` wiersz 1, faza 2) — **zrobione 2026-08-31,
+      trasą Supabase MCP.** Odczyt przed: `sprint` miał obie kolumny, przy **0**
+      wierszach `sprint`, **0** użytkownikach i **0** rekordach
+      `sprint_cadence_override`; ostatni wpis drizzle to id 24 (`0023`). Odczyt
+      po: `sprint` ma 15 kolumn, **żadnej** z dwóch skasowanych, a `length_days`
+      i `start_day` na miejscu; `sprint_cadence_override.working_days` nietknięte.
+      Wpis bookkeepingowy dopisany ręcznie: `drizzle.__drizzle_migrations` id 25,
+      hash `ef430c5d…`, `created_at` 1788199814434 — kolejny `db:migrate` pominie
+      `0024`. **Produkcja i lokalna baza mają teraz ten sam kształt.**
+      ⚠️ Ten krok był jednokierunkowy: powrót do commita sprzed S-32 wywala się
+      teraz na 42703, a odzyskanie to ręcznie napisana migracja dodająca kolumny.
+      **Gdzie:** produkcyjna baza
       Supabase — **nie** lokalna (lokalnie `0024` jest już zastosowana). Trasa jak
       dla `0021`–`0023`: pooler + `DATABASE_URL_OVERRIDE` albo Supabase MCP
       `apply_migration` z ręcznym wpisem bookkeepingowym.
