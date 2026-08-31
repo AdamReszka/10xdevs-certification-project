@@ -60,7 +60,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-26 | disconnect-data-retention | disconnecting an integration stops destroying the lead's OWN data — recorded absences survive a Jira disconnect | S-08, S-16, S-24 | FR-010 | done |
 | S-27 | demo-boundary-enforcement | the demo↔real boundary is a gate, not a convention — no demo screen can reach a real-account mutation, and every demo message says what is actually true | S-09, S-22, S-24 | FR-008, US-02 | done |
 | S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | done |
-| S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
+| S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | done |
 | S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | proposed |
 | S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | done |
 
@@ -578,7 +578,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 | S-26       | disconnect-data-retention | Recorded absences stop dying with a Jira disconnect | done| ✅ Implemented, reviewed, merged & archived — PR #88 (2026-08-30), six phases; impl-review fixes + archive in PR #90 (2026-08-31). Two referential actions moved CASCADE → SET NULL (`0021`), so a disconnect no longer destroys the lead's hand-entered absences or the GitHub subtree; Disconnect and the Jira project switch each offer TWO completions — keep (primary, default) or delete, reached by name — and a re-created `sprint` row recovers its frozen commitment from `sprint_measurement` instead of re-freezing at the reconnect-time sum. **Migration `0021` applied to production 2026-08-31**; `0019`/`0020` turned out already applied, so the `lessons.md:56-60` debt did not bite. The impl-review found two behaviour bugs the plan had not: the freeze restore could adopt a FOREIGN sprint's commitment (`jira_sprint_id` is unique per Jira instance, not globally) and a GitHub disconnect silently stopped the JIRA sync and the daily recap. Answered Open Roadmap Question 4 and spawned **S-30** and **S-31** |
 | S-27       | demo-boundary-enforcement | The demo↔real boundary becomes a gate instead of a convention | done | ✅ Implemented, reviewed, merged & archived — PR #80 (2026-08-30), five phases. Closes what S-24 could only narrow: the five unguarded actions (`storeGithubIntegration`, `storeJiraIntegration` and the three validate/fetch probes) now refuse server-side, the five pages hosting a credential form redirect out of demo, and Connect/Reconnect join the disabled set. The doorstep's demo door stopped REBUILDING the world on every press — it dispatches load-vs-enter like the settings panel, so a second entry no longer silently discards the visitor's demo edits. The load-bearing half is `src/lib/demo/boundary-inventory.test.ts`: a hermetic scan that fails the build when an action pins the real owner without an `isDemo` refusal, or when a page in either credential-form tree stops redirecting — the enumeration it replaces went stale three times (S-09, S-24, and S-27's own Phase 2). Every demo surface now carries one general guarantee instead of a list, and "Usuń dane demo" asks first |
 | S-28       | working-day-aging         | Anomaly aging respects the team's working-day calendar | done| ✅ Implemented, reviewed, merged & archived — PR #89 (2026-08-30), five phases; impl-review fixes + archive in PR #93 (2026-08-31). All five elapsed-time rules are denominated in WORKING hours — the clock advances only 08:00–16:00 in the team's zone, only on `sprint.working_days`, never on a company day off, and an individual absence does not pause it. Every threshold kept its unit name and was recalibrated to the intent it shipped with (24 h meant "a day", a day is 8 working hours), so the `"8_WORKING_DAYS"` sentinel dissolved into the ordinary number 64 and S-14's parked "10 working days is inexpressible" problem stopped existing; PRD FR-009 amended in the same slice. No migration. The impl-review found three silent-suppression paths — a clamp that gave up without saying so, a non-canonical `working_days` array that zeroed the clock forever, and stored numeric overrides now read ~3× longer (empty blast radius: production held zero rows). `day-bucket.ts` joined the mutation glob; gate holds at 85.34. Left behind: backlog row **28.A** |
-| S-29       | post-setup-cadence-surface | Sprint cadence editable after setup, outside the wizard | yes | The leftover deferred three times, each time as substantive scope: owner at S-15 (`plan-brief.md:55` "Cadence on the tab \| Roster only"), declined at S-22 (`onboarding-routing/plan.md:387-390` "a separate slice"), parked at S-16 as out-of-scope item F (`change.md:127-128` → "S-19 / S-15"). Split out of S-19 on 2026-08-30 because S-19's own text never described it. FR-007 promises the override with **no surface condition** — so it is met formally (in the wizard) and not practically. The write path is safe (`reconcile-sprint.ts:259-261` preserves an override; `:216-225` carries it across rollover, pinned by three integration tests), and re-entering `/setup/team` is neutral for an onboarded lead (no auto-write, no Jira call). Carries one defect found at frame time: between sprints `saveCadence`'s UPDATE is scoped to `state = 'ACTIVE'` (`roster-store.ts:1003`) while the form pre-fills from a CLOSED row via `sprint.ts:34-42` — 0 rows update and the action still returns `{ok:true}`. Worth more **after S-28**, which makes `working_days` matter far beyond capacity |
+| S-29       | post-setup-cadence-surface | Sprint cadence editable after setup, outside the wizard | done | ✅ Implemented, reviewed & merged — PR #96 (2026-08-31), five phases. **The screen was the smallest part.** The slice fixed the lifecycle first: `saveCadence` used to set `cadence_overridden = true` unconditionally, and that action IS what finishes the wizard — so *confirming* the derived values was recorded as *overriding* them, and every account that completed setup was cut off FR-007's auto-pull for its lifetime, frozen at whatever `deriveCadence` produced that minute. The flag now flips only on a real edit (a dirty-check normalising both sides through the same defaults the read applies, weekdays canonicalised so a reordered set is not an edit). The between-sprints defect is closed at its root: the write resolves through `getActiveSprintRow` — the SAME resolver the page, the anomaly snapshot and the days-off editor already use — and keys the UPDATE on `id`, so "the row the lead is looking at" and "the row the save writes" became one sentence; zero rows now raises `NoSprintRowError` → `no_sprint` instead of `{ok:true}`. Data-only migration `0022` unfreezes every existing row (**applied to production 2026-08-31**; that database holds zero `sprint` rows, so it landed as bookkeeping — the fleet-wide unfreeze is real only for the local/dev accounts the frame examined). "Restore Jira's values" passes `forceCadenceRefresh` INTO the reconcile rather than pre-clearing the flag, so the clear and the refresh ride one statement inside one transaction and a failed Jira call leaves the row untouched — the plan-review's only CRITICAL. Impl-review found two more: the Phase 1 comment rewrite never landed (the docblock still claimed the action "flips" the flag), and the cadence defaults lived in four hand-copied places, so changing a page's prefill alone would have re-created this very defect one layer up with no suite going red — `DEFAULT_CADENCE` is now exported from `cadence.ts` and spread by all four consumers. **Does NOT close S-30**: the write still keys on `sprint.id`, so a disconnect still loses the override |
 | S-30       | cadence-override-retention | A hand-entered sprint cadence survives a disconnect and a project switch | yes | Prereqs S-16, S-26 done. Found while framing S-26 (`context/changes/disconnect-data-retention/frame.md`) and deliberately left out of it: S-26 narrowed the cascade for `absence`, but `sprint` rows still die with the Jira credential in BOTH outcomes, and cadence carry-forward reads the *previous* sprint row (`reconcile-sprint.ts:190-231`). With that row gone the next reconcile reseeds from Jira's defaults with `cadenceOverridden: false`, so the lead's override is not lost loudly — it is replaced by a plausible wrong number. Unlike `absence`, this one cannot be fixed by a referential action: the values live ON the deleted row, so it needs the `sprint_measurement` treatment (a record that carries no FK into the sync lifecycle) or a cadence that belongs to the account rather than to a sprint. Overlaps S-29, which is where post-setup cadence UI now lives (that clause was split out of S-19 on the same day) |
 | S-31       | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision | done                   | ✅ Implemented, reviewed, merged & archived — PR #97 (2026-08-31), five phases. The half of Open Roadmap Question 4(b) that S-26 answered but could not fix: **token rotation was already lossless** and nothing on the card said so. Copy and layout only — no schema, store or Server Action change. `Reconnect` becomes the single emphasised control, `Test connection` moves above the row as the diagnostic it is, and `Disconnect` **stays** `ghost` — S-24's "no visual re-weighting" is reversed only in its first half, by promoting the safe sibling rather than demoting the destructive one. The load-bearing half is `integration-card-copy.ts`: every string on the card, with `jobsIntro` and `reconnectCost` DERIVED from `DISCONNECT_IMPACT`, so the promise cannot outlive the FK graph it describes. One clause — the FR-023 commitment freeze — is hand-written and declares itself, because it is a re-computation rather than a table in the graph. Both wizard status cards gained the same route; until now the only way to enter a fresh token from `/setup/jira` was to press the button that destroys the sprint. Impl-review caught two real copy defects the tests could not: in demo the settings card quoted a selection editor demo does not render, and the GitHub promise reused the disconnect-CLEAR fragments, claiming that deselecting one repository clears the whole monitored list |
 
@@ -1377,9 +1377,53 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Change ID:** post-setup-cadence-surface
 - **PRD refs:** FR-007
 - **Prerequisites:** S-15, S-16
-- **Status:** proposed
+- **Status:** done
 
-- **Why this exists:** FR-007 promises the lead "can override the auto-pulled
+- **✅ Shipped 2026-08-31** — PR #96, five phases. `/team/cadence` is the fourth
+  tab in the Team section, reached from the tab strip and from the Jira
+  project-switch link that used to point back into the wizard's "Krok 4 z 4"
+  stepper. All three fields are editable with per-field provenance (length and
+  start day derived from the sprint's Jira dates; working days SprintFlow's own
+  Mon–Fri default, because Jira exposes no such field — the wizard's copy used to
+  claim all three came from the sprint), it saves in place without redirecting,
+  and "Restore Jira's values" hands the cadence back to auto-pull.
+- **The surface was the smallest part.** Three lifecycle defects were closed
+  under it before it was built, each of them the *same shape* as the one recorded
+  below:
+  - **The flag meant the wrong thing.** `saveCadence` set
+    `cadence_overridden = true` unconditionally, and that action is what finishes
+    the wizard — so confirming the derived values was recorded as overriding
+    them, and `reconcileActiveSprint` faithfully preserved that freeze on every
+    later sync. It now flips only on a real edit, comparing both sides through
+    the same defaults the read applies (a stored `NULL` confirmed with the page's
+    `14` is not an edit) and canonicalising weekdays Mon→Sun.
+  - **The write is now keyed on the row the read returned** (`getActiveSprintRow`
+    + `where id = …`), which dissolves the between-sprints no-op rather than
+    special-casing it, and zero rows raises `NoSprintRowError` → `no_sprint`.
+  - **The restore is atomic.** `forceCadenceRefresh` is passed INTO
+    `reconcileActiveSprint`, so the flag is cleared by the same statement that
+    refreshes the columns, inside the transaction that already existed. Both
+    orders of the obvious two-step shape are unsafe — clearing after refreshes
+    nothing and reports success, clearing before commits "auto-pull is back on"
+    and then throws when the Jira call fails, letting the next sync overwrite a
+    cadence the lead chose. That was the plan-review's only CRITICAL.
+- **Migration `0022`** (data-only) unfreezes every `sprint` row, unqualified on
+  purpose: nobody set the flag deliberately, so a narrowing predicate would only
+  re-introduce the guessing. **Applied to production 2026-08-31** via the Supabase
+  MCP route with hand-written `drizzle.__drizzle_migrations` bookkeeping. Worth
+  recording honestly: that database holds **zero** `sprint` rows and zero users,
+  so the UPDATE touched nothing — the frozen accounts the frame found are on the
+  local/dev database, and production is simply not populated yet.
+- **Impl-review** (`reviews/impl-review.md`, verdict APPROVED, 0 critical) added
+  two: the Phase 1 comment rewrite never landed, and the cadence defaults existed
+  in four hand-copied places — so a later slice changing a page's prefill alone
+  would have re-created this slice's own defect one layer up, with the only guard
+  pinning the literal rather than the relationship. `DEFAULT_CADENCE` now lives
+  beside `DEFAULT_WORKING_DAYS` in `cadence.ts` and every consumer spreads it.
+- **Does NOT close S-30.** The write still keys on `sprint.id`; where a cadence
+  override *belongs* was deliberately left open.
+
+- **Why this existed:** FR-007 promises the lead "can override the auto-pulled
   values" and conditions that on no particular surface. The only `CadenceForm`
   mount is the wizard step (`setup/team/page.tsx:104`), whose Save finishes
   onboarding and pushes to `/dashboard`; none of the six Settings tabs mounts it.
@@ -1397,7 +1441,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
   between-sprints demotion — pinned by three integration tests. Re-entering
   `/setup/team` is also neutral for an onboarded lead: no auto-write and no Jira
   call fire (`cadence-form.tsx:144-152`, `roster-editor.tsx:273-276`).
-- **Carries one defect found at frame time:** between sprints, `saveCadence`'s
+- **Carried one defect found at frame time — FIXED by this slice:** between sprints, `saveCadence`'s
   UPDATE is scoped to `state = 'ACTIVE'` (`roster-store.ts:1003`) while the form
   pre-fills from a CLOSED row via `getActiveSprintRow`'s fallback
   (`sprint.ts:34-42`) — zero rows update and the action still returns
@@ -1435,9 +1479,19 @@ Foundations below assume these are present and do NOT re-scaffold them.
   into the sync graph. Applying it here means deciding what a cadence override
   belongs to — the account, or a sprint identified Jira-side — which is a modelling
   question, not a schema tweak.
-- **Overlaps S-29**, which is where post-setup cadence UI now lives — that clause
-  was split out of S-19 on the same day this entry was written. Worth
-  planning the two together if S-29 comes first.
+- **S-29 shipped first (2026-08-31) and deliberately left this open.** The UI
+  exists now — `/team/cadence` — and so does an honest write underneath it, but
+  S-29's "What We're NOT Doing" states the boundary in as many words: *"Not
+  moving cadence off the `sprint` row. An account-level cadence model is S-30's
+  modelling question; this plan keys the write on `sprint.id` and leaves the
+  ownership question open. A disconnect still loses the override."* So the
+  modelling question below is untouched, and S-29 raised its stakes rather than
+  lowering them: an override is now something a lead can actually set from a
+  reachable screen, which makes losing it on a disconnect a louder failure than
+  it was when only the wizard could write one. Two things S-29 built are worth
+  reusing here — `getActiveSprintRow` as the single resolver both the read and
+  the write go through, and `forceCadenceRefresh`, which already gives the
+  reconcile a way to be told what to do with the flag.
 
 ---
 
@@ -1508,3 +1562,4 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **S-19: roster and absences live under a first-class **Team** section instead of being two tabs inside Settings.** — Archived 2026-08-31 → `context/archive/2026-08-30-team-navigation-section/`. Lesson: —. Note: this slice made the first licensed edit inside `context/archive/` — two ticked S-15 manual rows asserting a navigation path it deleted, marked `SUPERSEDED` and replaced by backlog rows 23.A/23.B. The carve-out is written into `CLAUDE.md` so it stops being a silent precedent.
 - **S-28: an anomaly's elapsed-time budget is spent only on days the team could have worked, so a Monday inbox no longer holds items that accrued over the weekend.** — Archived 2026-08-31 → `context/archive/2026-08-30-working-day-aging/`. Lesson: —.
 - **S-31: a lead whose token expired can see, without experimenting, which control rotates it losslessly — and Disconnect stops reading as the natural thing to press when an integration is broken.** — Archived 2026-08-31 → `context/archive/2026-08-31-reconnect-affordance/`. Lesson: —.
+- **S-29: sprint length, start day and working days can be changed without re-entering the setup wizard.** — Archived 2026-08-31 → `context/archive/2026-08-31-post-setup-cadence-surface/`. Lesson: — . Note: the missing screen was the smallest part. `cadence_overridden` was set unconditionally by the action that finishes the wizard, so *confirming* the derived values was recorded as *overriding* them and every onboarded account was cut off FR-007's auto-pull for its lifetime; and between sprints the write matched zero rows while still returning `{ok:true}`. Both are the shape `lessons.md` already names — an empty or unexamined result read as success — met at two new layers.

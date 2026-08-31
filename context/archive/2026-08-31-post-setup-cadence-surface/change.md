@@ -1,10 +1,10 @@
 ---
 change_id: post-setup-cadence-surface
 title: Sprint cadence becomes editable after setup, outside the wizard
-status: impl_reviewed
+status: archived
 created: 2026-08-31
 updated: 2026-08-31
-archived_at: null
+archived_at: 2026-08-31T10:25:18Z
 ---
 
 ## Notes

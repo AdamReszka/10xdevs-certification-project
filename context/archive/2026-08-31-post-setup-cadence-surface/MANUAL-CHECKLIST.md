@@ -16,8 +16,14 @@ Wiersz 5 wymaga tego samego konta z **załadowanym demo**.
 
 ## Faza 2 — migracja produkcyjna
 
-- [ ] **1 — `0022` trafia na produkcję, zanim ktokolwiek dotknie reszty listy**
-      *(faza 2, zamyka `2.4`)*
+- [x] **1 — `0022` trafia na produkcję, zanim ktokolwiek dotknie reszty listy**
+      *(faza 2, zamyka `2.4`)* — **wykonane 2026-08-31 przez właściciela repo, nie
+      przez testerkę.** Migracja poszła przez Supabase MCP, wpis bookkeepingowy
+      dopisany ręcznie (23 wiersze = 23 wpisy w journalu). ⚠️ **Produkcyjna baza
+      jest pusta** — zero kont i zero wierszy `sprint` — więc `UPDATE` nie miał
+      czego odmrozić, a zdanie o „jedynym prawdziwym koncie onboardowanym"
+      dotyczy bazy **lokalnej**, nie produkcyjnej. Wiersze 2–5 poniżej nie są
+      więc już niczym blokowane.
 
   **Gdzie:** produkcyjna baza Supabase — **nie** lokalna. `drizzle-kit` nie
   dosięgnie tego hosta z tego Maca (host jest IPv6-only), więc trasa jest ta
