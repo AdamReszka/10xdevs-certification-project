@@ -99,7 +99,7 @@ export const detectTicketStatusAging: Detector = (snapshot, effective, now) => {
     const ageHours = workingHoursBetween(
       since,
       now,
-      snapshot.sprint.workingDays,
+      snapshot.workingDays,
       snapshot.timeZone,
       snapshot.nonWorkingDays,
     );

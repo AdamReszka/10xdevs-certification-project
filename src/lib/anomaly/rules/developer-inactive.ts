@@ -44,7 +44,7 @@ export const detectDeveloperInactive: Detector = (snapshot, effective, now) => {
   const windowStart = workingHoursBefore(
     now,
     noCommitDays * WORK_HOURS_PER_DAY,
-    snapshot.sprint.workingDays,
+    snapshot.workingDays,
     snapshot.timeZone,
     snapshot.nonWorkingDays,
   );

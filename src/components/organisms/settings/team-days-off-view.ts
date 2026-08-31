@@ -1,3 +1,4 @@
+import { workingDaySet } from "@/lib/anomaly/rules/helpers";
 import type { DayKey } from "@/lib/dashboard/day-bucket";
 
 /**
@@ -10,8 +11,6 @@ import type { DayKey } from "@/lib/dashboard/day-bucket";
 
 /** The weekday codes the sprint cadence uses, indexed by `Date#getUTCDay()`. */
 const WEEKDAY_BY_INDEX = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
-
-const DEFAULT_WORKING_DAYS = ["MON", "TUE", "WED", "THU", "FRI"];
 
 /** One recorded day off, ready to render. */
 export type TeamDayOffRow = {
@@ -76,9 +75,14 @@ export function toTeamDayOffRows({
   /** The sprint's working weekdays; Mon–Fri when Jira told us nothing. */
   workingDays: readonly string[] | null | undefined;
 }): TeamDayOffRow[] {
-  const working = new Set<string>(
-    workingDays && workingDays.length > 0 ? workingDays : DEFAULT_WORKING_DAYS,
-  );
+  // THROUGH `workingDaySet`, not a local fallback (S-30). This module used to
+  // declare its own Mon–Fri constant and coalesce without S-28's intersection
+  // guard, so under a non-canonical array every holiday here would render
+  // `costsNothing: true` while the guarded engine still subtracted it — two
+  // counters disagreeing, which is the exact failure `helpers.ts` and
+  // `lessons.md` each already record once. The defect slept while nobody held a
+  // pattern other than Mon–Fri; S-30 is what wakes it.
+  const working = workingDaySet(workingDays);
 
   return [...daysOff]
     .sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))

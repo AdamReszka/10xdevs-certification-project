@@ -1088,12 +1088,12 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 1.1 Migration applies cleanly against local Postgres
-- [x] 1.2 Type checking passes
-- [x] 1.3 Linting passes
-- [x] 1.4 Unit tests for `pickCadence` cover all four tiers and every `CadenceSource`
-- [x] 1.5 Integration tests for `resolveCadenceFor`: project-scoped, cross-owner, start_date-ordered
-- [x] 1.6 Integration test re-executes the exported backfill statement and asserts it, twice
+- [x] 1.1 Migration applies cleanly against local Postgres — 86f69f7
+- [x] 1.2 Type checking passes — 86f69f7
+- [x] 1.3 Linting passes — 86f69f7
+- [x] 1.4 Unit tests for `pickCadence` cover all four tiers and every `CadenceSource` — 86f69f7
+- [x] 1.5 Integration tests for `resolveCadenceFor`: project-scoped, cross-owner, start_date-ordered — 86f69f7
+- [x] 1.6 Integration test re-executes the exported backfill statement and asserts it, twice — 86f69f7
 
 #### Manual
 
@@ -1103,11 +1103,11 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [ ] 2.1 Type checking passes
-- [ ] 2.2 Linting passes
-- [ ] 2.3 Unit suite green
-- [ ] 2.4 Integration suite green with no behavioural assertion changed
-- [ ] 2.5 Integration test: the sweep uses the closed sprint's own cadence
+- [x] 2.1 Type checking passes
+- [x] 2.2 Linting passes
+- [x] 2.3 Unit suite green
+- [x] 2.4 Integration suite green with no behavioural assertion changed
+- [x] 2.5 Integration test: the sweep uses the closed sprint's own cadence
 
 #### Manual
 

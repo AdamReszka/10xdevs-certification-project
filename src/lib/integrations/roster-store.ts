@@ -12,6 +12,7 @@ import {
   type SelectSprint,
   type technologyTrack,
 } from "@/db/schema";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import type { getDb } from "@/lib/db";
 import { fteToColumn, toFte } from "@/lib/fte";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -915,7 +916,10 @@ export async function importCadence({
   switch (result.status) {
     case "reconciled":
       return {
-        cadence: cadenceFromRow(result.sprint),
+        // RESOLVED, not read off the row (S-30): the working-day pattern the
+        // lead chose lives in `sprint_cadence_override` now, so what the wizard
+        // shows and what the engine uses are the same three values.
+        cadence: await resolveCadenceFor(db, ownerId, result.sprint),
         boardId: result.boardId,
         jiraSprintId: result.sprint.jiraSprintId,
         sprintName: result.sprint.name,

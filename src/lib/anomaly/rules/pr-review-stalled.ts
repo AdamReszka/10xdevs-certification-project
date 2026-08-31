@@ -36,7 +36,7 @@ export const detectPrReviewStalled: Detector = (snapshot, effective, now) => {
     const ageHours = workingHoursBetween(
       ready,
       now,
-      snapshot.sprint.workingDays,
+      snapshot.workingDays,
       snapshot.timeZone,
       snapshot.nonWorkingDays,
     );

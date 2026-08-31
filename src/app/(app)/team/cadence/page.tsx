@@ -1,9 +1,9 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import CadenceEditor from "@/components/organisms/settings/cadence-editor";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
-import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { toSprintIdentity } from "@/lib/sprint-identity";
 import type { Weekday } from "@/lib/validations/roster";
@@ -42,17 +42,20 @@ export default async function TeamCadencePage() {
     getJiraTimeZone(db, ownerId),
   ]);
 
-  const initialCadence = activeSprint
+  // RESOLVED, not coalesced off the row (S-30). The form must prefill what the
+  // engine actually uses, and the lead's chosen working-day pattern no longer
+  // lives on `sprint` — it lives in `sprint_cadence_override`, which is what
+  // survives a disconnect and a project switch.
+  const resolved = activeSprint
+    ? await resolveCadenceFor(db, ownerId, activeSprint)
+    : null;
+
+  const initialCadence =
+    activeSprint && resolved
     ? {
-        // The same coalescing every other reader applies, through the SAME
-        // constant `saveCadence`'s dirty-check normalises against — so a
-        // confirmation is never mistaken for an edit (impl-review F2).
-        lengthDays: activeSprint.lengthDays ?? DEFAULT_CADENCE.lengthDays,
-        startDay:
-          (activeSprint.startDay as Weekday | null) ?? DEFAULT_CADENCE.startDay,
-        workingDays: (activeSprint.workingDays as Weekday[] | null) ?? [
-          ...DEFAULT_CADENCE.workingDays,
-        ],
+        lengthDays: resolved.lengthDays,
+        startDay: resolved.startDay as Weekday,
+        workingDays: [...resolved.workingDays] as Weekday[],
         cadenceOverridden: activeSprint.cadenceOverridden,
         sprintState: activeSprint.state,
         sprintIdentity: toSprintIdentity({

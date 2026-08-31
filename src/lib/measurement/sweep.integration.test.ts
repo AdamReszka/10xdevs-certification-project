@@ -12,6 +12,7 @@ import {
   jiraStatusHistory,
   jiraTicket,
   sprint,
+  sprintCadenceOverride,
   sprintMeasurement,
   teamMember,
   user,
@@ -363,6 +364,47 @@ describe("sweepSprintMeasurements", () => {
     // And so it never reaches the history series.
     const series = await listSprintMeasurements(db, s.ownerId, JIRA_PROJECT_ID);
     expect(series).toHaveLength(0);
+  });
+
+  it("recomputes an unfinalized sprint against ITS OWN cadence, not a later one (S-30)", async () => {
+    // The load-bearing case for the resolver's `start_date <=` ordering. This
+    // sprint closed without a frozen commitment, so `shouldFinalize` returns
+    // false forever and `shouldRecompute` lets EVERY cycle rewrite its computed
+    // columns. A "newest record" fallback would therefore let a cadence the lead
+    // chose for sprint N+1 retroactively rewrite the capacity of sprint N — and
+    // once that sprint does get frozen, that wrong denominator is permanent.
+    const s = await seed({ committedFrozenAt: null });
+
+    await db.insert(sprintCadenceOverride).values([
+      {
+        id: randomUUID(),
+        ownerId: s.ownerId,
+        jiraProjectId: JIRA_PROJECT_ID,
+        jiraSprintId: "4242",
+        startDate: N_START,
+        workingDays: ["MON", "TUE", "WED", "THU"],
+      },
+      {
+        id: randomUUID(),
+        ownerId: s.ownerId,
+        jiraProjectId: JIRA_PROJECT_ID,
+        jiraSprintId: "4343",
+        startDate: NEXT_START,
+        workingDays: ["MON", "TUE"],
+      },
+    ]);
+
+    await sweepSprintMeasurements({ db, ownerId: s.ownerId, now: LATE });
+
+    const [recordN, recordNext] = await measurementsOf(s.ownerId);
+    // Aug 3–14 is two full weeks: Mon–Thu is 8 working days, not the 10 the
+    // Mon–Fri default gives and not the 4 sprint N+1's narrower record would.
+    expect(recordN.jiraSprintId).toBe("4242");
+    expect(recordN.workingDays).toBe(8);
+    expect(recordN.capacityFullMd).toBe("24.00"); // 3 × 8
+    // And N+1 gets its own, so the two are genuinely resolved per sprint.
+    expect(recordNext.jiraSprintId).toBe("4343");
+    expect(recordNext.workingDays).toBe(4);
   });
 
   it("keeps its records when a Jira-project switch cascades the sprint rows away", async () => {
