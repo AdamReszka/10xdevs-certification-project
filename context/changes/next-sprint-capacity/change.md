@@ -1,7 +1,7 @@
 ---
 change_id: next-sprint-capacity
 title: Next-window capacity as a number on the availability tab
-status: implementing
+status: implemented
 created: 2026-08-31
 updated: 2026-09-01
 archived_at: null

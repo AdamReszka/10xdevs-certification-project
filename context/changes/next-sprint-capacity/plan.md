@@ -674,11 +674,11 @@ intended outcome, and no data is rewritten.
 
 #### Automated
 
-- [x] 3.1 Linting passes: `npm run lint`
-- [x] 3.2 Type checking passes: `npm run typecheck`
-- [x] 3.3 Unit tests pass: `npm test`
-- [x] 3.4 Integration tests pass: `npm run test:integration`
-- [x] 3.5 Every rendered sentence originates in `next-window-capacity-view.ts`
+- [x] 3.1 Linting passes: `npm run lint` — 2675f65
+- [x] 3.2 Type checking passes: `npm run typecheck` — 2675f65
+- [x] 3.3 Unit tests pass: `npm test` — 2675f65
+- [x] 3.4 Integration tests pass: `npm run test:integration` — 2675f65
+- [x] 3.5 Every rendered sentence originates in `next-window-capacity-view.ts` — 2675f65
 
 #### Manual
 
