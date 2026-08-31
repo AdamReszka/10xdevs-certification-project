@@ -314,6 +314,13 @@ export default async function DashboardPage() {
             nextWindowEnd={availability?.nextWindow.to.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
+            // S-18: the forecast window's figure, and the two facts that decide
+            // what it may claim. `now` crosses as a VALUE — in demo it is the
+            // frozen anchor, so the `Projected` badge stays coherent however
+            // long after loading the demo is viewed.
+            nextWindowCapacity={availability?.nextWindowCapacity ?? null}
+            hasForwardAbsence={availability?.hasForwardAbsence ?? false}
+            now={now.toISOString()}
             jiraSprintId={sprint?.jiraSprintId ?? null}
             holidayCalendar={{
               countryCode: holidayCountry,

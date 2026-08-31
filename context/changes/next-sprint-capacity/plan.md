@@ -660,11 +660,11 @@ intended outcome, and no data is rewritten.
 
 #### Automated
 
-- [x] 2.1 Linting passes: `npm run lint`
-- [x] 2.2 Type checking passes: `npm run typecheck`
-- [x] 2.3 Unit tests pass: `npm test`
-- [x] 2.4 Integration tests pass: `npm run test:integration`
-- [x] 2.5 No caller restates the horizon: `grep -rn "holidayYears(" src/app` is empty
+- [x] 2.1 Linting passes: `npm run lint` — 88b4535
+- [x] 2.2 Type checking passes: `npm run typecheck` — 88b4535
+- [x] 2.3 Unit tests pass: `npm test` — 88b4535
+- [x] 2.4 Integration tests pass: `npm run test:integration` — 88b4535
+- [x] 2.5 No caller restates the horizon: `grep -rn "holidayYears(" src/app` is empty — 88b4535
 
 #### Manual
 
@@ -674,11 +674,11 @@ intended outcome, and no data is rewritten.
 
 #### Automated
 
-- [ ] 3.1 Linting passes: `npm run lint`
-- [ ] 3.2 Type checking passes: `npm run typecheck`
-- [ ] 3.3 Unit tests pass: `npm test`
-- [ ] 3.4 Integration tests pass: `npm run test:integration`
-- [ ] 3.5 Every rendered sentence originates in `next-window-capacity-view.ts`
+- [x] 3.1 Linting passes: `npm run lint`
+- [x] 3.2 Type checking passes: `npm run typecheck`
+- [x] 3.3 Unit tests pass: `npm test`
+- [x] 3.4 Integration tests pass: `npm run test:integration`
+- [x] 3.5 Every rendered sentence originates in `next-window-capacity-view.ts`
 
 #### Manual
 

@@ -1,4 +1,4 @@
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, eq, gt, gte, lte } from "drizzle-orm";
 
 import { absence, teamMember, type SelectSprint } from "@/db/schema";
 import {
@@ -232,6 +232,38 @@ export type CapacityReadResult = {
   /** The cadence the two above were resolved from, so callers that need it —
    *  the holiday horizon on the dashboard — do not re-read it. */
   cadence: ResolvedCadence;
+  /**
+   * The SAME reducer over {@link nextWindow} (S-18, FR-022). Costs no query: the
+   * roster, the absences, the zone, the day-off calendar and the cadence are all
+   * already in hand, and `computeSprintCapacity` is pure.
+   *
+   * It is a PROJECTION, not a measurement, and two of its three inputs degrade
+   * past the sprint's end in the same direction — see
+   * `next-window-capacity-view.ts`, which owns what the panel is allowed to
+   * claim about it. The measurement sweep reads this field and persists nothing
+   * from it: the forecast window has no Jira sprint id to key a record on.
+   */
+  nextWindowCapacity: SprintCapacity;
+  /**
+   * Does this account hold ANY absence, on any date, ending after the current
+   * sprint's end (S-18)?
+   *
+   * NOT "how many absences fall inside the forecast window", and the difference
+   * is what makes the notice readable. Zero absences in a fortnight is the
+   * ordinary state of a 3–10-person team, so a notice keyed on that would be on
+   * almost always — and it could not separate "checked, nobody is away" from
+   * "nothing entered", because both render as zero.
+   *
+   * The distinction S-17 actually drew is account-level and UNBOUNDED BY DATE
+   * ({@link SprintCapacity.calendarIsEmpty}), which is what makes an empty set
+   * mean "this lead has never done the work". The same shape here is a fact
+   * about the LEAD'S HABIT — has anything ever been recorded forward of the
+   * running sprint — rather than about this particular fortnight's weather.
+   *
+   * One `limit(1)` on the index the absence query already uses, joined to the
+   * same fan-out because it depends only on `sprintEnd`.
+   */
+  hasForwardAbsence: boolean;
 };
 
 /**
@@ -296,47 +328,64 @@ export async function getSprintCapacityFor(
     sprintEnd.getTime() + MAX_CADENCE_LENGTH_DAYS * 24 * 60 * 60 * 1000,
   );
 
-  const [rows, absences, timeZone, nonWorkingDays, cadence] = await Promise.all([
-    db
-      .select({
-        id: teamMember.id,
-        name: teamMember.name,
-        fte: teamMember.fte,
-        isActive: teamMember.isActive,
-      })
-      .from(teamMember)
-      .where(eq(teamMember.ownerId, ownerId))
-      .orderBy(teamMember.name),
-    db
-      .select({
-        teamMemberId: absence.teamMemberId,
-        startDate: absence.startDate,
-        endDate: absence.endDate,
-      })
-      .from(absence)
-      .where(
-        and(
-          eq(absence.ownerId, ownerId),
-          lte(absence.startDate, lookahead),
-          gte(absence.endDate, sprintStart),
+  const [rows, absences, forwardAbsence, timeZone, nonWorkingDays, cadence] =
+    await Promise.all([
+      db
+        .select({
+          id: teamMember.id,
+          name: teamMember.name,
+          fte: teamMember.fte,
+          isActive: teamMember.isActive,
+        })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId))
+        .orderBy(teamMember.name),
+      db
+        .select({
+          teamMemberId: absence.teamMemberId,
+          startDate: absence.startDate,
+          endDate: absence.endDate,
+        })
+        .from(absence)
+        .where(
+          and(
+            eq(absence.ownerId, ownerId),
+            lte(absence.startDate, lookahead),
+            gte(absence.endDate, sprintStart),
+          ),
         ),
-      ),
-    getJiraTimeZone(db, ownerId),
-    // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
-    // inside the reducer for the same reason the zone is: the reducer is pure.
-    getNonWorkingDays({ db, ownerId }),
-    // S-30 (FR-007): the working-day pattern the LEAD chose. ONE call covers
-    // both callers of this function — the dashboard and the measurement sweep —
-    // and it is the sweep that makes the resolver's `start_date <=` ordering
-    // load-bearing: an unfinalized closed sprint is recomputed on every cycle,
-    // so a later record must not reach back over it.
-    resolveCadenceFor(db, ownerId, sprint),
-  ]);
+      // S-18: has this lead EVER recorded an absence past the running sprint? An
+      // existence check, unbounded above on purpose — an absence starting six
+      // months out still proves the habit, which is what the notice is about. Same
+      // `(team_member_id, start_date, end_date)` index, same fan-out: it depends
+      // only on `sprintEnd`, so it costs no extra round trip.
+      db
+        .select({ id: absence.id })
+        .from(absence)
+        .where(and(eq(absence.ownerId, ownerId), gt(absence.endDate, sprintEnd)))
+        .limit(1),
+      getJiraTimeZone(db, ownerId),
+      // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
+      // inside the reducer for the same reason the zone is: the reducer is pure.
+      getNonWorkingDays({ db, ownerId }),
+      // S-30 (FR-007): the working-day pattern the LEAD chose. ONE call covers
+      // both callers of this function — the dashboard and the measurement sweep —
+      // and it is the sweep that makes the resolver's `start_date <=` ordering
+      // load-bearing: an unfinalized closed sprint is recomputed on every cycle,
+      // so a later record must not reach back over it.
+      resolveCadenceFor(db, ownerId, sprint),
+    ]);
 
   // The driver hands `numeric` back as a string. Converting once, HERE, is what
   // keeps every consumer of this reader — the reducer and the tab's grids alike
   // — from having to remember (`lib/fte.ts`).
   const rosterMembers = rows.map((m) => ({ ...m, fte: toFte(m.fte) }));
+
+  const nextWindow = nextWindowAfter({
+    sprintEnd,
+    lengthDays: cadence.lengthDays,
+    timeZone,
+  });
 
   return {
     capacity: computeSprintCapacity({
@@ -357,11 +406,21 @@ export async function getSprintCapacityFor(
     absences,
     // Built AFTER the fan-out, from the length it resolved — pure arithmetic
     // over data already in hand, so it costs no query.
-    nextWindow: nextWindowAfter({
-      sprintEnd,
-      lengthDays: cadence.lengthDays,
-      timeZone,
-    }),
+    nextWindow,
     cadence,
+    // The SAME reducer, the SAME inputs, a different window. The absence set was
+    // loaded to cover any window the resolver can produce, and the reducer clips
+    // each absence to the window it is given, so nothing outside this one leaks
+    // into the figure.
+    nextWindowCapacity: computeSprintCapacity({
+      members: rosterMembers,
+      absences,
+      sprintStart: nextWindow.from,
+      sprintEnd: nextWindow.to,
+      workingDays: cadence.workingDays,
+      timeZone,
+      nonWorkingDays,
+    }),
+    hasForwardAbsence: forwardAbsence.length > 0,
   };
 }
