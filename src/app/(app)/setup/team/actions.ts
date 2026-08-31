@@ -409,7 +409,15 @@ export async function restoreCadenceAction(): Promise<ImportCadenceResult> {
   }
 }
 
-/** Persist the user-confirmed / overridden cadence (flips `cadence_overridden`). */
+/**
+ * Persist the lead's cadence (FR-007).
+ *
+ * `cadence_overridden` flips ONLY on a real edit (S-29). This action used to set
+ * it unconditionally, and since it is also what finishes the wizard, merely
+ * CONFIRMING the derived values was recorded as overriding them — freezing the
+ * account off FR-007's auto-pull for its lifetime. The dirty-check now lives in
+ * `saveCadence`, and the `overridden` it returns is carried back to the caller.
+ */
 export async function saveCadenceAction(
   input: unknown,
 ): Promise<SaveCadenceResult> {
@@ -428,14 +436,22 @@ export async function saveCadenceAction(
   const { env } = getCloudflareContext();
   const db = getDb(env);
 
-  // THIS IS WHAT FINISHES THE WIZARD, and the last step has TWO independent
-  // saves — the roster editor's own button and this one. A lead who reviews the
-  // imported roster without pressing "Save roster" would otherwise be pushed to
-  // `/dashboard`, bounced back by the first-run gate (no `team_member`), and
-  // handed a door pointing at this very page, with nothing naming the missing
-  // condition (`onboarding-routing` impl-review F2). Refusing here says it once,
-  // where the lead can act on it. The cadence is deliberately NOT saved yet: the
-  // form keeps its values, so nothing is lost by making this the first step.
+  // TWO CALLERS since S-29, and this guard is for the first one only:
+  // `CadenceForm` on the wizard's last step, and `CadenceEditor` on
+  // `/team/cadence`. Only the wizard's call FINISHES SETUP, and its last step has
+  // TWO independent saves — the roster editor's own button and this one. A lead
+  // who reviews the imported roster without pressing "Save roster" would
+  // otherwise be pushed to `/dashboard`, bounced back by the first-run gate (no
+  // `team_member`), and handed a door pointing at this very page, with nothing
+  // naming the missing condition (`onboarding-routing` impl-review F2). Refusing
+  // here says it once, where the lead can act on it. The cadence is deliberately
+  // NOT saved yet: the form keeps its values, so nothing is lost by making this
+  // the first step.
+  //
+  // From `/team/cadence` the refusal is UNREACHABLE rather than merely unlikely:
+  // an onboarded lead always has a `team_member` row (the first-run gate is what
+  // let them past `/setup`), so the wizard-specific copy below never renders
+  // there. That is why it stays worded for the wizard.
   const [member] = await db
     .select({ id: teamMember.id })
     .from(teamMember)

@@ -31,6 +31,27 @@ export type DerivedCadence = {
   workingDays: WeekdayCode[];
 };
 
+/**
+ * What a reader substitutes when the sprint row's cadence columns are NULL.
+ *
+ * THIS MUST BE THE ONLY SPELLING OF THESE THREE VALUES (impl-review F2). All
+ * three columns are nullable, and `saveCadence`'s dirty-check compares the
+ * submitted cadence against the STORED one run through exactly these defaults —
+ * so if a page prefilled a different number than the check normalises to, a lead
+ * who confirmed without editing would score as having edited, and the account
+ * would be frozen off FR-007's auto-pull. That is the S-29 defect one layer up.
+ * Every reader spreads this constant rather than restating the literals; the
+ * relationship is then a fact the compiler holds, not a promise in a comment.
+ *
+ * Spread `workingDays` at each use — the array is shared and callers hand it to
+ * form state.
+ */
+export const DEFAULT_CADENCE: DerivedCadence = {
+  lengthDays: 14,
+  startDay: "MON",
+  workingDays: [...DEFAULT_WORKING_DAYS],
+};
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /** `Intl`'s `en-US` short weekday → our code. */

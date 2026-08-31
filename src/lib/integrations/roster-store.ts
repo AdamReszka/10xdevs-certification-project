@@ -29,7 +29,7 @@ import {
 } from "@/lib/jira";
 
 import {
-  DEFAULT_WORKING_DAYS,
+  DEFAULT_CADENCE,
   type DerivedCadence,
   type WeekdayCode,
 } from "./cadence";
@@ -76,12 +76,6 @@ export type TeamMemberRow = typeof teamMember.$inferSelect;
 
 type TechnologyTrack = (typeof technologyTrack.enumValues)[number];
 
-/** Cadence defaults for the no-active-sprint / editable-defaults path. */
-const DEFAULT_CADENCE: DerivedCadence = {
-  lengthDays: 14,
-  startDay: "MON",
-  workingDays: [...DEFAULT_WORKING_DAYS],
-};
 
 // ============================================================================
 // Roster import preview (read both sources, diff against the stored roster)

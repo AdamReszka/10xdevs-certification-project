@@ -3,6 +3,7 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import CadenceEditor from "@/components/organisms/settings/cadence-editor";
 import { getDb } from "@/lib/db";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
+import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { toSprintIdentity } from "@/lib/sprint-identity";
 import type { Weekday } from "@/lib/validations/roster";
@@ -43,17 +44,14 @@ export default async function TeamCadencePage() {
 
   const initialCadence = activeSprint
     ? {
-        // The same coalescing every other reader applies — all three columns
-        // are nullable, and `saveCadence`'s dirty-check normalises against
-        // exactly these defaults so a confirmation is never mistaken for an edit.
-        lengthDays: activeSprint.lengthDays ?? 14,
-        startDay: (activeSprint.startDay as Weekday | null) ?? "MON",
+        // The same coalescing every other reader applies, through the SAME
+        // constant `saveCadence`'s dirty-check normalises against — so a
+        // confirmation is never mistaken for an edit (impl-review F2).
+        lengthDays: activeSprint.lengthDays ?? DEFAULT_CADENCE.lengthDays,
+        startDay:
+          (activeSprint.startDay as Weekday | null) ?? DEFAULT_CADENCE.startDay,
         workingDays: (activeSprint.workingDays as Weekday[] | null) ?? [
-          "MON",
-          "TUE",
-          "WED",
-          "THU",
-          "FRI",
+          ...DEFAULT_CADENCE.workingDays,
         ],
         cadenceOverridden: activeSprint.cadenceOverridden,
         sprintState: activeSprint.state,

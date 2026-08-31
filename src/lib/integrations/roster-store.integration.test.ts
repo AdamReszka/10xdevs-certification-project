@@ -17,6 +17,7 @@ import {
   user,
 } from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
+import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import {
   LastMemberError,
   MemberHasHistoryError,
@@ -517,10 +518,14 @@ describe("importCadence — board + sprint persistence (FR-007)", () => {
  * treating it as new (PRD cross-account-isolation guardrail).
  */
 describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
+  // Spread from the shipped constant, not restated: the NULL-row case below
+  // asserts that a confirmation through the READERS' defaults is not an edit, so
+  // pinning a literal here would let the pages and the dirty-check drift apart
+  // while this test stayed green (impl-review F2).
   const DERIVED = {
-    lengthDays: 14,
-    startDay: "MON" as const,
-    workingDays: ["MON", "TUE", "WED", "THU", "FRI"] as const,
+    lengthDays: DEFAULT_CADENCE.lengthDays,
+    startDay: DEFAULT_CADENCE.startDay,
+    workingDays: [...DEFAULT_CADENCE.workingDays] as const,
   };
 
   /** An owner whose only sprint row is CLOSED — the between-sprints state. */

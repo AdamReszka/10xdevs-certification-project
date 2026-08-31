@@ -7,6 +7,7 @@ import SetupWizardShell from "@/components/templates/setup-wizard-shell";
 import { requireRealWorkspace, resolveWorkspace } from "@/lib/workspace";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getDb } from "@/lib/db";
+import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 import { listRosterForEditor } from "@/lib/roster";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { toSprintIdentity } from "@/lib/sprint-identity";
@@ -66,14 +67,14 @@ export default async function TeamSetupPage() {
 
   const initialCadence = activeSprint
     ? {
-        lengthDays: activeSprint.lengthDays ?? 14,
-        startDay: (activeSprint.startDay as Weekday | null) ?? "MON",
+        // Coalesced through the SAME constant `saveCadence`'s dirty-check
+        // normalises against, so confirming the derived values without editing
+        // is never scored as an override (impl-review F2).
+        lengthDays: activeSprint.lengthDays ?? DEFAULT_CADENCE.lengthDays,
+        startDay:
+          (activeSprint.startDay as Weekday | null) ?? DEFAULT_CADENCE.startDay,
         workingDays: (activeSprint.workingDays as Weekday[] | null) ?? [
-          "MON",
-          "TUE",
-          "WED",
-          "THU",
-          "FRI",
+          ...DEFAULT_CADENCE.workingDays,
         ],
         cadenceOverridden: activeSprint.cadenceOverridden,
         // Built on the SERVER so the identity is on screen at first paint, not
