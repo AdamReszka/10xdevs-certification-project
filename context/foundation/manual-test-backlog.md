@@ -219,6 +219,13 @@ automatycznych zielone. Instrukcje krok po kroku:
       ⚠️ **Czego to NIE dowodzi:** gałąź INSERT. Jira miała ten sam sprint, więc
       upsert poszedł gałęzią CONFLICT. Nadpisana kadencja na **nowo utworzonym**
       wierszu jest pokryta tylko testem integracyjnym (case (i)), nie na żywo.
+      ⚠️ **Adnotacja 2026-08-31 (S-30):** to jest dokładnie ta gałąź, którą S-30
+      zmienił. Mechanizm `carry` — przepisywanie nadpisanej kadencji na nowy
+      wiersz przy rollowerze — **został usunięty**; dziedziczenie jest teraz
+      odczytem (`pickCadence` tier 2), więc rollover nie zapisuje w tej sprawie
+      niczego. Ten wiersz zostaje zamknięty (dowód dla gałęzi CONFLICT nadal
+      obowiązuje), a nowe zachowanie ma własne pokrycie: reconcile case (i)/(k)
+      plus §26 poniżej. Nie otwieraj go ponownie — nowy wiersz idzie pod S-30.
 
 - [x] **3.7** Dashboard „Today" renderuje ticket'y i anomalie **nowego**
       sprintu, ze świeżym timestampem. **Zaliczone 2026-08-29** (sesja manualna,
@@ -3332,10 +3339,113 @@ prawdziwym koncie.
 - [ ] **25.D** (faza 5, `plan.md` `5.9`) **Gdzie:** `/settings/connections`,
       prawdziwe konto z podłączoną Jirą.
       **Co zrobić:** zmień monitorowany projekt Jiry na inny i doprowadź do
-      ekranu, na którym pojawia się przycisk **Import sprint cadence**. Kliknij go.
+      ekranu, na którym pojawia się przycisk kadencji. Kliknij go.
+      ⚠️ **Etykieta zmieniona 2026-08-31 (S-30):** przycisk nazywa się teraz
+      **Review sprint cadence**, nie „Import sprint cadence". Po zmianie projektu
+      nie ma czego importować — kadencja **przeżyła** zmianę i czeka na sprint,
+      który wciągnie następna synchronizacja. Stara etykieta obiecywała akcję,
+      której ten ekran nie mógł wykonać.
       **Co musi być prawdą:** lądujesz na `/team/cadence` — angielskim ekranie w
       sekcji **Team** — a **nie** w kreatorze na polskim „Krok 4 z 4".
       **Dlaczego to ma znaczenie:** to było jedyne przejście z Ustawień prosto do
       kreatora i jedyny szew, w którym aplikacja zmieniała język w środku zadania.
       Zostawiono go świadomie, bo rytmu nie dało się ustawić nigdzie indziej.
       Teraz się da, więc powód zniknął.
+
+---
+
+## 26. S-30 `cadence-override-retention` — otwarte (2026-08-31)
+
+Slice zamknięty 2026-08-31, sześć faz. Źródło kanoniczne:
+`context/changes/cadence-override-retention/plan.md` `## Progress`. Pełne opisy
+wierszy blokujących: `context/changes/cadence-override-retention/MANUAL-CHECKLIST.md`
+(cztery wiersze — te są u testera pierwsze, a **pierwszy z nich musi pójść przed
+wszystkimi pozostałymi w tym paragrafie**).
+
+**O co chodzi, po ludzku.** Rytm sprintu, który lead ustawił ręcznie, leżał jako
+cztery kolumny na wierszu `sprint`. Ten wiersz umiera razem z poświadczeniem
+Jiry — w **obu** wariantach rozłączenia z S-26 — i jest kasowany wprost przy
+zmianie monitorowanego projektu. Po ponownym podłączeniu następny cykl zaciągał
+kadencję od nowa z konfiguracji Jiry i zapisywał „lead niczego nie nadpisywał".
+Wybór lidera nie znikał więc głośno: był **podmieniany na prawdopodobnie
+wyglądającą złą liczbę**, i nic tego nie zgłaszało.
+
+**Co się zmieniło.** Kadencja jest teraz **osobnym rekordem** (`sprint_cadence_override`)
+kluczowanym po sprincie **po stronie Jiry**, bez żadnego klucza obcego w graf
+synchronizacji — ten sam kształt, co rekord pomiarowy sprintu z S-23 i z tego
+samego powodu. Trzy pola są niezależnie „puste albo ustawione", więc **zespół
+pracujący Mon–Thu może mieć jednocześnie auto-pull długości i dnia startu z
+Jiry** (FR-007). Ten stan był wcześniej nieosiągalny w obie strony.
+
+**Trzy rzeczy, które przy okazji przestały kłamać.**
+1. **„Restore Jira's values"** kasował dni robocze, choć jego własne okno
+   obiecuje od S-29, że ich nie ruszy. Jira nie ma pola dni roboczych, więc nie
+   było czego „przywracać" — było co skasować.
+2. **Okna rozłączenia i zmiany projektu** nie wspominały o kadencji ani słowem —
+   ani jako o stracie, ani jako o rzeczy zachowanej.
+3. **Przejście „po zmianie projektu → kadencja"** prowadziło na ekran z
+   wyszarzonym przyciskiem i zapisem rzucającym błędem.
+
+**Migracja `0023` (dodatkowa, nie naprawcza).** Tworzy tabelę i przepisuje do
+niej nadpisania z wierszy `sprint`, które niosą flagę. **Zmierzone: nie ma
+takich wierszy** — lokalnie sześć wierszy `sprint`, wszystkie z flagą `f`; na
+produkcji zero wierszy `sprint`. Backfill jest więc poprawnościowy, na wypadek
+konta, którego nikt nie zmierzył. Wiersz produkcyjny jest w MANUAL-CHECKLIST i
+idzie **pierwszy**.
+
+**Czego NIE oczekiwać.** Kolumny `sprint.working_days` i `sprint.cadence_overridden`
+**zostają w bazie** — są zapisywane, ale nigdy nie czytane. Jeśli zajrzysz do
+bazy i zobaczysz tam Mon–Fri przy koncie pracującym Mon–Thu, **to nie jest
+błąd**: to nieużywana kopia, a prawdziwa wartość jest w
+`sprint_cadence_override`. Ich usunięcie to osobna pozycja roadmapy (**S-32**).
+
+**Konto:** 26.A i 26.C wymagają prawdziwego konta z podłączoną Jirą, w której
+jest aktywny sprint. 26.B jest do zrobienia na dowolnym prawdziwym koncie.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **26.A** (faza 2, `plan.md` `2.6`) **Gdzie:** `/dashboard` i
+      `/dashboard/sprint-detail`, prawdziwe konto **bez** ręcznie ustawionej
+      kadencji.
+      **Co zrobić:** przed wdrożeniem zapisz sobie z Today: pojemność w
+      man-dayach, liczbę dni roboczych obok niej, oraz liczbę anomalii w skrzynce.
+      Po wdrożeniu odczytaj te same trzy liczby.
+      **Co musi być prawdą:** wszystkie trzy są **identyczne**. Sprint Detail
+      renderuje ten sam raport starzenia i te same sub-burndowny.
+      **Dlaczego to ma znaczenie:** faza 2 przepięła **wszystkie** odczyty
+      kadencji na nowy resolver — pojemność, cały sweep pomiarowy i osiem miejsc
+      w regułach anomalii — nie zmieniając zachowania: konto bez rekordu ląduje
+      na tier 3 i dostaje dokładnie to, co wcześniej. To założenie jest warte
+      sprawdzenia oczami na żywych danych, bo jeśli jest fałszywe, to fałszywe
+      jest dla każdej liczby na obu dashboardach naraz.
+
+- [ ] **26.B** (faza 3, `plan.md` `3.6`) **Gdzie:** `/team/cadence`, dowolne
+      prawdziwe konto z aktywnym sprintem.
+      **Co zrobić:** odznacz **Fri** w „Working days" (i **nie** ruszaj długości
+      ani dnia startu), kliknij **Save cadence**, a potem przeczytaj baner na
+      górze ekranu oraz komunikat pod przyciskiem zapisu.
+      **Co musi być prawdą:** ekran mówi, że **dni robocze są ustawione ręcznie,
+      a długość sprintu i dzień startu nadal pochodzą z Jiry**. Nie mówi, że
+      auto-pull jest wyłączony dla wszystkiego, i nie mówi, że nic się nie
+      zmieniło.
+      **Dlaczego to ma znaczenie:** to jedyne miejsce, w którym nowy model jest
+      *widoczny*. Wcześniej stan konta opisywał jeden boolean, który nie potrafił
+      wyrazić tej sytuacji — więc opisywał ją **źle**, twierdząc, że Jira
+      przestała dostarczać także długość i dzień startu. W repo nie ma testów
+      komponentów, więc te zdania sprawdzą tylko czyjeś oczy.
+
+- [ ] **26.C** (faza 4, `plan.md` `4.8`) **Gdzie:** `/settings/connections`
+      → **Sync now**, a potem historia synchronizacji na tym samym ekranie.
+      Prawdziwe konto z **ręcznie ustawioną** kadencją (np. po 26.B).
+      **Co zrobić:** wymuś jeden cykl synchronizacji i odczytaj najnowszy wpis w
+      historii oraz wróć na `/team/cadence`.
+      **Co musi być prawdą:** kadencja jest **niezmieniona**, a wpis w historii
+      **nie** zawiera dopisku `cadence default fallback`. Zwykły, zdrowy cykl
+      milczy.
+      **Dlaczego to ma znaczenie:** to jest kontrola dla nowego sygnału
+      diagnostycznego. `lessons.md` wymaga, żeby log operatora rozróżniał „nic
+      nie pasowało" od „predykat jest zły" — więc cykl, który rozwiązał kadencję
+      z domyślnej, **choć konto ma gdzieś rekord kadencji**, zapisuje to w
+      `sync_attempt.outcome` zamiast kończyć jako zwyczajny zielony przebieg.
+      Sygnał, który odpala się na zdrowym koncie, nie jest sygnałem — ten wiersz
+      sprawdza właśnie tę połowę.

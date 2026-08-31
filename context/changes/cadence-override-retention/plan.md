@@ -1149,10 +1149,10 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 5.1 Type checking and linting pass
-- [x] 5.2 Unit suite green, including the disconnect-impact regression, the clause pin and the reader guard
-- [x] 5.3 `disconnect-confirm-copy` and `integration-card-copy` suites green
-- [x] 5.4 Integration test: reconnect against a different workspace URL takes the changed branch
+- [x] 5.1 Type checking and linting pass — 8954ad1
+- [x] 5.2 Unit suite green, including the disconnect-impact regression, the clause pin and the reader guard — 8954ad1
+- [x] 5.3 `disconnect-confirm-copy` and `integration-card-copy` suites green — 8954ad1
+- [x] 5.4 Integration test: reconnect against a different workspace URL takes the changed branch — 8954ad1
 
 #### Manual
 
@@ -1163,9 +1163,9 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [ ] 6.1 Full suite green (lint, typecheck, unit, integration)
-- [ ] 6.2 E2E spec passes
-- [ ] 6.3 `node scripts/manual-test-sweep.mjs` exits zero
+- [x] 6.1 Full suite green (lint, typecheck, unit, integration)
+- [x] 6.2 E2E spec passes
+- [x] 6.3 `node scripts/manual-test-sweep.mjs` exits zero
 
 #### Manual
 
