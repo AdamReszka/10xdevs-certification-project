@@ -17,8 +17,15 @@ rytm sprintu, który da się ustawić z powrotem tym samym ekranem.
 
 ## Faza 1 — migracja produkcyjna
 
-- [ ] **1 — `0023` trafia na produkcję, zanim ktokolwiek dotknie reszty listy**
-      *(faza 1, zamyka `1.7`)*
+- [x] **1 — `0023` trafia na produkcję, zanim ktokolwiek dotknie reszty listy**
+      *(faza 1, zamyka `1.7`)* — **zrobione 2026-08-31, trasą Supabase MCP.**
+      Odczyt przed: `select count(*) from sprint where cadence_overridden = true`
+      → **0**, przy **0** wierszach `sprint` i 0 użytkownikach. Odczyt po:
+      `select count(*) from sprint_cadence_override` → **0**. Zgadza się, więc
+      backfill był zmierzonym no-opem, tak jak planowano. Wpis bookkeepingowy
+      dopisany ręcznie: `drizzle.__drizzle_migrations` id 24, hash `e460079a…`,
+      `created_at` 1788185516599 — kolejny `db:migrate` pominie `0023`.
+      **Wiersze 2–4 są odblokowane.**
 
   **Gdzie:** produkcyjna baza Supabase — **nie** lokalna. `drizzle-kit` nie
   dosięgnie tego hosta z tego Maca (host jest IPv6-only), więc trasa jest ta sama

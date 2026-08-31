@@ -1106,7 +1106,17 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Manual
 
-- [ ] 1.7 Migration has a named route to production and is applied there first
+- [x] 1.7 Migration has a named route to production and is applied there first —
+      applied 2026-08-31 via the Supabase MCP route (`supabase_migrations` version
+      `s30_0023_flowery_flatman_sprint_cadence_override`), with the drizzle
+      bookkeeping row written by hand: `drizzle.__drizzle_migrations` id 24, hash
+      `e460079a…` (sha256 of `0023_flowery_flatman.sql`), `created_at`
+      1788185516599 from the journal. Pre-flight `select count(*) from sprint
+      where cadence_overridden = true` returned **0** against **0** `sprint` rows
+      and 0 users; post-flight `sprint_cadence_override` holds **0** rows — the
+      backfill was the measured no-op it was planned as. Table, unique key, FK to
+      `user` and the series index all match the migration; grants and
+      `rls_enabled: false` are identical to `sprint_measurement`'s
 
 ### Phase 2: The read seams
 

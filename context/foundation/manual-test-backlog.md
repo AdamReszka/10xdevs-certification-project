@@ -3359,8 +3359,14 @@ prawdziwym koncie.
 Slice zamknięty 2026-08-31, sześć faz. Źródło kanoniczne:
 `context/changes/cadence-override-retention/plan.md` `## Progress`. Pełne opisy
 wierszy blokujących: `context/changes/cadence-override-retention/MANUAL-CHECKLIST.md`
-(cztery wiersze — te są u testera pierwsze, a **pierwszy z nich musi pójść przed
-wszystkimi pozostałymi w tym paragrafie**).
+(cztery wiersze — te są u testera pierwsze).
+
+✅ **Migracja produkcyjna (wiersz 1 z MANUAL-CHECKLIST) jest zrobiona
+2026-08-31.** To był ten wiersz, który musiał pójść przed wszystkimi pozostałymi
+w tym paragrafie; **nie blokuje już niczego**. Tabela `sprint_cadence_override`
+istnieje na produkcji, backfill przepisał zero wierszy (bo na produkcji jest zero
+sprintów), a bookkeeping drizzle jest dopisany, więc kolejny `db:migrate` jej nie
+ruszy.
 
 **O co chodzi, po ludzku.** Rytm sprintu, który lead ustawił ręcznie, leżał jako
 cztery kolumny na wierszu `sprint`. Ten wiersz umiera razem z poświadczeniem
