@@ -829,8 +829,8 @@ Phase 1 test encodes: a future slice that changes the FK graph must update
 
 #### Automated
 
-- [x] 5.1 Sweep is clean: `node scripts/manual-test-sweep.mjs`
-- [x] 5.2 Linting passes: `npm run lint`
+- [x] 5.1 Sweep is clean: `node scripts/manual-test-sweep.mjs` — 0e6df1f
+- [x] 5.2 Linting passes: `npm run lint` — 0e6df1f
 
 #### Manual
 
