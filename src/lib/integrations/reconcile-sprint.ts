@@ -68,6 +68,23 @@ export type ReconcileArgs = {
   timeZone?: string;
   /** Wizard-only: the board the user picked out of a multi-board project. */
   chosenBoardId?: number;
+  /**
+   * S-29: refresh the cadence PAST an existing override, and clear the flag in
+   * the same statement — the "Restore Jira's values" path.
+   *
+   * It lives here, on the one function that already owns the flag, rather than
+   * in a caller that clears it first: every Jira network call in this module
+   * completes BEFORE the transaction opens, so a pre-clear followed by a failed
+   * pull would commit "auto-pull is back on" and then throw. The lead would read
+   * "restore failed" while the next 15-minute sync quietly overwrote the cadence
+   * they had deliberately chosen — and since S-28 that value moves capacity and
+   * all five time-based anomaly rules (plan-review F1).
+   *
+   * DEFAULTS FALSE, and the headless sync never passes it: an override is
+   * something only the lead lifts. `importCadence`'s own regression test pins
+   * that the default left the sync path untouched.
+   */
+  forceCadenceRefresh?: boolean;
   jiraOpts?: JiraClientOpts;
 };
 
@@ -122,6 +139,7 @@ export async function reconcileActiveSprint({
   storedBoardId,
   timeZone,
   chosenBoardId,
+  forceCadenceRefresh = false,
   jiraOpts,
 }: ReconcileArgs): Promise<ReconcileResult> {
   // --- Network reads BEFORE the transaction (lesson: reads-before-tx) -------
@@ -296,6 +314,10 @@ export async function reconcileActiveSprint({
     // could not re-apply it, since /setup/team is the only mount of
     // `CadenceForm`. So a carried override seeds the new row.
     const carry =
+      // `forceCadenceRefresh` (S-29) takes the else-branch deliberately: a
+      // restore that races a rollover must not resurrect the override it was
+      // asked to drop.
+      !forceCadenceRefresh &&
       previous?.cadenceOverridden === true &&
       previous.lengthDays != null &&
       previous.startDay != null
@@ -343,9 +365,23 @@ export async function reconcileActiveSprint({
           endDate: new Date(endDate),
           // Cadence refreshes ONLY when the existing row was not user-overridden
           // (FR-007). Unqualified column = existing row; `excluded` = proposed.
-          lengthDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.lengthDays} else ${cadence.lengthDays} end`,
-          startDay: sql`case when ${sprint.cadenceOverridden} then ${sprint.startDay} else ${cadence.startDay} end`,
-          workingDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.workingDays} else ${newWorkingDays}::jsonb end`,
+          //
+          // Under `forceCadenceRefresh` the guard is dropped and the flag is
+          // cleared in the SAME statement — that is the whole reason the flag
+          // is not cleared by a separate UPDATE beforehand. One statement, one
+          // transaction: a Jira call that throws leaves the row untouched.
+          ...(forceCadenceRefresh
+            ? {
+                lengthDays: cadence.lengthDays,
+                startDay: cadence.startDay,
+                workingDays: sql`${newWorkingDays}::jsonb`,
+                cadenceOverridden: false,
+              }
+            : {
+                lengthDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.lengthDays} else ${cadence.lengthDays} end`,
+                startDay: sql`case when ${sprint.cadenceOverridden} then ${sprint.startDay} else ${cadence.startDay} end`,
+                workingDays: sql`case when ${sprint.cadenceOverridden} then ${sprint.workingDays} else ${newWorkingDays}::jsonb end`,
+              }),
         },
       })
       .returning();

@@ -27,6 +27,7 @@ import {
   importCadence,
   previewRosterImport,
   mergeMembers,
+  restoreCadenceFromJira,
   saveCadence,
   saveRoster,
   setMemberActive,
@@ -659,6 +660,99 @@ describe("saveCadence — the write stops lying (S-29 Phase 1)", () => {
 
     const rows = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("restoreCadenceFromJira — one transaction, or nothing (S-29 Phase 3)", () => {
+  /** An overridden account whose stored cadence differs from what Jira derives. */
+  async function overriddenOwner(): Promise<string> {
+    const ownerId = await newOwner();
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+    await saveCadence({
+      db,
+      ownerId,
+      cadence: { lengthDays: 21, startDay: "WED", workingDays: ["MON", "TUE", "WED"] },
+    });
+    return ownerId;
+  }
+
+  it("refreshes the cadence PAST the override and clears the flag", async () => {
+    const ownerId = await overriddenOwner();
+
+    const result = await restoreCadenceFromJira({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    expect(result.noActiveSprint).toBe(false);
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    // Back to what the sprint's own Jira dates derive.
+    expect(row.lengthDays).toBe(14);
+    expect(row.startDay).toBe("MON");
+    expect(row.workingDays).toEqual(["MON", "TUE", "WED", "THU", "FRI"]);
+    expect(row.cadenceOverridden).toBe(false);
+  });
+
+  it("a FAILED Jira call leaves both the values and the flag exactly as they were", async () => {
+    const ownerId = await overriddenOwner();
+
+    const exploding = (async () => {
+      throw new Error("jira is down");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      restoreCadenceFromJira({
+        db,
+        ownerId,
+        jiraBaseUrl: JIRA_BASE,
+        jiraOpts: { fetchImpl: exploding },
+      }),
+    ).rejects.toThrow();
+
+    // This is the case a pre-clear would fail: the flag would already be gone,
+    // and the next 15-minute sync would overwrite a cadence the lead chose.
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(true);
+    expect(row.lengthDays).toBe(21);
+    expect(row.startDay).toBe("WED");
+    expect(row.workingDays).toEqual(["MON", "TUE", "WED"]);
+  });
+
+  it("refuses by name when there is no sprint row to restore", async () => {
+    const ownerId = await newOwner();
+
+    await expect(
+      restoreCadenceFromJira({
+        db,
+        ownerId,
+        jiraBaseUrl: JIRA_BASE,
+        jiraOpts: { fetchImpl: jiraFetch() },
+      }),
+    ).rejects.toThrow(NoSprintRowError);
+  });
+
+  it("an ORDINARY import still preserves the override — the default left the sync path alone", async () => {
+    const ownerId = await overriddenOwner();
+
+    // No `forceCadenceRefresh`: this is what the 15-minute cycle calls.
+    await importCadence({
+      db,
+      ownerId,
+      jiraBaseUrl: JIRA_BASE,
+      jiraOpts: { fetchImpl: jiraFetch() },
+    });
+
+    const [row] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
+    expect(row.cadenceOverridden).toBe(true);
+    expect(row.lengthDays).toBe(21);
   });
 });
 

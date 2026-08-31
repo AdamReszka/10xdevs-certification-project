@@ -859,6 +859,7 @@ export async function importCadence({
   ownerId,
   env,
   chosenBoardId,
+  forceCadenceRefresh,
   jiraBaseUrl,
   jiraOpts,
 }: {
@@ -866,6 +867,8 @@ export async function importCadence({
   ownerId: string;
   env?: StoreEnv;
   chosenBoardId?: number;
+  /** S-29 restore only — see `ReconcileArgs.forceCadenceRefresh`. */
+  forceCadenceRefresh?: boolean;
   jiraBaseUrl?: string;
   jiraOpts?: JiraClientOpts;
 }): Promise<ImportCadenceResult> {
@@ -911,6 +914,7 @@ export async function importCadence({
     storedBoardId: null,
     timeZone: identity.timeZone,
     chosenBoardId,
+    forceCadenceRefresh,
     jiraOpts,
   });
 
@@ -1090,4 +1094,54 @@ export async function saveCadence({
   if (rows.length === 0) throw new NoSprintRowError();
 
   return { updated: rows.length, overridden };
+}
+
+/**
+ * Hand the cadence back to Jira (S-29): drop the lead's override and take
+ * FR-007's auto-pulled values again.
+ *
+ * WHY THIS FUNCTION DOES NO UPDATE OF ITS OWN. The obvious shape — clear
+ * `cadence_overridden`, then import — is wrong in both orders, and the reason is
+ * worth keeping. Clearing AFTER the import refreshes nothing and reports
+ * success, because the reconciler's CONFLICT branch honours the very flag the
+ * caller is trying to lift. Clearing BEFORE is worse: every Jira network call in
+ * `reconcileActiveSprint` runs before its transaction opens, so an expired
+ * token or a dropped connection throws with the clear already committed — the
+ * action says "restore failed" while the account is silently back on auto-pull,
+ * and the next sync overwrites a cadence the lead chose on purpose. So the
+ * intent is passed INTO the reconcile instead, and the clear rides in the same
+ * statement as the refresh, inside the transaction that already exists.
+ *
+ * `noActiveSprint: true` means Jira had nothing to restore FROM. Nothing was
+ * written and the override is still in force — the honest outcome, carried to
+ * the caller so the surface can say so rather than presenting `DEFAULT_CADENCE`
+ * as a successful pull.
+ */
+export async function restoreCadenceFromJira({
+  db,
+  ownerId,
+  env,
+  jiraBaseUrl,
+  jiraOpts,
+}: {
+  db: Db;
+  ownerId: string;
+  env?: StoreEnv;
+  jiraBaseUrl?: string;
+  jiraOpts?: JiraClientOpts;
+}): Promise<ImportCadenceResult> {
+  // For the CALLER's benefit, not the write's: an account with no sprint row has
+  // no override to lift, and `no_sprint` says that better than a pull that
+  // quietly does nothing.
+  const row = await getActiveSprintRow(db, ownerId);
+  if (!row) throw new NoSprintRowError();
+
+  return importCadence({
+    db,
+    ownerId,
+    env,
+    forceCadenceRefresh: true,
+    jiraBaseUrl,
+    jiraOpts,
+  });
 }

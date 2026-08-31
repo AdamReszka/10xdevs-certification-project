@@ -10,12 +10,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * matters — must never construct a GitHub or Jira client to do it.
  */
 
-const { requireRealWorkspace, resolveWorkspace, previewRosterImport, importCadence } =
-  vi.hoisted(() => ({
+const {
+  requireRealWorkspace,
+  resolveWorkspace,
+  previewRosterImport,
+  importCadence,
+  restoreCadenceFromJira,
+} = vi.hoisted(() => ({
     requireRealWorkspace: vi.fn(),
     resolveWorkspace: vi.fn(),
     previewRosterImport: vi.fn(),
     importCadence: vi.fn(),
+    restoreCadenceFromJira: vi.fn(),
   }));
 
 vi.mock("@/lib/workspace", () => ({ requireRealWorkspace, resolveWorkspace }));
@@ -33,11 +39,16 @@ vi.mock("@/lib/integrations/roster-store", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/integrations/roster-store")>()),
   previewRosterImport,
   importCadence,
+  restoreCadenceFromJira,
 }));
 
 // Imported after the mocks (vi.mock is hoisted).
 import { DEMO_REFUSAL_MESSAGE } from "@/lib/demo/refusal";
-import { importCadenceAction, importRosterAction } from "./actions";
+import {
+  importCadenceAction,
+  importRosterAction,
+  restoreCadenceAction,
+} from "./actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -73,5 +84,16 @@ describe("setup/team import actions — demo mode", () => {
       message: DEMO_REFUSAL_MESSAGE,
     });
     expect(importCadence).not.toHaveBeenCalled();
+  });
+
+  it("restoreCadenceAction refuses and never reaches Jira (S-29)", async () => {
+    const result = await restoreCadenceAction();
+
+    expect(result).toEqual({
+      ok: false,
+      error: "demo_mode",
+      message: DEMO_REFUSAL_MESSAGE,
+    });
+    expect(restoreCadenceFromJira).not.toHaveBeenCalled();
   });
 });

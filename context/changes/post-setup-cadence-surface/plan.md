@@ -779,14 +779,14 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [ ] 3.1 Linting passes: `npm run lint`
-- [ ] 3.2 Type checking passes: `npm run typecheck`
-- [ ] 3.3 Unit tests pass: `npm test`
-- [ ] 3.4 Integration tests pass: `npm run test:integration`
-- [ ] 3.5 Restore on an overridden account refreshes the cadence columns and clears the flag
-- [ ] 3.6 A restore whose Jira call fails leaves the cadence AND the flag untouched
-- [ ] 3.7 `importCadence` without `forceCadenceRefresh` still preserves an override
-- [ ] 3.8 `restoreCadenceAction` refuses with `demo_mode` while the workspace is demo
+- [x] 3.1 Linting passes: `npm run lint`
+- [x] 3.2 Type checking passes: `npm run typecheck`
+- [x] 3.3 Unit tests pass: `npm test`
+- [x] 3.4 Integration tests pass: `npm run test:integration`
+- [x] 3.5 Restore on an overridden account refreshes the cadence columns and clears the flag
+- [x] 3.6 A restore whose Jira call fails leaves the cadence AND the flag untouched
+- [x] 3.7 `importCadence` without `forceCadenceRefresh` still preserves an override
+- [x] 3.8 `restoreCadenceAction` refuses with `demo_mode` while the workspace is demo
 
 ### Phase 4: `/team/cadence`
 

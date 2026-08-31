@@ -34,6 +34,7 @@ import {
   deleteMember as deleteMemberService,
   getMemberHistory as getMemberHistoryService,
   importCadence as importCadenceService,
+  restoreCadenceFromJira as restoreCadenceService,
   previewRosterImport as previewRosterImportService,
   mergeMembers as mergeMembersService,
   saveCadence as saveCadenceService,
@@ -358,6 +359,53 @@ export async function importCadenceAction(
     };
   } catch (err) {
     return toFailure(err, "[setup/team] importCadence");
+  }
+}
+
+/**
+ * "Restore Jira's values" (S-29): drop the lead's cadence override and go back
+ * to FR-007's auto-pull.
+ *
+ * Same guards as `importCadenceAction`, because it spends the account's real
+ * Jira credentials: `workspaceForImport` (real workspace + demo flag), and a
+ * demo refusal rather than a call that reaches outside the app.
+ *
+ * `noActiveSprint: true` in the result means Jira had nothing to restore FROM —
+ * nothing was written and the override still stands. The surface renders that as
+ * its own outcome; it is not a success and not a failure.
+ */
+export async function restoreCadenceAction(): Promise<ImportCadenceResult> {
+  const { ownerId, isDemo, now } = await workspaceForImport();
+  if (isDemo) return demoRefusal();
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    const result = await restoreCadenceService({
+      db,
+      ownerId,
+      env,
+      jiraBaseUrl: jiraBaseOverride(),
+    });
+    return {
+      ok: true,
+      cadence: result.cadence,
+      boardId: result.boardId,
+      jiraSprintId: result.jiraSprintId,
+      sprintIdentity: toSprintIdentity({
+        name: result.sprintName,
+        jiraSprintId: result.jiraSprintId,
+        startDate: result.startDate,
+        endDate: result.endDate,
+        timeZone: result.timeZone,
+        now,
+      }),
+      boardCandidates: result.boardCandidates,
+      noActiveSprint: result.noActiveSprint,
+    };
+  } catch (err) {
+    return toFailure(err, "[setup/team] restoreCadence");
   }
 }
 
