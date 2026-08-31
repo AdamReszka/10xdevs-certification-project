@@ -15,7 +15,6 @@ import {
   type AvailabilityGrid,
   type AvailabilityMember,
   buildAvailabilityGrid,
-  nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -84,10 +83,10 @@ export type HolidayCalendarFacts = {
  * A tab rather than an always-on card, because FR-016 is explicit that the
  * Anomaly Inbox stays the headline and every other panel sits one click away.
  *
- * Two windows: the sprint in flight, and the next one of the same length. The
- * second answers "can I promise this?" at the moment the lead is asked — which is
- * usually mid-sprint, not at planning. It shows WHO is away; it deliberately does
- * not compute that window's capacity number (its own slice).
+ * Two windows: the sprint in flight, and the next one, of the length the lead's
+ * cadence says (S-18 — it used to be the current sprint's own accidental span).
+ * The second answers "can I promise this?" at the moment the lead is asked —
+ * which is usually mid-sprint, not at planning.
  *
  * All grid logic lives in `availability-view.ts`; this file renders.
  */
@@ -96,6 +95,8 @@ export default function Availability({
   absences,
   sprintStart,
   sprintEnd,
+  nextWindowStart,
+  nextWindowEnd,
   timeZone,
   capacity,
   jiraSprintId,
@@ -107,6 +108,15 @@ export default function Availability({
   absences: SerializedAbsence[];
   sprintStart: string | null;
   sprintEnd: string | null;
+  /**
+   * The forecast window's bounds, resolved SERVER-SIDE (S-18). It used to be
+   * computed here from the sprint's own millisecond span; its length is now the
+   * lead's durable cadence, which only a database read can resolve — so the
+   * window crosses the boundary as two ISO strings, like every other date here.
+   * `null` whenever the sprint has no dates, exactly when the grids are withheld.
+   */
+  nextWindowStart: string | null;
+  nextWindowEnd: string | null;
   timeZone: string | null;
   capacity: SprintCapacity | null;
   /**
@@ -127,10 +137,10 @@ export default function Availability({
   isDemo: boolean;
 }) {
   const windows = useMemo(() => {
-    if (!sprintStart || !sprintEnd) return null;
+    if (!sprintStart || !sprintEnd || !nextWindowStart || !nextWindowEnd)
+      return null;
     const start = new Date(sprintStart);
     const end = new Date(sprintEnd);
-    const next = nextWindowAfter(start, end, timeZone);
     const parsed = absences.map((a) => ({
       teamMemberId: a.teamMemberId,
       startDate: new Date(a.startDate),
@@ -147,12 +157,20 @@ export default function Availability({
       next: buildAvailabilityGrid({
         members,
         absences: parsed,
-        from: next.from,
-        to: next.to,
+        from: new Date(nextWindowStart),
+        to: new Date(nextWindowEnd),
         timeZone,
       }),
     };
-  }, [members, absences, sprintStart, sprintEnd, timeZone]);
+  }, [
+    members,
+    absences,
+    sprintStart,
+    sprintEnd,
+    nextWindowStart,
+    nextWindowEnd,
+    timeZone,
+  ]);
 
   return (
     <Card>
@@ -160,9 +178,9 @@ export default function Availability({
         <div className="flex flex-col gap-1.5">
           <CardTitle>Who is away</CardTitle>
           <CardDescription>
-            Recorded absences across this sprint and the next window of the same
-            length. An absence also silences that person&apos;s inactivity flag and
-            lowers the sprint&apos;s capacity.
+            Recorded absences across this sprint and the next window of your
+            team&apos;s cadence. An absence also silences that person&apos;s
+            inactivity flag and lowers the sprint&apos;s capacity.
           </CardDescription>
         </div>
         {/*

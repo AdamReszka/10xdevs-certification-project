@@ -301,6 +301,11 @@ export default async function DashboardPage() {
             }))}
             sprintStart={availability?.sprintStart.toISOString() ?? null}
             sprintEnd={availability?.sprintEnd.toISOString() ?? null}
+            // S-18: the forecast window is now the lead's resolved cadence, so
+            // it is decided server-side and travels as ISO strings like the two
+            // above. The client no longer derives it from the sprint's span.
+            nextWindowStart={availability?.nextWindow.from.toISOString() ?? null}
+            nextWindowEnd={availability?.nextWindow.to.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
             jiraSprintId={sprint?.jiraSprintId ?? null}

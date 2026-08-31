@@ -140,8 +140,25 @@ export const mergeMembersSchema = z
  * User-confirmed / overridden sprint cadence. `boardId` is the optional chosen
  * scrum board (only relevant when multiple boards exist).
  */
+/**
+ * The longest sprint the cadence editor accepts, and therefore the longest
+ * window `nextWindowAfter` can ever resolve (S-18).
+ *
+ * Exported rather than restated, for the same reason `DEFAULT_CADENCE` is the
+ * only spelling of its own numbers (`lib/integrations/cadence.ts`):
+ * `getSprintCapacityFor` bounds its absence read at `sprintEnd + this`, and if
+ * the ceiling here ever rose while that bound did not, absences past it would
+ * silently vanish from the forecast and its capacity would silently rise —
+ * `lessons.md`'s narrowing-predicate rule, one window right.
+ */
+export const MAX_CADENCE_LENGTH_DAYS = 90;
+
 export const cadenceSchema = z.object({
-  lengthDays: z.number().int().min(1, "Sprint length must be at least 1 day").max(90),
+  lengthDays: z
+    .number()
+    .int()
+    .min(1, "Sprint length must be at least 1 day")
+    .max(MAX_CADENCE_LENGTH_DAYS),
   startDay: weekdaySchema,
   workingDays: z
     .array(weekdaySchema)

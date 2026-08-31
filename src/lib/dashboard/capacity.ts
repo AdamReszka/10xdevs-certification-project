@@ -5,13 +5,15 @@ import {
   countTeamDaysOffInclusive,
   countWorkingDaysInclusive,
 } from "@/lib/anomaly/rules/helpers";
-import { resolveCadenceFor } from "@/lib/cadence-override";
+import { type ResolvedCadence, resolveCadenceFor } from "@/lib/cadence-override";
 import type { DayKey } from "@/lib/dashboard/day-bucket";
+import { nextWindowAfter } from "@/lib/dashboard/next-window";
 import type { getDb } from "@/lib/db";
 import { toFte } from "@/lib/fte";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getNonWorkingDays } from "@/lib/team-day-off-store";
+import { MAX_CADENCE_LENGTH_DAYS } from "@/lib/validations/roster";
 
 /**
  * Sprint capacity in MAN-DAYS (S-23, FR-010/FR-022) — the third downstream
@@ -216,6 +218,20 @@ export type CapacityReadResult = {
   timeZone: string | null;
   members: (CapacityMember & { name: string })[];
   absences: CapacityAbsence[];
+  /**
+   * The forecast window the availability tab's second grid draws (S-18): the
+   * lead's resolved cadence length, starting the day after this sprint's last
+   * day key.
+   *
+   * RESOLVED HERE rather than in the client component, because its length now
+   * comes from a record only the server can read (`resolveCadenceFor`). Three
+   * things then agree by construction instead of by coincidence: the grid, this
+   * reader's forecast capacity, and the holiday-review horizon.
+   */
+  nextWindow: { from: Date; to: Date };
+  /** The cadence the two above were resolved from, so callers that need it —
+   *  the holiday horizon on the dashboard — do not re-read it. */
+  cadence: ResolvedCadence;
 };
 
 /**
@@ -223,8 +239,8 @@ export type CapacityReadResult = {
  * sprint, or one without dates to bound the window.
  *
  * The absence read is shaped to the `(team_member_id, start_date, end_date)`
- * index — the only one `absence` has — and is bounded to the two windows the tab
- * renders: this sprint, and the next window of the same length.
+ * index — the only one `absence` has — and is bounded to this sprint plus the
+ * longest forecast window the cadence resolver can produce.
  */
 export async function getSprintCapacity(
   db: Db,
@@ -248,14 +264,37 @@ export async function getSprintCapacity(
 export async function getSprintCapacityFor(
   db: Db,
   ownerId: string,
-  sprint: SelectSprint,
+  /**
+   * A `Pick`, not the whole row (S-18): the function reads exactly these five
+   * fields, and typing it for `SelectSprint` demanded a sprint row from every
+   * caller — which no unstarted window can supply. A superset of
+   * `resolveCadenceFor`'s own `Pick` (which has no `endDate`), so it stays
+   * assignable there unchanged; both existing callers pass full rows.
+   */
+  sprint: Pick<
+    SelectSprint,
+    "jiraProjectId" | "jiraSprintId" | "startDate" | "endDate" | "lengthDays" | "startDay"
+  >,
 ): Promise<CapacityReadResult | null> {
   if (!sprint.startDate || !sprint.endDate) return null;
 
   const sprintStart = sprint.startDate;
   const sprintEnd = sprint.endDate;
-  // Far edge of the "next window" the tab also draws.
-  const lookahead = new Date(sprintEnd.getTime() + (sprintEnd.getTime() - sprintStart.getTime()));
+  // Far edge of any forecast window the cadence resolver can produce.
+  //
+  // NOT the window itself, deliberately, and the fan-out is why (plan-review
+  // F4). Bounding on the resolved window would make the cadence read sequential
+  // — and this function runs once per recomputable sprint inside the measurement
+  // sweep's loop (`sweep.ts`), so a cron cycle over N sprints would go from N
+  // round trips to 2N. `lessons.md` #3's surviving rule is one handle, ONE
+  // fan-out. The editor's own ceiling is a bound no resolved window can exceed,
+  // so nothing the window draws can fall outside the loaded set, and the extra
+  // rows are inert: `computeSprintCapacity` clips every absence to the window it
+  // is given, and `buildAvailabilityGrid` filters to its own axis. At most a
+  // quarter's absences per owner, on the index the query already uses.
+  const lookahead = new Date(
+    sprintEnd.getTime() + MAX_CADENCE_LENGTH_DAYS * 24 * 60 * 60 * 1000,
+  );
 
   const [rows, absences, timeZone, nonWorkingDays, cadence] = await Promise.all([
     db
@@ -316,5 +355,13 @@ export async function getSprintCapacityFor(
     timeZone,
     members: rosterMembers,
     absences,
+    // Built AFTER the fan-out, from the length it resolved — pure arithmetic
+    // over data already in hand, so it costs no query.
+    nextWindow: nextWindowAfter({
+      sprintEnd,
+      lengthDays: cadence.lengthDays,
+      timeZone,
+    }),
+    cadence,
   };
 }
