@@ -220,9 +220,19 @@ export const COMMITMENT_FREEZE_CLAUSE =
  * Declared rather than dropped, on `COMMITMENT_FREEZE_CLAUSE`'s precedent: the
  * cadence is the one thing a switch KEEPS that a lead would reasonably assume it
  * destroys, having just been told the sprints are going.
+ *
+ * IT SAYS "STAYS WITH THE PROJECT", NOT "REATTACHES", and the distinction is the
+ * record's own shape rather than a nicety of wording. The row is filed under the
+ * JIRA-SIDE project id and the resolver scopes every tier to it
+ * (`cadence-override.ts`), so after a SWITCH it is still there and still not
+ * applicable: the new project's sprints follow Jira until the lead sets a
+ * cadence for them. "Reattaches when the next sprint is imported" is true of a
+ * disconnect-and-reconnect, which keeps the project — the one case this sentence
+ * is not about. It matches `DISCONNECT_IMPACT.projectSwitch.keeps`, which said
+ * it correctly all along.
  */
 export const CADENCE_RETENTION_CLAUSE =
-  "the sprint cadence you set by hand is kept and reattaches when the next sprint is imported, because it is stored against the Jira sprint rather than against the rows being deleted";
+  "the sprint cadence you set by hand is kept and stays with the project you set it for, because it is stored against the Jira sprint rather than against the rows being deleted — point the account back at that project and it is still there, while the new one follows Jira until you set a cadence for it";
 
 /**
  * Which `DISCONNECT_IMPACT` entry describes what a RECONNECT can cost.

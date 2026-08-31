@@ -441,7 +441,10 @@ export async function reconcileActiveSprint({
     if (forceCadenceRefresh && projectRow) {
       // Read BEFORE the clear: this is the value being PRESERVED, so a create
       // can materialise the working days the lead would otherwise lose along
-      // with the inherited length.
+      // with the inherited length. The whole `ResolvedCadence` goes in, not just
+      // its three values — the clear materialises ONLY the fields its
+      // `provenance` marks as the lead's, so a restore on an account that never
+      // chose a pattern records no choice.
       const before = await resolveCadenceFor(tx, ownerId, row);
       await clearCadenceOverrideFields(tx, {
         ownerId,

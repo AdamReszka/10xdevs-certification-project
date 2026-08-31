@@ -395,7 +395,13 @@ describe("writeCadenceOverride / clearCadenceOverrideFields", () => {
       jiraProjectId: JIRA_SIDE_PROJECT,
       jiraSprintId: "4343",
       startDate: SPRINT_START,
-      resolved: { lengthDays: 21, startDay: "WED", workingDays: MON_THU as never },
+      resolved: {
+        lengthDays: 21,
+        startDay: "WED",
+        workingDays: MON_THU as never,
+        source: "own",
+        provenance: { lengthDays: true, startDay: true, workingDays: true },
+      },
       fields: ["lengthDays", "startDay"],
     });
 
@@ -434,6 +440,50 @@ describe("writeCadenceOverride / clearCadenceOverrideFields", () => {
     // The inherited LENGTH does not survive; the pattern does.
     expect(after.lengthDays).toBe(14);
     expect(after.workingDays).toEqual(MON_THU);
+    expect(after.provenance.workingDays).toBe(true);
+  });
+
+  it("materialises NOTHING the lead did not choose — a restore is not a choice", async () => {
+    // THE OTHER HALF of the create path, and the one that was wrong. `resolved`
+    // coalesces every unowned field to the source, so materialising it whole
+    // wrote `["MON"…"FRI"]` for an account that had never picked a working-day
+    // pattern — and `/team/cadence` then told that lead "You set your working
+    // days by hand". It also pinned them: an explicit pattern blocks tier 2 for
+    // good, and the record it creates makes every later cycle able to report
+    // `cadence_default_fallback` for an override that never existed.
+    //
+    // Same invariant the `0023` backfill states in its own header: a field equal
+    // to its source is written NULL, or the row asserts a choice nobody made.
+    const seeded = await newOwner();
+    const row = await seedSprint(seeded, { jiraSprintId: "4343" });
+
+    const before = await resolveCadenceFor(db, seeded.ownerId, row);
+    expect(before.source).toBe("source");
+    expect(before.provenance.workingDays).toBe(false);
+
+    await clearCadenceOverrideFields(db, {
+      ownerId: seeded.ownerId,
+      jiraProjectId: JIRA_SIDE_PROJECT,
+      jiraSprintId: "4343",
+      startDate: SPRINT_START,
+      resolved: before,
+      fields: ["lengthDays", "startDay"],
+    });
+
+    const [record] = await records(seeded.ownerId);
+    expect(record.workingDays).toBeNull();
+
+    // The row still EXISTS — that is what blocks tier 2 for this sprint — and it
+    // still resolves to Mon–Fri. What changed is that Mon–Fri is now the source
+    // answering, not a choice attributed to the lead.
+    const after = await resolveCadenceFor(db, seeded.ownerId, row);
+    expect(after.source).toBe("own");
+    expect(after.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
+    expect(after.provenance).toEqual({
+      lengthDays: false,
+      startDay: false,
+      workingDays: false,
+    });
   });
 });
 

@@ -386,9 +386,19 @@ export async function writeCadenceOverride(
  * CREATES THE ROW WHEN ABSENT, which is the whole reason this is not an UPDATE.
  * A sprint whose cadence is INHERITED has no row of its own, so a clear against
  * a missing row is a no-op that leaves the inherited value in force. On that
- * create it materialises `resolved` — the currently RESOLVED value — for every
- * field it is NOT clearing, or the restore would drop the inherited working-day
+ * create it materialises, for every field it is NOT clearing, the value the
+ * resolver just returned — or the restore would drop the inherited working-day
  * pattern along with the inherited length.
+ *
+ * IT MATERIALISES ONLY WHAT THE LEAD ACTUALLY OWNS, which is why it takes the
+ * resolver's whole answer and not just its three values. `resolved` coalesces
+ * every unowned field to the source, so materialising it unconditionally wrote
+ * `["MON"…"FRI"]` for an account that had never chosen a working-day pattern —
+ * asserting, on a create, a choice nobody made, and then reporting it back as
+ * `provenance.workingDays: true` on the very screen whose dialog had just
+ * promised to leave the working days alone. A field that follows the source is
+ * written NULL, exactly as {@link writeCadenceOverride} and the `0023` backfill
+ * write it.
  *
  * Never deletes, for the same reason {@link writeCadenceOverride} never does: a
  * row of three NULLs is what says "follow the source for this sprint" and blocks
@@ -402,8 +412,12 @@ export async function clearCadenceOverrideFields(
     jiraProjectId: string;
     jiraSprintId: string;
     startDate: Date;
-    /** What applies to this sprint right now — materialised on create. */
-    resolved: DerivedCadence;
+    /**
+     * The RESOLVER'S OWN ANSWER for this sprint, provenance included — what
+     * applies right now, and which of it the lead chose. Only the fields marked
+     * hand-set are materialised on create.
+     */
+    resolved: ResolvedCadence;
     fields: ReadonlyArray<keyof OverrideFields>;
   },
 ): Promise<void> {
@@ -414,7 +428,8 @@ export async function clearCadenceOverrideFields(
   const keep = <K extends keyof OverrideFields>(
     key: K,
     value: OverrideFields[K],
-  ): OverrideFields[K] => (cleared.has(key) ? null : value);
+  ): OverrideFields[K] =>
+    cleared.has(key) || !resolved.provenance[key] ? null : value;
 
   await tx
     .insert(sprintCadenceOverride)
