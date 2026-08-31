@@ -810,13 +810,13 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [x] 5.1 Linting passes: `npm run lint`
-- [x] 5.2 Type checking passes: `npm run typecheck`
-- [x] 5.3 Unit tests pass: `npm test`
-- [x] 5.4 Integration tests pass: `npm run test:integration`
-- [x] 5.5 E2E passes: `npm run test:e2e`
-- [x] 5.6 Manual backlog is complete: `node scripts/manual-test-sweep.mjs` exits 0
-- [x] 5.7 Production build succeeds: `npm run build`
+- [x] 5.1 Linting passes: `npm run lint` — 417b6b7
+- [x] 5.2 Type checking passes: `npm run typecheck` — 417b6b7
+- [x] 5.3 Unit tests pass: `npm test` — 417b6b7
+- [x] 5.4 Integration tests pass: `npm run test:integration` — 417b6b7
+- [x] 5.5 E2E passes: `npm run test:e2e` — 417b6b7
+- [x] 5.6 Manual backlog is complete: `node scripts/manual-test-sweep.mjs` exits 0 — 417b6b7
+- [x] 5.7 Production build succeeds: `npm run build` — 417b6b7
 
 #### Manual
 
