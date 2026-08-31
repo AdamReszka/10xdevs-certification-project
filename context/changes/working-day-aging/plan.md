@@ -718,6 +718,15 @@ epilogue commit, per CLAUDE.md.
 - Compatibility: a stored `"8_WORKING_DAYS"` resolving to 64 working hours
   without resetting the rule.
 
+**Amended at impl-review (2026-08-31, F10).** Four of the five rule test files
+carry the Friday-afternoon / Sunday / Monday pair as written. `sprint-at-risk.ts`
+carries an equivalent working-vs-calendar boundary test instead (16 working hours
+fires, 20 does not), and that substitution is ACCEPTED rather than a gap: this
+condition counts FORWARD to the sprint end rather than backward from a movement,
+so a "moved on Friday afternoon" anchor has nothing to attach to. The requirement
+above is restated here as "all five files pin the working-vs-calendar difference",
+which is what it was reaching for.
+
 ### Integration Tests:
 
 - `detect.integration.test.ts`'s Friday/Saturday seeds re-derived, including the

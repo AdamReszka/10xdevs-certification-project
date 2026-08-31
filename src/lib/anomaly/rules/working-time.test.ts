@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   WORK_DAY_END_HOUR,
@@ -392,5 +392,103 @@ describe("shiftWorkingHours", () => {
         allOff,
       ),
     ).toEqual(at("2026-07-20T23:59:59.999Z"));
+  });
+
+  it("says so on the operator log when it clamps (impl-review F2)", () => {
+    // The clamped instant is shaped exactly like a successful one, and both
+    // callers use it to open a LOOKBACK window — so a silent clamp widens the
+    // window and the rule emits nothing, which reads as a healthy sprint.
+    // `lessons.md` obligation (a): the log must distinguish the cases.
+    const allOff = new Set<string>();
+    let cursor = new Date("2026-06-01T12:00:00.000Z").getTime();
+    const last = new Date("2026-08-11T12:00:00.000Z").getTime();
+    while (cursor <= last) {
+      allOff.add(new Date(cursor).toISOString().slice(0, 10));
+      cursor += 86_400_000;
+    }
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      workingHoursBefore(at("2026-08-10T09:00:00.000Z"), 4, MON_FRI, "UTC", allOff);
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(String(spy.mock.calls[0]?.[0])).toContain("clamped");
+      expect(String(spy.mock.calls[0]?.[0])).toContain("could not supply 4 working");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("falls back to Mon–Fri on a non-canonical workingDays array (impl-review F3)", () => {
+    // `weekdayOf` only ever emits "MON".."SUN", so a lowercase or long-form
+    // array used to match nothing — and matching nothing means every day is a
+    // non-working day, so the clock returns 0 for every span forever. Silence,
+    // not an error. Both writers are canonical today; S-17 will add a third.
+    const monFriHours = workingHoursBetween(
+      at("2026-08-10T00:00:00.000Z"),
+      at("2026-08-15T00:00:00.000Z"),
+      MON_FRI,
+      "UTC",
+      new Set(),
+    );
+    expect(monFriHours).toBe(40);
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const bad of [
+        ["mon", "tue", "wed", "thu", "fri"],
+        ["Monday", "Tuesday"],
+        ["", "???"],
+      ]) {
+        expect(
+          workingHoursBetween(
+            at("2026-08-10T00:00:00.000Z"),
+            at("2026-08-15T00:00:00.000Z"),
+            bad,
+            "UTC",
+            new Set(),
+          ),
+        ).toBe(40);
+      }
+      expect(spy).toHaveBeenCalledTimes(3);
+      // Assert the message, not just the call: a bare call-count leaves every
+      // string in it as a surviving mutant, and the message is the whole point
+      // of the log — it has to name what was stored and what was expected.
+      const msg = String(spy.mock.calls[0]?.[0]);
+      expect(msg).toContain("no recognisable weekday code");
+      expect(msg).toContain('["mon","tue","wed","thu","fri"]');
+      expect(msg).toContain("MON");
+      expect(msg).toContain("Falling back to Mon–Fri");
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps the recognisable half of a partly-bad workingDays array", () => {
+    // A partial match is honoured rather than thrown away: the array names
+    // Monday and Tuesday plus noise, so the week is two working days, not five.
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(
+        workingHoursBetween(
+          at("2026-08-10T00:00:00.000Z"),
+          at("2026-08-15T00:00:00.000Z"),
+          ["MON", "TUE", "someday"],
+          "UTC",
+          new Set(),
+        ),
+      ).toBe(16);
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("stays silent on the log when the calendar CAN supply the hours", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      workingHoursBefore(at("2026-08-10T12:00:00.000Z"), 4, MON_FRI, "UTC", new Set());
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

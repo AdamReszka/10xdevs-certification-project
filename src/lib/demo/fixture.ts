@@ -312,7 +312,12 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
     // rule fires.
     { key: "WEB-99", sp: 8, cat: "IN_PROGRESS", who: "chen", moved: wh(24), added: false, summary: "Hyperdrive connection pooling" },
 
-    // Still To Do with under 48h left → SPRINT_AT_RISK (todo_near_end).
+    // Still To Do with the sprint's tail under the lead time → SPRINT_AT_RISK
+    // (todo_near_end). Since S-28 both sides are WORKING hours: the default lead
+    // time is 16 (two working days) and the fixture's tail is
+    // SPRINT_WORKING_HOURS_LEFT = 12, so the condition holds on every anchor.
+    // These two rows keep calendar offsets on purpose — how long they have SAT
+    // in To Do is not what the rule measures; the sprint's remaining tail is.
     { key: "WEB-95", sp: 5, cat: "TODO", who: null, moved: h(200), added: false, summary: "Recap email template" },
     { key: "WEB-96", sp: 3, cat: "TODO", who: "farida", moved: h(180), added: true, summary: "Threshold settings page" },
     { key: "WEB-98", sp: null, cat: "TODO", who: "erik", moved: d(3), added: false, summary: "Spike: offline mode" },

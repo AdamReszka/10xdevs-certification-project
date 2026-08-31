@@ -16,7 +16,29 @@ type AgingThresholds = {
 
 /** Resolve the In-Progress budget for a story-point estimate: exact bucket, else
  * the nearest defined bucket ≤ sp, else the smallest bucket. Returns working
- * hours, or null when sp is unknown. */
+ * hours, or null when sp is unknown.
+ *
+ * THIS FUNCTION CARRIES FIVE EQUIVALENT MUTANTS, AND THEY ARE WHY THIS FILE
+ * SCORES LOWEST IN `stryker.conf.json` (72.41 at S-28's impl-review, F8). Checked
+ * one by one so the next person does not spend an afternoon writing tests that
+ * cannot fail:
+ *
+ *  - Dropping `.sort()`, and flipping its `a - b` to `a + b`, change nothing.
+ *    `Object.keys` returns integer-like keys in ascending numeric order by
+ *    specification — `{"21":…,"1":…}` enumerates as `["1","21"]` — and the seven
+ *    keys here are fixed integers, pinned by `anomaly-settings.ts`. The sort is
+ *    belt-and-braces against a future non-integer key; it is kept for that, not
+ *    because anything today depends on it.
+ *  - `keys.length === 0 → false` returns `undefined` instead of `null`, and the
+ *    caller's guard is `budget == null`, which is loose. Same branch taken.
+ *  - The exact-match short-circuit `→ false` falls through to the loop below,
+ *    which selects that same key. Same value returned.
+ *  - `k <= sp → k < sp` differs only when `k === sp`, which the short-circuit
+ *    above has already returned for.
+ *
+ * The two remaining survivors are string mutants inside the description text.
+ * Killing those means asserting the sentence verbatim, which buys churn rather
+ * than confidence. */
 function inProgressBudget(
   sp: number | null,
   map: Record<string, number>,
