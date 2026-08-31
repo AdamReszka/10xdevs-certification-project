@@ -3797,3 +3797,129 @@ store'u.
   sondach; siódma bramkowałaby `/dashboard` na polu, które ma działającą wartość
   domyślną.
 - **Recap nie dowiaduje się o kalendarzu** — żadnego powiadomienia push.
+
+---
+
+## 29. S-18 `next-sprint-capacity` — otwarte (2026-09-01)
+
+Zakładka **Availability** na `/dashboard` rysowała dwie siatki „kto jest
+nieobecny" i podawała liczbę pojemności (MD) tylko pod pierwszą. Ten slice
+dokłada liczbę pod drugą — i ponieważ dwa z trzech jej wejść degradują się po
+cichu **poza końcem bieżącego sprintu**, i to **w tę samą stronę** (liczba
+wychodzi za wysoka), zamyka też tę degradację i pisze na ekranie, co ta liczba
+wolno twierdzi.
+
+> **Jedna zmiana zachowania bez migracji, dotyka KAŻDEGO konta.** Siatka „Next
+> window" traci **jedną kolumnę**. Wcześniej jej długość brała się z rozpiętości
+> bieżącego sprintu w milisekundach, a prawdziwy sprint z Jiry kończy się o tej
+> samej porze dnia, o której się zaczyna — więc rysowało się `długość + 1` dni.
+> Teraz długość bierze się z **kadencji, którą ustawił lead** (`/team/cadence`),
+> i rysuje się dokładnie tyle dni, ile ona mówi. To **nie jest błąd**: ten
+> nadmiarowy dzień zawyżałby prognozę o jeden osobodzień na osobę. Skutek uboczny
+> na ekranie — „This sprint … over 11 working days" obok „Next window … over 10
+> working days" dla dwóch nominalnie identycznych okien — jest świadomy.
+
+Brak migracji, więc nie ma kroku „zastosuj schemat" przed testami.
+
+- [ ] **29.A** (`MANUAL-CHECKLIST` wiersz 1, faza 3, zamyka `3.6`)
+      **Gdzie:** `/dashboard` → zakładka **Availability**, na zaseedowanym koncie
+      lokalnym (tym z prawdziwymi danymi z Jiry i AKTYWNYM sprintem).
+      **Co zrobić:** otwórz zakładkę i popatrz na blok między siatką „This
+      sprint" a siatką „Next window".
+      **Co musi być prawdą:** jest liczba `N MD`, obok niej odznaka **Projected**
+      (obramowana), linijka „Capacity for the next window, over N working days."
+      oraz zdanie mówiące, że okno jest prognozowane z kadencji zespołu, a
+      nieobecności poza bieżącym sprintem mogą nie być jeszcze wpisane — kończące
+      się „more likely too high than too low".
+      **Dlaczego to ma znaczenie:** cały slice jest niewidoczny, jeśli
+      `nextWindowCapacity` nie dojdzie do komponentu. A liczba bez odznaki i bez
+      zastrzeżenia to dokładnie to, czemu ten slice ma zapobiec: prognoza
+      czytana jak pomiar.
+
+- [ ] **29.B** (`MANUAL-CHECKLIST` wiersz 1, faza 1, zamyka `1.7`)
+      **Gdzie:** ta sama zakładka, siatka **Next window**.
+      **Co zrobić:** policz kolumny. Porównaj z długością sprintu ustawioną w
+      `/team/cadence` (albo z długością sprintu w Jirze, jeśli nigdy tam nie
+      wchodziłeś). Sprawdź pierwszą kolumnę „Next window" i ostatnią kolumnę
+      „This sprint".
+      **Co musi być prawdą:** liczba kolumn równa się **dokładnie** długości
+      kadencji — o **jeden mniej** niż przed tym slice'em — i żaden dzień nie
+      występuje w obu siatkach naraz.
+      **Dlaczego to ma znaczenie:** wspólny dzień oznaczałby, że czyjaś
+      nieobecność jest policzona dwa razy; nadmiarowy dzień zawyża prognozę o
+      osobodzień na osobę. Jedno i drugie było już defektem w S-08.
+
+- [ ] **29.C** (`MANUAL-CHECKLIST` wiersz 2, faza 3, zamyka `3.7`) 🔴
+      **Gdzie:** `/team/absences`, potem `/dashboard` → **Availability**.
+      **Co zrobić:** zapisz obie liczby MD. Dodaj jednej osobie nieobecność
+      wypadającą **w całości po dacie końca bieżącego sprintu** i wewnątrz
+      następnego okna — najbezpieczniej ostatnie dwa–trzy dni robocze tego okna.
+      Wróć na Availability.
+      **Co musi być prawdą:** liczba **next-window** spada o dostępność tej osoby
+      × liczbę wpisanych dni roboczych. Liczba **this sprint** nie rusza się w
+      ogóle.
+      **Dlaczego to ma znaczenie:** to jest test poszerzonej granicy zapytania o
+      nieobecności. Gdyby zawiodła po cichu, liczba po prostu **by się nie
+      ruszyła** — ekran wyglądałby poprawnie, pokazując pojemność za wysoką,
+      czyli w tę samą stronę, w którą myli się każde inne wejście tej liczby.
+
+- [ ] **29.D** (`MANUAL-CHECKLIST` wiersz 3, faza 2, zamyka `2.6`)
+      **Gdzie:** `/team/days-off`, na koncie, którego sprint kończy się w ostatnich
+      dwóch tygodniach grudnia (ustaw daty sprintu w Jirze albo użyj konta, którego
+      sprint już przechodzi przez Nowy Rok).
+      **Co zrobić:** otwórz stronę, obejrzyj propozycję, kliknij **Approve**.
+      **Co musi być prawdą:** propozycja wymienia święta **przyszłego roku**, a
+      Approve przechodzi — bez „That list is out of date. Reload the page and try
+      again."
+      **Dlaczego to ma znaczenie:** powierzchnia, która proponuje rok, i serwer,
+      który go waliduje, wyprowadzają horyzont **niezależnie od siebie**. Gdy się
+      rozjadą, lead dostaje notkę wymieniającą rok i przycisk, który nigdy nie
+      zadziała — to ślepa uliczka, nie usterka kosmetyczna.
+
+- [ ] **29.E** (faza 3, zamyka `3.6` — druga połowa)
+      **Gdzie:** `/dashboard` → **Availability**, na koncie, którego **wyświetlany
+      sprint już się skończył** (rozłączona Jira, zatrzymany sync albo przerwa
+      między sprintami — `getActiveSprintRow` pokazuje wtedy ostatni rozpoczęty
+      sprint).
+      **Co zrobić:** obejrzyj ten sam blok co w 29.A.
+      **Co musi być prawdą:** liczba MD jest, ale **bez** odznaki `Projected`, a
+      zamiast zdania o prognozie jest zdanie mówiące, że to okno już się zaczęło
+      albo skończyło i opisuje czas wydany, a nie czas do obiecania.
+      **Dlaczego to ma znaczenie:** „następne okno" to zawsze `koniec sprintu +
+      1 dzień`, a sprint na ekranie nie zawsze trwa. Odznaka `Projected` na oknie,
+      które już minęło, twierdziłaby coś **odwrotnego niż prawda** — na jedynej
+      powierzchni, którą ten slice ma uczciwić.
+
+- [ ] **29.F** (faza 3, zamyka `3.8`)
+      **Gdzie:** `/dashboard` → **Availability**, na koncie, na którym **żadna**
+      nieobecność nie kończy się po końcu bieżącego sprintu (świeże konto albo
+      takie, gdzie wszystkie wpisy są historyczne).
+      **Co zrobić:** obejrzyj blok next-window. Potem wpisz **jedną** nieobecność
+      w przyszłości (obojętnie kiedy — może być za kwartał) i wróć.
+      **Co musi być prawdą:** przed wpisem jest dodatkowa, mocniejsza notka
+      („Nothing is recorded past this sprint") mówiąca, że liczba nie ma czego
+      odejmować i jest **sufitem, nie planem**, z linkiem prowadzącym na
+      `/team/absences`. Po wpisaniu jednej przyszłej nieobecności notka
+      **znika** — także wtedy, gdy ta nieobecność wypada **poza** następnym
+      oknem.
+      **Dlaczego to ma znaczenie:** notka celuje w **nawyk leada**, nie w pogodę
+      danego dwutygodnia. Zero nieobecności w konkretnym oknie to normalny stan
+      zespołu 3–10 osób — notka oparta na tym paliłaby się prawie zawsze i
+      przestałaby być czytana. To jest ten sam kształt co `calendarIsEmpty`
+      z S-17: fakt o koncie, nieograniczony datą.
+
+### Świadomie NIE zrobione w tym slice'ie
+
+- **Żadnej estymaty w story pointach dla następnego okna.** FR-024 zatrzymuje się
+  na sprincie AKTYWNYM z premedytacją; prognoza prędkości dla okna, którego Jira
+  jeszcze nie utworzyła, to następca S-18, nie ten slice.
+- **Żadnego pobierania sprintów `state=future` z Jiry.** `getActiveSprint` ma
+  `state=active` na sztywno, a przyszłe sprinty zwykle nie mają dat — ścieżka
+  zwracałaby `null` w typowym przypadku.
+- **Żadnego override'u pojemności ani linii delivered SP dla następnego okna.**
+  Oba są kluczowane przez `sprint_measurement.jira_sprint_id`, którego okno
+  prognozy nie ma.
+- **Bieżący sprint nietknięty.** Jego granice to prawdziwe instanty z Jiry, a
+  jego pojemność to pomiar FR-022.
+- **Żadnej zmiany w sposobie wpisywania nieobecności.** Ułatwienie wpisywania „do
+  przodu" to osobny slice; ten pokazuje, ile kosztuje tego nierobienie.

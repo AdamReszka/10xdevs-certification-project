@@ -3,6 +3,7 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 
 import { detectAnomalies } from "@/lib/anomaly/detect";
+import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import {
   type AbsenceInput,
@@ -18,7 +19,7 @@ import {
   approveHolidayYear as approveHolidayYearService,
   setHolidayCountry as setHolidayCountryService,
 } from "@/lib/holidays/calendar-store";
-import { holidayYears } from "@/lib/holidays/proposal";
+import { holidayReviewWindow } from "@/lib/holidays/proposal";
 import { UnknownMemberError } from "@/lib/integrations/roster-store";
 import {
   UnknownTeamDayOffError,
@@ -269,7 +270,8 @@ export async function saveHolidayCountryAction(
  * the days against the years the CLIENT sent left the years unchecked, so a
  * crafted payload could stamp a year the surface never offered — closing it
  * before its holidays were ever proposed, and therefore for good. The server now
- * recomputes the window from the owner's own sprint row with {@link holidayYears}
+ * recomputes the window from the owner's own sprint row with
+ * {@link holidayReviewWindow}
  * and refuses anything outside it. That check is only safe BECAUSE that function
  * always includes today's year (F1): an account between sprints must still be
  * able to approve the year it is living in.
@@ -303,13 +305,14 @@ export async function approveHolidayYearAction(
       getActiveSprintRow(db, ownerId),
       getJiraTimeZone(db, ownerId),
     ]);
+    // S-18: the cadence is the forecast window's LENGTH SOURCE, and the horizon
+    // now reaches that window — so the validator has to resolve it too, or it
+    // would refuse the very year `/team/days-off` had just offered. Sequential
+    // because it needs the sprint row above, and cheap: one indexed read on a
+    // path that runs once per approval.
+    const cadence = sprint ? await resolveCadenceFor(db, ownerId, sprint) : null;
     const reviewable = new Set(
-      holidayYears({
-        sprintStart: sprint?.startDate ?? null,
-        sprintEnd: sprint?.endDate ?? null,
-        now,
-        timeZone,
-      }),
+      holidayReviewWindow({ sprint, cadence, now, timeZone }),
     );
     if (years.some((year) => !reviewable.has(year))) {
       return invalidInput("That list is out of date. Reload the page and try again.");

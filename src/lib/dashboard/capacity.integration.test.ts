@@ -5,7 +5,14 @@ import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
-import { jiraCredential, jiraProject, sprint, user } from "@/db/schema";
+import {
+  absence,
+  jiraCredential,
+  jiraProject,
+  sprint,
+  teamMember,
+  user,
+} from "@/db/schema";
 import { encryptToken } from "@/lib/crypto";
 import { getSprintCapacity } from "@/lib/dashboard/capacity";
 import { createTeamDayOff } from "@/lib/team-day-off-store";
@@ -26,6 +33,15 @@ import { createTeamDayOff } from "@/lib/team-day-off-store";
  * So the second case seeds a day off deliberately OUTSIDE the sprint window: the
  * sprint loses nothing (`teamDaysOff === 0`) and the calendar is nevertheless
  * not empty. That pair is the claim.
+ *
+ * S-18 ADDS A SECOND SUBJECT to the same file: the forecast window's capacity
+ * and `hasForwardAbsence`. Both are integration-only for the same shape of
+ * reason. The forecast figure rests on the absence read's UPPER BOUND — which a
+ * unit test cannot see at all, because the reducer is handed the rows
+ * ready-made — and the bound is exactly what the old `lookahead` got wrong once
+ * the window's length stopped being the sprint's own span. And
+ * `hasForwardAbsence` is an account-level existence read, so the case that
+ * matters is an absence starting BEYOND the forecast window: it must still count.
  *
  * Seed/cleanup style follows `cadence-override.integration.test.ts`.
  */
@@ -103,6 +119,35 @@ async function newOwnerWithSprint(): Promise<string> {
   return ownerId;
 }
 
+/** One full-time active member, so the capacity figures are non-zero. */
+async function addMember(ownerId: string): Promise<string> {
+  const id = randomUUID();
+  await db.insert(teamMember).values({
+    id,
+    ownerId,
+    name: "Mia Krystof",
+    fte: "1.00",
+    source: "MANUAL",
+  });
+  return id;
+}
+
+async function addAbsence(
+  ownerId: string,
+  teamMemberId: string,
+  startDate: Date,
+  endDate: Date,
+): Promise<void> {
+  await db.insert(absence).values({
+    id: randomUUID(),
+    ownerId,
+    teamMemberId,
+    type: "VACATION",
+    startDate,
+    endDate,
+  });
+}
+
 describe("getSprintCapacity — calendarIsEmpty", () => {
   it("reports an empty calendar for an owner with no team days off", async () => {
     const ownerId = await newOwnerWithSprint();
@@ -143,5 +188,160 @@ describe("getSprintCapacity — calendarIsEmpty", () => {
     const result = await getSprintCapacity(db, mine);
 
     expect(result?.capacity.calendarIsEmpty).toBe(true);
+  });
+});
+
+/**
+ * The sprint is Mon 2026-08-03 → Fri 2026-08-14 with `length_days = 14`, so the
+ * forecast window is Sat 2026-08-15 → Fri 2026-08-28: fourteen calendar days,
+ * ten of them Mon–Fri.
+ */
+describe("getSprintCapacity — the forecast window", () => {
+  it("returns a capacity for the window after the sprint", async () => {
+    const ownerId = await newOwnerWithSprint();
+    await addMember(ownerId);
+
+    const result = await getSprintCapacity(db, ownerId);
+
+    expect(result?.nextWindow.from.toISOString()).toBe("2026-08-15T00:00:00.000Z");
+    expect(result?.nextWindowCapacity.sprintWorkingDays).toBe(10);
+    expect(result?.nextWindowCapacity.adjustedMd).toBe(10);
+    expect(result?.nextWindowCapacity.nominalMd).toBe(10);
+    // The sprint's own figure is untouched.
+    expect(result?.capacity.adjustedMd).toBe(10);
+  });
+
+  it("subtracts an absence that falls ONLY in the forecast window", async () => {
+    // THE CASE THE OLD BOUND DROPPED. The absence read used to stop at the
+    // sprint's own span past its end — here 2026-08-25T08:00Z — and once the
+    // window's length came from the cadence rather than from that span, anything
+    // past the bound silently vanished and the forecast figure silently ROSE
+    // (`lessons.md`'s narrowing-predicate rule, one window right). These dates
+    // are deliberately chosen to sit beyond the old bound and inside the window.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    // Thu 2026-08-27 → Fri 2026-08-28: two working days.
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-27T00:00:00.000Z"),
+      new Date("2026-08-28T23:59:59.999Z"),
+    );
+
+    const result = await getSprintCapacity(db, ownerId);
+
+    expect(result?.nextWindowCapacity.adjustedMd).toBe(8);
+    expect(result?.nextWindowCapacity.nominalMd).toBe(10);
+    // And the sprint's own capacity does not move.
+    expect(result?.capacity.adjustedMd).toBe(10);
+  });
+
+  it("subtracts a team-wide day off inside the forecast window", async () => {
+    const ownerId = await newOwnerWithSprint();
+    await addMember(ownerId);
+    // Mon 2026-08-17, inside the forecast window and outside the sprint.
+    await createTeamDayOff({
+      db,
+      ownerId,
+      input: { day: "2026-08-17", label: "Company day off" },
+    });
+
+    const result = await getSprintCapacity(db, ownerId);
+
+    expect(result?.nextWindowCapacity.sprintWorkingDays).toBe(9);
+    expect(result?.nextWindowCapacity.teamDaysOff).toBe(1);
+    expect(result?.capacity.sprintWorkingDays).toBe(10);
+  });
+});
+
+describe("getSprintCapacity — hasForwardAbsence", () => {
+  it("is false when the account holds no absence at all", async () => {
+    const ownerId = await newOwnerWithSprint();
+    await addMember(ownerId);
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(false);
+  });
+
+  it("is false when the only absence ends inside the running sprint", async () => {
+    // The lead has recorded absences, but nothing forward — which is what the
+    // stronger notice is about.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-05T00:00:00.000Z"),
+      new Date("2026-08-07T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(false);
+  });
+
+  it("is false for an absence on the sprint's OWN last day", async () => {
+    // IMPL-REVIEW F1. `absence.end_date` is the LAST INSTANT of its local day,
+    // while `sprint.end_date` is Jira's arbitrary instant — 08:00Z here. A raw
+    // `end_date > sprint_end` therefore called this absence "forward" and
+    // silenced the notice for a lead who had recorded nothing past the sprint.
+    // Taking the sprint's last day off is an ordinary thing to record.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-14T00:00:00.000Z"),
+      new Date("2026-08-14T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(false);
+  });
+
+  it("is true for an absence starting the DAY AFTER the sprint ends", async () => {
+    // The other side of the same boundary: one day later is genuinely forward.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-15T00:00:00.000Z"),
+      new Date("2026-08-15T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(true);
+  });
+
+  it("is true for an absence starting BEYOND the forecast window", async () => {
+    // This is what makes the fact ACCOUNT-LEVEL rather than windowed
+    // (plan-review F2): a lead who records next quarter's holiday has done the
+    // work, and a notice keyed on the fortnight would tell them otherwise.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-12-21T00:00:00.000Z"),
+      new Date("2026-12-31T23:59:59.999Z"),
+    );
+
+    const result = await getSprintCapacity(db, ownerId);
+
+    expect(result?.hasForwardAbsence).toBe(true);
+    // And it changed nothing about either figure — it is outside both windows.
+    expect(result?.nextWindowCapacity.adjustedMd).toBe(10);
+  });
+
+  it("is owner-scoped: another account's forward absence does not count", async () => {
+    const mine = await newOwnerWithSprint();
+    await addMember(mine);
+    const theirs = await newOwnerWithSprint();
+    const theirMember = await addMember(theirs);
+    await addAbsence(
+      theirs,
+      theirMember,
+      new Date("2026-09-01T00:00:00.000Z"),
+      new Date("2026-09-04T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, mine))?.hasForwardAbsence).toBe(false);
+    expect((await getSprintCapacity(db, theirs))?.hasForwardAbsence).toBe(true);
   });
 });

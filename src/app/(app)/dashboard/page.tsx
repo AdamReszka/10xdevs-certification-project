@@ -26,7 +26,7 @@ import {
   getHolidayCalendar,
   listApprovedYears,
 } from "@/lib/holidays/calendar-store";
-import { holidayYears } from "@/lib/holidays/proposal";
+import { holidayReviewWindow } from "@/lib/holidays/proposal";
 import { toVelocityEstimateView } from "@/lib/measurement/estimate";
 import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
@@ -143,12 +143,18 @@ export default async function DashboardPage() {
   ]);
 
   // S-17. Every year the ACTIVE SPRINT touches, so a sprint running into January
-  // is not told in February that January mattered. The approvals read is second
-  // because it needs the country the fan-out above resolved; it is skipped
+  // is not told in February that January mattered. S-18 extends the reach to the
+  // FORECAST window, whose capacity consumes the same calendar — and routes all
+  // three surfaces through one derivation, because `approveHolidayYearAction`
+  // re-derives this window and refuses anything outside it. The cadence comes
+  // from the fan-out's own result, so this costs no read. The approvals read is
+  // second because it needs the country the fan-out above resolved; it is skipped
   // entirely — not defaulted — when there is no country to scope it to.
-  const holidayCalendarYears = holidayYears({
-    sprintStart: availability?.sprintStart ?? null,
-    sprintEnd: availability?.sprintEnd ?? null,
+  const holidayCalendarYears = holidayReviewWindow({
+    sprint: availability
+      ? { startDate: availability.sprintStart, endDate: availability.sprintEnd }
+      : null,
+    cadence: availability?.cadence ?? null,
     now,
     timeZone,
   });
@@ -301,8 +307,20 @@ export default async function DashboardPage() {
             }))}
             sprintStart={availability?.sprintStart.toISOString() ?? null}
             sprintEnd={availability?.sprintEnd.toISOString() ?? null}
+            // S-18: the forecast window is now the lead's resolved cadence, so
+            // it is decided server-side and travels as ISO strings like the two
+            // above. The client no longer derives it from the sprint's span.
+            nextWindowStart={availability?.nextWindow.from.toISOString() ?? null}
+            nextWindowEnd={availability?.nextWindow.to.toISOString() ?? null}
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
+            // S-18: the forecast window's figure, and the two facts that decide
+            // what it may claim. `now` crosses as a VALUE — in demo it is the
+            // frozen anchor, so the `Projected` badge stays coherent however
+            // long after loading the demo is viewed.
+            nextWindowCapacity={availability?.nextWindowCapacity ?? null}
+            hasForwardAbsence={availability?.hasForwardAbsence ?? false}
+            now={now.toISOString()}
             jiraSprintId={sprint?.jiraSprintId ?? null}
             holidayCalendar={{
               countryCode: holidayCountry,

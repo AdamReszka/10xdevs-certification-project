@@ -1,4 +1,5 @@
 import { dayKeyInTimeZone, type DayKey } from "@/lib/dashboard/day-bucket";
+import { nextWindowAfter } from "@/lib/dashboard/next-window";
 import { holidaysForYear } from "@/lib/holidays";
 
 /**
@@ -52,23 +53,85 @@ export type ProposedHoliday = {
  * exactly the stale case and in no other. The module still owns no clock — `now`
  * is a parameter, as it was.
  *
+ * AND NOT JUST THE SPRINT'S WINDOW EITHER (S-18). The forecast window past the
+ * sprint's end consumes the very same day-off calendar — its capacity counts 1
+ * and 6 January as ordinary working days if nothing has proposed 2027 — and
+ * nothing else in the system looks past sprint end. A sprint ending 2026-12-20
+ * whose next window runs into January would otherwise put a number on screen
+ * that is wrong by one man-day per person per unreviewed holiday, with no
+ * surface anywhere offering the year that would fix it. Null when there is no
+ * window to reach: the horizon must not grow without a cause.
+ *
  * Read in the TEAM's zone, so a sprint ending just after midnight UTC on 1
  * January is not silently attributed to the wrong year.
  */
 export function holidayYears({
   sprintStart,
   sprintEnd,
+  nextWindowEnd,
   now,
   timeZone,
 }: {
   sprintStart: Date | null;
   sprintEnd: Date | null;
+  /** Far edge of the forecast window (`nextWindowAfter`), or null when the
+   *  sprint has no dates to project one from. */
+  nextWindowEnd: Date | null;
   now: Date;
   timeZone: string | null;
 }): number[] {
-  const dates = [now, ...(sprintStart && sprintEnd ? [sprintStart, sprintEnd] : [])];
+  const dates = [
+    now,
+    ...(sprintStart && sprintEnd ? [sprintStart, sprintEnd] : []),
+    ...(nextWindowEnd ? [nextWindowEnd] : []),
+  ];
   const years = dates.map((d) => Number(dayKeyInTimeZone(d, timeZone).slice(0, 4)));
   return [...new Set(years)].sort((a, b) => a - b);
+}
+
+/**
+ * The years to review, composed once for all three surfaces that ask (S-18).
+ *
+ * WHY IT IS A FUNCTION AND NOT THREE CALL SITES. `approveHolidayYearAction`
+ * RE-DERIVES this window server-side and refuses any submitted year outside it
+ * ("That list is out of date") — which is what stops a crafted payload from
+ * closing an unreviewed year forever. So a page that offers 2027 while the
+ * action computes a horizon ending in 2026 is not a cosmetic disagreement: it is
+ * a button that can never succeed. Same class as `DEFAULT_CADENCE`'s "must be
+ * the only spelling" rule (`lib/integrations/cadence.ts`) — one pure function,
+ * three callers, no restatement.
+ *
+ * The cadence is the LENGTH SOURCE, so the forecast window this reaches is the
+ * same one the availability grid draws and the same one its capacity is computed
+ * over. Null cadence or a sprint without dates contributes no window, and the
+ * horizon falls back to exactly what it covered before this slice.
+ */
+export function holidayReviewWindow({
+  sprint,
+  cadence,
+  now,
+  timeZone,
+}: {
+  sprint: { startDate: Date | null; endDate: Date | null } | null;
+  /** The RESOLVED cadence (`resolveCadenceFor`), or null when there is no sprint
+   *  to resolve one for. */
+  cadence: { lengthDays: number } | null;
+  now: Date;
+  timeZone: string | null;
+}): number[] {
+  const sprintStart = sprint?.startDate ?? null;
+  const sprintEnd = sprint?.endDate ?? null;
+
+  const nextWindowEnd =
+    sprintEnd && cadence
+      ? nextWindowAfter({
+          sprintEnd,
+          lengthDays: cadence.lengthDays,
+          timeZone,
+        }).to
+      : null;
+
+  return holidayYears({ sprintStart, sprintEnd, nextWindowEnd, now, timeZone });
 }
 
 /**

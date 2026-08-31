@@ -1,17 +1,19 @@
-import { and, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lte } from "drizzle-orm";
 
 import { absence, teamMember, type SelectSprint } from "@/db/schema";
 import {
   countTeamDaysOffInclusive,
   countWorkingDaysInclusive,
 } from "@/lib/anomaly/rules/helpers";
-import { resolveCadenceFor } from "@/lib/cadence-override";
-import type { DayKey } from "@/lib/dashboard/day-bucket";
+import { type ResolvedCadence, resolveCadenceFor } from "@/lib/cadence-override";
+import { type DayKey, dayKeyInTimeZone } from "@/lib/dashboard/day-bucket";
+import { nextWindowAfter } from "@/lib/dashboard/next-window";
 import type { getDb } from "@/lib/db";
 import { toFte } from "@/lib/fte";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getNonWorkingDays } from "@/lib/team-day-off-store";
+import { MAX_CADENCE_LENGTH_DAYS } from "@/lib/validations/roster";
 
 /**
  * Sprint capacity in MAN-DAYS (S-23, FR-010/FR-022) — the third downstream
@@ -216,6 +218,57 @@ export type CapacityReadResult = {
   timeZone: string | null;
   members: (CapacityMember & { name: string })[];
   absences: CapacityAbsence[];
+  /**
+   * The forecast window the availability tab's second grid draws (S-18): the
+   * lead's resolved cadence length, starting the day after this sprint's last
+   * day key.
+   *
+   * RESOLVED HERE rather than in the client component, because its length now
+   * comes from a record only the server can read (`resolveCadenceFor`). Three
+   * things then agree by construction instead of by coincidence: the grid, this
+   * reader's forecast capacity, and the holiday-review horizon.
+   */
+  nextWindow: { from: Date; to: Date };
+  /** The cadence the two above were resolved from, so callers that need it —
+   *  the holiday horizon on the dashboard — do not re-read it. */
+  cadence: ResolvedCadence;
+  /**
+   * The SAME reducer over {@link nextWindow} (S-18, FR-022). Costs no query: the
+   * roster, the absences, the zone, the day-off calendar and the cadence are all
+   * already in hand, and `computeSprintCapacity` is pure.
+   *
+   * It is a PROJECTION, not a measurement, and two of its three inputs degrade
+   * past the sprint's end in the same direction — see
+   * `next-window-capacity-view.ts`, which owns what the panel is allowed to
+   * claim about it. The measurement sweep reads this field and persists nothing
+   * from it: the forecast window has no Jira sprint id to key a record on.
+   */
+  nextWindowCapacity: SprintCapacity;
+  /**
+   * Does this account hold ANY absence, on any date, ending after the current
+   * sprint's end (S-18)?
+   *
+   * NOT "how many absences fall inside the forecast window", and the difference
+   * is what makes the notice readable. Zero absences in a fortnight is the
+   * ordinary state of a 3–10-person team, so a notice keyed on that would be on
+   * almost always — and it could not separate "checked, nobody is away" from
+   * "nothing entered", because both render as zero.
+   *
+   * The distinction S-17 actually drew is account-level and UNBOUNDED BY DATE
+   * ({@link SprintCapacity.calendarIsEmpty}), which is what makes an empty set
+   * mean "this lead has never done the work". The same shape here is a fact
+   * about the LEAD'S HABIT — has anything ever been recorded forward of the
+   * running sprint — rather than about this particular fortnight's weather.
+   *
+   * "After the sprint's end" is decided on DAY KEYS in the team's zone, not on
+   * the raw instants (impl-review F1): an absence recorded on the sprint's own
+   * final day is stored as that day's last instant and would otherwise read as
+   * forward.
+   *
+   * One `limit(1)` on the index the absence query already uses, joined to the
+   * same fan-out because it depends only on `sprintEnd`.
+   */
+  hasForwardAbsence: boolean;
 };
 
 /**
@@ -223,8 +276,8 @@ export type CapacityReadResult = {
  * sprint, or one without dates to bound the window.
  *
  * The absence read is shaped to the `(team_member_id, start_date, end_date)`
- * index — the only one `absence` has — and is bounded to the two windows the tab
- * renders: this sprint, and the next window of the same length.
+ * index — the only one `absence` has — and is bounded to this sprint plus the
+ * longest forecast window the cadence resolver can produce.
  */
 export async function getSprintCapacity(
   db: Db,
@@ -248,56 +301,119 @@ export async function getSprintCapacity(
 export async function getSprintCapacityFor(
   db: Db,
   ownerId: string,
-  sprint: SelectSprint,
+  /**
+   * A `Pick`, not the whole row (S-18): the function reads exactly these five
+   * fields, and typing it for `SelectSprint` demanded a sprint row from every
+   * caller — which no unstarted window can supply. A superset of
+   * `resolveCadenceFor`'s own `Pick` (which has no `endDate`), so it stays
+   * assignable there unchanged; both existing callers pass full rows.
+   */
+  sprint: Pick<
+    SelectSprint,
+    "jiraProjectId" | "jiraSprintId" | "startDate" | "endDate" | "lengthDays" | "startDay"
+  >,
 ): Promise<CapacityReadResult | null> {
   if (!sprint.startDate || !sprint.endDate) return null;
 
   const sprintStart = sprint.startDate;
   const sprintEnd = sprint.endDate;
-  // Far edge of the "next window" the tab also draws.
-  const lookahead = new Date(sprintEnd.getTime() + (sprintEnd.getTime() - sprintStart.getTime()));
+  // Far edge of any forecast window the cadence resolver can produce.
+  //
+  // NOT the window itself, deliberately, and the fan-out is why (plan-review
+  // F4). Bounding on the resolved window would make the cadence read sequential
+  // — and this function runs once per recomputable sprint inside the measurement
+  // sweep's loop (`sweep.ts`), so a cron cycle over N sprints would go from N
+  // round trips to 2N. `lessons.md` #3's surviving rule is one handle, ONE
+  // fan-out. The editor's own ceiling bounds it, so nothing the window draws can
+  // fall outside the loaded set, and the extra rows are inert:
+  // `computeSprintCapacity` clips every absence to the window it is given, and
+  // `buildAvailabilityGrid` filters to its own axis. At most a quarter's
+  // absences per owner, on the index the query already uses.
+  //
+  // PLUS TWO DAYS OF SLACK (impl-review F2). The ceiling alone leaves a margin of
+  // exactly zero at `lengthDays = 90`, and this is millisecond arithmetic over an
+  // instant while the window is drawn in day keys: a DST fall-back inside the
+  // window puts `sprintEnd + 90 days` an hour EARLIER in local terms, so an
+  // absence starting on the window's last day can sit past the bound and vanish.
+  // The symptom would be silent and one-directional — the row disappears and
+  // `adjustedMd` rises — which is `lessons.md`'s narrowing-predicate rule, the
+  // rule this constant exists to honour. Two days absorb every zone offset
+  // (-12…+14) and both DST directions; the rows they add are inert like the rest.
+  const lookahead = new Date(
+    sprintEnd.getTime() + (MAX_CADENCE_LENGTH_DAYS + 2) * 24 * 60 * 60 * 1000,
+  );
 
-  const [rows, absences, timeZone, nonWorkingDays, cadence] = await Promise.all([
-    db
-      .select({
-        id: teamMember.id,
-        name: teamMember.name,
-        fte: teamMember.fte,
-        isActive: teamMember.isActive,
-      })
-      .from(teamMember)
-      .where(eq(teamMember.ownerId, ownerId))
-      .orderBy(teamMember.name),
-    db
-      .select({
-        teamMemberId: absence.teamMemberId,
-        startDate: absence.startDate,
-        endDate: absence.endDate,
-      })
-      .from(absence)
-      .where(
-        and(
-          eq(absence.ownerId, ownerId),
-          lte(absence.startDate, lookahead),
-          gte(absence.endDate, sprintStart),
+  const [rows, absences, forwardAbsence, timeZone, nonWorkingDays, cadence] =
+    await Promise.all([
+      db
+        .select({
+          id: teamMember.id,
+          name: teamMember.name,
+          fte: teamMember.fte,
+          isActive: teamMember.isActive,
+        })
+        .from(teamMember)
+        .where(eq(teamMember.ownerId, ownerId))
+        .orderBy(teamMember.name),
+      db
+        .select({
+          teamMemberId: absence.teamMemberId,
+          startDate: absence.startDate,
+          endDate: absence.endDate,
+        })
+        .from(absence)
+        .where(
+          and(
+            eq(absence.ownerId, ownerId),
+            lte(absence.startDate, lookahead),
+            gte(absence.endDate, sprintStart),
+          ),
         ),
-      ),
-    getJiraTimeZone(db, ownerId),
-    // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
-    // inside the reducer for the same reason the zone is: the reducer is pure.
-    getNonWorkingDays({ db, ownerId }),
-    // S-30 (FR-007): the working-day pattern the LEAD chose. ONE call covers
-    // both callers of this function — the dashboard and the measurement sweep —
-    // and it is the sweep that makes the resolver's `start_date <=` ordering
-    // load-bearing: an unfinalized closed sprint is recomputed on every cycle,
-    // so a later record must not reach back over it.
-    resolveCadenceFor(db, ownerId, sprint),
-  ]);
+      // S-18: has this lead EVER recorded an absence past the running sprint?
+      // Unbounded above on purpose — an absence starting six months out still
+      // proves the habit, which is what the notice is about. Same
+      // `(team_member_id, start_date, end_date)` index, same fan-out: it depends
+      // only on `sprintEnd`, so it costs no extra round trip.
+      //
+      // THE LATEST END DATE, NOT AN EXISTENCE CHECK (impl-review F1). `gt` on the
+      // raw instants cannot answer the question on its own: `absence.end_date` is
+      // the LAST INSTANT of its local day (`absence-dates.ts`), while
+      // `sprint.end_date` is Jira's arbitrary instant — 08:00Z on a typical
+      // sprint. An absence recorded on the sprint's OWN final day therefore ends
+      // at 23:59:59.999 local, satisfies `gt`, and would report a lead who has
+      // recorded nothing forward as one who has — silencing the notice for
+      // exactly the account it was written for. Taking the sprint's last day off
+      // is an ordinary thing to record, not a corner case. The predicate below
+      // stays as a cheap pre-filter (it can only over-select); the DAY KEYS in the
+      // team's zone decide, once the zone this fan-out is also loading resolves.
+      db
+        .select({ endDate: absence.endDate })
+        .from(absence)
+        .where(and(eq(absence.ownerId, ownerId), gt(absence.endDate, sprintEnd)))
+        .orderBy(desc(absence.endDate))
+        .limit(1),
+      getJiraTimeZone(db, ownerId),
+      // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
+      // inside the reducer for the same reason the zone is: the reducer is pure.
+      getNonWorkingDays({ db, ownerId }),
+      // S-30 (FR-007): the working-day pattern the LEAD chose. ONE call covers
+      // both callers of this function — the dashboard and the measurement sweep —
+      // and it is the sweep that makes the resolver's `start_date <=` ordering
+      // load-bearing: an unfinalized closed sprint is recomputed on every cycle,
+      // so a later record must not reach back over it.
+      resolveCadenceFor(db, ownerId, sprint),
+    ]);
 
   // The driver hands `numeric` back as a string. Converting once, HERE, is what
   // keeps every consumer of this reader — the reducer and the tab's grids alike
   // — from having to remember (`lib/fte.ts`).
   const rosterMembers = rows.map((m) => ({ ...m, fte: toFte(m.fte) }));
+
+  const nextWindow = nextWindowAfter({
+    sprintEnd,
+    lengthDays: cadence.lengthDays,
+    timeZone,
+  });
 
   return {
     capacity: computeSprintCapacity({
@@ -316,5 +432,26 @@ export async function getSprintCapacityFor(
     timeZone,
     members: rosterMembers,
     absences,
+    // Built AFTER the fan-out, from the length it resolved — pure arithmetic
+    // over data already in hand, so it costs no query.
+    nextWindow,
+    cadence,
+    // The SAME reducer, the SAME inputs, a different window. The absence set was
+    // loaded to cover any window the resolver can produce, and the reducer clips
+    // each absence to the window it is given, so nothing outside this one leaks
+    // into the figure.
+    nextWindowCapacity: computeSprintCapacity({
+      members: rosterMembers,
+      absences,
+      sprintStart: nextWindow.from,
+      sprintEnd: nextWindow.to,
+      workingDays: cadence.workingDays,
+      timeZone,
+      nonWorkingDays,
+    }),
+    hasForwardAbsence:
+      forwardAbsence[0] != null &&
+      dayKeyInTimeZone(forwardAbsence[0].endDate, timeZone) >
+        dayKeyInTimeZone(sprintEnd, timeZone),
   };
 }

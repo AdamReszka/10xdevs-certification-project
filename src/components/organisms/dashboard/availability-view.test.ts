@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildAvailabilityGrid,
-  nextWindowAfter,
-} from "@/components/organisms/dashboard/availability-view";
+import { buildAvailabilityGrid } from "@/components/organisms/dashboard/availability-view";
 
 /**
- * S-08 Phase 5 — the availability tab's grid logic.
+ * S-08 Phase 5 — the availability tab's grid logic: which cells are marked
+ * absent.
  *
- * Two things get decided here and nowhere else: which window "next" means, and
- * which cells are marked absent. The second sprint window is derived from the
- * CURRENT sprint's own length rather than from `sprint.length_days` /
- * `start_day`, because those cadence columns are written by the importer and read
- * by nothing — they carry no test coverage and no guarantee of agreeing with the
- * dates the sprint actually ran on.
+ * WHICH WINDOW "NEXT" MEANS MOVED OUT (S-18). It is no longer derived from the
+ * current sprint's own span but from the lead's resolved cadence, which only the
+ * server can read — so it lives in `lib/dashboard/next-window.ts` and is covered
+ * by `next-window.test.ts`.
  */
 
 const SPRINT_START = new Date("2026-08-03T00:00:00.000Z"); // Mon
@@ -23,78 +19,6 @@ const MEMBERS = [
   { id: "m-1", name: "Mia Krystof", isActive: true },
   { id: "m-2", name: "Sam Lee", isActive: true },
 ];
-
-describe("nextWindowAfter", () => {
-  /**
-   * These assert on the DAYS the two grids actually draw, not on the arithmetic
-   * the function performs. The earlier version restated `end + 1ms` back to
-   * itself and therefore could not fail — which is exactly how the overlap below
-   * shipped (impl-review F1/F3).
-   */
-  function daysOf(from: Date, to: Date, timeZone: string | null) {
-    return buildAvailabilityGrid({ members: MEMBERS, absences: [], from, to, timeZone })
-      .days;
-  }
-
-  it("does not share a day with the sprint when the sprint ends mid-day", () => {
-    // The load-bearing case: real Jira sprints end at an arbitrary instant.
-    // `run-sync.integration.test.ts` stores 2026-08-31T08:00:00.000Z.
-    const start = new Date("2026-08-17T08:00:00.000Z");
-    const end = new Date("2026-08-28T08:00:00.000Z");
-    const next = nextWindowAfter(start, end, "UTC");
-
-    const current = daysOf(start, end, "UTC");
-    const upcoming = daysOf(next.from, next.to, "UTC");
-
-    expect(current.at(-1)).toBe("2026-08-28");
-    expect(upcoming[0]).toBe("2026-08-29");
-    expect(current.filter((d) => upcoming.includes(d))).toEqual([]);
-  });
-
-  it("does not share a day when the sprint ends at the last instant of a day", () => {
-    const next = nextWindowAfter(SPRINT_START, SPRINT_END, "UTC");
-
-    const current = daysOf(SPRINT_START, SPRINT_END, "UTC");
-    const upcoming = daysOf(next.from, next.to, "UTC");
-
-    expect(current.at(-1)).toBe("2026-08-14");
-    expect(upcoming[0]).toBe("2026-08-15");
-    expect(current.filter((d) => upcoming.includes(d))).toEqual([]);
-  });
-
-  it("resolves the boundary in the team's zone, not in UTC", () => {
-    // 2026-08-28T08:00Z is still 2026-08-28 in Warsaw (+2) but 2026-08-28 01:00
-    // in Los Angeles — and an end at 2026-08-29T04:00Z is the 29th in Warsaw and
-    // still the 28th in LA, so the next window starts on a different day in each.
-    const start = new Date("2026-08-17T08:00:00.000Z");
-    const end = new Date("2026-08-29T04:00:00.000Z");
-
-    expect(
-      daysOf(
-        nextWindowAfter(start, end, "Europe/Warsaw").from,
-        nextWindowAfter(start, end, "Europe/Warsaw").to,
-        "Europe/Warsaw",
-      )[0],
-    ).toBe("2026-08-30");
-    expect(
-      daysOf(
-        nextWindowAfter(start, end, "America/Los_Angeles").from,
-        nextWindowAfter(start, end, "America/Los_Angeles").to,
-        "America/Los_Angeles",
-      )[0],
-    ).toBe("2026-08-29");
-  });
-
-  it("keeps the next window the same length as the sprint", () => {
-    const start = new Date("2026-08-17T08:00:00.000Z");
-    const end = new Date("2026-08-28T08:00:00.000Z");
-    const next = nextWindowAfter(start, end, "UTC");
-
-    expect(daysOf(next.from, next.to, "UTC")).toHaveLength(
-      daysOf(start, end, "UTC").length,
-    );
-  });
-});
 
 describe("buildAvailabilityGrid", () => {
   it("puts every day of the window on the axis, in order", () => {

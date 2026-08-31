@@ -116,6 +116,23 @@ afterEach(async () => {
  * subject.
  */
 async function seedCrossingSprint(ownerId: string): Promise<void> {
+  await seedSprint(ownerId, {
+    name: "Crosses new year",
+    startDate: new Date("2026-12-21T08:00:00.000Z"),
+    endDate: new Date("2027-01-04T08:00:00.000Z"),
+  });
+}
+
+/**
+ * Give an owner a sprint with arbitrary dates, and no `length_days` — so the
+ * cadence resolves through tier 4 to `DEFAULT_CADENCE.lengthDays = 14`, which is
+ * the fallback S-18's window rides on for a sprint the reconciler has not
+ * cached a length for.
+ */
+async function seedSprint(
+  ownerId: string,
+  { name, startDate, endDate }: { name: string; startDate: Date; endDate: Date },
+): Promise<void> {
   const [cred] = await db
     .insert(jiraCredential)
     .values({
@@ -148,10 +165,10 @@ async function seedCrossingSprint(ownerId: string): Promise<void> {
     ownerId,
     jiraProjectId: project.id,
     jiraSprintId: `ha-${ownerId}`,
-    name: "Crosses new year",
+    name,
     state: "ACTIVE",
-    startDate: new Date("2026-12-21T08:00:00.000Z"),
-    endDate: new Date("2027-01-04T08:00:00.000Z"),
+    startDate,
+    endDate,
   });
 }
 
@@ -393,6 +410,61 @@ describe("approveHolidayYearAction", () => {
     expect(
       (await listApprovedYears({ db, ownerId, countryCode: "PL" })).has(thisYear),
     ).toBe(true);
+  });
+
+  it("accepts a year reachable only through the FORECAST window", async () => {
+    // S-18, and the half a unit test cannot see. This sprint touches only its
+    // own year — it is the FORTNIGHT AFTER it, whose capacity the availability
+    // tab now puts on screen, that runs into January. Before this phase
+    // `/team/days-off` could offer that year while the action refused it: a
+    // notice naming the year and a button that could never succeed.
+    const ownerId = await newOwner();
+    const thisYear = new Date().getUTCFullYear();
+    const nextYear = thisYear + 1;
+    await seedSprint(ownerId, {
+      name: "Ends before new year",
+      startDate: new Date(`${thisYear}-12-07T08:00:00.000Z`),
+      endDate: new Date(`${thisYear}-12-20T08:00:00.000Z`),
+    });
+
+    const result = await approveHolidayYearAction({
+      countryCode: "PL",
+      years: [nextYear],
+      days: holidaysForYear("PL", nextYear).map((h) => h.day),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      (await listApprovedYears({ db, ownerId, countryCode: "PL" })).has(nextYear),
+    ).toBe(true);
+  });
+
+  it("still refuses a year beyond the forecast window", async () => {
+    // The horizon reached one window further, not off the end: a payload naming
+    // a year no surface offers is still what closes it before its calendar was
+    // ever proposed.
+    const ownerId = await newOwner();
+    const thisYear = new Date().getUTCFullYear();
+    const beyond = thisYear + 2;
+    await seedSprint(ownerId, {
+      name: "Ends before new year",
+      startDate: new Date(`${thisYear}-12-07T08:00:00.000Z`),
+      endDate: new Date(`${thisYear}-12-20T08:00:00.000Z`),
+    });
+
+    const result = await approveHolidayYearAction({
+      countryCode: "PL",
+      years: [beyond],
+      days: holidaysForYear("PL", beyond).map((h) => h.day),
+    });
+
+    expect(result.ok).toBe(false);
+    expect(
+      await db
+        .select()
+        .from(holidayYearApproval)
+        .where(eq(holidayYearApproval.ownerId, ownerId)),
+    ).toHaveLength(0);
   });
 
   it("does not touch another account", async () => {

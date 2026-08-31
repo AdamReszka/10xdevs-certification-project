@@ -15,8 +15,11 @@ import {
   type AvailabilityGrid,
   type AvailabilityMember,
   buildAvailabilityGrid,
-  nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
+import {
+  type NextWindowCapacityView,
+  toNextWindowCapacityView,
+} from "@/components/organisms/dashboard/next-window-capacity-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -84,10 +87,10 @@ export type HolidayCalendarFacts = {
  * A tab rather than an always-on card, because FR-016 is explicit that the
  * Anomaly Inbox stays the headline and every other panel sits one click away.
  *
- * Two windows: the sprint in flight, and the next one of the same length. The
- * second answers "can I promise this?" at the moment the lead is asked — which is
- * usually mid-sprint, not at planning. It shows WHO is away; it deliberately does
- * not compute that window's capacity number (its own slice).
+ * Two windows: the sprint in flight, and the next one, of the length the lead's
+ * cadence says (S-18 — it used to be the current sprint's own accidental span).
+ * The second answers "can I promise this?" at the moment the lead is asked —
+ * which is usually mid-sprint, not at planning.
  *
  * All grid logic lives in `availability-view.ts`; this file renders.
  */
@@ -96,8 +99,13 @@ export default function Availability({
   absences,
   sprintStart,
   sprintEnd,
+  nextWindowStart,
+  nextWindowEnd,
   timeZone,
   capacity,
+  nextWindowCapacity,
+  hasForwardAbsence,
+  now,
   jiraSprintId,
   adjustments,
   holidayCalendar,
@@ -107,8 +115,32 @@ export default function Availability({
   absences: SerializedAbsence[];
   sprintStart: string | null;
   sprintEnd: string | null;
+  /**
+   * The forecast window's bounds, resolved SERVER-SIDE (S-18). It used to be
+   * computed here from the sprint's own millisecond span; its length is now the
+   * lead's durable cadence, which only a database read can resolve — so the
+   * window crosses the boundary as two ISO strings, like every other date here.
+   * `null` whenever the sprint has no dates, exactly when the grids are withheld.
+   */
+  nextWindowStart: string | null;
+  nextWindowEnd: string | null;
   timeZone: string | null;
   capacity: SprintCapacity | null;
+  /**
+   * The SAME reducer over the forecast window (S-18, FR-022). `null` exactly
+   * when {@link capacity} is — there is no sprint to project from.
+   */
+  nextWindowCapacity: SprintCapacity | null;
+  /** Has this lead EVER recorded an absence past the running sprint? Drives the
+   *  stronger notice — a fact about their habit, not about this fortnight. */
+  hasForwardAbsence: boolean;
+  /**
+   * The request's clock, as an ISO string. It decides whether the forecast
+   * window is still ahead, and it crosses the boundary as a VALUE rather than a
+   * `new Date()` inside this component — the same rule `calendar-notice.ts`'s
+   * callers follow, and what keeps the demo's frozen anchor coherent.
+   */
+  now: string;
   /**
    * The displayed sprint's Jira id, or `null` when there is none to adjust. The
    * manual-entry form is withheld without it: an entry has to name the sprint it
@@ -127,10 +159,10 @@ export default function Availability({
   isDemo: boolean;
 }) {
   const windows = useMemo(() => {
-    if (!sprintStart || !sprintEnd) return null;
+    if (!sprintStart || !sprintEnd || !nextWindowStart || !nextWindowEnd)
+      return null;
     const start = new Date(sprintStart);
     const end = new Date(sprintEnd);
-    const next = nextWindowAfter(start, end, timeZone);
     const parsed = absences.map((a) => ({
       teamMemberId: a.teamMemberId,
       startDate: new Date(a.startDate),
@@ -147,12 +179,20 @@ export default function Availability({
       next: buildAvailabilityGrid({
         members,
         absences: parsed,
-        from: next.from,
-        to: next.to,
+        from: new Date(nextWindowStart),
+        to: new Date(nextWindowEnd),
         timeZone,
       }),
     };
-  }, [members, absences, sprintStart, sprintEnd, timeZone]);
+  }, [
+    members,
+    absences,
+    sprintStart,
+    sprintEnd,
+    nextWindowStart,
+    nextWindowEnd,
+    timeZone,
+  ]);
 
   return (
     <Card>
@@ -160,9 +200,9 @@ export default function Availability({
         <div className="flex flex-col gap-1.5">
           <CardTitle>Who is away</CardTitle>
           <CardDescription>
-            Recorded absences across this sprint and the next window of the same
-            length. An absence also silences that person&apos;s inactivity flag and
-            lowers the sprint&apos;s capacity.
+            Recorded absences across this sprint and the next window of your
+            team&apos;s cadence. An absence also silences that person&apos;s
+            inactivity flag and lowers the sprint&apos;s capacity.
           </CardDescription>
         </div>
         {/*
@@ -199,6 +239,17 @@ export default function Availability({
               isDemo={isDemo}
             />
             <AvailabilitySection title="This sprint" grid={windows.current} />
+            {nextWindowCapacity && nextWindowStart ? (
+              <NextWindowCapacity
+                view={toNextWindowCapacityView({
+                  capacity: nextWindowCapacity,
+                  hasForwardAbsence,
+                  windowStart: new Date(nextWindowStart),
+                  now: new Date(now),
+                  timeZone,
+                })}
+              />
+            ) : null}
             <AvailabilitySection title="Next window" grid={windows.next} />
           </>
         )}
@@ -340,6 +391,66 @@ function CapacitySummary({
           canCorrectDelivered={adjustments?.isFinalized ?? false}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * The forecast window's capacity in MAN-DAYS, and what it is allowed to claim
+ * (S-18, FR-010/FR-022).
+ *
+ * MIRRORS `CapacitySummary`'s shape so the two windows read as the same kind of
+ * thing, and differs exactly where their provenance differs. There is no
+ * override badge, no delivered-SP line and no adjustment form: all three are
+ * keyed by `sprint_measurement.jira_sprint_id`, and a window Jira has not
+ * created has no such id — inventing one would put a hand-entered figure into
+ * FR-024's normalisation under a key nothing can reconcile.
+ *
+ * EVERY SENTENCE COMES FROM `next-window-capacity-view.ts`. This file has no test
+ * harness, so a claim assembled here is a claim nothing can hold to account —
+ * and the whole point of the badge and the caveat is that this number must not
+ * be mistaken for a measurement.
+ */
+function NextWindowCapacity({ view }: { view: NextWindowCapacityView }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-md border p-4">
+      <div className="flex flex-col gap-1">
+        <p className="flex items-center gap-2 text-2xl font-semibold tabular-nums">
+          {round1(view.md)} MD
+          {view.beforeAbsencesMd !== null ? (
+            <span className="text-sm font-normal text-muted-foreground">
+              of {round1(view.beforeAbsencesMd)} MD, after absences
+            </span>
+          ) : null}
+          {view.isProjected ? <Badge variant="outline">Projected</Badge> : null}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Capacity for the next window, over {view.workingDays}{" "}
+          {view.workingDays === 1 ? "working day" : "working days"}.
+        </p>
+        {view.teamDaysOff > 0 ? (
+          <p className="text-sm text-muted-foreground">
+            − {view.teamDaysOff} team{" "}
+            {view.teamDaysOff === 1 ? "day" : "days"} off already subtracted
+            (public holidays, company days off).
+          </p>
+        ) : null}
+      </div>
+
+      <p className="text-sm text-muted-foreground">{view.caveat}</p>
+
+      {view.noForwardAbsencesNotice ? (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>Nothing is recorded past this sprint</AlertTitle>
+          <AlertDescription>
+            <span>{view.noForwardAbsencesNotice}</span>
+            <Link href="/team/absences" className="underline underline-offset-4">
+              Record upcoming absences
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }
