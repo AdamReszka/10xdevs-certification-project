@@ -743,13 +743,13 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [x] 4.1 Unit tests pass, including `holidayProposal` returning `[]` for an approved year and omitting days already present: `npm test`
-- [x] 4.2 The notice module's tests enumerate the whole precedence table, including the country-unavailable row, including demo silence with a country set and a year unapproved
-- [x] 4.3 Integration tests pass, including double approval writing rows once and a deleted day not being re-proposed: `npm run test:integration`
-- [x] 4.4 A submitted day outside that year's calendar, or whose year was not submitted, is refused
-- [x] 4.5 A sprint spanning a year boundary proposes both years; a sprint inside one year proposes one
-- [x] 4.6 Type checking passes: `npm run typecheck`
-- [x] 4.7 Linting passes: `npm run lint`
+- [x] 4.1 Unit tests pass, including `holidayProposal` returning `[]` for an approved year and omitting days already present: `npm test` — 7a4854f
+- [x] 4.2 The notice module's tests enumerate the whole precedence table, including the country-unavailable row, including demo silence with a country set and a year unapproved — 7a4854f
+- [x] 4.3 Integration tests pass, including double approval writing rows once and a deleted day not being re-proposed: `npm run test:integration` — 7a4854f
+- [x] 4.4 A submitted day outside that year's calendar, or whose year was not submitted, is refused — 7a4854f
+- [x] 4.5 A sprint spanning a year boundary proposes both years; a sprint inside one year proposes one — 7a4854f
+- [x] 4.6 Type checking passes: `npm run typecheck` — 7a4854f
+- [x] 4.7 Linting passes: `npm run lint` — 7a4854f
 
 #### Manual
 
