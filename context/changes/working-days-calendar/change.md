@@ -1,7 +1,7 @@
 ---
 change_id: working-days-calendar
 title: Public holidays are derived from the team's country instead of typed in by hand
-status: new
+status: preparing
 created: 2026-08-31
 updated: 2026-08-31
 archived_at: null
