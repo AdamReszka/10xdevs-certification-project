@@ -3587,3 +3587,196 @@ wierszy 27.B i 27.C — inaczej niż wiersz 1 w §26.
       produkt (US-02). Dodatkowo dni robocze do liczenia wieku anomalii biorą się
       teraz ze stałej, a nie z wiersza fikstury: niepusta skrzynka jest dowodem,
       że ta podmiana nie zmieniła wyniku.
+
+---
+
+## 28. S-17 `working-days-calendar` — otwarte (2026-08-31)
+
+Kalendarz dni roboczych: produkt **mówi**, kiedy liczył pojemność i budżety
+starzenia się przeciwko pustemu kalendarzowi; polskie święta są **wyprowadzane**
+z kraju zapisanego na koncie zamiast wklepywane data po dacie; a wyprowadzenie
+jest **oferowane co roku** jako propozycja do zatwierdzenia, żeby 1 stycznia nie
+był cichą regresją.
+
+Źródła: `context/changes/working-days-calendar/plan.md` (kanon, sekcja
+`## Progress`) i `context/changes/working-days-calendar/MANUAL-CHECKLIST.md`
+(pełne opisy czterech wierszy blokujących + wiersz 0 migracyjny).
+
+**Co już działa automatycznie** (nie testuj tego ręcznie): arytmetyka Wielkanocy
+przeciwko ośmiu znanym latom, czternaście reguł polskich przeciwko rocznikom
+2024/2025/2026, cała tabela pierwszeństwa notki, transakcyjność zatwierdzenia,
+odrzucanie spreparowanego dnia i izolacja międzykontowa każdej nowej funkcji
+store'u.
+
+### 🔴 Blokujący wszystko poniżej — migracja `0025` na produkcję
+
+- [ ] **28.0** (`MANUAL-CHECKLIST` wiersz 0, faza 2) — **URUCHAM PRZED KAŻDYM
+      INNYM WIERSZEM Z §28.**
+      **Gdzie:** produkcyjna baza Supabase — **nie** lokalna (lokalnie `0025`
+      jest już zastosowana). Trasa jak dla `0021`–`0024`: pooler +
+      `DATABASE_URL_OVERRIDE` albo Supabase MCP `apply_migration` z ręcznym
+      wpisem bookkeepingowym w `drizzle.__drizzle_migrations`.
+      **Co zrobić:** zastosuj
+      `src/db/migrations/0025_concerned_gertrude_yorkes.sql` (dwa `CREATE TABLE`
+      + jeden `ALTER TABLE "team_day_off" ADD COLUMN "source"`), dopisz wpis
+      bookkeepingowy, a potem odczytaj listę tabel i kolumn.
+      **Co musi być prawdą:** istnieją tabele `holiday_calendar` i
+      `holiday_year_approval`, a `team_day_off` ma kolumnę `source` typu `text`,
+      `NOT NULL DEFAULT 'manual'`; lista migracji drizzle zawiera `0025`.
+      **Dlaczego to ma znaczenie:** merge do `main` uruchamia deploy **samego
+      kodu** — nic w CI nie stosuje migracji na produkcji
+      (`context/foundation/lessons.md`, ostatni wpis). Każdy wiersz poniżej
+      czyta jedną z tych tabel albo tę kolumnę; odhaczenie go na produkcji bez
+      `0025` niczego nie dowodzi. Kolumna jest addytywna z wartością domyślną,
+      więc cofnięcie kodu **nie** wymaga cofania schematu.
+
+### Blokujące (te same, co w checkliście slice'a)
+
+- [ ] **28.A** (`MANUAL-CHECKLIST` wiersz 1, faza 1, zamyka `1.7`)
+      **Gdzie:** `/dashboard` (panel Availability) i `/team/days-off`, na
+      **prawdziwym** koncie bez żadnego zapisanego dnia wolnego.
+      **Co zrobić:** otwórz dashboard, znajdź liczbę osobodni (MD), przeczytaj
+      linijki pod nią. Potem otwórz `/team/days-off`.
+      **Co musi być prawdą:** obie powierzchnie niosą zdanie mówiące, że liczby
+      zakładają, iż nikt nigdy nie ma wolnego. Nie odznaka, nie pusta lista —
+      zdanie nazywające **i** pojemność w osobodniach, **i** budżety starzenia
+      się ticketów/PR-ów.
+      **Dlaczego to ma znaczenie:** dziś pusty kalendarz i sprint bez świąt
+      renderują się bajt w bajt tak samo — na liczbie, przeciwko której lead
+      zobowiązuje się do sprintu.
+
+- [ ] **28.B** (faza 1, zamyka `1.8`)
+      **Gdzie:** `/team/days-off`, potem `/dashboard`.
+      **Co zrobić:** dodaj ręcznie **jeden** dzień wolny wypadający w dzień
+      roboczy wewnątrz aktywnego sprintu. Wróć na dashboard.
+      **Co musi być prawdą:** zdanie z 28.A znika z obu powierzchni **tylko
+      wtedy**, gdy kraj jest już ustawiony i rok zatwierdzony; przed tym miejsce
+      zdania zajmuje propozycja kraju (28.E). Na panelu pojawia się linijka
+      „− 1 team day off already subtracted".
+      **Dlaczego to ma znaczenie:** to jedyny wiersz, który sprawdza, że
+      ręcznie wpisany dzień nadal dociera do dzielnika pojemności — czyli że
+      S-17 niczego nie odciął w szwie, który zbudował S-23.
+
+- [ ] **28.C** (`MANUAL-CHECKLIST` wiersz 2, fazy 1 i 4, zamyka `1.9` i `4.14`)
+      **Gdzie:** wczytaj demo z `/settings/demo`, potem `/dashboard` i
+      `/team/days-off`.
+      **Co zrobić:** szukaj zdania z 28.A oraz **jakiejkolwiek** propozycji
+      wyboru kraju.
+      **Co musi być prawdą:** ani jedno, ani drugie nie pojawia się w demie —
+      mimo że właściciel demo nie ma ustawionego kraju, a rok nie jest
+      zatwierdzony. Sekcja „Public holiday calendar" na `/team/days-off` też się
+      w demie nie renderuje.
+      **Dlaczego to ma znaczenie:** odwiedzający demo świadomie pominął
+      konfigurację. Namawianie go do skonfigurowania tenanta, którego nie chciał
+      konfigurować, łamie obietnicę progu (FR-008) — i jest dokładnie tą
+      regresją, dla której istnieje tabela pierwszeństwa notki.
+
+- [ ] **28.D** (faza 2, zamyka `2.7`)
+      **Gdzie:** `/team/days-off` na koncie, które **przed** migracją miało
+      zapisane dni wolne.
+      **Co zrobić:** popatrz na listę zapisanych dni.
+      **Co musi być prawdą:** wszystkie są na miejscu, w tej samej kolejności, i
+      **żaden** nie ma odznaki „From the holiday calendar" — lista wygląda
+      dokładnie tak, jak przed migracją.
+      **Dlaczego to ma znaczenie:** kolumna `source` jest `NOT NULL DEFAULT
+      'manual'` właśnie po to, żeby migracja zaklasyfikowała każdy istniejący
+      wiersz poprawnie. Odznaka na wierszu, który wpisał człowiek, odbiera mu
+      autorstwo jego własnej pracy.
+
+- [ ] **28.E** (faza 2, zamyka `2.8`)
+      **Gdzie:** `/dashboard`, panel Availability, na tym samym koncie co 28.D.
+      **Co zrobić:** zanotuj liczbę MD **przed** wdrożeniem tej gałęzi, potem
+      porównaj po.
+      **Co musi być prawdą:** pojemność jest **niezmieniona**. Migracja dodaje
+      kolumnę i dwie tabele; nie ma prawa ruszyć żadnej liczby.
+      **Dlaczego to ma znaczenie:** to test regresji na dzielniku, którego
+      wszystkie pozostałe wiersze §28 dotykają celowo. Jeśli liczba drgnie
+      **tutaj**, to znaczy, że ruszyła z powodu, którego nikt nie zamawiał.
+
+- [ ] **28.F** (faza 4, zamyka `4.8`)
+      **Gdzie:** `/team/days-off` i `/dashboard`, prawdziwe konto bez
+      ustawionego kraju.
+      **Co zrobić:** obejrzyj obie powierzchnie.
+      **Co musi być prawdą:** obie proponują wybór kraju. Na `/team/days-off`
+      jest lista rozwijana z Polską i zdanie mówiące, że kolejne kraje dopiero
+      będą — jednoelementowa lista ma się czytać jako granica produktu, nie jako
+      błąd. Uwaga: propozycja kraju pojawia się **także** na koncie, które ma już
+      ręcznie wpisane dni wolne, i tekst musi wtedy mówić, że to, co wpisałeś,
+      zostaje nietknięte.
+      **Dlaczego to ma znaczenie:** brak kraju to stan, którego konto nie umie
+      opuścić samo. Bez oferty na obu powierzchniach cała reszta slice'a jest
+      nieosiągalna.
+
+- [ ] **28.G** (faza 4, zamyka `4.9`)
+      **Gdzie:** `/team/days-off`, prawdziwe konto.
+      **Co zrobić:** wybierz **Poland**. Przejrzyj listę, która się pojawi.
+      **Co musi być prawdą:** każdy zaproponowany dzień ma datę i polską nazwę
+      („Nowy Rok", „Boże Ciało"), wszystkie są domyślnie zaznaczone, a te
+      wypadające w sobotę lub niedzielę mają odznakę „Not a working day anyway".
+      Nagłówek mówi, ile dni **naprawdę** kosztuje zespół dzień roboczy.
+      **Dlaczego to ma znaczenie:** dwa z czternastu polskich świąt zawsze
+      wypadają w niedzielę. Lead, który zatwierdzi czternaście dni i zobaczy
+      spadek o dziesięć, musi być o tym uprzedzony **przed** zatwierdzeniem, bo
+      inaczej odczyta to jako błąd arytmetyczny.
+
+- [ ] **28.H** (`MANUAL-CHECKLIST` wiersz 3, faza 4, zamyka `4.10`)
+      **Gdzie:** `/team/days-off`, potem `/dashboard`.
+      **Co zrobić:** zostaw wszystkie dni zaznaczone i zatwierdź. Policz, ile z
+      nich wypada w dni robocze. Otwórz panel Availability.
+      **Co musi być prawdą:** liczba MD **spada**, pojawia się linijka
+      „− N team days off already subtracted", a **N** równa się liczbie
+      zatwierdzonych dni wypadających w dni robocze — święta weekendowe nie
+      wchodzą do N.
+      **Dlaczego to ma znaczenie:** to powód istnienia slice'a. Jeśli wiersze
+      wpadają do bazy, a pojemność się nie rusza, to szew zbudowany przez S-23
+      nie jest naprawdę karmiony i lead patrzy na tę samą złą liczbę, tylko z
+      większą ceremonią.
+
+- [ ] **28.I** (faza 4, zamyka `4.11`)
+      **Gdzie:** `/team/days-off`, na koncie, na którym rok **nie jest** jeszcze
+      zatwierdzony (użyj drugiego konta albo drugiego roku).
+      **Co zrobić:** **odznacz** jedno święto przed zatwierdzeniem. Zatwierdź.
+      Odśwież stronę.
+      **Co musi być prawdą:** odznaczonego dnia nie ma na liście zapisanych dni
+      wolnych **i** nie jest proponowany ponownie.
+      **Dlaczego to ma znaczenie:** odznaczenie jest wyrażone jako
+      *niewysłanie*, nigdy jako wysłanie kasowania. Jeśli wraca po odświeżeniu,
+      to znaczy, że rok nie został ostemplowany albo propozycja liczy się od
+      nowa mimo stempla.
+
+- [ ] **28.J** (`MANUAL-CHECKLIST` wiersz 4, faza 4, zamyka `4.12`) 🔴 **NIE
+      POMIJAJ TEGO WIERSZA.**
+      **Gdzie:** `/team/days-off`, po 28.H.
+      **Co zrobić:** usuń **jeden** wyprowadzony dzień z listy. Odśwież stronę.
+      Odśwież ją jeszcze raz następnego dnia, jeśli możesz.
+      **Co musi być prawdą:** nie wraca i nie jest proponowany ponownie.
+      **Dlaczego to ma znaczenie:** to defekt klasy S-30 — wybór leada zastąpiony
+      po cichu wiarygodną złą wartością — i jedyny wiersz, który dowodzi, że
+      rekord zatwierdzenia roku robi swoje. Regeneracja wskrzeszająca skasowane
+      święto kosztuje zespół osobodzień na osobę w dniu, który faktycznie
+      przepracowali, i nic na ekranie tego nie mówi.
+
+- [ ] **28.K** (faza 4, zamyka `4.13`)
+      **Gdzie:** `/dashboard` i `/team/days-off`, po 28.H.
+      **Co zrobić:** obejrzyj obie powierzchnie jeszcze raz.
+      **Co musi być prawdą:** notka o kalendarzu **zniknęła** z obu — także
+      wtedy, gdy odznaczyłeś wszystko i nie zapisał się ani jeden dzień. Sekcja
+      „Public holiday calendar" mówi „Reviewed".
+      **Dlaczego to ma znaczenie:** to, że kalendarz został przejrzany, mówi
+      **rekord zatwierdzenia**, a nie liczba wierszy. Zespół, który pracuje w
+      każde święto, zweryfikował kalendarz dokładniej niż ktokolwiek inny —
+      mówienie mu, że jego liczby „zakładają, iż nikt nigdy nie ma wolnego",
+      celuje zdaniem w jedyną osobę, która sprawdziła, że jest odwrotnie.
+
+### Świadomie NIE zrobione w tym slice'ie
+
+- **Żadnych podziałów regionalnych** (niemieckie landy, szwajcarskie kantony,
+  narody UK) — jeden kraj na całe konto, ustalone na etapie framingu.
+- **Żadnego kraju poza Polską.** Kolumna trzyma kod ISO, a reguły siedzą w
+  tabeli kluczowanej tym kodem, więc drugi kraj to dopisanie pliku bez migracji.
+- **Żadnego kroku crona.** Propozycja jest czystą funkcją; cache'owanie czegoś,
+  co da się przeliczyć, to cache z problemem unieważniania.
+- **Żadnego kroku w kreatorze setupu** — `onboarding.ts` zostaje przy sześciu
+  sondach; siódma bramkowałaby `/dashboard` na polu, które ma działającą wartość
+  domyślną.
+- **Recap nie dowiaduje się o kalendarzu** — żadnego powiadomienia push.

@@ -731,25 +731,25 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [x] 3.1 Unit tests pass: `npm test`
-- [x] 3.2 `easterSunday` matches six known years including both March and April Easters
-- [x] 3.3 `holidaysForYear('PL', 2026)` returns 14 dates with Easter Monday 2026-04-06 and Boże Ciało 2026-06-04
-- [x] 3.4 `holidaysForYear('PL', 2024)` returns 13 and `('PL', 2025)` returns 14
-- [x] 3.5 `holidaysForYear('XX', 2026)` returns `[]` and does not throw
-- [x] 3.6 Type checking passes: `npm run typecheck`
-- [x] 3.7 Linting passes: `npm run lint`
+- [x] 3.1 Unit tests pass: `npm test` — 792547f
+- [x] 3.2 `easterSunday` matches six known years including both March and April Easters — 792547f
+- [x] 3.3 `holidaysForYear('PL', 2026)` returns 14 dates with Easter Monday 2026-04-06 and Boże Ciało 2026-06-04 — 792547f
+- [x] 3.4 `holidaysForYear('PL', 2024)` returns 13 and `('PL', 2025)` returns 14 — 792547f
+- [x] 3.5 `holidaysForYear('XX', 2026)` returns `[]` and does not throw — 792547f
+- [x] 3.6 Type checking passes: `npm run typecheck` — 792547f
+- [x] 3.7 Linting passes: `npm run lint` — 792547f
 
 ### Phase 4: The proposal and its approval
 
 #### Automated
 
-- [ ] 4.1 Unit tests pass, including `holidayProposal` returning `[]` for an approved year and omitting days already present: `npm test`
-- [ ] 4.2 The notice module's tests enumerate the whole precedence table, including the country-unavailable row, including demo silence with a country set and a year unapproved
-- [ ] 4.3 Integration tests pass, including double approval writing rows once and a deleted day not being re-proposed: `npm run test:integration`
-- [ ] 4.4 A submitted day outside that year's calendar, or whose year was not submitted, is refused
-- [ ] 4.5 A sprint spanning a year boundary proposes both years; a sprint inside one year proposes one
-- [ ] 4.6 Type checking passes: `npm run typecheck`
-- [ ] 4.7 Linting passes: `npm run lint`
+- [x] 4.1 Unit tests pass, including `holidayProposal` returning `[]` for an approved year and omitting days already present: `npm test`
+- [x] 4.2 The notice module's tests enumerate the whole precedence table, including the country-unavailable row, including demo silence with a country set and a year unapproved
+- [x] 4.3 Integration tests pass, including double approval writing rows once and a deleted day not being re-proposed: `npm run test:integration`
+- [x] 4.4 A submitted day outside that year's calendar, or whose year was not submitted, is refused
+- [x] 4.5 A sprint spanning a year boundary proposes both years; a sprint inside one year proposes one
+- [x] 4.6 Type checking passes: `npm run typecheck`
+- [x] 4.7 Linting passes: `npm run lint`
 
 #### Manual
 

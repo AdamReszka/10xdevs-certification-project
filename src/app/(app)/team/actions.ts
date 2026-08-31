@@ -12,13 +12,23 @@ import {
   deleteAbsence as deleteAbsenceService,
   updateAbsence as updateAbsenceService,
 } from "@/lib/absence-store";
+import { holidaysForYear } from "@/lib/holidays";
+import {
+  approveHolidayYear as approveHolidayYearService,
+  setHolidayCountry as setHolidayCountryService,
+} from "@/lib/holidays/calendar-store";
 import { UnknownMemberError } from "@/lib/integrations/roster-store";
 import {
   UnknownTeamDayOffError,
+  createDerivedDaysOff,
   createTeamDayOff as createTeamDayOffService,
   deleteTeamDayOff as deleteTeamDayOffService,
 } from "@/lib/team-day-off-store";
 import { absenceIdSchema, absenceSaveSchema } from "@/lib/validations/absence";
+import {
+  holidayApprovalSaveSchema,
+  holidayCountrySaveSchema,
+} from "@/lib/validations/holiday-calendar";
 import {
   teamDayOffIdSchema,
   teamDayOffSaveSchema,
@@ -202,6 +212,111 @@ export async function deleteTeamDayOffAction(
     return { ok: true, id: parsed.data };
   } catch (err) {
     return toFailure(err, "[team/absences] deleteTeamDayOff");
+  }
+}
+
+/**
+ * Set the account's country (S-17, FR-007).
+ *
+ * Re-detects for the same reason every other mutation in this file does (D1):
+ * the country alone changes nothing yet, but the action is the entry point of a
+ * flow whose next step moves five aging budgets, and a family where one member
+ * silently skips the reconcile is how the exception gets copied.
+ */
+export async function saveHolidayCountryAction(
+  input: unknown,
+): Promise<AbsenceMutationResult> {
+  const { ownerId, now } = await resolveWorkspace();
+
+  const parsed = holidayCountrySaveSchema.safeParse(input);
+  if (!parsed.success) return invalidInput("Pick a country and try again.");
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await setHolidayCountryService({
+      db,
+      ownerId,
+      countryCode: parsed.data.countryCode,
+    });
+    await redetect(db, ownerId, now);
+    return { ok: true, id: parsed.data.countryCode };
+  } catch (err) {
+    return toFailure(err, "[team/days-off] saveHolidayCountry");
+  }
+}
+
+/**
+ * Approve a year's public holidays (S-17, FR-007).
+ *
+ * ONE TRANSACTION, ALWAYS. The rows and the year stamps commit together or
+ * neither does: a half-applied approval would leave a year that LOOKS decided
+ * carrying only some of its days, and nothing afterwards could tell that from a
+ * lead who unchecked the rest. A two-year approval is all-or-nothing exactly as
+ * a one-year approval is.
+ *
+ * EVERY SUBMITTED DAY IS RE-VALIDATED SERVER-SIDE against the calendar of its
+ * own year, and its year must be among the submitted `years`. The payload is
+ * client-authored: without this, a crafted submission could write arbitrary
+ * dates into the account's calendar under a year stamp that then closes the
+ * question forever.
+ *
+ * A YEAR WITH NO KEPT DAYS IS STILL STAMPED. That is a real decision — a team
+ * that works every public holiday — and leaving it unstamped would re-propose
+ * the whole calendar on the very next render.
+ */
+export async function approveHolidayYearAction(
+  input: unknown,
+): Promise<AbsenceMutationResult> {
+  const { ownerId, now } = await resolveWorkspace();
+
+  const parsed = holidayApprovalSaveSchema.safeParse(input);
+  if (!parsed.success) {
+    return invalidInput(
+      parsed.error.issues[0]?.message ?? "Check the selection and try again.",
+    );
+  }
+
+  const { countryCode, years, days } = parsed.data;
+  const submittedYears = new Set(years);
+
+  // The calendar of each submitted year, once, so the check below is a lookup
+  // rather than a recomputation per day.
+  const allowed = new Map<string, string>();
+  for (const year of years) {
+    for (const holiday of holidaysForYear(countryCode, year)) {
+      allowed.set(holiday.day, holiday.label);
+    }
+  }
+
+  for (const day of days) {
+    const year = Number(day.slice(0, 4));
+    if (!submittedYears.has(year) || !allowed.has(day)) {
+      return invalidInput("That list is out of date. Reload the page and try again.");
+    }
+  }
+
+  const { env } = getCloudflareContext();
+  const db = getDb(env);
+
+  try {
+    await db.transaction(async (tx) => {
+      await createDerivedDaysOff({
+        db: tx,
+        ownerId,
+        // The generator's own label, never the client's: the payload carries
+        // day keys alone, so there is nothing to spoof here.
+        days: days.map((day) => ({ day, label: allowed.get(day) ?? null })),
+      });
+      for (const year of years) {
+        await approveHolidayYearService({ db: tx, ownerId, countryCode, year });
+      }
+    });
+    await redetect(db, ownerId, now);
+    return { ok: true, id: countryCode };
+  } catch (err) {
+    return toFailure(err, "[team/days-off] approveHolidayYear");
   }
 }
 

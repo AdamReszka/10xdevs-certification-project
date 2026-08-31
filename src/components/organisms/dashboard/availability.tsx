@@ -63,6 +63,22 @@ export type SprintAdjustments = {
 };
 
 /**
+ * The holiday-calendar facts the notice needs, as plain data (S-17).
+ *
+ * ARRAYS RATHER THAN A `Set` across the boundary: the house convention is that
+ * only plain JSON-ish values cross into a client component, the same rule that
+ * turns `Date` into an ISO string two types above. The component rebuilds the
+ * set once.
+ */
+export type HolidayCalendarFacts = {
+  countryCode: string | null;
+  /** Every year the active sprint touches (`holidayYears`). */
+  years: number[];
+  /** Which of them the lead has already decided about, under `countryCode`. */
+  approvedYears: number[];
+};
+
+/**
  * Availability — the fifth tab on Dashboard "Today" (S-08, FR-010/FR-016).
  *
  * A tab rather than an always-on card, because FR-016 is explicit that the
@@ -84,6 +100,8 @@ export default function Availability({
   capacity,
   jiraSprintId,
   adjustments,
+  holidayCalendar,
+  isDemo,
 }: {
   members: AvailabilityMember[];
   absences: SerializedAbsence[];
@@ -103,6 +121,10 @@ export default function Availability({
    * an error, and one the override form itself can resolve by creating one.
    */
   adjustments: SprintAdjustments | null;
+  /** S-17: what the panel needs to say about the working-day calendar. */
+  holidayCalendar: HolidayCalendarFacts;
+  /** Silences the calendar notice outright — see the notice module's row 0. */
+  isDemo: boolean;
 }) {
   const windows = useMemo(() => {
     if (!sprintStart || !sprintEnd) return null;
@@ -173,6 +195,8 @@ export default function Availability({
               capacity={capacity}
               jiraSprintId={jiraSprintId}
               adjustments={adjustments}
+              holidayCalendar={holidayCalendar}
+              isDemo={isDemo}
             />
             <AvailabilitySection title="This sprint" grid={windows.current} />
             <AvailabilitySection title="Next window" grid={windows.next} />
@@ -201,28 +225,39 @@ export default function Availability({
  * is surfaced by the `/settings/team` banner instead, where it can actually be
  * fixed.
  *
- * AN EMPTY CALENDAR NOW SPEAKS (S-17, FR-007). Until this slice, zero team days
- * off rendered as silence — the same silence as a calendar the lead had checked
- * and found genuinely holiday-free — while the capacity above and all five
- * elapsed-time anomaly rules were being computed as though nobody is ever off.
- * The two states are separated by `capacity.calendarIsEmpty`, not by
- * `teamDaysOff`, which is zero for both; the copy lives in
+ * AN UNREVIEWED CALENDAR NOW SPEAKS (S-17, FR-007). Until this slice, zero team
+ * days off rendered as silence — the same silence as a calendar the lead had
+ * checked and found genuinely holiday-free — while the capacity above and all
+ * five elapsed-time anomaly rules were being computed as though nobody is ever
+ * off. What separates the states is the APPROVAL RECORD rather than the row
+ * count, and the whole precedence table (demo first, then a country we have no
+ * rules for, then no country, then an unreviewed year) lives in
  * `lib/holidays/calendar-notice.ts` because this file has no test harness.
  */
 function CapacitySummary({
   capacity,
   jiraSprintId,
   adjustments,
+  holidayCalendar,
+  isDemo,
 }: {
   capacity: SprintCapacity | null;
   jiraSprintId: string | null;
   adjustments: SprintAdjustments | null;
+  holidayCalendar: HolidayCalendarFacts;
+  isDemo: boolean;
 }) {
   if (!capacity) return null;
 
   const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff, calendarIsEmpty } =
     capacity;
-  const notice = holidayCalendarNotice({ calendarIsEmpty });
+  const notice = holidayCalendarNotice({
+    isDemo,
+    countryCode: holidayCalendar.countryCode,
+    years: holidayCalendar.years,
+    approvedYears: new Set(holidayCalendar.approvedYears),
+    calendarIsEmpty,
+  });
   const headline = toCapacityHeadline({
     adjustedMd,
     nominalMd,

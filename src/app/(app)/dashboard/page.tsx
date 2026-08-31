@@ -22,6 +22,11 @@ import {
   dayRangeInTimeZone,
 } from "@/lib/dashboard/day-bucket";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
+import {
+  getHolidayCalendar,
+  listApprovedYears,
+} from "@/lib/holidays/calendar-store";
+import { holidayYears } from "@/lib/holidays/proposal";
 import { toVelocityEstimateView } from "@/lib/measurement/estimate";
 import { getSprintMeasurement } from "@/lib/measurement/overrides";
 import { listSprintMeasurementsForOwner } from "@/lib/measurement/reader";
@@ -103,6 +108,7 @@ export default async function DashboardPage() {
     availability,
     measurement,
     history,
+    holidayCountry,
   ] = await Promise.all([
     sprint
       ? listAnomaliesForSprint(db, ownerId, sprint.id)
@@ -130,7 +136,25 @@ export default async function DashboardPage() {
     // round of them. The shared handle is free (`lessons.md` #3); the extra
     // round trip would not have been.
     listSprintMeasurementsForOwner(db, ownerId),
+    // S-17: the account's jurisdiction, for the working-day-calendar notice on
+    // the Availability panel. One indexed lookup on `owner_id`, joined to the
+    // SAME fan-out on the SAME handle (`lessons.md` #3).
+    getHolidayCalendar({ db, ownerId }),
   ]);
+
+  // S-17. Every year the ACTIVE SPRINT touches, so a sprint running into January
+  // is not told in February that January mattered. The approvals read is second
+  // because it needs the country the fan-out above resolved; it is skipped
+  // entirely — not defaulted — when there is no country to scope it to.
+  const holidayCalendarYears = holidayYears({
+    sprintStart: availability?.sprintStart ?? null,
+    sprintEnd: availability?.sprintEnd ?? null,
+    now,
+    timeZone,
+  });
+  const approvedHolidayYears = holidayCountry
+    ? await listApprovedYears({ db, ownerId, countryCode: holidayCountry })
+    : new Set<number>();
 
   // The lead's override replaces the WHOLE computed capacity (FR-022), so the
   // ratio FR-024 scales by has to be taken over the same figure the Availability
@@ -280,6 +304,12 @@ export default async function DashboardPage() {
             timeZone={timeZone}
             capacity={availability?.capacity ?? null}
             jiraSprintId={sprint?.jiraSprintId ?? null}
+            holidayCalendar={{
+              countryCode: holidayCountry,
+              years: holidayCalendarYears,
+              approvedYears: [...approvedHolidayYears],
+            }}
+            isDemo={isDemo}
             // A null record is ordinary, not an error: the sweep has simply not
             // run since this sprint appeared. The override form creates one.
             adjustments={

@@ -1,11 +1,18 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { InfoIcon } from "lucide-react";
 
+import HolidayCalendarEditor from "@/components/organisms/settings/holiday-calendar-editor";
 import TeamDaysOffEditor from "@/components/organisms/settings/team-days-off-editor";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
 import { holidayCalendarNotice } from "@/lib/holidays/calendar-notice";
+import {
+  getHolidayCalendar,
+  listApprovedYears,
+} from "@/lib/holidays/calendar-store";
+import { holidayProposal, holidayYears } from "@/lib/holidays/proposal";
+import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { listTeamDaysOff } from "@/lib/team-day-off-store";
 import { resolveWorkspace } from "@/lib/workspace";
@@ -28,15 +35,18 @@ import { resolveWorkspace } from "@/lib/workspace";
 export default async function TeamDaysOffPage() {
   const { env } = getCloudflareContext();
   const db = getDb(env);
-  const { ownerId } = await resolveWorkspace();
+  const { ownerId, isDemo, now } = await resolveWorkspace();
 
-  const [daysOff, sprint] = await Promise.all([
+  const [daysOff, sprint, countryCode, timeZone] = await Promise.all([
     // Unwindowed for the same reason absences are: a holiday entered for next
     // quarter that vanished from the list would read as a failed save.
     listTeamDaysOff({ db, ownerId }),
-    // Only for `workingDays` — the editor shows what the sprint's working-day
-    // count becomes once a day is removed from it.
+    // For `workingDays` — the editor shows what the sprint's working-day count
+    // becomes once a day is removed from it — and, since S-17, for the window
+    // the holiday proposal covers.
     getActiveSprintRow(db, ownerId),
+    getHolidayCalendar({ db, ownerId }),
+    getJiraTimeZone(db, ownerId),
   ]);
 
   // RESOLVED (S-30). This page's counter and the capacity engine must agree on
@@ -44,10 +54,40 @@ export default async function TeamDaysOffPage() {
   // the sprint row.
   const cadence = sprint ? await resolveCadenceFor(db, ownerId, sprint) : null;
 
-  // S-17: driven by the list this page already holds, not by a capacity read.
+  // S-17. Every year the ACTIVE SPRINT touches, not just this one: a sprint
+  // running into January would otherwise count 1 and 6 January as ordinary
+  // working days for its whole length, and the notice would be silent about it
+  // until the year had already turned.
+  const years = holidayYears({
+    sprintStart: sprint?.startDate ?? null,
+    sprintEnd: sprint?.endDate ?? null,
+    now,
+    timeZone,
+  });
+  const approvedYears = countryCode
+    ? await listApprovedYears({ db, ownerId, countryCode })
+    : new Set<number>();
+  // Submitted WHOLE on approval, a year with nothing left to propose included —
+  // stamping it is what stops SprintFlow asking about it forever.
+  const unapprovedYears = years.filter((y) => !approvedYears.has(y));
+  const proposed = countryCode
+    ? holidayProposal({
+        countryCode,
+        years,
+        approvedYears,
+        existingDays: new Set(daysOff.map((d) => d.day)),
+      })
+    : [];
+
   // `listTeamDaysOff` is unwindowed, so "no rows here" IS "no calendar at all" —
   // the same fact `capacity.calendarIsEmpty` reports on the dashboard.
-  const notice = holidayCalendarNotice({ calendarIsEmpty: daysOff.length === 0 });
+  const notice = holidayCalendarNotice({
+    isDemo,
+    countryCode,
+    years,
+    approvedYears,
+    calendarIsEmpty: daysOff.length === 0,
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -69,6 +109,18 @@ export default async function TeamDaysOffPage() {
           <AlertDescription>{notice.body}</AlertDescription>
         </Alert>
       ) : null}
+
+      {/* Above the manual list, because it is the path most leads should take:
+          the list below stays for the company offsite that no national calendar
+          knows about. */}
+      {isDemo ? null : (
+        <HolidayCalendarEditor
+          countryCode={countryCode}
+          years={unapprovedYears}
+          proposed={proposed}
+          workingDays={cadence?.workingDays ?? null}
+        />
+      )}
 
       <TeamDaysOffEditor
         daysOff={daysOff.map((d) => ({
