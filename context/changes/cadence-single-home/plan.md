@@ -551,13 +551,13 @@ was protecting has been proven unnecessary by a green suite.
 
 #### Automated
 
-- [x] 2.1 Migration applies cleanly: `npm run db:migrate`
-- [x] 2.2 Columns are gone from `\d sprint`
-- [x] 2.3 Type checking passes: `npm run typecheck`
-- [x] 2.4 Linting passes: `npm run lint`
-- [x] 2.5 Unit tests pass: `npm test`
-- [x] 2.6 Integration tests pass: `npm run test:integration`
-- [x] 2.7 Generated SQL contains exactly two `DROP COLUMN` statements and no other DDL
+- [x] 2.1 Migration applies cleanly: `npm run db:migrate` — 603ce3e
+- [x] 2.2 Columns are gone from `\d sprint` — 603ce3e
+- [x] 2.3 Type checking passes: `npm run typecheck` — 603ce3e
+- [x] 2.4 Linting passes: `npm run lint` — 603ce3e
+- [x] 2.5 Unit tests pass: `npm test` — 603ce3e
+- [x] 2.6 Integration tests pass: `npm run test:integration` — 603ce3e
+- [x] 2.7 Generated SQL contains exactly two `DROP COLUMN` statements and no other DDL — 603ce3e
 
 #### Manual
 
@@ -568,9 +568,9 @@ was protecting has been proven unnecessary by a green suite.
 
 #### Automated
 
-- [ ] 3.1 Linting passes: `npm run lint`
-- [ ] 3.2 Unit tests pass: `npm test`
-- [ ] 3.3 Manual-test sweep is clean: `node scripts/manual-test-sweep.mjs`
+- [x] 3.1 Linting passes: `npm run lint`
+- [x] 3.2 Unit tests pass: `npm test`
+- [x] 3.3 Manual-test sweep is clean: `node scripts/manual-test-sweep.mjs`
 
 #### Manual
 

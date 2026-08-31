@@ -586,9 +586,26 @@ export const sprintMeasurement = pgTable(
  * who saves Mon–Fri at sprint N+1 writes three source-equal fields; delete the
  * row and the recency fallback hands Mon–Thu back, silently reverting the save.
  * So a row of three NULLs is a meaningful state — *for this sprint, follow the
- * source and do not inherit* — and NO write path deletes a row, ever. That is
- * the permanent rule, settled at S-32 rather than left open; the reasoning is
- * below.
+ * source and do not inherit* — and NO write path deletes a row, ever.
+ *
+ * NOTHING PRUNES THIS TABLE, AND THAT IS A DECISION (S-32), not an omission the
+ * next slice should tidy up. The PRD's retention non-goal was extended to name
+ * this record alongside `sprint_measurement` (§ Non-Goals, 2026-08-31). Two
+ * edges are the reason a prune was REJECTED rather than deferred:
+ *
+ *  - The inheritance tier's lookback has NO FLOOR by construction — it orders on
+ *    `start_date <= <this sprint's>` — so the record carrying a Mon–Thu pattern
+ *    into today's sprint is routinely one from a long-closed sprint. Pruning by
+ *    age hands the team back Mon–Fri without telling them: the S-30 defect
+ *    rebuilt on a timer.
+ *  - A record for a project the account NO LONGER MONITORS is a promise made to
+ *    the lead in copy — `disconnect-impact.ts` tells them a project switch keeps
+ *    "the sprint cadence you set by hand" — and the resolver's `sameProject`
+ *    LEFT JOIN exists precisely so those rows stay visible.
+ *
+ * There is also no regime to be out of line with: `purgeOldRecaps` is the only
+ * age-based delete in the repo, and no current-plus-two purge exists for
+ * `sprint`, `jira_ticket`, `pull_request` or `commit`.
  */
 export const sprintCadenceOverride = pgTable(
   "sprint_cadence_override",
