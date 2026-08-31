@@ -1,4 +1,4 @@
-import { and, eq, gt, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lte } from "drizzle-orm";
 
 import { absence, teamMember, type SelectSprint } from "@/db/schema";
 import {
@@ -6,7 +6,7 @@ import {
   countWorkingDaysInclusive,
 } from "@/lib/anomaly/rules/helpers";
 import { type ResolvedCadence, resolveCadenceFor } from "@/lib/cadence-override";
-import type { DayKey } from "@/lib/dashboard/day-bucket";
+import { type DayKey, dayKeyInTimeZone } from "@/lib/dashboard/day-bucket";
 import { nextWindowAfter } from "@/lib/dashboard/next-window";
 import type { getDb } from "@/lib/db";
 import { toFte } from "@/lib/fte";
@@ -260,6 +260,11 @@ export type CapacityReadResult = {
    * about the LEAD'S HABIT — has anything ever been recorded forward of the
    * running sprint — rather than about this particular fortnight's weather.
    *
+   * "After the sprint's end" is decided on DAY KEYS in the team's zone, not on
+   * the raw instants (impl-review F1): an absence recorded on the sprint's own
+   * final day is stored as that day's last instant and would otherwise read as
+   * forward.
+   *
    * One `limit(1)` on the index the absence query already uses, joined to the
    * same fan-out because it depends only on `sprintEnd`.
    */
@@ -319,13 +324,23 @@ export async function getSprintCapacityFor(
   // — and this function runs once per recomputable sprint inside the measurement
   // sweep's loop (`sweep.ts`), so a cron cycle over N sprints would go from N
   // round trips to 2N. `lessons.md` #3's surviving rule is one handle, ONE
-  // fan-out. The editor's own ceiling is a bound no resolved window can exceed,
-  // so nothing the window draws can fall outside the loaded set, and the extra
-  // rows are inert: `computeSprintCapacity` clips every absence to the window it
-  // is given, and `buildAvailabilityGrid` filters to its own axis. At most a
-  // quarter's absences per owner, on the index the query already uses.
+  // fan-out. The editor's own ceiling bounds it, so nothing the window draws can
+  // fall outside the loaded set, and the extra rows are inert:
+  // `computeSprintCapacity` clips every absence to the window it is given, and
+  // `buildAvailabilityGrid` filters to its own axis. At most a quarter's
+  // absences per owner, on the index the query already uses.
+  //
+  // PLUS TWO DAYS OF SLACK (impl-review F2). The ceiling alone leaves a margin of
+  // exactly zero at `lengthDays = 90`, and this is millisecond arithmetic over an
+  // instant while the window is drawn in day keys: a DST fall-back inside the
+  // window puts `sprintEnd + 90 days` an hour EARLIER in local terms, so an
+  // absence starting on the window's last day can sit past the bound and vanish.
+  // The symptom would be silent and one-directional — the row disappears and
+  // `adjustedMd` rises — which is `lessons.md`'s narrowing-predicate rule, the
+  // rule this constant exists to honour. Two days absorb every zone offset
+  // (-12…+14) and both DST directions; the rows they add are inert like the rest.
   const lookahead = new Date(
-    sprintEnd.getTime() + MAX_CADENCE_LENGTH_DAYS * 24 * 60 * 60 * 1000,
+    sprintEnd.getTime() + (MAX_CADENCE_LENGTH_DAYS + 2) * 24 * 60 * 60 * 1000,
   );
 
   const [rows, absences, forwardAbsence, timeZone, nonWorkingDays, cadence] =
@@ -354,15 +369,28 @@ export async function getSprintCapacityFor(
             gte(absence.endDate, sprintStart),
           ),
         ),
-      // S-18: has this lead EVER recorded an absence past the running sprint? An
-      // existence check, unbounded above on purpose — an absence starting six
-      // months out still proves the habit, which is what the notice is about. Same
+      // S-18: has this lead EVER recorded an absence past the running sprint?
+      // Unbounded above on purpose — an absence starting six months out still
+      // proves the habit, which is what the notice is about. Same
       // `(team_member_id, start_date, end_date)` index, same fan-out: it depends
       // only on `sprintEnd`, so it costs no extra round trip.
+      //
+      // THE LATEST END DATE, NOT AN EXISTENCE CHECK (impl-review F1). `gt` on the
+      // raw instants cannot answer the question on its own: `absence.end_date` is
+      // the LAST INSTANT of its local day (`absence-dates.ts`), while
+      // `sprint.end_date` is Jira's arbitrary instant — 08:00Z on a typical
+      // sprint. An absence recorded on the sprint's OWN final day therefore ends
+      // at 23:59:59.999 local, satisfies `gt`, and would report a lead who has
+      // recorded nothing forward as one who has — silencing the notice for
+      // exactly the account it was written for. Taking the sprint's last day off
+      // is an ordinary thing to record, not a corner case. The predicate below
+      // stays as a cheap pre-filter (it can only over-select); the DAY KEYS in the
+      // team's zone decide, once the zone this fan-out is also loading resolves.
       db
-        .select({ id: absence.id })
+        .select({ endDate: absence.endDate })
         .from(absence)
         .where(and(eq(absence.ownerId, ownerId), gt(absence.endDate, sprintEnd)))
+        .orderBy(desc(absence.endDate))
         .limit(1),
       getJiraTimeZone(db, ownerId),
       // The team-wide day-off calendar (S-23, FR-007). Loaded here rather than
@@ -421,6 +449,9 @@ export async function getSprintCapacityFor(
       timeZone,
       nonWorkingDays,
     }),
-    hasForwardAbsence: forwardAbsence.length > 0,
+    hasForwardAbsence:
+      forwardAbsence[0] != null &&
+      dayKeyInTimeZone(forwardAbsence[0].endDate, timeZone) >
+        dayKeyInTimeZone(sprintEnd, timeZone),
   };
 }

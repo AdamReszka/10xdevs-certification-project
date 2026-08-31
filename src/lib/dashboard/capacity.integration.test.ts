@@ -277,6 +277,38 @@ describe("getSprintCapacity — hasForwardAbsence", () => {
     expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(false);
   });
 
+  it("is false for an absence on the sprint's OWN last day", async () => {
+    // IMPL-REVIEW F1. `absence.end_date` is the LAST INSTANT of its local day,
+    // while `sprint.end_date` is Jira's arbitrary instant — 08:00Z here. A raw
+    // `end_date > sprint_end` therefore called this absence "forward" and
+    // silenced the notice for a lead who had recorded nothing past the sprint.
+    // Taking the sprint's last day off is an ordinary thing to record.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-14T00:00:00.000Z"),
+      new Date("2026-08-14T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(false);
+  });
+
+  it("is true for an absence starting the DAY AFTER the sprint ends", async () => {
+    // The other side of the same boundary: one day later is genuinely forward.
+    const ownerId = await newOwnerWithSprint();
+    const memberId = await addMember(ownerId);
+    await addAbsence(
+      ownerId,
+      memberId,
+      new Date("2026-08-15T00:00:00.000Z"),
+      new Date("2026-08-15T23:59:59.999Z"),
+    );
+
+    expect((await getSprintCapacity(db, ownerId))?.hasForwardAbsence).toBe(true);
+  });
+
   it("is true for an absence starting BEYOND the forecast window", async () => {
     // This is what makes the fact ACCOUNT-LEVEL rather than windowed
     // (plan-review F2): a lead who records next quarter's holiday has done the

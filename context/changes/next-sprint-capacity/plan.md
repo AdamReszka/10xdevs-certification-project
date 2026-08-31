@@ -565,7 +565,12 @@ carries every open row from this plan.
   no-shared-day-with-the-sprint invariant asserted on DRAWN DAYS.
 - `proposal.test.ts` — the horizon's reach with and without a forecast window,
   with and without sprint dates, and under a longer lead cadence.
-- `next-window-capacity-view.test.ts` — a caveat is always present and its text
+- `next-window-capacity-view.test.ts` — **shipped at
+  `src/components/organisms/dashboard/`, beside its module** (impl-review F3):
+  this section and Phase 3 §4 named `lib/dashboard/` while Phase 3 §2 puts the
+  module under `components/organisms/dashboard/`, and the house convention is a
+  sibling test (`capacity-adjustments-view`, `availability-view`). Covers: a
+  caveat is always present and its text
   follows `isProjected`, which is false once `now` has reached the window's first
   day; the no-forward-absences notice switches on `hasForwardAbsence` alone.
 - `availability-view.test.ts` — `buildAvailabilityGrid` coverage retained
