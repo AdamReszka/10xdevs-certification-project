@@ -16,6 +16,7 @@ import {
   jiraTicket,
   monitoredRepo,
   sprint,
+  sprintCadenceOverride,
   sprintMeasurement,
   statusMapping,
   syncAttempt,
@@ -1027,6 +1028,67 @@ describe("syncOwner — added_after_sprint_start from the Sprint changelog", () 
       },
     });
     expect(healthy).toBeNull();
+  });
+
+  it("records `cadence_default_fallback` when a cadence record exists but none applies (S-30)", async () => {
+    // The same `lessons.md` obligation, pointed at S-30's own failure mode: the
+    // cycle resolved a cadence from the DEFAULT while this account holds a
+    // record somewhere else — the recency predicate having failed to find what
+    // the lead chose. Reported, rather than finalized as an ordinary green run.
+    const { ownerId } = await newOwner();
+    // A record for a DIFFERENT Jira-side project: it exists, and it cannot apply.
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: "99999",
+      jiraSprintId: "9999",
+      startDate: new Date("2026-08-01T08:00:00.000Z"),
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(rows.at(-1)?.outcome).toContain("cadence_default_fallback");
+  });
+
+  it("stays silent when the cadence resolves from a record that DOES apply", async () => {
+    // A signal that fires on a healthy account is not a signal.
+    const { ownerId } = await newOwner();
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+    const [row] = await db
+      .select()
+      .from(sprint)
+      .where(eq(sprint.ownerId, ownerId));
+    const [project] = await db
+      .select()
+      .from(jiraProject)
+      .where(eq(jiraProject.ownerId, ownerId));
+    await db.insert(sprintCadenceOverride).values({
+      id: randomUUID(),
+      ownerId,
+      jiraProjectId: project.jiraProjectId,
+      jiraSprintId: row.jiraSprintId,
+      startDate: row.startDate!,
+      workingDays: ["MON", "TUE", "WED"],
+    });
+
+    await syncOwner(
+      baseArgs(ownerId, githubFetch().fetchImpl, jiraFetch().fetchImpl),
+    );
+
+    const rows = await db
+      .select({ outcome: syncAttempt.outcome })
+      .from(syncAttempt)
+      .where(and(eq(syncAttempt.ownerId, ownerId), eq(syncAttempt.integration, "JIRA")));
+    expect(rows.at(-1)?.outcome).toBeNull();
   });
 });
 

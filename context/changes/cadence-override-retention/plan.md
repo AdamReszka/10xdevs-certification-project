@@ -1117,11 +1117,11 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 3.1 Type checking and linting pass
-- [x] 3.2 Unit suite green, including rewritten `cadence-editor-view.test.ts`
-- [x] 3.3 Integration suite green, including the reversed `:705` assertion
-- [x] 3.4 Integration case: restore preserves working days, resets length and start day
-- [x] 3.5 Integration case: a source-equal save blocks inheritance instead of deleting the row
+- [x] 3.1 Type checking and linting pass — 5dd0f03
+- [x] 3.2 Unit suite green, including rewritten `cadence-editor-view.test.ts` — 5dd0f03
+- [x] 3.3 Integration suite green, including the reversed `:705` assertion — 5dd0f03
+- [x] 3.4 Integration case: restore preserves working days, resets length and start day — 5dd0f03
+- [x] 3.5 Integration case: a source-equal save blocks inheritance instead of deleting the row — 5dd0f03
 
 #### Manual
 
@@ -1132,13 +1132,13 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [ ] 4.1 Type checking and linting pass
-- [ ] 4.2 Unit suite green
-- [ ] 4.3 Integration suite green, including reconcile cases (c), (d), (i), (k)
-- [ ] 4.4 A direct test for the force branch, which has none today
-- [ ] 4.5 Case (k) asserts `workingDays`
-- [ ] 4.6 Rollover integration case: inheritance with no write at rollover
-- [ ] 4.7 A default-fallback cycle finalizes with `cadence_default_fallback`
+- [x] 4.1 Type checking and linting pass
+- [x] 4.2 Unit suite green
+- [x] 4.3 Integration suite green, including reconcile cases (c), (d), (i), (k)
+- [x] 4.4 A direct test for the force branch, which has none today
+- [x] 4.5 Case (k) asserts `workingDays`
+- [x] 4.6 Rollover integration case: inheritance with no write at rollover
+- [x] 4.7 A default-fallback cycle finalizes with `cadence_default_fallback`
 
 #### Manual
 
