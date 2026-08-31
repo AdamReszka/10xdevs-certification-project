@@ -127,12 +127,22 @@ rytm sprintu, który da się ustawić z powrotem tym samym ekranem.
 
   **Co musi być prawdą:** teksty z kroku 1 wymieniają **kadencję ustawioną
   ręcznie** wśród rzeczy, które **zostają** — nie tylko roster, absencje i dni
-  wolne. Podsumowanie z kroku 3 mówi, że kadencja została zachowana i przypnie
-  się do sprintu, który wciągnie następna synchronizacja. Ekran, na który
-  prowadzi przycisk, **mówi coś prawdziwego o tym, co tam jest** — nie „zaimportuj
-  najpierw kadencję" z wyszarzonym przyciskiem, którego nie da się użyć. Po
-  kroku 4 kadencja z nowego projektu jest ustawialna, a wzorzec **z poprzedniego
-  projektu nie został na nią przeniesiony**.
+  wolne. Podsumowanie z kroku 3 mówi, że kadencja **zostaje przy projekcie, dla
+  którego ją ustawiłeś** (i że wróci, jeśli skierujesz konto z powrotem na ten
+  projekt) — **nie**, że „przypnie się" do sprintu z następnej synchronizacji.
+  Ekran, na który prowadzi przycisk, **mówi coś prawdziwego o tym, co tam jest** —
+  nie „zaimportuj najpierw kadencję" z wyszarzonym przyciskiem, którego nie da
+  się użyć. Po kroku 4 kadencja z nowego projektu jest ustawialna, wzorzec **z
+  poprzedniego projektu nie został na nią przeniesiony**, a najnowszy wpis w
+  historii synchronizacji **nie zawiera** dopisku `cadence default fallback`.
+
+  ⚠️ **Zmienione 2026-08-31 po impl-review (R.2, R.3).** Wcześniej ten wiersz
+  wymagał, żeby podsumowanie obiecywało przypięcie kadencji do nowego sprintu.
+  Kod tego nie robi i nie powinien: rekord jest kluczowany po projekcie **po
+  stronie Jiry**, więc do sprintów nowego projektu nie przyklei się nigdy — a
+  ekran, na który prowadził przycisk, mówił dokładnie odwrotnie, jedno kliknięcie
+  dalej. Ostatnie zdanie o historii synchronizacji jest z tej samej poprawki:
+  świadoma zmiana projektu to **nie** awaria, więc cykl po niej ma milczeć.
 
   **Dlaczego to ma znaczenie:** dwie osobne wady w jednym wierszu. Pierwsza:
   `grep -i cadence` po wszystkich modułach z tekstami ostrzeżeń przed S-30

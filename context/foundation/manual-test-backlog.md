@@ -3399,8 +3399,16 @@ bazy i zobaczysz tam Mon–Fri przy koncie pracującym Mon–Thu, **to nie jest
 błąd**: to nieużywana kopia, a prawdziwa wartość jest w
 `sprint_cadence_override`. Ich usunięcie to osobna pozycja roadmapy (**S-32**).
 
-**Konto:** 26.A i 26.C wymagają prawdziwego konta z podłączoną Jirą, w której
-jest aktywny sprint. 26.B jest do zrobienia na dowolnym prawdziwym koncie.
+**Poprawki po review kodu (2026-08-31).** Slice został po zamknięciu przejrzany i
+poprawiony w trzech miejscach (`plan.md` `## Progress` → *Impl-review fixes*).
+Dla testera zmienia to dwie rzeczy: **wiersz 4 z MANUAL-CHECKLIST ma inny warunek
+zaliczenia** (podsumowanie po zmianie projektu mówi teraz, że kadencja *zostaje
+przy projekcie, dla którego ją ustawiono*, a nie że przypnie się do nowego
+sprintu — bo tego drugiego kod nie robi i nie powinien), oraz **doszedł wiersz
+26.D**.
+
+**Konto:** 26.A, 26.C i 26.D wymagają prawdziwego konta z podłączoną Jirą, w
+której jest aktywny sprint. 26.B jest do zrobienia na dowolnym prawdziwym koncie.
 
 ### Nieblokujące (tylko tutaj)
 
@@ -3445,7 +3453,35 @@ jest aktywny sprint. 26.B jest do zrobienia na dowolnym prawdziwym koncie.
       **Dlaczego to ma znaczenie:** to jest kontrola dla nowego sygnału
       diagnostycznego. `lessons.md` wymaga, żeby log operatora rozróżniał „nic
       nie pasowało" od „predykat jest zły" — więc cykl, który rozwiązał kadencję
-      z domyślnej, **choć konto ma gdzieś rekord kadencji**, zapisuje to w
-      `sync_attempt.outcome` zamiast kończyć jako zwyczajny zielony przebieg.
-      Sygnał, który odpala się na zdrowym koncie, nie jest sygnałem — ten wiersz
-      sprawdza właśnie tę połowę.
+      z domyślnej, **choć konto ma rekord kadencji dla monitorowanego teraz
+      projektu**, zapisuje to w `sync_attempt.outcome` zamiast kończyć jako
+      zwyczajny zielony przebieg. Sygnał, który odpala się na zdrowym koncie, nie
+      jest sygnałem — ten wiersz sprawdza właśnie tę połowę.
+      ⚠️ **Doprecyzowane 2026-08-31 po impl-review (R.3):** wcześniej liczył się
+      rekord **gdziekolwiek** na koncie. Rekord zostawiony przez projekt, z
+      którego lead sam się przepiął, to nie awaria tylko obiecany wynik zmiany
+      projektu — a liczony jako awaria kazał każdemu cyklu takiego konta zgłaszać
+      błąd bez końca. Konsekwencja dla testera: po zmianie projektu historia
+      synchronizacji **też** ma milczeć (sprawdza to wiersz 4 z MANUAL-CHECKLIST).
+
+- [ ] **26.D** (impl-review, `plan.md` `R.6`) **Gdzie:** `/team/cadence`,
+      prawdziwe konto z aktywnym sprintem, które **nigdy** nie ustawiało dni
+      roboczych ręcznie (albo takie, na którym wcześniej zapisano zwykłe
+      **Mon–Fri**).
+      **Co zrobić:** wejdź na `/team/cadence`, **nie ruszaj** „Working days",
+      kliknij **Restore Jira's values**, potwierdź, a potem odśwież stronę (F5) i
+      przeczytaj baner na górze ekranu.
+      **Co musi być prawdą:** baner **nie** mówi „You set your working days by
+      hand". Konto, które nigdy nie wybrało wzorca dni roboczych, po samym
+      przywróceniu wartości z Jiry nadal **podąża za źródłem** — ekran mówi
+      „Following Jira" albo opisuje wyłącznie te pola, które lead faktycznie
+      zmienił.
+      **Dlaczego to ma znaczenie:** przywracanie tworzy wiersz rekordu, jeśli
+      sprint go jeszcze nie ma, i musi wpisać do niego **tylko to, co lead
+      naprawdę wybrał**. Wpisywało tam Mon–Fri zawsze — czyli przypisywało
+      liderowi decyzję, której nie podjął, na ekranie, którego okno chwilę
+      wcześniej obiecało, że dni roboczych nie ruszy. Skutek uboczny był trwały:
+      jawny wzorzec blokuje dziedziczenie po poprzednim sprincie na zawsze. To
+      ten sam niezmiennik, który migracja `0023` opisuje w swoim własnym
+      nagłówku — pole równe źródłu zapisuje się jako puste. W repo nie ma testów
+      komponentów, więc to zdanie na banerze sprawdzą tylko czyjeś oczy.

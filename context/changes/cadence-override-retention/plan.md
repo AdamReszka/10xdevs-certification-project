@@ -1179,3 +1179,53 @@ applying — today's zero is a fact about today, not a guarantee.
 #### Manual
 
 - [ ] 6.4 The four `MANUAL-CHECKLIST.md` rows, row 1 first
+
+### Impl-review fixes (post-epilogue)
+
+Three findings from reviewing the shipped slice against itself. All three are the
+same shape — a path asserting, on the lead's behalf, something the lead never
+said — which is the shape this slice exists to end, so they are fixed here rather
+than deferred. Rows carry their own commit, like every phase above.
+
+#### Automated
+
+- [x] R.1 `clearCadenceOverrideFields` materialises on create ONLY the fields
+      `provenance` marks hand-set. It took `resolved` whole, and `resolved`
+      coalesces every unowned field to the source, so a restore on an account
+      that had never chosen a pattern wrote `["MON"…"FRI"]` as the lead's — and
+      `/team/cadence` then said so, one state after a dialog promising to leave
+      the working days alone. Integration case pins the empty-provenance
+      create — 7d7270c
+- [x] R.2 The project-switch copy stops promising a reattachment, in BOTH modules
+      that carried the claim (`projectSwitchDiscardedDescription`,
+      `CADENCE_RETENTION_CLAUSE`). The record is filed under the Jira-side
+      project id, so a switch leaves the cadence with the project it was set for;
+      the summary's own button then sent the lead to `/team/cadence`, where
+      `survivingCadenceProvenance` finds nothing under the new project and the
+      page says the opposite. Regression asserts the phrase against
+      `DISCONNECT_IMPACT.projectSwitch.keeps`, which had it right all along — 7d7270c
+- [x] R.3 `source_with_prior_override` is scoped to the CURRENT Jira-side
+      project. Counting a record left by a project the account switched away from
+      made every cycle of a deliberately switched account log
+      `cadence_default_fallback` indefinitely — an outcome
+      `DISCONNECT_IMPACT.projectSwitch` promises the lead in advance. Tier 2
+      splits `sameProject` from `applies`, still one row and one round trip;
+      three tests reversed to silence, three added for the case that still
+      fires — 19e1bb1
+- [x] R.4 A latent false green found on the way: both `run-sync` cadence cases
+      ran two `syncOwner` calls under one pinned `NOW`, so the second was skipped
+      on a fresh lease and wrote no attempt — each asserted against the FIRST
+      cycle's row, and the silent one would have passed whatever the resolver
+      did. Both are single-cycle now — 19e1bb1
+- [x] R.5 Full suite green after both commits: lint, typecheck, unit (1373),
+      integration (415), `e2e/cadence-restore.spec.ts` — 19e1bb1
+
+#### Manual
+
+- [ ] R.6 A restore on an account that never set working days does not report
+      them as hand-set (backlog 26.D)
+
+> `MANUAL-CHECKLIST.md` row 4's pass condition changed with R.2 and R.3 rather
+> than gaining a row: the summary now says the cadence stays with the project it
+> was set for, and the cycle after the switch must NOT carry
+> `cadence default fallback`. Rows `5.5` / `5.6` above still cover it.
