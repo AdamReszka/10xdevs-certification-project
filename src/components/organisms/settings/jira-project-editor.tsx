@@ -109,7 +109,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
 
   if (stage.kind === "warning") {
     return (
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="flex w-full flex-col gap-3 rounded-lg border p-4">
         <Alert variant="destructive">
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>This discards synced sprint data</AlertTitle>
@@ -146,7 +146,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
 
   if (stage.kind === "discarded") {
     return (
-      <div className="flex flex-col gap-3 rounded-lg border p-4">
+      <div className="flex w-full flex-col gap-3 rounded-lg border p-4">
         <Alert>
           <AlertTriangle className="size-4" aria-hidden />
           <AlertTitle>{stage.summary}</AlertTitle>
@@ -179,7 +179,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
 
   if (stage.kind === "project") {
     return (
-      <div className="rounded-lg border p-4">
+      <div className="w-full rounded-lg border p-4">
         <JiraProjectSelector
           email={stage.email}
           projects={stage.projects}
@@ -203,7 +203,7 @@ export default function JiraProjectEditor({ currentProjectKey }: { currentProjec
   }
 
   return (
-    <div className="rounded-lg border p-4">
+    <div className="w-full rounded-lg border p-4">
       <JiraStatusMapper
         projectKey={stage.projectKey}
         statuses={stage.statuses}

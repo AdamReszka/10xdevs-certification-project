@@ -62,7 +62,7 @@ SprintFlow gives tech leads of small Scrum teams (3–10 people) an anomaly inbo
 | S-28 | working-day-aging         | anomaly aging is measured against the team's working-day calendar instead of the wall clock, so Monday's inbox stops charging the team for the weekend | S-06, S-14, S-23 | FR-009, FR-013, FR-016 | done |
 | S-29 | post-setup-cadence-surface | sprint length, start day and working days are editable after setup, without re-entering the wizard | S-15, S-16 | FR-007 | proposed |
 | S-30 | cadence-override-retention | a lead's hand-entered sprint cadence survives a Jira disconnect or project switch, instead of silently reseeding with Jira's defaults | S-16, S-26 | FR-007 | proposed |
-| S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | proposed |
+| S-31 | reconnect-affordance      | Reconnect and Disconnect stop looking like the same decision — the lossless way to rotate a token is the obvious one | S-24, S-26 | — (PRD Guardrails: no silent data loss) | done |
 
 ## Streams
 

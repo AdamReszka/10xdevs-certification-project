@@ -663,6 +663,27 @@ przełącznika") razem z pułapką animacji `transition-all`.
 Zostawione tutaj świadomie, żeby kolejny przegląd zgodności nie zgłosił ich
 jako „zgubione". *Ustalone 2026-08-29.*
 
+### Wycofane — S-22 wiersz 15.C (2026-08-31, przez S-31)
+
+**Nie wykonuj 15.C w zapisanej formie.** Wiersz kazał kliknąć w oknie
+potwierdzenia przycisk **„Disconnect GitHub"**. Ten przycisk **nie istnieje** od
+S-26: okno oferuje dziś `Cancel`, `Keep my GitHub data` i `Delete my GitHub
+data`, a jego **brak** jest wprost warunkiem zaliczenia wiersza **16.A**. Dwa
+wiersze tego samego pliku wymagały więc rzeczy przeciwnych — jeden nie do
+wykonania, drugi zaprzeczający pierwszemu.
+
+Wycofany jest **tylko krok pośredni**. Sprawdzana rzecz — że odłączenie
+GitHuba z `/settings/connections/github` zostawia leada na tej stronie z
+formularzem ponownego podłączenia, a **nie** wyrzuca go na `/setup` — jest nadal
+żywa i ważniejsza niż była: od S-31 to właśnie ta strona jest celem wyróżnionego
+przycisku **Reconnect**, i to na obu kartach Ustawień oraz w obu kartach
+kreatora. Wraca jako wiersz **24.C** w §24, z krokiem 2 przepisanym na dzisiejsze
+okno.
+
+Wiersz nie jest kasowany, tylko przekreślony w §15 z odsyłaczem tutaj, żeby ktoś
+czytający starszą checklistę S-22 wiedział, dlaczego jej treść i ekran się
+rozjeżdżają. *Ustalone 2026-08-31 przy S-31.*
+
 ---
 
 ## 7. S-15 `team-management-surface` — przeniesione pod termin (2026-08-25)
@@ -1999,21 +2020,14 @@ scenariuszami: próg, bramka, drzwi demo), `typecheck`, `lint`.
       i konto, które przeszło cały kreator, zostaje wyrzucone z powrotem do
       kreatora — ktoś z działającą integracją traci dostęp do własnego pulpitu.
 
-- [ ] **15.C** (faza 3, `3.8`) **Gdzie:** `/settings/connections/github`, konto z
-      prawdziwymi credentialami.
-      ⚠️ **Ten wiersz odłącza prawdziwą integrację i zaraz ją podłącza z powrotem
-      — miej ten sam PAT GitHuba pod ręką, zanim zaczniesz.**
-      **Co zrobić:** kliknij **Disconnect**, w oknie potwierdzenia kliknij
-      **Disconnect GitHub** (od S-24 to okno pojawia się na każdej ścieżce;
-      **Cancel** nic nie kasuje), popatrz na pasek adresu
-      **zanim** klikniesz cokolwiek innego; potem podłącz GitHuba z powrotem tym
-      samym PAT-em i tymi samymi repozytoriami i wejdź na `/dashboard`.
-      **Co musi być prawdą:** po odłączeniu nadal jesteś na
-      `/settings/connections/github` z formularzem ponownego podłączenia — **nie**
-      na `/setup`; po ponownym podłączeniu `/dashboard` znów pokazuje dane.
-      *Dlaczego to łapie:* bramka pilnuje `/dashboard`, ale nie wolno jej pilnować
-      `/settings/**`. Zadziała szerzej — i lead rotujący wygasły token zostaje
-      wyrzucony z jedynej strony, na której jest przycisk „podłącz ponownie".
+- ~~**15.C**~~ (faza 3, `3.8`) — **WYCOFANE 2026-08-31 przez S-31.** Wiersz
+      kazał kliknąć w oknie potwierdzenia przycisk **„Disconnect GitHub"**,
+      którego S-26 się pozbył i którego **brak** jest dziś warunkiem zaliczenia
+      wiersza **16.A**. Tester wykonujący 15.C dosłownie utknąłby na kroku 2, a
+      gdyby „poprawił" go po swojemu, potwierdziłby wynik, którego 16.A zabrania.
+      Powód i pełne uzasadnienie: §6. **Żywa połowa tego wiersza — że odłączenie
+      z `/settings/connections/github` nie może wyrzucić leada na `/setup` —
+      wraca jako 24.C**, pod slice'em, który czyni tę ścieżkę ważniejszą.
 
 - [ ] **15.D** (faza 4, `4.6` + `4.9`) **Gdzie:** to samo świeże konto co w
       **15.A**, zaraz po nim.
@@ -2189,20 +2203,34 @@ wiedział, dlaczego jej treść i ekran się rozjeżdżają.
       sprawdzenie obu ścieżek (klik do końca) siedzi w §21 — tutaj kończymy na
       Cancel.
 
-- [ ] **16.C** (faza 3, `3.6`) **Gdzie:** `/settings/connections`, konto z
-      **załadowanym demo** (baner na górze) i z prawdziwie podłączonymi
-      integracjami.
+- [ ] **16.C** (faza 3, `3.6`; **układ karty przepisany przez S-31 —
+      2026-08-31**) **Gdzie:** `/settings/connections`, konto z **załadowanym
+      demo** (baner na górze) i z prawdziwie podłączonymi integracjami.
       **Co zrobić:** załaduj demo, wejdź na `/settings/connections`, popatrz na
-      obie karty.
-      **Co musi być prawdą:** **Disconnect** jest wyszarzony i nieklikalny na obu
-      kartach (tak jak „Test connection"). Pod przyciskami jest polskie zdanie
-      wymieniające, co jest wyłączone — w tym *odłączenie integracji* oraz
-      *zmiana monitorowanego projektu i repozytoriów*. Sekcje do zmiany projektu
-      Jiry i wyboru repozytoriów **w ogóle się nie renderują**.
+      obie karty. Spróbuj kliknąć **Reconnect**.
+      **Co musi być prawdą:** w rzędzie akcji są **dwie** kontrolki —
+      **Reconnect** i **Disconnect** — obie wyszarzone i nieklikalne, tak jak
+      **Test connection** stojące nad rzędem. **Reconnect nigdzie nie prowadzi**:
+      kliknięcie nie zmienia adresu (to link tylko poza demo). Przycisków
+      **Change monitored repositories** / **Change monitored project** w rzędzie
+      **w ogóle nie ma**, a sekcje do zmiany repozytoriów i projektu Jiry **się
+      nie renderują**. Pod przyciskami stoi polskie zdanie zaczynające się od
+      „W trybie demonstracyjnym nic, co robisz, nie zmienia Twojego prawdziwego
+      konta". **Nie musi ono wymieniać poszczególnych kontrolek** — od S-27 jest
+      to celowo jedno ogólne zdanie, bo wyliczanka rozjeżdżała się z kodem trzy
+      razy z rzędu.
       *Dlaczego to łapie:* karta Connections celowo pokazuje prawdziwe konto
       nawet w demo. Do tej pory znaczyło to, że z ekranu demo dało się jednym
       klikiem skasować prawdziwe dane — baner obiecywał „Twoje prawdziwe dane i
-      integracje są nietknięte", a kod tego nie dotrzymywał.
+      integracje są nietknięte", a kod tego nie dotrzymywał. S-31 dokłada do tego
+      nowe ryzyko: **Reconnect** jest teraz najbardziej zachęcającym przyciskiem
+      na karcie, a prowadzi do formularza zapisującego prawdziwy credential —
+      gdyby w demo pozostał linkiem, slice zrobiłby z niego najkrótszą drogę do
+      nadpisania prawdziwego tokena z ekranu demo.
+      **Zmiana warunku (2026-08-31):** stara treść wymagała, żeby polskie zdanie
+      *wymieniało*, co jest wyłączone. To już nieprawda od S-27 i było fałszywym
+      niezaliczeniem. Położenie zdania — **pod** przyciskami — zostaje warunkiem,
+      bo przyciski się przesunęły.
 
 - [ ] **16.D** (faza 3, `3.7`) **Gdzie:** baner demo → `/settings/demo` →
       `/team/roster` i `/dashboard`.
@@ -3116,3 +3144,97 @@ ludzi w rosterze). Wiersz 23.E wymaga wejścia w tryb demo.
       więc jego wygląd jest jedyną rzeczą tutaj, której nie potwierdza żaden test
       automatyczny. **Nieblokujące:** obie ścieżki działają niezależnie od tego,
       jak to wygląda.
+
+
+---
+
+## 24. S-31 `reconnect-affordance` — otwarte (2026-08-31)
+
+Slice zamknięty 2026-08-31, pięć faz. Źródło kanoniczne:
+`context/changes/reconnect-affordance/plan.md` `## Progress`. Pełne opisy
+wierszy blokujących: `context/changes/reconnect-affordance/MANUAL-CHECKLIST.md`
+(pięć wierszy — te są u testera pierwsze).
+
+**O co chodzi, po ludzku.** Lead, któremu wygasł token, wchodził na
+`/settings/connections` i musiał zgadywać. Karta oferowała **cztery** kontrolki
+o równej albo mniejszej wadze, trzy z nich nazwane mechanizmem
+(`Test connection`, `Reconnect`, `Disconnect`), i **nic** na niej nie mówiło, że
+jedna z nich wymienia token bez żadnej straty, a inna kasuje sprinty. S-24 dał
+`Disconnect` okno potwierdzenia, S-26 dał temu oknu bezpieczne domyślne wyjście —
+ale oba działają **po** tym, jak lead wybrał już zły przycisk. S-31 naprawia to,
+co jest wcześniej: wagę i słowa. `Reconnect` jest teraz jedynym wyróżnionym
+przyciskiem, `Test connection` stoi osobno nad rzędem jako diagnostyka,
+`Disconnect` zostaje **najcichszą** kontrolką karty, a dwa zdania — jedno nad
+rzędem, jedno pod nim — nazywają trzy zadania i mówią, co ponowne podłączenie
+kosztuje. Te same `Reconnect` dostały też obie karty kreatora, gdzie do dziś
+jedyną drogą do nowego tokena było kliknięcie przycisku niszczącego.
+
+**Żadnej migracji, żadnej zmiany w bazie.** To slice tekstu i układu. Nic tutaj
+nie kasuje danych — każdy wiersz kończy się na patrzeniu albo na `Cancel`.
+
+**Wpływ na starsze wiersze tego pliku.** **16.C** ma przepisany warunek
+zaliczenia (przyciski się przesunęły, a wyliczanka w polskim zdaniu przestała
+być prawdą już przy S-27). **15.C** jest wycofane — powód w §6 — a jego żywa
+połowa wraca niżej jako **24.C**.
+
+**Konto:** 24.A i 24.B robisz na **prawdziwym** koncie z podłączonym GitHubem
+(karta Connections nigdy nie pokazuje danych demo). 24.C wymaga prawdziwego
+konta i **tego samego PAT-a GitHuba pod ręką**.
+
+### Nieblokujące (tylko tutaj)
+
+- [ ] **24.A** (faza 2, poza `plan.md`) **Gdzie:** `/settings/connections`,
+      przeglądarka zwężona do **1024 px** (DevTools → Responsive → 1024×768).
+      To podłoga formatu z NFR — „tablety 10 cali i większe".
+      **Co zrobić:** popatrz na rząd trzech kontrolek na obu kartach. Potem
+      otwórz **Change monitored repositories** i popatrz jeszcze raz.
+      **Co musi być prawdą:** zamknięty rząd mieści się czytelnie — kontrolki
+      albo stoją w jednej linii, albo zawijają się **całe**, żadna nie jest
+      przycięta ani nie nachodzi na sąsiednią. Otwarty panel zajmuje **całą
+      szerokość** karty i spycha `Disconnect` pod siebie; nie próbuje dzielić
+      linii z `Reconnect`.
+      *Dlaczego to łapie:* rząd urósł z trzech kontrolek do trzech **plus**
+      wyprowadzony nad niego `Test connection`, a przycisk otwierający edytor
+      wszedł do zawijanego kontenera dopiero w tym slice'ie. Na szerokim
+      monitorze wszystko się mieści i defekt jest niewidoczny. **Nieblokujące:**
+      brzydkie zawinięcie nikomu niczego nie kasuje, a podłoga tabletu jest
+      wymaganiem niefunkcjonalnym, nie ścieżką krytyczną.
+
+- [ ] **24.B** (faza 2, poza `plan.md`) **Gdzie:** `/settings/connections`,
+      prawdziwe konto, karta GitHub.
+      **Co zrobić:** kliknij **Test connection** i poczekaj na wynik.
+      **Co musi być prawdą:** przycisk na moment pokazuje „Testing…", a potem
+      **nad** dolnym blokiem (nad zdaniem „Three jobs live here") pojawia się
+      ramka „Connection is live" albo „Connection test failed" z wyjaśnieniem.
+      Rząd trzech przycisków i oba zdania są nadal na swoich miejscach, a dolne
+      bloki obu kart nadal są wyrównane względem siebie.
+      *Dlaczego to łapie:* `Test connection` przeprowadził się w tym slice'ie —
+      z rzędu akcji nad zdanie opisowe — i jego alert renderuje się w zupełnie
+      innym miejscu układu niż sam przycisk. Test automatyczny sprawdza
+      **kolejność w DOM**, nie to, czy klik nadal cokolwiek robi i czy wynik
+      jest widoczny bez przewijania. **Nieblokujące:** sama akcja serwerowa jest
+      nietknięta przez ten slice.
+
+- [ ] **24.C** (przeniesione z **15.C**, krok 2 przepisany 2026-08-31)
+      **Gdzie:** `/settings/connections/github`, konto z prawdziwymi
+      credentialami.
+      ⚠️ **Ten wiersz odłącza prawdziwą integrację i zaraz ją podłącza z
+      powrotem — miej ten sam PAT GitHuba pod ręką, zanim zaczniesz.**
+      **Co zrobić:** na `/settings/connections` kliknij **Disconnect** na karcie
+      GitHub; w oknie potwierdzenia kliknij **Keep my GitHub data** (przycisk
+      zwykły, nie czerwony — od S-26 to jest domyślne wyjście i **niczego** nie
+      kasuje poniżej samego credentiala; przycisk „Disconnect GitHub" w tym oknie
+      **nie istnieje**, i tak ma być). Popatrz na pasek adresu **zanim**
+      klikniesz cokolwiek innego. Potem podłącz GitHuba z powrotem tym samym
+      PAT-em i tymi samymi repozytoriami i wejdź na `/dashboard`.
+      **Co musi być prawdą:** po odłączeniu jesteś na `/settings/connections`
+      albo `/settings/connections/github` z formularzem ponownego podłączenia —
+      **nie** na `/setup`. Po ponownym podłączeniu `/dashboard` znów pokazuje
+      dane.
+      *Dlaczego to łapie:* bramka pierwszego uruchomienia pilnuje `/dashboard`,
+      ale nie wolno jej pilnować `/settings/**`. Gdyby zadziałała szerzej, lead
+      rotujący wygasły token zostałby wyrzucony z jedynej strony, na której jest
+      formularz „podłącz ponownie" — a od S-31 to jest strona, na którą prowadzi
+      **wyróżniony** przycisk `Reconnect` z obu kart Ustawień **i** z obu kart
+      kreatora. Wiersz przestał więc dotyczyć jednej ścieżki brzegowej i zaczął
+      dotyczyć głównej.
