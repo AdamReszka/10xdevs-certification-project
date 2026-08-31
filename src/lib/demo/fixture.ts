@@ -825,8 +825,6 @@ export function buildDemoFixture(anchor: Date, ownerId: string): DemoFixture {
       completedSp: 18,
       lengthDays: 14,
       startDay: "MON",
-      workingDays: [...WORKING_DAYS],
-      cadenceOverridden: false,
     },
     teamMembers,
     absences,

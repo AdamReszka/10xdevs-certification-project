@@ -226,7 +226,6 @@ export async function reconcileActiveSprint({
 
   const cadence = deriveCadence({ startDate, endDate, timeZone });
   const jiraSprintId = String(activeSprint.id);
-  const newWorkingDays = JSON.stringify(cadence.workingDays);
   const resolvedBoardId = boardId;
 
   // --- DB writes inside the transaction ------------------------------------
@@ -358,12 +357,12 @@ export async function reconcileActiveSprint({
         state: toSprintState(activeSprint.state) ?? "ACTIVE",
         startDate: new Date(startDate),
         endDate: new Date(endDate),
+        // The DERIVED CACHE of what Jira's dates say. Working days are NOT
+        // written here at all — Jira has no such field, and the lead's chosen
+        // pattern lives in `sprint_cadence_override` (S-32 dropped the second
+        // copy those two columns used to hold).
         lengthDays: cadence.lengthDays,
         startDay: cadence.startDay,
-        workingDays: cadence.workingDays,
-        // INERT since S-30 — written `false` on insert, never read. Provenance
-        // is per field now, which one boolean cannot express (`schema.ts`).
-        cadenceOverridden: false,
         // INSERT-ONLY on purpose: the conflict branch below deliberately omits
         // both columns, so an existing row's freeze is never touched by a
         // metadata refresh. `values()` that the conflict branch does not
@@ -378,19 +377,13 @@ export async function reconcileActiveSprint({
           state: toSprintState(activeSprint.state) ?? "ACTIVE",
           startDate: new Date(startDate),
           endDate: new Date(endDate),
-          // UNCONDITIONAL since S-30. These three columns are the DERIVED
+          // UNCONDITIONAL since S-30. These two columns are the DERIVED
           // CACHE of what Jira's dates say, nothing more: the lead's choice
           // lives in `sprint_cadence_override`, which this statement cannot
           // reach. The three-way `case when … cadence_overridden` SET that used
           // to guard them is gone with the flag it read.
-          //
-          // The `::jsonb` cast stays because the parameter is a
-          // `JSON.stringify`'d literal, not an array.
           lengthDays: cadence.lengthDays,
           startDay: cadence.startDay,
-          workingDays: sql`${newWorkingDays}::jsonb`,
-          // `cadenceOverridden` is deliberately ABSENT: inert, and leaving a
-          // pre-S-30 `true` in place costs nothing since nothing reads it.
         },
       })
       .returning();

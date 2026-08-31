@@ -1,8 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Pool } from "pg";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -15,7 +14,6 @@ import {
   type SelectSprint,
 } from "@/db/schema";
 import {
-  BACKFILL_CADENCE_OVERRIDES,
   clearCadenceOverrideFields,
   resolveCadenceFor,
   writeCadenceOverride,
@@ -118,8 +116,6 @@ async function seedSprint(
       endDate: SPRINT_END,
       lengthDays: 14,
       startDay: "MON",
-      workingDays: [...DEFAULT_CADENCE.workingDays],
-      cadenceOverridden: false,
       ...values,
     })
     .returning();
@@ -514,80 +510,5 @@ describe("writeCadenceOverride / clearCadenceOverrideFields", () => {
       startDay: false,
       workingDays: false,
     });
-  });
-});
-
-describe("the 0023 backfill", () => {
-  it("is copied into the migration verbatim", async () => {
-    // Authored once (`BACKFILL_CADENCE_OVERRIDES`) and copied into
-    // `0023_flowery_flatman.sql`. The pin is what keeps the two from drifting —
-    // a `.sql` file cannot import the constant.
-    const migration = readFileSync(
-      new URL("../db/migrations/0023_flowery_flatman.sql", import.meta.url),
-      "utf8",
-    );
-    expect(migration).toContain(BACKFILL_CADENCE_OVERRIDES);
-  });
-
-  it("carries a flagged sprint's non-default pattern into a record", async () => {
-    // The migration itself ran BEFORE this suite, against an empty table, so the
-    // statement is re-executed here over a seed it can actually see.
-    const seeded = await newOwner();
-    const row = await seedSprint(seeded, {
-      jiraSprintId: "4343",
-      cadenceOverridden: true,
-      workingDays: MON_THU,
-    });
-
-    await db.execute(sql.raw(BACKFILL_CADENCE_OVERRIDES));
-
-    const resolved = await resolveCadenceFor(db, seeded.ownerId, row);
-    expect(resolved.workingDays).toEqual(MON_THU);
-    expect(resolved.source).toBe("own");
-  });
-
-  it("writes NULL for a field that EQUALS what the source derives", async () => {
-    // Otherwise the backfill asserts on day one a choice nobody made: a lead who
-    // overrode only the length would get a record claiming they also chose
-    // Mon–Fri, and would be pinned to it forever after.
-    const seeded = await newOwner();
-    await seedSprint(seeded, {
-      jiraSprintId: "4343",
-      cadenceOverridden: true,
-      lengthDays: 21,
-      startDay: "MON",
-      workingDays: [...DEFAULT_CADENCE.workingDays],
-    });
-
-    await db.execute(sql.raw(BACKFILL_CADENCE_OVERRIDES));
-
-    const [record] = await records(seeded.ownerId);
-    expect(record.lengthDays).toBe(21);
-    // 2026-08-17T08:00Z is a Monday, and Mon–Fri is the constant — both source-equal.
-    expect(record.startDay).toBeNull();
-    expect(record.workingDays).toBeNull();
-  });
-
-  it("leaves a sprint that carries no flag alone, and re-running changes nothing", async () => {
-    const seeded = await newOwner();
-    await seedSprint(seeded, { jiraSprintId: "4141" });
-    await seedSprint(seeded, {
-      jiraSprintId: "4343",
-      cadenceOverridden: true,
-      workingDays: MON_THU,
-    });
-
-    await db.execute(sql.raw(BACKFILL_CADENCE_OVERRIDES));
-    const first = await records(seeded.ownerId);
-    expect(first).toHaveLength(1);
-    expect(first[0].jiraSprintId).toBe("4343");
-
-    // `on conflict do nothing` is what makes the second execution safe — it is
-    // load-bearing, not defensive.
-    await db.execute(sql.raw(BACKFILL_CADENCE_OVERRIDES));
-    const second = await records(seeded.ownerId);
-    expect(second).toHaveLength(1);
-    expect(second[0].id).toBe(first[0].id);
-    expect(second[0].updatedAt.getTime()).toBe(first[0].updatedAt.getTime());
   });
 });

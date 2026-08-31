@@ -38,8 +38,6 @@ export function makeSprint(over: Partial<SelectSprint> = {}): SelectSprint {
     completedSp: 10,
     lengthDays: 14,
     startDay: "MON",
-    workingDays: ["MON", "TUE", "WED", "THU", "FRI"],
-    cadenceOverridden: false,
     createdAt: NOW,
     updatedAt: NOW,
     ...over,
