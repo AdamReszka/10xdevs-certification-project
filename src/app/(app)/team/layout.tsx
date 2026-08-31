@@ -21,6 +21,10 @@ const TABS: { label: string; href: string }[] = [
   // S-19 split this out of the absences page: one person away and a day the
   // whole company is off are different models with different time horizons.
   { label: "Team days off", href: "/team/days-off" },
+  // S-29: the cadence lives beside the company calendar because `days-off`
+  // already reads `sprint.working_days` to compute its own copy — the sprint's
+  // rhythm and the days the team is off are one model, not two.
+  { label: "Sprint cadence", href: "/team/cadence" },
 ];
 
 export default function TeamLayout({ children }: { children: ReactNode }) {
@@ -29,7 +33,8 @@ export default function TeamLayout({ children }: { children: ReactNode }) {
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Team</h1>
         <p className="text-muted-foreground">
-          Who your team is, and when they are not working.
+          Who your team is, when they are not working, and the rhythm the sprint
+          runs to.
         </p>
       </div>
 

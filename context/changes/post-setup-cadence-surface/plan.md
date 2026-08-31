@@ -792,11 +792,11 @@ refresh are ones no lead chose.
 
 #### Automated
 
-- [ ] 4.1 Linting passes: `npm run lint`
-- [ ] 4.2 Type checking passes: `npm run typecheck`
-- [ ] 4.3 Unit tests pass, including `cadence-editor-view.test.ts`: `npm test`
-- [ ] 4.4 Integration tests pass: `npm run test:integration`
-- [ ] 4.5 Production build succeeds: `npm run build`
+- [x] 4.1 Linting passes: `npm run lint`
+- [x] 4.2 Type checking passes: `npm run typecheck`
+- [x] 4.3 Unit tests pass, including `cadence-editor-view.test.ts`: `npm test`
+- [x] 4.4 Integration tests pass: `npm run test:integration`
+- [x] 4.5 Production build succeeds: `npm run build`
 
 #### Manual
 
