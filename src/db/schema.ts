@@ -811,6 +811,23 @@ export const teamDayOff = pgTable(
     day: date("day").notNull(),
     /** "Assumption of Mary", "company offsite" — free text, optional. */
     label: text("label"),
+    /**
+     * Who put this row here (S-17): `'manual'` — a human typed it — or
+     * `'derived'` — SprintFlow generated it from the account's country.
+     *
+     * NOT NULL WITH A DEFAULT so the migration classifies every existing row
+     * correctly without a backfill: everything in this table today was typed by
+     * a human, and `'manual'` is what they are.
+     *
+     * DELIBERATELY NOT THE THING THAT STOPS A DELETED HOLIDAY COMING BACK. It
+     * is tempting to read provenance as the resurrection guard — "do not
+     * re-derive a row the lead removed" — but a deleted row leaves nothing
+     * behind to carry provenance. What closes that hole is
+     * {@link holidayYearApproval}: an approved year is never recomputed at all.
+     * This column exists so the LEAD can tell, in a list of fourteen dates,
+     * which ones they typed themselves.
+     */
+    source: text("source").default("manual").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
@@ -819,6 +836,95 @@ export const teamDayOff = pgTable(
     // UNIQUE dedup key never collides, so the constraint would silently fail.
     unique("team_day_off_owner_day_uq").on(table.ownerId, table.day),
     index("team_day_off_ownerId_idx").on(table.ownerId),
+  ],
+);
+
+/**
+ * WHERE THE TEAM IS — the account's jurisdiction, and the only input the public
+ * holiday generator needs (S-17, FR-007).
+ *
+ * ITS ABSENCE IS A STATE, not a missing default: no row means the lead has not
+ * picked a country, which is what the dashboard offers to fix. There is no
+ * fallback country, deliberately — guessing one and generating fourteen Polish
+ * holidays for a team in Vienna is precisely the plausible-wrong-value failure
+ * this slice exists to avoid.
+ *
+ * NOT A COLUMN ON `jira_project`, which is the only place the account holds a
+ * geographic signal today. That row is rewritten 1:1 by every Jira cycle, dies
+ * with the credential in BOTH of S-26's disconnect outcomes, and is deleted
+ * outright on a project switch — so the lead's own choice would be destroyed by
+ * an operation that has nothing to do with it. `jira_project.time_zone` could
+ * not answer the question anyway: Vienna and Warsaw share a zone and differ on
+ * holidays. This is the conclusion S-32 reached for the cadence override, and
+ * the same shape follows — a record whose only foreign key points at the
+ * account.
+ *
+ * NOT A COLUMN ON `recap_settings` either: that table's own header rejects
+ * carrying a second geographic value, and `user` is contractually Better Auth's.
+ *
+ * Per-owner singleton on the `recap_settings` shape.
+ */
+export const holidayCalendar = pgTable(
+  "holiday_calendar",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** ISO 3166-1 alpha-2, e.g. `'PL'`. The rules live in code, keyed by this. */
+    countryCode: text("country_code").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .$onUpdate(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  },
+  (table) => [unique("holiday_calendar_owner_uq").on(table.ownerId)],
+);
+
+/**
+ * WHICH YEARS THE LEAD HAS ALREADY DECIDED ABOUT (S-17, FR-007).
+ *
+ * THE RESURRECTION GUARD, and the reason this table exists at all. Once a year
+ * is stamped here its proposal is never recomputed, so a derived holiday the
+ * lead deleted — because their team works that day — stays deleted forever.
+ * Deleting a day does NOT clear the stamp. Without this record, every render
+ * would re-offer the day they just removed, which is the S-30 defect in a new
+ * place: the lead's choice replaced by a plausible wrong value, silently.
+ *
+ * ALSO WHAT MAKES THE OFFER ANNUAL, with no cron step. The proposal is a pure
+ * function of (country, year, existing rows, approvals), so nothing is lost by
+ * not computing it in advance — on 2027-01-01 the question "is 2027 approved?"
+ * answers itself on the next render of a panel the lead opens every morning. A
+ * scheduled job caching a recomputable proposal would be a cache with an
+ * invalidation problem.
+ *
+ * KEYED ON THE COUNTRY TOO, not on `(owner, year)` alone: a country switch must
+ * RE-OPEN the year rather than inherit a decision the lead made about a
+ * different calendar. All three key columns are NOT NULL per
+ * `context/foundation/lessons.md` — a nullable column in a UNIQUE dedup key
+ * never collides, and this key carries an idempotent `ON CONFLICT DO NOTHING`.
+ */
+export const holidayYearApproval = pgTable(
+  "holiday_year_approval",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** The country the decision was made under — see the note above. */
+    countryCode: text("country_code").notNull(),
+    /** Calendar year, e.g. 2026. */
+    year: integer("year").notNull(),
+    approvedAt: timestamp("approved_at").defaultNow().notNull(),
+  },
+  (table) => [
+    unique("holiday_year_approval_owner_country_year_uq").on(
+      table.ownerId,
+      table.countryCode,
+      table.year,
+    ),
+    index("holiday_year_approval_ownerId_idx").on(table.ownerId),
   ],
 );
 
@@ -1423,6 +1529,23 @@ export const teamDayOffRelations = relations(teamDayOff, ({ one }) => ({
   }),
 }));
 
+export const holidayCalendarRelations = relations(holidayCalendar, ({ one }) => ({
+  owner: one(user, {
+    fields: [holidayCalendar.ownerId],
+    references: [user.id],
+  }),
+}));
+
+export const holidayYearApprovalRelations = relations(
+  holidayYearApproval,
+  ({ one }) => ({
+    owner: one(user, {
+      fields: [holidayYearApproval.ownerId],
+      references: [user.id],
+    }),
+  }),
+);
+
 // --- Inferred types (Phase 2 tables) ---
 
 export type SelectGithubCredential = typeof githubCredential.$inferSelect;
@@ -1451,6 +1574,10 @@ export type SelectAbsence = typeof absence.$inferSelect;
 export type InsertAbsence = typeof absence.$inferInsert;
 export type SelectTeamDayOff = typeof teamDayOff.$inferSelect;
 export type InsertTeamDayOff = typeof teamDayOff.$inferInsert;
+export type SelectHolidayCalendar = typeof holidayCalendar.$inferSelect;
+export type InsertHolidayCalendar = typeof holidayCalendar.$inferInsert;
+export type SelectHolidayYearApproval = typeof holidayYearApproval.$inferSelect;
+export type InsertHolidayYearApproval = typeof holidayYearApproval.$inferInsert;
 
 // --- F-02 product relations (Phase 3) ---
 

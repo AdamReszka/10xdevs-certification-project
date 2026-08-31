@@ -39,10 +39,21 @@ type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 /** Anything that can run a read — the pool or an open transaction. */
 type Reader = Db | Tx;
 
+/** Anything that can run a write — same two, named for what the caller does. */
+type Writer = Db | Tx;
+
+/** Where a row came from (S-17). See `schema.ts`'s `team_day_off.source`. */
+export type TeamDayOffSource = "manual" | "derived";
+
 /** One team day off as the client submits it. */
 export type TeamDayOffInput = {
   day: DayKey;
   label: string | null;
+  /**
+   * Optional, defaulting to `'manual'`, so every call site that existed before
+   * S-17 is unchanged and still means what it said: a human typed this.
+   */
+  source?: TeamDayOffSource;
 };
 
 /**
@@ -119,7 +130,10 @@ export async function getNonWorkingDays({
  * same date the no-op it should be, and returns the existing row's id so the
  * caller gets the same answer either way. `label` on an existing row is left
  * alone: the owner's own wording outranks whatever a later re-entry — or S-17's
- * generator — would have called it.
+ * generator — calls it. Since S-17 that is shipped behaviour rather than an
+ * intention, and `source` is left alone for the same reason: a date the lead
+ * typed by hand stays THEIRS even when the generator would also have produced
+ * it.
  */
 export async function createTeamDayOff({
   db,
@@ -137,6 +151,7 @@ export async function createTeamDayOff({
       ownerId,
       day: input.day,
       label: input.label,
+      source: input.source ?? "manual",
     })
     .onConflictDoNothing({ target: [teamDayOff.ownerId, teamDayOff.day] })
     .returning({ id: teamDayOff.id });
@@ -154,6 +169,47 @@ export async function createTeamDayOff({
   if (!existing) throw new UnknownTeamDayOffError();
 
   return { id: existing.id, created: false };
+}
+
+/**
+ * Write many DERIVED days off in one statement (S-17).
+ *
+ * ONE ROUND TRIP, not fourteen `createTeamDayOff` calls: an approval writes a
+ * whole year at once, and it has to do so inside a transaction that also stamps
+ * the year — so the cost of the loop would be paid with the transaction open.
+ *
+ * The SAME conflict target as the single insert, so a day the lead already typed
+ * by hand is left untouched — its label AND its `'manual'` provenance both
+ * survive. That is why this is a plain `DO NOTHING` and not an upsert: the
+ * generator never overwrites a human.
+ *
+ * Takes a `Writer` so it can run inside the approval's transaction. Accepts an
+ * empty list and does nothing, because a year in which the lead unchecked
+ * everything is a real and meaningful approval — the year is still stamped.
+ */
+export async function createDerivedDaysOff({
+  db,
+  ownerId,
+  days,
+}: {
+  db: Writer;
+  ownerId: string;
+  days: readonly { day: DayKey; label: string | null }[];
+}): Promise<void> {
+  if (days.length === 0) return;
+
+  await db
+    .insert(teamDayOff)
+    .values(
+      days.map((d) => ({
+        id: randomUUID(),
+        ownerId,
+        day: d.day,
+        label: d.label,
+        source: "derived" as const,
+      })),
+    )
+    .onConflictDoNothing({ target: [teamDayOff.ownerId, teamDayOff.day] });
 }
 
 /**

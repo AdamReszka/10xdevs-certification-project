@@ -698,12 +698,12 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `npm test`
-- [x] 1.2 The notice module's tests cover both branches, empty and non-empty
-- [x] 1.3 Type checking passes: `npm run typecheck`
-- [x] 1.4 Linting passes: `npm run lint`
-- [x] 1.5 Integration tests pass: `npm run test:integration`
-- [x] 1.6 `calendarIsEmpty` is asserted through the real reader: zero rows → `true`; one row outside the sprint window → `false`
+- [x] 1.1 Unit tests pass: `npm test` — da7bc9c
+- [x] 1.2 The notice module's tests cover both branches, empty and non-empty — da7bc9c
+- [x] 1.3 Type checking passes: `npm run typecheck` — da7bc9c
+- [x] 1.4 Linting passes: `npm run lint` — da7bc9c
+- [x] 1.5 Integration tests pass: `npm run test:integration` — da7bc9c
+- [x] 1.6 `calendarIsEmpty` is asserted through the real reader: zero rows → `true`; one row outside the sprint window → `false` — da7bc9c
 
 #### Manual
 
@@ -715,12 +715,12 @@ schema rollback — existing rows read as `'manual'`, which is what they are.
 
 #### Automated
 
-- [ ] 2.1 Migration generates and applies cleanly: `npm run db:generate` then `npm run db:migrate`
-- [ ] 2.2 Integration tests pass, including a repeated `approveHolidayYear` being a no-op: `npm run test:integration`
-- [ ] 2.3 Cross-account isolation is asserted for every new store function
-- [ ] 2.4 Type checking passes: `npm run typecheck`
-- [ ] 2.5 Linting passes: `npm run lint`
-- [ ] 2.6 Unit tests pass: `npm test`
+- [x] 2.1 Migration generates and applies cleanly: `npm run db:generate` then `npm run db:migrate`
+- [x] 2.2 Integration tests pass, including a repeated `approveHolidayYear` being a no-op: `npm run test:integration`
+- [x] 2.3 Cross-account isolation is asserted for every new store function
+- [x] 2.4 Type checking passes: `npm run typecheck`
+- [x] 2.5 Linting passes: `npm run lint`
+- [x] 2.6 Unit tests pass: `npm test`
 
 #### Manual
 

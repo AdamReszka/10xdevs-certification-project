@@ -29,6 +29,18 @@ export type TeamDayOffRow = {
    * `countTeamDaysOffInclusive` deliberately does not count it either.
    */
   costsNothing: boolean;
+  /**
+   * True when SprintFlow generated this row from the account's country (S-17),
+   * false when a human typed it.
+   *
+   * A READER FOR `team_day_off.source` in the same slice that writes it: a
+   * column only ever written is not provenance, it is a migration with no
+   * consequence. It answers the question a lead asks having just approved
+   * fourteen dates at once — which of these did I enter myself? — and it is
+   * deliberately quiet on the manual rows, so an account that has never
+   * approved a year looks exactly as it did before.
+   */
+  isDerived: boolean;
 };
 
 /**
@@ -71,7 +83,14 @@ export function toTeamDayOffRows({
   daysOff,
   workingDays,
 }: {
-  daysOff: { id: string; day: DayKey; label: string | null }[];
+  daysOff: {
+    id: string;
+    day: DayKey;
+    label: string | null;
+    /** Optional so a caller that predates S-17 still type-checks; absent reads
+     *  as `'manual'`, which is what every pre-S-17 row is. */
+    source?: string | null;
+  }[];
   /** The sprint's working weekdays; Mon–Fri when Jira told us nothing. */
   workingDays: readonly string[] | null | undefined;
 }): TeamDayOffRow[] {
@@ -92,6 +111,10 @@ export function toTeamDayOffRows({
       label: d.label,
       formatted: formatDayOff(d.day),
       costsNothing: !working.has(weekdayOfDayKey(d.day)),
+      // Positive test against the one value that means "generated", so an
+      // unknown string from a future country or a hand-edited row degrades to
+      // "a human's" — the reading that never takes credit away from the lead.
+      isDerived: d.source === "derived",
     }));
 }
 

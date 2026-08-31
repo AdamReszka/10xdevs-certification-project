@@ -77,6 +77,9 @@ export default async function TeamDaysOffPage() {
           // there is no instant to serialize and no zone to resolve it in.
           day: d.day,
           label: d.label,
+          // S-17: the marker the lead reads to tell their own entries apart
+          // from the ones the holiday calendar generated.
+          source: d.source,
         }))}
         workingDays={cadence?.workingDays ?? null}
       />
