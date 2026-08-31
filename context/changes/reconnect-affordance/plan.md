@@ -773,19 +773,19 @@ Phase 1 test encodes: a future slice that changes the FK graph must update
 
 #### Automated
 
-- [x] 1.1 Unit tests pass: `npm test`
-- [x] 1.2 Type checking passes: `npm run typecheck`
-- [x] 1.3 Linting passes: `npm run lint`
-- [x] 1.4 Copy test goes red when a `DISCONNECT_IMPACT` fragment is edited alone
+- [x] 1.1 Unit tests pass: `npm test` — 38a4342
+- [x] 1.2 Type checking passes: `npm run typecheck` — 38a4342
+- [x] 1.3 Linting passes: `npm run lint` — 38a4342
+- [x] 1.4 Copy test goes red when a `DISCONNECT_IMPACT` fragment is edited alone — 38a4342
 
 ### Phase 2: The card becomes three jobs, one of them obvious
 
 #### Automated
 
-- [ ] 2.1 Unit tests pass: `npm test`
-- [ ] 2.2 Type checking passes: `npm run typecheck`
-- [ ] 2.3 Linting passes: `npm run lint`
-- [ ] 2.4 No user-facing string literals remain in `integration-card.tsx`
+- [x] 2.1 Unit tests pass: `npm test`
+- [x] 2.2 Type checking passes: `npm run typecheck`
+- [x] 2.3 Linting passes: `npm run lint`
+- [x] 2.4 No user-facing string literals remain in `integration-card.tsx`
 
 #### Manual
 

@@ -64,7 +64,10 @@ export default function RepoSelectionEditor() {
   }
 
   return (
-    <div className="rounded-lg border p-4">
+    // `w-full` because this panel now opens INSIDE the card's wrapping action
+    // row (S-31 Phase 2): without it the open editor tries to share a line with
+    // `Reconnect`. With it, it claims its own line and `Disconnect` wraps below.
+    <div className="w-full rounded-lg border p-4">
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading repositories from GitHub…</p>
       ) : error ? (

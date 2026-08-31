@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import DisconnectConfirmDialog from "@/components/molecules/disconnect-confirm";
-import { DEMO_REFUSAL_MESSAGE } from "@/lib/demo/refusal";
+import type { DisconnectIntegration } from "@/components/molecules/disconnect-confirm-copy";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,25 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  DISCONNECTING_LABEL,
+  DISCONNECT_LABEL,
+  DISCONNECT_REFUSED_TITLE,
+  NOT_CONNECTED_DESCRIPTION,
+  RECONNECT_LABEL,
+  TESTING_LABEL,
+  TEST_FAILURE_COPY,
+  TEST_FAILURE_TITLE,
+  TEST_LABEL,
+  TEST_SUCCESS_TITLE,
+  connectLabel,
+  demoNote,
+  jobsIntro,
+  lastSyncDescription,
+  reconnectCost,
+  statusBadge,
+  testSuccessDescription,
+} from "@/components/organisms/settings/integration-card-copy";
 import { classifyFailure, type SyncStatus } from "@/lib/integrations/failure-reason";
 import type { ConnectionTestResult } from "@/lib/settings/connection-service";
 import type { DisconnectMode } from "@/lib/validations/disconnect";
@@ -30,6 +49,20 @@ import type { DisconnectMode } from "@/lib/validations/disconnect";
  *
  * Generic over the integration so GitHub and Jira share one layout; the
  * identity block differs and arrives as `children`.
+ *
+ * HOLDS NO STRINGS SINCE S-31. Every word lives in `integration-card-copy.ts`,
+ * where it can be asserted — before that split, no test anywhere covered a
+ * single string on this card. This file is a renderer.
+ *
+ * THREE JOBS, NOT FOUR CONTROLS (S-31). The connected branch used to show
+ * `Test connection` / `Reconnect` / `Disconnect` at equal-or-lighter weight with
+ * the selection editor's trigger below them — four controls, three named after
+ * mechanisms, and nothing saying which one costs the lead anything. A lead whose
+ * token had expired had to guess. Now `Test connection` sits above as the
+ * diagnostic it is, the row holds the three JOBS (rotate the token / change what
+ * is watched / end the integration), `Reconnect` is the single emphasised
+ * control, and `reconnectCost` states underneath what re-submitting the form
+ * costs — nothing for GitHub, nothing for Jira while the project stays the same.
  *
  * ALWAYS SHOWS THE REAL ACCOUNT, in demo mode too (S-09): integration
  * configuration is not a thing to simulate, and a lead who loaded demo still
@@ -55,53 +88,8 @@ import type { DisconnectMode } from "@/lib/validations/disconnect";
  * rendered as a real disabled `<button>` rather than as a styled link.
  */
 
-const STATUS_BADGE: Record<SyncStatus, { label: string; variant: "default" | "secondary" | "destructive" }> = {
-  OK: { label: "Healthy", variant: "secondary" },
-  ERROR: { label: "Failing", variant: "destructive" },
-  RATE_LIMITED: { label: "Rate-limited", variant: "default" },
-};
-
-/** UTC `YYYY-MM-DD HH:mm` — deterministic across server render + hydration,
- * matching `sync-status-bar.tsx`'s formatting so the two never disagree. */
-function formatAt(iso: string | null): string {
-  if (!iso) return "never";
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
-}
-
-const TEST_FAILURE_COPY: Record<
-  Extract<ConnectionTestResult, { ok: false }>["reason"],
-  string
-> = {
-  not_connected: "Nothing is connected yet.",
-  credential_unreadable:
-    "The stored credential could not be decrypted, so we never reached the API. This happens after an encryption-key change or a database restored from another environment — reconnect to store a fresh one.",
-  auth: "The stored credential was rejected just now — it needs reconnecting.",
-  unavailable: "The API did not respond. That is their side, not your token.",
-  // Polish, matching `DEMO_REFUSAL_MESSAGE` and the demo note below — the demo
-  // copy on this page is Polish while the card itself is English.
-  demo_mode: DEMO_REFUSAL_MESSAGE,
-};
-
-/**
- * What demo disables, said once and shown in BOTH branches.
- *
- * Deliberately NOT a list of the individual controls: that sentence has been
- * written three times and gone stale three times — most recently here, where
- * S-27 added Connect / Reconnect to the disabled set without the enumeration
- * noticing. The general claim is the one the server actually keeps.
- *
- * Polish inside the English card, per the decision recorded at the top of
- * `TEST_FAILURE_COPY`.
- */
-function DemoNote({ name }: { name: "GitHub" | "Jira" }) {
-  return (
-    <p className="text-sm text-muted-foreground">
-      W trybie demonstracyjnym nic, co robisz, nie zmienia Twojego prawdziwego
-      konta — dlatego sterowanie integracją jest tu wyłączone. Powyżej widzisz
-      stan swojej prawdziwej integracji z {name === "GitHub" ? "GitHubem" : "Jirą"};
-      wyjdź z demo, aby cokolwiek w niej zmienić.
-    </p>
-  );
+function DemoNote({ integration }: { integration: DisconnectIntegration }) {
+  return <p className="text-sm text-muted-foreground">{demoNote(integration)}</p>;
 }
 
 export default function IntegrationCard({
@@ -149,6 +137,8 @@ export default function IntegrationCard({
   // last sync and `testResult` about the probe, neither about this action.
   const [disconnectError, setDisconnectError] = useState<string | null>(null);
 
+  const integration: DisconnectIntegration = name === "GitHub" ? "github" : "jira";
+
   const failure = classifyFailure(
     status,
     name === "GitHub" ? "GITHUB" : "JIRA",
@@ -182,40 +172,36 @@ export default function IntegrationCard({
       <Card>
         <CardHeader>
           <CardTitle>{name}</CardTitle>
-          <CardDescription>Not connected.</CardDescription>
+          <CardDescription>{NOT_CONNECTED_DESCRIPTION}</CardDescription>
         </CardHeader>
         {/* Same bottom-pinning as the connected card, so a not-connected
             integration still lines its action up with its sibling. */}
         <CardContent className="flex flex-1 flex-col">
           <div className="mt-auto flex flex-col gap-4">
             {isDemo ? (
-              <Button disabled>Connect {name}</Button>
+              <Button disabled>{connectLabel(integration)}</Button>
             ) : (
               <Button asChild>
-                <a href={reconnectHref}>Connect {name}</a>
+                <a href={reconnectHref}>{connectLabel(integration)}</a>
               </Button>
             )}
-            {isDemo ? <DemoNote name={name} /> : null}
+            {isDemo ? <DemoNote integration={integration} /> : null}
           </div>
         </CardContent>
       </Card>
     );
   }
 
-  const badge = status ? STATUS_BADGE[status] : null;
+  const badge = statusBadge(status);
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-wrap items-center gap-3">
           <CardTitle>{name}</CardTitle>
-          {badge ? <Badge variant={badge.variant}>{badge.label}</Badge> : (
-            <Badge variant="outline">Not synced yet</Badge>
-          )}
+          <Badge variant={badge.variant}>{badge.label}</Badge>
         </div>
-        <CardDescription>
-          Last successful sync: {formatAt(lastSuccessfulSyncAt)}
-        </CardDescription>
+        <CardDescription>{lastSyncDescription(lastSuccessfulSyncAt)}</CardDescription>
       </CardHeader>
 
       {/* `flex-1` lets the content absorb the row's spare height so `mt-auto`
@@ -239,11 +225,11 @@ export default function IntegrationCard({
               <XCircle className="size-4" aria-hidden />
             )}
             <AlertTitle>
-              {testResult.ok ? "Connection is live" : "Connection test failed"}
+              {testResult.ok ? TEST_SUCCESS_TITLE : TEST_FAILURE_TITLE}
             </AlertTitle>
             <AlertDescription>
               {testResult.ok
-                ? `${name} accepted the stored credential — authenticated as ${testResult.identity}.`
+                ? testSuccessDescription(integration, testResult.identity)
                 : TEST_FAILURE_COPY[testResult.reason]}
             </AlertDescription>
           </Alert>
@@ -252,55 +238,78 @@ export default function IntegrationCard({
         {disconnectError ? (
           <Alert variant="destructive">
             <XCircle className="size-4" aria-hidden />
-            <AlertTitle>Disconnect refused</AlertTitle>
+            <AlertTitle>{DISCONNECT_REFUSED_TITLE}</AlertTitle>
             <AlertDescription>{disconnectError}</AlertDescription>
           </Alert>
         ) : null}
 
         {/* Pinned to the bottom via `mt-auto`. The two cards sit in a grid, so
             they already share a row height — without this, an alert on one card
-            pushes only ITS actions down and the pair reads as misaligned. */}
+            pushes only ITS actions down and the pair reads as misaligned.
+
+            `Test connection` is INSIDE this block, as its first child, for the
+            same reason: lifting it into the `flex-1` region above is exactly
+            what would break that alignment. */}
         <div className="mt-auto flex flex-col gap-4">
-          <div className="flex flex-wrap gap-2">
+          {/* Not a job — a diagnostic. It answers "is my token valid right
+              now", which is the question that leads to Reconnect, so it sits
+              above the row rather than competing inside it. */}
+          <div>
             <Button
               variant="outline"
               onClick={handleTest}
               disabled={testing || isDemo}
             >
               {testing ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
-              {testing ? "Testing…" : "Test connection"}
+              {testing ? TESTING_LABEL : TEST_LABEL}
             </Button>
+          </div>
+
+          {/* The labels stay as they are (owner's decision), so this sentence
+              carries the whole job-naming burden — and it quotes each control
+              by its exact on-screen label so the two cannot drift. */}
+          <p className="text-sm text-muted-foreground">{jobsIntro(integration)}</p>
+
+          <div className="flex flex-wrap gap-2">
+            {/* THE CHANGE THIS SLICE EXISTS FOR: the lossless route is the
+                emphasised one. S-31 reverses S-24's "no visual re-weighting"
+                by promoting THIS button — see the plan's "The reversal this
+                plan makes, stated as one". */}
             {isDemo ? (
-              <Button variant="outline" disabled>
-                Reconnect
-              </Button>
+              <Button disabled>{RECONNECT_LABEL}</Button>
             ) : (
-              <Button variant="outline" asChild>
-                <a href={reconnectHref}>Reconnect</a>
+              <Button asChild>
+                <a href={reconnectHref}>{RECONNECT_LABEL}</a>
               </Button>
             )}
-            {/* Stays `ghost` deliberately (owner's decision): the dialog is
-                the gate, not the button's weight. */}
+
+            {/* The third job, already job-named in both editors. Not rendered
+                in demo: both selection editors mutate the REAL account. */}
+            {isDemo ? null : editSlot}
+
+            {/* Stays `ghost`, and that half of S-24's decision is untouched:
+                the dialog is the gate, not the button's weight. S-31 promoted
+                its sibling rather than demoting this one, so Disconnect is
+                still the quietest control on the card. */}
             <Button
               variant="ghost"
               onClick={() => setConfirmOpen(true)}
               disabled={disconnecting || isDemo}
             >
-              {disconnecting ? "Disconnecting…" : "Disconnect"}
+              {disconnecting ? DISCONNECTING_LABEL : DISCONNECT_LABEL}
             </Button>
             <DisconnectConfirmDialog
-              integration={name === "GitHub" ? "github" : "jira"}
+              integration={integration}
               open={confirmOpen}
               onOpenChange={setConfirmOpen}
               onConfirm={handleDisconnect}
             />
           </div>
 
-          {isDemo ? <DemoNote name={name} /> : null}
+          {/* Directly under the row, so it qualifies the primary control. */}
+          <p className="text-sm text-muted-foreground">{reconnectCost(integration)}</p>
 
-          {/* Not rendered in demo: it holds the two destructive selection
-              editors, both of which mutate the REAL account. */}
-          {isDemo ? null : editSlot}
+          {isDemo ? <DemoNote integration={integration} /> : null}
         </div>
       </CardContent>
     </Card>
