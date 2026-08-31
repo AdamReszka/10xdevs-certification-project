@@ -22,8 +22,9 @@ const TABS: { label: string; href: string }[] = [
   // whole company is off are different models with different time horizons.
   { label: "Team days off", href: "/team/days-off" },
   // S-29: the cadence lives beside the company calendar because `days-off`
-  // already reads `sprint.working_days` to compute its own copy — the sprint's
-  // rhythm and the days the team is off are one model, not two.
+  // already resolves the sprint's working-day pattern (`resolveCadenceFor`) to
+  // compute its own copy — the sprint's rhythm and the days the team is off are
+  // one model, not two.
   { label: "Sprint cadence", href: "/team/cadence" },
 ];
 

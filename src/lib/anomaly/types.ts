@@ -58,10 +58,11 @@ export type SprintSnapshot = {
    *
    * TOP-LEVEL, beside `timeZone` and `nonWorkingDays`, for exactly their reason:
    * rules are pure over the snapshot, so anything they need has to be handed to
-   * them resolved. It is deliberately NOT `sprint.working_days` — that column is
-   * superseded and holds only the Mon–Fri constant (`schema.ts`). The lead's
-   * chosen pattern lives in `sprint_cadence_override`, which outlives the Jira
-   * cascade, and `resolveCadenceFor` is the one place that reads it.
+   * them resolved. It is deliberately NOT read off the `sprint` row: that row
+   * carried a `working_days` column holding only the Mon–Fri constant until S-32
+   * dropped it. The lead's chosen pattern lives in `sprint_cadence_override`,
+   * which outlives the Jira cascade, and `resolveCadenceFor` is the one place
+   * that reads it.
    */
   workingDays: string[];
   /**

@@ -24,8 +24,9 @@ import { resolveWorkspace } from "@/lib/workspace";
  * `/setup/team` — the wizard's last step, which `CadenceForm` was mounted by
  * exactly once repo-wide and which an onboarded lead has no route back to. It
  * sits under `/team` rather than `/settings` because `/team/days-off` already
- * consumes `sprint.working_days` to compute its own copy: the cadence and the
- * company calendar are one model, and this is where that model lives.
+ * consumes the sprint's RESOLVED working-day pattern to compute its own copy:
+ * the cadence and the company calendar are one model, and this is where that
+ * model lives.
  *
  * Gated server component under `(app)`: inherits `requireSession()` +
  * `force-dynamic` from `(app)/layout.tsx` — do NOT re-declare either. One

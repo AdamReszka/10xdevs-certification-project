@@ -116,10 +116,12 @@ export type ResolvedCadence = DerivedCadence & {
  *    record for the same owner and the same Jira-side project. This is
  *    inheritance, and it is what replaces the reconciler's write-time `carry`.
  * 3. `sprint.length_days` / `sprint.start_day` for those two — a genuine derived
- *    cache of what Jira's dates say. `sprint.working_days` is deliberately NOT
- *    consulted: it can only ever hold the Mon–Fri constant, and consulting a
- *    second copy of a constant is precisely the duplicate that produced the S-29
- *    defect one layer up.
+ *    cache of what Jira's dates say. THERE IS NO WORKING-DAYS INPUT AT THIS TIER
+ *    AT ALL, by construction: Jira exposes no working-days field, so nothing can
+ *    be derived. `sprint.working_days` held a second copy of the Mon–Fri
+ *    constant until S-32 (`0024`) dropped it — consulting a second copy of a
+ *    constant is precisely the duplicate that produced the S-29 defect one layer
+ *    up.
  * 4. `DEFAULT_CADENCE` for anything still null.
  */
 export function pickCadence(input: {

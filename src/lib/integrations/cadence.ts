@@ -13,7 +13,7 @@
 
 import { safeZone } from "@/lib/time-zone";
 
-/** Weekday codes stored in `sprint.start_day` / `sprint.working_days` (jsonb). */
+/** Weekday codes stored in `sprint.start_day` and `sprint_cadence_override`. */
 export type WeekdayCode = "MON" | "TUE" | "WED" | "THU" | "FRI" | "SAT" | "SUN";
 
 /** Mon–Fri: the working-days default (Jira exposes no working-days field). */

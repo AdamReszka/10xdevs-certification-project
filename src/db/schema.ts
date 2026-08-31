@@ -561,7 +561,8 @@ export const sprintMeasurement = pgTable(
 
 /**
  * What the LEAD CHOSE for a sprint's cadence (S-30, FR-007) — the durable record
- * that replaces `sprint.working_days` / `cadence_overridden`.
+ * that replaced `sprint.working_days` / `cadence_overridden`, dropped at S-32
+ * (`0024`) once nothing read them.
  *
  * The columns it supersedes lived on `sprint`, which cascades off `jira_project`
  * off `jira_credential`, so BOTH S-26 disconnect outcomes destroyed them, and two
