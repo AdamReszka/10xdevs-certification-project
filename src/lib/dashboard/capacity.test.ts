@@ -277,4 +277,24 @@ describe("computeSprintCapacity with team-wide days off", () => {
   it("reports zero days off when the calendar is empty", () => {
     expect(compute([{ id: "m-1", fte: 1 }]).teamDaysOff).toBe(0);
   });
+
+  /**
+   * S-17 Phase 1 — the two states `teamDaysOff` cannot tell apart.
+   *
+   * Both cases below report `teamDaysOff: 0`, and exactly one of them is an
+   * account that has never recorded a day off. The disclosure the dashboard
+   * carries hangs off this distinction, so it is asserted here rather than
+   * inferred from the count.
+   */
+  it("flags an empty calendar", () => {
+    expect(compute([{ id: "m-1", fte: 1 }]).calendarIsEmpty).toBe(true);
+  });
+
+  it("does not flag a calendar whose days all fall outside this sprint", () => {
+    const result = compute([{ id: "m-1", fte: 1 }], [], new Set(["2026-07-29"]));
+
+    // The sprint lost nothing — and the account still has a calendar.
+    expect(result.teamDaysOff).toBe(0);
+    expect(result.calendarIsEmpty).toBe(false);
+  });
 });

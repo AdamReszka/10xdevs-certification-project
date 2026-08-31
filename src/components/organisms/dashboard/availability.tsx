@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoIcon } from "lucide-react";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -16,6 +17,7 @@ import {
   buildAvailabilityGrid,
   nextWindowAfter,
 } from "@/components/organisms/dashboard/availability-view";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +28,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import type { SprintCapacity } from "@/lib/dashboard/capacity";
+import { holidayCalendarNotice } from "@/lib/holidays/calendar-notice";
 import { cn } from "@/lib/utils";
 
 /**
@@ -197,6 +200,14 @@ export default function Availability({
  * every active member contributes something; a member the migration guessed at
  * is surfaced by the `/settings/team` banner instead, where it can actually be
  * fixed.
+ *
+ * AN EMPTY CALENDAR NOW SPEAKS (S-17, FR-007). Until this slice, zero team days
+ * off rendered as silence — the same silence as a calendar the lead had checked
+ * and found genuinely holiday-free — while the capacity above and all five
+ * elapsed-time anomaly rules were being computed as though nobody is ever off.
+ * The two states are separated by `capacity.calendarIsEmpty`, not by
+ * `teamDaysOff`, which is zero for both; the copy lives in
+ * `lib/holidays/calendar-notice.ts` because this file has no test harness.
  */
 function CapacitySummary({
   capacity,
@@ -209,7 +220,9 @@ function CapacitySummary({
 }) {
   if (!capacity) return null;
 
-  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff } = capacity;
+  const { adjustedMd, nominalMd, sprintWorkingDays, teamDaysOff, calendarIsEmpty } =
+    capacity;
+  const notice = holidayCalendarNotice({ calendarIsEmpty });
   const headline = toCapacityHeadline({
     adjustedMd,
     nominalMd,
@@ -264,6 +277,23 @@ function CapacitySummary({
           </p>
         ) : null}
       </div>
+
+      {/* Below the numbers rather than above them: the panel's headline is the
+          capacity figure, and the notice explains what that figure assumed. The
+          two are NOT written as an either/or — the component must not assume
+          the mutual exclusion that happens to hold today. */}
+      {notice ? (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{notice.title}</AlertTitle>
+          <AlertDescription>
+            <span>{notice.body}</span>
+            <Link href="/team/days-off" className="underline underline-offset-4">
+              Record your team days off
+            </Link>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {jiraSprintId === null ? null : (
         <CapacityAdjustments

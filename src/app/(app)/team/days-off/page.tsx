@@ -1,8 +1,11 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { InfoIcon } from "lucide-react";
 
 import TeamDaysOffEditor from "@/components/organisms/settings/team-days-off-editor";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { resolveCadenceFor } from "@/lib/cadence-override";
 import { getDb } from "@/lib/db";
+import { holidayCalendarNotice } from "@/lib/holidays/calendar-notice";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { listTeamDaysOff } from "@/lib/team-day-off-store";
 import { resolveWorkspace } from "@/lib/workspace";
@@ -41,6 +44,11 @@ export default async function TeamDaysOffPage() {
   // the sprint row.
   const cadence = sprint ? await resolveCadenceFor(db, ownerId, sprint) : null;
 
+  // S-17: driven by the list this page already holds, not by a capacity read.
+  // `listTeamDaysOff` is unwindowed, so "no rows here" IS "no calendar at all" —
+  // the same fact `capacity.calendarIsEmpty` reports on the dashboard.
+  const notice = holidayCalendarNotice({ calendarIsEmpty: daysOff.length === 0 });
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
@@ -53,6 +61,14 @@ export default async function TeamDaysOffPage() {
           away, use the <strong>Absences</strong> tab instead.
         </p>
       </div>
+
+      {notice ? (
+        <Alert>
+          <InfoIcon />
+          <AlertTitle>{notice.title}</AlertTitle>
+          <AlertDescription>{notice.body}</AlertDescription>
+        </Alert>
+      ) : null}
 
       <TeamDaysOffEditor
         daysOff={daysOff.map((d) => ({
