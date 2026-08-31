@@ -643,12 +643,12 @@ intended outcome, and no data is rewritten.
 
 #### Automated
 
-- [x] 1.1 Linting passes: `npm run lint`
-- [x] 1.2 Type checking passes: `npm run typecheck`
-- [x] 1.3 Unit tests pass: `npm test`
-- [x] 1.4 Integration tests pass: `npm run test:integration`
-- [x] 1.5 `nextWindowAfter` is gone from the client surface (grep)
-- [x] 1.6 `e2e/cadence-restore.spec.ts` still passes
+- [x] 1.1 Linting passes: `npm run lint` — b547b03
+- [x] 1.2 Type checking passes: `npm run typecheck` — b547b03
+- [x] 1.3 Unit tests pass: `npm test` — b547b03
+- [x] 1.4 Integration tests pass: `npm run test:integration` — b547b03
+- [x] 1.5 `nextWindowAfter` is gone from the client surface (grep) — b547b03
+- [x] 1.6 `e2e/cadence-restore.spec.ts` still passes — b547b03
 
 #### Manual
 
@@ -660,11 +660,11 @@ intended outcome, and no data is rewritten.
 
 #### Automated
 
-- [ ] 2.1 Linting passes: `npm run lint`
-- [ ] 2.2 Type checking passes: `npm run typecheck`
-- [ ] 2.3 Unit tests pass: `npm test`
-- [ ] 2.4 Integration tests pass: `npm run test:integration`
-- [ ] 2.5 No caller restates the horizon: `grep -rn "holidayYears(" src/app` is empty
+- [x] 2.1 Linting passes: `npm run lint`
+- [x] 2.2 Type checking passes: `npm run typecheck`
+- [x] 2.3 Unit tests pass: `npm test`
+- [x] 2.4 Integration tests pass: `npm run test:integration`
+- [x] 2.5 No caller restates the horizon: `grep -rn "holidayYears(" src/app` is empty
 
 #### Manual
 

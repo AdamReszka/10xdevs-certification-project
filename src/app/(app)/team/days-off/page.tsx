@@ -11,7 +11,7 @@ import {
   getHolidayCalendar,
   listApprovedYears,
 } from "@/lib/holidays/calendar-store";
-import { holidayProposal, holidayYears } from "@/lib/holidays/proposal";
+import { holidayProposal, holidayReviewWindow } from "@/lib/holidays/proposal";
 import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { listTeamDaysOff } from "@/lib/team-day-off-store";
@@ -57,13 +57,10 @@ export default async function TeamDaysOffPage() {
   // S-17. Every year the ACTIVE SPRINT touches, not just this one: a sprint
   // running into January would otherwise count 1 and 6 January as ordinary
   // working days for its whole length, and the notice would be silent about it
-  // until the year had already turned.
-  const years = holidayYears({
-    sprintStart: sprint?.startDate ?? null,
-    sprintEnd: sprint?.endDate ?? null,
-    now,
-    timeZone,
-  });
+  // until the year had already turned. S-18 adds the FORECAST window for the
+  // same reason one window further out, through the one derivation the approval
+  // action also re-runs — the cadence resolved just above is its length source.
+  const years = holidayReviewWindow({ sprint, cadence, now, timeZone });
   const approvedYears = countryCode
     ? await listApprovedYears({ db, ownerId, countryCode })
     : new Set<number>();
