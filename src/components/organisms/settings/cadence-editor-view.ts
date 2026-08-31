@@ -16,13 +16,20 @@
  *    would force the page to invent a resting state for an event.
  */
 
+import type { CadenceProvenance } from "@/lib/cadence-override";
+
+/** Does the lead own ANY of the three values? */
+export function anyHandSet(p: CadenceProvenance): boolean {
+  return p.lengthDays || p.startDay || p.workingDays;
+}
+
 /** What the screen is looking at before the lead touches anything. */
 export type CadenceEditorState =
   /** No `sprint` row at all — there is nothing to write a cadence onto. */
   | { kind: "no_sprint"; title: string; body: string }
   /** The newest sprint row is not ACTIVE: the team is between sprints. */
   | { kind: "no_active_sprint"; title: string; body: string }
-  /** The lead deliberately changed the cadence, so auto-pull is off. */
+  /** The lead deliberately set at least one of the three values by hand. */
   | { kind: "overridden"; title: string; body: string }
   /** Auto-pull is on and nothing needs saying. */
   | { kind: "in_sync"; title: string; body: string };
@@ -32,9 +39,19 @@ export function cadenceEditorState(input: {
   hasSprintRow: boolean;
   /** `sprint.state` of the resolved row; null when there is no row. */
   sprintState: string | null;
-  cadenceOverridden: boolean;
+  /**
+   * PER FIELD since S-30. One boolean could not describe the account this slice
+   * exists to create — working days hand-set, length and start day still
+   * following Jira — so it described it wrongly, and the screen said so.
+   */
+  provenance: CadenceProvenance;
 }): CadenceEditorState {
-  const { hasSprintRow, sprintState, cadenceOverridden } = input;
+  const { hasSprintRow, sprintState, provenance } = input;
+  const handSet = anyHandSet(provenance);
+  // The one field with no upstream: Jira has no working-days field to pull
+  // (`CADENCE_PROVENANCE.workingDays`), so it is the half that can stand alone.
+  const workingDaysOnly =
+    provenance.workingDays && !provenance.lengthDays && !provenance.startDay;
 
   if (!hasSprintRow) {
     return {
@@ -58,21 +75,40 @@ export function cadenceEditorState(input: {
         "There is no active sprint in Jira right now, so this cadence is stored " +
         "against your most recent one and carries over when the next sprint " +
         "starts. Saving here works normally." +
-        (cadenceOverridden
-          ? " Auto-pull is currently off for this account, because you changed " +
-            "the cadence by hand."
+        (handSet
+          ? workingDaysOnly
+            ? " Your working days are set by hand; sprint length and start day " +
+              "still come from Jira."
+            : " Auto-pull is currently off for the values you changed by hand."
           : ""),
     };
   }
 
-  if (cadenceOverridden) {
+  // THE STATE S-30 EXISTS TO CREATE, and the reason this is no longer one
+  // sentence: working days have no upstream in Jira at all, so a lead can own
+  // them while length and start day keep auto-pulling. Under the old single
+  // boolean that account was told auto-pull was off for everything.
+  if (workingDaysOnly) {
+    return {
+      kind: "overridden",
+      title: "You set your working days by hand",
+      body:
+        "SprintFlow is keeping the working days you chose. " +
+        CADENCE_PROVENANCE.workingDays +
+        " Sprint length and start day still come from Jira on every sync, and " +
+        "“Restore Jira’s values” leaves your working days alone.",
+    };
+  }
+
+  if (handSet) {
     return {
       kind: "overridden",
       title: "You set this cadence by hand",
       body:
         "SprintFlow is keeping your values and no longer takes the sprint " +
         "length or start day from Jira. Use “Restore Jira’s values” to hand the " +
-        "cadence back to auto-pull.",
+        "sprint length and start day back to auto-pull — your working days stay " +
+        "as they are, because Jira has no working-days field to restore them from.",
     };
   }
 

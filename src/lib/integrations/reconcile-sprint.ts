@@ -9,6 +9,10 @@ import {
   sprintMeasurement,
   type SelectSprint,
 } from "@/db/schema";
+import {
+  clearCadenceOverrideFields,
+  resolveCadenceFor,
+} from "@/lib/cadence-override";
 import type { getDb } from "@/lib/db";
 import {
   type JiraBoard,
@@ -69,8 +73,13 @@ export type ReconcileArgs = {
   /** Wizard-only: the board the user picked out of a multi-board project. */
   chosenBoardId?: number;
   /**
-   * S-29: refresh the cadence PAST an existing override, and clear the flag in
-   * the same statement — the "Restore Jira's values" path.
+   * S-29: refresh the cadence PAST an existing override — the "Restore Jira's
+   * values" path. Since S-30 its effect is to clear the override record's
+   * `length_days` and `start_day`, and DELIBERATELY NOT its working days: Jira
+   * exposes no working-days field, so "restoring from Jira" a value Jira does
+   * not have is not a restore, it is deleting the lead's choice under someone
+   * else's name. The dialog has promised exactly this since S-29 — the sentence
+   * becomes true here.
    *
    * It lives here, on the one function that already owns the flag, rather than
    * in a caller that clears it first: every Jira network call in this module
@@ -301,11 +310,15 @@ export async function reconcileActiveSprint({
           }
         : {};
 
-    // Persist the resolved board so the next cycle skips `listBoards`.
-    await tx
+    // Persist the resolved board so the next cycle skips `listBoards`. The
+    // JIRA-SIDE project id rides back on the same statement — the override
+    // record is filed under it (it carries no FK), and a second SELECT for a
+    // value this UPDATE already touches would be a round trip for nothing.
+    const [projectRow] = await tx
       .update(jiraProject)
       .set({ boardId: String(resolvedBoardId) })
-      .where(eq(jiraProject.ownerId, ownerId));
+      .where(eq(jiraProject.ownerId, ownerId))
+      .returning({ jiraProjectId: jiraProject.jiraProjectId });
 
     // A rollover takes the INSERT branch (the conflict target is
     // `(owner_id, jira_sprint_id)`), and `importCadence`'s INSERT hard-codes
@@ -414,6 +427,35 @@ export async function reconcileActiveSprint({
           ne(anomaly.sprintId, row.id),
         ),
       );
+
+    // S-30 — the restore, inside the transaction that already exists.
+    //
+    // ITS POSITION AS AN ARGUMENT IS THE POINT, and it is not about one
+    // statement being safer than two. All four of `board_ambiguous`, `no_board`,
+    // `no_active_sprint` and `sprint_undated` return BEFORE this transaction
+    // opens, successfully, having written nothing and with no exception for a
+    // caller to catch — so a caller-side pre-clear would commit "auto-pull is
+    // back on" and then be told nothing was pulled.
+    //
+    // The clear CREATES the row when absent, which is what makes it safe against
+    // a restore racing a rollover: the new `jira_sprint_id` has no record of its
+    // own, and a clear that no-oped there would let the resolver's tier 2
+    // resurrect from the previous sprint exactly the override the restore was
+    // asked to drop.
+    if (forceCadenceRefresh && projectRow) {
+      // Read BEFORE the clear: this is the value being PRESERVED, so a create
+      // can materialise the working days the lead would otherwise lose along
+      // with the inherited length.
+      const before = await resolveCadenceFor(tx, ownerId, row);
+      await clearCadenceOverrideFields(tx, {
+        ownerId,
+        jiraProjectId: projectRow.jiraProjectId,
+        jiraSprintId: row.jiraSprintId,
+        startDate: new Date(startDate),
+        resolved: before,
+        fields: ["lengthDays", "startDay"],
+      });
+    }
 
     return { row, switched: previous != null && previous.id !== row.id };
   });

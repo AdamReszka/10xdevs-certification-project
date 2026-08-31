@@ -65,7 +65,34 @@ export type CadenceSource =
   | "source"
   | "source_with_prior_override";
 
-export type ResolvedCadence = DerivedCadence & { source: CadenceSource };
+/**
+ * Per field: did the LEAD set this, or does it still follow the source?
+ *
+ * This replaces `sprint.cadence_overridden`, and the reason it is three booleans
+ * rather than one is the state S-30 exists to create: a team whose working days
+ * are hand-set while length and start day still auto-pull from Jira (FR-007).
+ * One boolean cannot describe that account, so it described it wrongly.
+ *
+ * A field is hand-set when the record that APPLIED — this sprint's own, or the
+ * one it inherited — supplied a non-null value for it.
+ */
+export type CadenceProvenance = {
+  lengthDays: boolean;
+  startDay: boolean;
+  workingDays: boolean;
+};
+
+/** Nothing hand-set: every field follows the source. */
+export const FOLLOWS_SOURCE: CadenceProvenance = {
+  lengthDays: false,
+  startDay: false,
+  workingDays: false,
+};
+
+export type ResolvedCadence = DerivedCadence & {
+  source: CadenceSource;
+  provenance: CadenceProvenance;
+};
 
 /**
  * The precedence, stated once because everything else follows from it:
@@ -114,19 +141,27 @@ export function pickCadence(input: {
     return {
       ...fromSource,
       source: ownerHasAnyRecord ? "source_with_prior_override" : "source",
+      provenance: { ...FOLLOWS_SOURCE },
     };
   }
+
+  // An empty array is not a pattern. Nothing can write one today
+  // (`validations/roster.ts`), and no write path in this slice may start.
+  const handSetWorkingDays =
+    applied.workingDays != null && applied.workingDays.length > 0;
 
   return {
     lengthDays: applied.lengthDays ?? fromSource.lengthDays,
     startDay: (applied.startDay as WeekdayCode | null) ?? fromSource.startDay,
-    // An empty array is not a pattern. Nothing can write one today
-    // (`validations/roster.ts`), and no write path in this slice may start.
-    workingDays:
-      applied.workingDays != null && applied.workingDays.length > 0
-        ? (applied.workingDays as WeekdayCode[])
-        : fromSource.workingDays,
+    workingDays: handSetWorkingDays
+      ? (applied.workingDays as WeekdayCode[])
+      : fromSource.workingDays,
     source: own != null ? "own" : "inherited",
+    provenance: {
+      lengthDays: applied.lengthDays != null,
+      startDay: applied.startDay != null,
+      workingDays: handSetWorkingDays,
+    },
   };
 }
 

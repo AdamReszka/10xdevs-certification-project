@@ -13,6 +13,7 @@ import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
 import ConfirmDialog from "@/components/molecules/confirm-dialog";
 import CadenceFields from "@/components/organisms/setup/cadence-fields";
 import {
+  anyHandSet,
   cadenceEditorState,
   restoreOutcome,
   saveButtonLabel,
@@ -29,6 +30,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Form } from "@/components/ui/form";
+import { FOLLOWS_SOURCE, type CadenceProvenance } from "@/lib/cadence-override";
 import type { SprintIdentityView } from "@/lib/sprint-identity";
 import {
   cadenceSchema,
@@ -58,7 +60,8 @@ export type InitialCadence = {
   lengthDays: number;
   startDay: Weekday;
   workingDays: Weekday[];
-  cadenceOverridden: boolean;
+  /** PER FIELD since S-30 — see `CadenceProvenance`. */
+  provenance: CadenceProvenance;
   /** `sprint.state` of the row this screen writes to. */
   sprintState: string | null;
   /** Already formatted server-side — this component does no `Intl` work. */
@@ -78,13 +81,14 @@ export default function CadenceEditor({
   initialCadence: InitialCadence | null;
 }) {
   const [formError, setFormError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<{ overridden: boolean } | null>(null);
+  const [saved, setSaved] = useState<CadenceProvenance | null>(null);
   const [restored, setRestored] = useState<RestoreOutcome | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
   const [restoreOpen, setRestoreOpen] = useState(false);
-  // Seeded from the server render, then replaced by whatever a restore returns.
-  const [overridden, setOverridden] = useState(
-    initialCadence?.cadenceOverridden ?? false,
+  // Seeded from the server render, then replaced by whatever a save or a restore
+  // returns.
+  const [provenance, setProvenance] = useState<CadenceProvenance>(
+    initialCadence?.provenance ?? FOLLOWS_SOURCE,
   );
   const [sprintIdentity, setSprintIdentity] = useState<SprintIdentityView>(
     initialCadence?.sprintIdentity ?? { kind: "none" },
@@ -93,7 +97,7 @@ export default function CadenceEditor({
   const state = cadenceEditorState({
     hasSprintRow: initialCadence != null,
     sprintState: initialCadence?.sprintState ?? null,
-    cadenceOverridden: overridden,
+    provenance,
   });
 
   const form = useForm<CadenceValues>({
@@ -117,11 +121,18 @@ export default function CadenceEditor({
         setFormError(result.message);
         return;
       }
-      // The save reports what it DECIDED, not what was sent: an unchanged
-      // confirmation leaves the account on auto-pull, and the banner must stop
-      // saying "you set this by hand" the moment that is no longer true.
-      setOverridden(result.overridden || overridden);
-      setSaved({ overridden: result.overridden });
+      // SET, NOT MERGED (S-30). This used to be a sticky OR — `result.overridden
+      // || overridden` — because the old dirty-check compared the submission
+      // against the STORED row, so an unchanged save scored `false` even on an
+      // overridden account and would have un-overridden it. Compared against the
+      // SOURCE for each field, an unchanged save on an overridden account now
+      // scores `true` on its own, and every save writes all three fields
+      // authoritatively. Keeping the OR would make handing a field back
+      // impossible: a lead saving Mon–Fri over their own Mon–Thu writes a
+      // source-equal NULL, and a sticky merge would go on claiming it was
+      // hand-set — the silent revert this slice exists to end.
+      setProvenance(result.provenance);
+      setSaved(result.provenance);
     } catch {
       setFormError("Something went wrong saving your cadence. Please try again.");
     }
@@ -150,7 +161,11 @@ export default function CadenceEditor({
       // the returned defaults here would show the lead a cadence the database
       // does not hold (plan-review F5).
       if (pulled) {
-        setOverridden(false);
+        // The restore returns the RESOLVED cadence, so the working days it
+        // preserved come back marked as still hand-set. Writing `false` across
+        // the board here would contradict the dialog's own promise one line of
+        // state later.
+        setProvenance(result.cadence.provenance);
         setSprintIdentity(result.sprintIdentity);
         form.reset({
           lengthDays: result.cadence.lengthDays,
@@ -202,9 +217,15 @@ export default function CadenceEditor({
                 <CheckCircle2Icon />
                 <AlertTitle>Cadence saved</AlertTitle>
                 <AlertDescription>
-                  {saved.overridden
-                    ? "SprintFlow will keep these values and stop taking the sprint length and start day from Jira."
-                    : "Nothing changed, so this account keeps following Jira."}
+                  {/* THREE sentences since S-30, because there are now three
+                      outcomes. The middle one is the state this slice exists to
+                      create, and the single boolean this used to read could not
+                      describe it. */}
+                  {!anyHandSet(saved)
+                    ? "Nothing changed, so this account keeps following Jira."
+                    : saved.workingDays && !saved.lengthDays && !saved.startDay
+                      ? "SprintFlow will keep your working days, and the sprint length and start day still come from Jira."
+                      : "SprintFlow will keep these values and stop taking the sprint length and start day from Jira."}
                 </AlertDescription>
               </Alert>
             ) : null}

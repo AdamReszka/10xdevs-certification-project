@@ -9,10 +9,16 @@ import {
   monitoredRepo,
   sprint,
   teamMember,
-  type SelectSprint,
   type technologyTrack,
 } from "@/db/schema";
-import { resolveCadenceFor } from "@/lib/cadence-override";
+import {
+  FOLLOWS_SOURCE,
+  resolveCadenceFor,
+  writeCadenceOverride,
+  type CadenceProvenance,
+  type OverrideFields,
+  type ResolvedCadence,
+} from "@/lib/cadence-override";
 import type { getDb } from "@/lib/db";
 import { fteToColumn, toFte } from "@/lib/fte";
 import { getActiveSprintRow } from "@/lib/sprint";
@@ -31,6 +37,7 @@ import {
 
 import {
   DEFAULT_CADENCE,
+  deriveCadence,
   type DerivedCadence,
   type WeekdayCode,
 } from "./cadence";
@@ -810,7 +817,13 @@ export async function confirmAllFte({
 // ============================================================================
 
 export type ImportCadenceResult = {
-  cadence: DerivedCadence;
+  /**
+   * RESOLVED since S-30, so the surface learns per-field provenance from the
+   * same read the engine uses. The degraded branches (no board, no active
+   * sprint, ambiguous board) wrote NOTHING, so they carry `DEFAULT_CADENCE` with
+   * every field marked as following the source — which is what they are showing.
+   */
+  cadence: ResolvedCadence;
   /** The board whose sprint drove the cadence (persisted), or null. */
   boardId: number | null;
   /** The active sprint's Jira id (string) when one exists. */
@@ -935,7 +948,9 @@ export async function importCadence({
     case "board_ambiguous":
       // Multiple boards, none chosen → surface the chooser, persist nothing yet.
       return {
-        cadence: DEFAULT_CADENCE,
+        // NOTHING WAS WRITTEN on this branch, so every field is shown as
+        // following the source — which is what the defaults are.
+        cadence: { ...DEFAULT_CADENCE, source: "source", provenance: { ...FOLLOWS_SOURCE } },
         boardId: null,
         jiraSprintId: null,
         sprintName: null,
@@ -948,7 +963,9 @@ export async function importCadence({
     case "no_board":
       // No sprint-capable board → nothing to derive from; editable defaults.
       return {
-        cadence: DEFAULT_CADENCE,
+        // NOTHING WAS WRITTEN on this branch, so every field is shown as
+        // following the source — which is what the defaults are.
+        cadence: { ...DEFAULT_CADENCE, source: "source", provenance: { ...FOLLOWS_SOURCE } },
         boardId: null,
         jiraSprintId: null,
         sprintName: null,
@@ -964,7 +981,9 @@ export async function importCadence({
       // (`jira_sprint_id` is NOT NULL, and a NULL-dated row would outrank a
       // correctly dated one in `getActiveSprintRow`). Editable defaults.
       return {
-        cadence: DEFAULT_CADENCE,
+        // NOTHING WAS WRITTEN on this branch, so every field is shown as
+        // following the source — which is what the defaults are.
+        cadence: { ...DEFAULT_CADENCE, source: "source", provenance: { ...FOLLOWS_SOURCE } },
         boardId: result.boardId,
         jiraSprintId: null,
         sprintName: null,
@@ -977,20 +996,10 @@ export async function importCadence({
   }
 }
 
-/**
- * Read cadence back off the persisted row rather than re-deriving it, so the
- * form shows what is actually stored — which differs from `deriveCadence`'s
- * output exactly when the owner's override was carried forward.
- */
-function cadenceFromRow(row: SelectSprint): DerivedCadence {
-  return {
-    lengthDays: row.lengthDays ?? DEFAULT_CADENCE.lengthDays,
-    startDay: (row.startDay as WeekdayCode | null) ?? DEFAULT_CADENCE.startDay,
-    workingDays: (row.workingDays as WeekdayCode[] | null) ?? [
-      ...DEFAULT_CADENCE.workingDays,
-    ],
-  };
-}
+// `cadenceFromRow` lived here until S-30. Every caller now goes through
+// `resolveCadenceFor`, which reads the durable record first and only falls back
+// to the sprint row's derived cache — so "what the form shows" and "what the
+// engine uses" are one read rather than two coalescings that could disagree.
 
 // ============================================================================
 // Cadence save (user-confirmed / overridden)
@@ -1014,48 +1023,72 @@ function canonicalWorkingDays(days: readonly string[]): string {
 }
 
 /**
- * Did the lead actually CHANGE anything?
+ * The lead's submitted cadence → the three NULL-or-value fields of the record.
  *
- * Both sides go through `cadenceFromRow`'s defaults, not just the stored one.
- * All three cadence columns are nullable, and every reader coalesces them to
- * 14 / MON / Mon–Fri before a human ever sees a value — so comparing a
- * submitted `14` against a stored `NULL` would score an untouched confirmation
- * as an edit and re-freeze the account. That is the same read-wider-than-write
- * asymmetry this function exists to close, one layer down (plan-review F4).
+ * THREE INDEPENDENT COMPARISONS AGAINST THE SOURCE FOR THAT FIELD (S-30), not
+ * one all-three equality collapsed onto a boolean. That collapse is why no
+ * reachable state gave a Mon–Thu team both its working days and FR-007's
+ * auto-pull: the moment any field differed, all three froze.
+ *
+ * A field equal to its source is stored NULL — "follow the source for this
+ * field". All three NULL leaves a row of three NULLs, which is NOT an empty
+ * save: it is the record of the lead having chosen the source FOR THIS SPRINT,
+ * and it is the only thing that stops the resolver's tier 2 handing an earlier
+ * sprint's pattern back.
+ *
+ * Working days go through `canonicalWorkingDays` on both sides, so a reordered
+ * but identical set is still not an edit — the same normalisation the old
+ * dirty-check applied, kept for the same reason.
  */
-function sameCadence(a: DerivedCadence, b: DerivedCadence): boolean {
-  return (
-    a.lengthDays === b.lengthDays &&
-    a.startDay === b.startDay &&
-    canonicalWorkingDays(a.workingDays) === canonicalWorkingDays(b.workingDays)
-  );
+export function cadenceOverrideFields(
+  submitted: DerivedCadence,
+  source: DerivedCadence,
+): OverrideFields {
+  return {
+    lengthDays:
+      submitted.lengthDays === source.lengthDays ? null : submitted.lengthDays,
+    startDay: submitted.startDay === source.startDay ? null : submitted.startDay,
+    workingDays:
+      canonicalWorkingDays(submitted.workingDays) ===
+      canonicalWorkingDays(source.workingDays)
+        ? null
+        : [...submitted.workingDays],
+  };
 }
 
 /**
  * Persist the lead's confirmed / overridden cadence (FR-007).
  *
- * TWO defects are closed here, and both were the same shape.
- *
  * **The row.** This used to UPDATE `where owner_id AND state = 'ACTIVE'` while
  * every reader — the wizard page, the anomaly snapshot, the days-off editor —
  * resolves through `getActiveSprintRow`, whose second tier is state-unscoped.
  * Between sprints the form therefore pre-filled from a CLOSED row and the write
- * matched nothing, silently. It now resolves through the SAME reader and keys
- * the UPDATE on `id`, so "the row the lead is looking at" and "the row the save
- * writes" are one sentence. Resolving INSIDE the service rather than taking a
- * `sprintId` argument is what stops the wizard action and the Settings action
- * from drifting apart again. The `owner_id` predicate stays even though the id
- * came from an owner-scoped read — `lessons.md`'s corollary (a) on differential
- * upserts.
+ * matched nothing, silently. It resolves through the SAME reader and keys the
+ * UPDATE on `id`, so "the row the lead is looking at" and "the row the save
+ * writes" are one sentence. The `owner_id` predicate stays even though the id
+ * came from an owner-scoped read — `lessons.md`'s corollary (a).
  *
- * **The flag.** It used to be set to `true` unconditionally, and this action IS
- * what finishes the setup wizard — so merely *confirming* the derived values was
- * recorded as *overriding* them, and `reconcileActiveSprint` then faithfully
- * preserved that freeze on every future sync. `cadence_overridden` now means
- * "the lead deliberately changed this". Note the asymmetry in the SET: an
- * unchanged save OMITS the column rather than writing `false`, because writing
- * `false` would silently un-override a lead who genuinely overrode earlier and
- * then re-saved without touching anything.
+ * **The record (S-30).** The lead's choice now lands in
+ * `sprint_cadence_override`, per field, and `sprint.cadence_overridden` is no
+ * longer written by this path at all. Three consequences worth stating:
+ *
+ *  - The comparison basis moved from "the stored row" to "the SOURCE value for
+ *    that field", which is what lets a Mon–Thu team's working days coexist with
+ *    FR-007's auto-pull for length and start day.
+ *  - **The sticky OR is retired, and its retirement is the point.** The old
+ *    return told the caller only whether an edit happened, and an unchanged save
+ *    scored `false` even on an overridden account — so the UI had to OR the new
+ *    answer onto the old one or it would un-override the lead on a confirming
+ *    save. Compared against the SOURCE, an unchanged save on an overridden
+ *    account now scores `true` on its own, and every save writes all three
+ *    fields authoritatively. Keeping the OR would make handing a field back
+ *    impossible: a lead saving Mon–Fri over their own Mon–Thu writes a
+ *    source-equal NULL, and a sticky merge would go on claiming it was hand-set.
+ *  - It opens a TRANSACTION, which it did not need while it was one statement
+ *    and does need for a two-table save.
+ *
+ * The three values are still written to `sprint` as before, so the derived cache
+ * stays populated and a rollback of S-30 is a code revert.
  */
 export async function saveCadence({
   db,
@@ -1069,29 +1102,89 @@ export async function saveCadence({
     startDay: WeekdayCode;
     workingDays: WeekdayCode[];
   };
-}): Promise<{ updated: number; overridden: boolean }> {
+}): Promise<{ updated: number; provenance: CadenceProvenance }> {
   const row = await getActiveSprintRow(db, ownerId);
   if (!row) throw new NoSprintRowError();
 
-  const overridden = !sameCadence(cadence, cadenceFromRow(row));
-
-  const rows = await db
-    .update(sprint)
-    .set({
-      lengthDays: cadence.lengthDays,
-      startDay: cadence.startDay,
-      workingDays: cadence.workingDays,
-      // Only on a real edit. Omitted — not `false` — otherwise.
-      ...(overridden ? { cadenceOverridden: true } : {}),
+  // The record is filed under the JIRA-SIDE project id, and the source below
+  // needs the owner's zone — one read serves both.
+  const [project] = await db
+    .select({
+      jiraProjectId: jiraProject.jiraProjectId,
+      timeZone: jiraProject.timeZone,
     })
-    .where(and(eq(sprint.id, row.id), eq(sprint.ownerId, ownerId)))
-    .returning({ id: sprint.id });
+    .from(jiraProject)
+    .where(eq(jiraProject.id, row.jiraProjectId))
+    .limit(1);
 
-  // Unreachable after a by-id UPDATE of a row we just read. Kept because the
-  // whole point of this function is that an empty result is never success.
-  if (rows.length === 0) throw new NoSprintRowError();
+  // THE SOURCE for each field, and it is DERIVED rather than read off
+  // `sprint.length_days` / `start_day`. This function writes those columns too
+  // (below), so reading them back as the comparison basis would make the second
+  // save of an unchanged override score source-EQUAL and silently drop it — the
+  // save corrupting the basis it compares against next time. `deriveCadence` is
+  // pure and the sprint row carries both dates, so the true source costs no
+  // network call. The stored columns remain the fallback for a row Jira left
+  // undated, which no writer can produce.
+  const derived =
+    row.startDate && row.endDate
+      ? deriveCadence({
+          startDate: row.startDate,
+          endDate: row.endDate,
+          timeZone: project?.timeZone ?? undefined,
+        })
+      : null;
+  const source: DerivedCadence = {
+    lengthDays: derived?.lengthDays ?? row.lengthDays ?? DEFAULT_CADENCE.lengthDays,
+    startDay:
+      derived?.startDay ??
+      (row.startDay as WeekdayCode | null) ??
+      DEFAULT_CADENCE.startDay,
+    // Jira has no working-days field, so there is nothing to derive: the
+    // constant IS the source. `sprint.working_days` is deliberately not
+    // consulted — see its docblock.
+    workingDays: [...DEFAULT_CADENCE.workingDays],
+  };
+  const fields = cadenceOverrideFields(cadence, source);
+  const provenance: CadenceProvenance = {
+    lengthDays: fields.lengthDays != null,
+    startDay: fields.startDay != null,
+    workingDays: fields.workingDays != null,
+  };
 
-  return { updated: rows.length, overridden };
+  const updated = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(sprint)
+      .set({
+        lengthDays: cadence.lengthDays,
+        startDay: cadence.startDay,
+        workingDays: cadence.workingDays,
+      })
+      .where(and(eq(sprint.id, row.id), eq(sprint.ownerId, ownerId)))
+      .returning({ id: sprint.id });
+
+    // Unreachable after a by-id UPDATE of a row we just read. Kept because the
+    // whole point of this function is that an empty result is never success.
+    if (rows.length === 0) throw new NoSprintRowError();
+
+    // An UNDATED sprint row cannot be keyed into the record: `start_date` is the
+    // ordering key of the resolver's inheritance tier and is NOT NULL by design.
+    // No writer can produce such a row — the reconciler refuses it outright
+    // (`sprint_undated`) and `importCadence` refuses it before that — so this is
+    // a guard, not a path, and the `sprint` columns above still took the values.
+    if (project && row.startDate) {
+      await writeCadenceOverride(tx, {
+        ownerId,
+        jiraProjectId: project.jiraProjectId,
+        jiraSprintId: row.jiraSprintId,
+        startDate: row.startDate,
+        fields,
+      });
+    }
+
+    return rows.length;
+  });
+
+  return { updated, provenance };
 }
 
 /**

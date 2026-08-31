@@ -277,13 +277,13 @@ describe("team actions — happy path", () => {
       workingDays: ["MON", "TUE", "WED"],
     });
     expect(savedCadence.ok).toBe(true);
-    // A CHANGED submit records a deliberate override (S-29); confirming the
-    // derived values unchanged would report `false` and leave auto-pull on.
+    // A CHANGED submit records a deliberate override (S-29), PER FIELD since
+    // S-30; confirming the derived values unchanged reports every field as
+    // following the source and leaves auto-pull on.
     if (!savedCadence.ok) throw new Error("expected success");
-    expect(savedCadence.overridden).toBe(true);
+    expect(savedCadence.provenance.lengthDays).toBe(true);
 
     const [sprintRow] = await db.select().from(sprint).where(eq(sprint.ownerId, ownerId));
-    expect(sprintRow.cadenceOverridden).toBe(true);
     expect(sprintRow.lengthDays).toBe(21);
 
     expect(captured.join("\n")).not.toContain(JIRA_TOKEN);

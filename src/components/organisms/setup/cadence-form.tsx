@@ -13,6 +13,7 @@ import {
 } from "@/app/(app)/setup/team/actions";
 import SprintIdentityBar from "@/components/molecules/sprint-identity-bar";
 import CadenceFields from "@/components/organisms/setup/cadence-fields";
+import type { CadenceProvenance } from "@/lib/cadence-override";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,7 +74,9 @@ type InitialCadence = {
   lengthDays: number;
   startDay: Weekday;
   workingDays: Weekday[];
-  cadenceOverridden: boolean;
+  /** PER FIELD since S-30. The wizard does not read it back from a save
+   *  (`result.provenance` is discarded below); it only needs the type. */
+  provenance: CadenceProvenance;
   /** Already formatted server-side — this component does no `Intl` work. */
   sprintIdentity: SprintIdentityView;
 };

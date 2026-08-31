@@ -171,6 +171,7 @@ describe("resolveCadenceFor — tiers against real Postgres", () => {
       startDay: "WED",
       workingDays: [...DEFAULT_CADENCE.workingDays],
       source: "source",
+      provenance: { lengthDays: false, startDay: false, workingDays: false },
     });
   });
 

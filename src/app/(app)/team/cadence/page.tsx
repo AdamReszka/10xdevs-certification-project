@@ -56,7 +56,7 @@ export default async function TeamCadencePage() {
         lengthDays: resolved.lengthDays,
         startDay: resolved.startDay as Weekday,
         workingDays: [...resolved.workingDays] as Weekday[],
-        cadenceOverridden: activeSprint.cadenceOverridden,
+        provenance: resolved.provenance,
         sprintState: activeSprint.state,
         sprintIdentity: toSprintIdentity({
           name: activeSprint.name,

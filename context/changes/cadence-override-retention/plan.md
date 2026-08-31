@@ -1103,11 +1103,11 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [x] 2.1 Type checking passes
-- [x] 2.2 Linting passes
-- [x] 2.3 Unit suite green
-- [x] 2.4 Integration suite green with no behavioural assertion changed
-- [x] 2.5 Integration test: the sweep uses the closed sprint's own cadence
+- [x] 2.1 Type checking passes — c1bec2f
+- [x] 2.2 Linting passes — c1bec2f
+- [x] 2.3 Unit suite green — c1bec2f
+- [x] 2.4 Integration suite green with no behavioural assertion changed — c1bec2f
+- [x] 2.5 Integration test: the sweep uses the closed sprint's own cadence — c1bec2f
 
 #### Manual
 
@@ -1117,11 +1117,11 @@ applying — today's zero is a fact about today, not a guarantee.
 
 #### Automated
 
-- [ ] 3.1 Type checking and linting pass
-- [ ] 3.2 Unit suite green, including rewritten `cadence-editor-view.test.ts`
-- [ ] 3.3 Integration suite green, including the reversed `:705` assertion
-- [ ] 3.4 Integration case: restore preserves working days, resets length and start day
-- [ ] 3.5 Integration case: a source-equal save blocks inheritance instead of deleting the row
+- [x] 3.1 Type checking and linting pass
+- [x] 3.2 Unit suite green, including rewritten `cadence-editor-view.test.ts`
+- [x] 3.3 Integration suite green, including the reversed `:705` assertion
+- [x] 3.4 Integration case: restore preserves working days, resets length and start day
+- [x] 3.5 Integration case: a source-equal save blocks inheritance instead of deleting the row
 
 #### Manual
 

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { pickCadence, type OverrideFields } from "@/lib/cadence-override";
+import {
+  FOLLOWS_SOURCE,
+  pickCadence,
+  type OverrideFields,
+} from "@/lib/cadence-override";
 import { DEFAULT_CADENCE } from "@/lib/integrations/cadence";
 
 /**
@@ -37,6 +41,7 @@ describe("pickCadence — tier 1: the record for this exact sprint", () => {
       startDay: "FRI",
       workingDays: ["MON", "TUE"],
       source: "own",
+      provenance: { lengthDays: true, startDay: true, workingDays: true },
     });
   });
 
@@ -54,6 +59,13 @@ describe("pickCadence — tier 1: the record for this exact sprint", () => {
     expect(resolved.startDay).toBe("WED");
     expect(resolved.workingDays).toEqual(["MON", "TUE", "WED", "THU"]);
     expect(resolved.source).toBe("own");
+    // THE STATE THIS SLICE EXISTS TO CREATE, stated per field: the lead owns
+    // the working days while length and start day still follow Jira.
+    expect(resolved.provenance).toEqual({
+      lengthDays: false,
+      startDay: false,
+      workingDays: true,
+    });
   });
 
   it("treats a row of three NULLs as a meaningful state that blocks inheritance", () => {
@@ -68,6 +80,7 @@ describe("pickCadence — tier 1: the record for this exact sprint", () => {
     // Mon–Thu back here is the silent revert this table exists to prevent.
     expect(resolved.workingDays).toEqual([...DEFAULT_CADENCE.workingDays]);
     expect(resolved.source).toBe("own");
+    expect(resolved.provenance).toEqual(FOLLOWS_SOURCE);
   });
 
   it("ignores an empty working-day array — an empty set is not a pattern", () => {
@@ -96,6 +109,7 @@ describe("pickCadence — tier 2: inheritance", () => {
       startDay: "WED",
       workingDays: ["MON", "TUE", "WED", "THU"],
       source: "inherited",
+      provenance: { lengthDays: false, startDay: false, workingDays: true },
     });
   });
 
@@ -126,6 +140,7 @@ describe("pickCadence — tier 3: the sprint's own derived cache", () => {
       startDay: "WED",
       workingDays: [...DEFAULT_CADENCE.workingDays],
       source: "source",
+      provenance: { ...FOLLOWS_SOURCE },
     });
   });
 
@@ -157,7 +172,11 @@ describe("pickCadence — tier 4: DEFAULT_CADENCE", () => {
       sprintStartDay: null,
     });
 
-    expect(resolved).toEqual({ ...DEFAULT_CADENCE, source: "source" });
+    expect(resolved).toEqual({
+      ...DEFAULT_CADENCE,
+      source: "source",
+      provenance: { ...FOLLOWS_SOURCE },
+    });
   });
 });
 
