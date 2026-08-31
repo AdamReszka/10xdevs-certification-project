@@ -423,6 +423,7 @@ Foundations below assume these are present and do NOT re-scaffold them.
 - **Prerequisites:** S-04 (the roster editor + import/save services exist), S-10
   (the `/settings` tabbed shell exists — this becomes a second tab beside
   Connections, exactly as S-14 will)
+- **Status:** done
 - **Parallel with:** S-08, S-09, S-11, S-13, S-14
 - **Blockers:** —
 - **Why this is a gap, not a nice-to-have (found 2026-08-22 during S-10 manual
