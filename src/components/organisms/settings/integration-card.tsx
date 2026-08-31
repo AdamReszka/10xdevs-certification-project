@@ -306,8 +306,21 @@ export default function IntegrationCard({
             />
           </div>
 
-          {/* Directly under the row, so it qualifies the primary control. */}
-          <p className="text-sm text-muted-foreground">{reconnectCost(integration)}</p>
+          {/* Directly under the row, so it qualifies the primary control.
+
+              DEMO TAKES THE EDITOR-LESS VARIANT (impl-review F1). The
+              `"settings"` promise closes by quoting `Change monitored …`, and
+              `editSlot` is not rendered in demo — so on that branch the
+              sentence would name a control its reader cannot see, which is the
+              exact defect the `surface` parameter exists to prevent
+              (`integration-card-copy.ts`, plan-review F5). Demo is the second
+              surface with no selection editor; it takes the same variant the
+              wizard does. No pure test can see this — that is the parameter's
+              own stated reason for existing — so the condition is on the
+              checklist instead. */}
+          <p className="text-sm text-muted-foreground">
+            {reconnectCost(integration, isDemo ? "wizard" : "settings")}
+          </p>
 
           {isDemo ? <DemoNote integration={integration} /> : null}
         </div>

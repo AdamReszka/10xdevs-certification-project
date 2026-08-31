@@ -264,11 +264,21 @@ export function reconnectCost(
   const editor = selectionEditorLabel(integration);
 
   if (integration === "github") {
+    // POSITIONAL, not `joinClauses`, and the scope qualifier is load-bearing
+    // (impl-review F2). These two fragments were written for the disconnect's
+    // CLEAR branch, where the whole list goes; deselecting is per-repository —
+    // `github-store.ts:195-202` deletes only the rows `notInArray(keptRepoIds)`.
+    // Joined into one object of "removes", they claimed that dropping one
+    // repository clears the entire monitored list, which overstates the loss
+    // exactly as badly as hiding one understates it. They also play different
+    // grammatical roles here, so they cannot share a verb. Shrinking the source
+    // entry renders `undefined`, which the sibling test asserts against.
+    const [repoList, syncedHistory] = RECONNECT_COST_SOURCE.github;
     const body =
       `Re-submitting the form replaces the stored token and costs you nothing — the ` +
       `monitored repositories and their synced history stay where they are. ` +
-      `Deselecting a repository is what removes ` +
-      `${joinClauses(RECONNECT_COST_SOURCE.github)}.`;
+      `Deselecting a repository is the one thing here that costs anything: for each ` +
+      `one you drop, it takes its place out of ${repoList} and removes ${syncedHistory}.`;
     const routing = ` “${editor}” is where that choice is made.`;
     return surface === "settings" ? body + routing : body;
   }

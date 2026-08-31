@@ -120,6 +120,11 @@ wymaga tego samego konta z **załadowanym demo**.
   nad nimi). **Reconnect nigdzie nie prowadzi**: kliknięcie nie zmienia adresu.
   Przycisków **Change monitored …** w ogóle nie ma. Polskie zdanie
   („W trybie demonstracyjnym nic, co robisz…") stoi **pod** przyciskami.
+  **Dodatkowo (impl-review F1):** zdanie o koszcie ponownego podłączenia —
+  to nad polskim, pod rzędem — **nie może** w demo wymieniać „Change monitored
+  project" ani „Change monitored repositories". Tych przycisków w demo nie ma,
+  więc zdanie kończy się na tym, co ponowne podłączenie kosztuje, i nie kieruje
+  nigdzie dalej. Porównaj z tym samym zdaniem poza demo: tam ta końcówka **jest**.
 
   **Dlaczego to ma znaczenie:** karta Connections celowo pokazuje prawdziwe
   konto nawet w demo, więc każdy nowy element rzędu jest nową drogą z ekranu

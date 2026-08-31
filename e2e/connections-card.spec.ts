@@ -5,7 +5,7 @@ import pg from "pg";
 
 import {
   DB_URL,
-  deleteAccount,
+  deleteAccountByEmail,
   resolveOwnerId,
   signUpFreshAccount,
 } from "./accounts";
@@ -42,6 +42,19 @@ import {
  * The credential's `encrypted_token` is a placeholder: this page never decrypts
  * it, and no test here clicks `Test connection`, which is the one control that
  * would reach the API.
+ *
+ * WHY THIS SPEC IMPORTS APPLICATION SOURCE, alone in `e2e/` (impl-review F4).
+ * The assertions below compare the rendered page against the very sentences
+ * `integration-card-copy.ts` assembles, rather than against literals. A literal
+ * would be a fourth copy of a string this slice exists to keep in ONE place —
+ * and a copy-module regression the hermetic test cannot see (a sentence
+ * assembled but never mounted) would then stay green here too. Two things it
+ * rests on, neither local to this file: Playwright resolves `@/…` through the
+ * ROOT `tsconfig.json` path mapping, so moving that mapping breaks the suite
+ * from outside `e2e/`; and the imported module must stay pure — its only
+ * non-type imports are `disconnect-impact.ts`, `disconnect-confirm-copy.ts`,
+ * `jira-project-editor-copy.ts` and `demo/refusal.ts`, all dependency-free by
+ * construction, so no server code enters the test process.
  */
 
 const email = `e2e-s31-connections-${Date.now()}@example.test`;
@@ -81,8 +94,13 @@ test.describe("settings — the connected Connections card (S-31)", () => {
     }
   });
 
+  // Keyed on the EMAIL, not on `ownerId` (impl-review F3). `ownerId` is
+  // assigned partway through `beforeAll`, so anything that throws between the
+  // sign-up and that assignment would leak the account — the exact case
+  // `accounts.ts:177-183` added this helper for. The email is a module const,
+  // known before the sign-up runs.
   test.afterAll(async () => {
-    if (ownerId) await deleteAccount(ownerId);
+    await deleteAccountByEmail(email);
     await context?.close();
   });
 

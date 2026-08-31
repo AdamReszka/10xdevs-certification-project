@@ -1,7 +1,7 @@
 ---
 change_id: reconnect-affordance
 title: Reconnect and Disconnect stop looking like the same decision
-status: implemented
+status: impl_reviewed
 created: 2026-08-31
 updated: 2026-08-31
 archived_at: null
