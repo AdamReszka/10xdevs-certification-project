@@ -1495,6 +1495,46 @@ Foundations below assume these are present and do NOT re-scaffold them.
 
 ---
 
+### S-32: Retire what S-30 leaves behind
+
+- **Outcome:** the cadence a lead chose has exactly one home in the database —
+  the superseded copy on `sprint` is gone, and the override table holds no rows
+  that describe sprints nobody will ask about again.
+- **Change ID:** —
+- **PRD refs:** FR-007
+- **Prerequisites:** S-30
+- **Status:** proposed
+
+- **Two deliberate leftovers, from the same decision.** S-30 moves the cadence
+  override into `sprint_cadence_override` and does **not** drop
+  `sprint.working_days` / `sprint.cadence_overridden` (owner's call: an additive
+  migration keeps a revert to a code revert). The columns become
+  written-but-never-read, and the whole thing standing between them and a future
+  reader picking up the stale copy is one hermetic test — the reader guard in
+  S-30's Phase 5, whose allowlist IS the contract. That is a fine bridge and a bad
+  permanent arrangement: a guard can be deleted by anyone who reads its failure as
+  noise, and the question "which copy is true" comes straight back.
+- **The second leftover is the price of S-30's plan review F1** (2026-08-31,
+  `context/changes/cadence-override-retention/reviews/plan-review.md`). Row
+  existence there means *"the lead has spoken for this sprint"*, not *"the values
+  differ from the source"* — because with a read-time inheritance tier the
+  `anomaly_settings` delete-when-equal rule makes "stop inheriting" inexpressible,
+  and a lead saving their way back to the default would have it silently undone.
+  The consequence is rows holding three NULLs that no write path ever deletes. At
+  one per sprint the lead touched that is the `sprint_measurement` order of
+  magnitude and not a scaling problem — it is a tidiness problem with a real edge:
+  nothing prunes records for sprints that fell out of the PRD's current-plus-two
+  retention window, or for a Jira project the account no longer monitors.
+- **Shape:** one migration dropping the two columns and deleting the reader guard
+  in the same commit (the guard exists to hold the line until this lands, so
+  outliving its cause makes it misleading), plus a decision on when a cadence
+  record stops being worth keeping. Note the second half is genuinely a decision,
+  not a chore: an override for a long-closed sprint is what tier-2 inheritance
+  reads to carry a Mon–Thu pattern forward, so a prune that is too eager is the
+  S-30 defect rebuilt in a cron job.
+
+---
+
 ### S-31: Reconnect and Disconnect stop looking like the same decision
 
 - **Outcome:** a lead whose token expired can see, without experimenting, which
