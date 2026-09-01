@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useRecaptcha } from "@/components/organisms/auth/use-recaptcha";
 import { authClient } from "@/lib/auth-client";
 import {
   resetRequestSchema,
@@ -36,7 +37,8 @@ import {
  * whether the email exists — avoids account enumeration. Only network/unexpected
  * failures surface as a toast.
  */
-export default function ResetForm() {
+export default function ResetForm({ siteKey }: { siteKey: string | null }) {
+  const recaptcha = useRecaptcha(siteKey);
   const [submitted, setSubmitted] = useState(false);
   const form = useForm<ResetRequestValues>({
     resolver: zodResolver(resetRequestSchema),
@@ -45,10 +47,15 @@ export default function ResetForm() {
 
   async function onSubmit(values: ResetRequestValues) {
     try {
-      const { error } = await authClient.requestPasswordReset({
-        email: values.email,
-        redirectTo: "/reset/confirm",
-      });
+      // FAIL-CLOSED: no token, no request. `headers()` throws when the widget
+      // has not loaded or Google never called back, and the catch below turns
+      // that into a failed submit rather than a request the server rejects.
+      const captchaHeaders = await recaptcha.headers();
+
+      const { error } = await authClient.requestPasswordReset(
+        { email: values.email, redirectTo: "/reset/confirm" },
+        { headers: captchaHeaders },
+      );
 
       if (error) {
         toast.error(

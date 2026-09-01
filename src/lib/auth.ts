@@ -1,10 +1,12 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { captcha } from "better-auth/plugins";
 import { cache } from "react";
 import { getDb, getDbWithPool } from "@/lib/db";
 import * as schema from "@/db/schema";
 import { dispatchPasswordReset } from "@/lib/auth-email";
 import { resolveTrustedOrigins } from "@/lib/auth-origins";
+import { resolveCaptchaSecret } from "@/lib/captcha";
 import {
   resolveApiKey,
   resolveEmailTransport,
@@ -22,6 +24,9 @@ type AuthEnv = {
   BETTER_AUTH_URL?: string;
   /** Extra trusted origins, comma-separated — see `auth-origins.ts`. */
   BETTER_AUTH_TRUSTED_ORIGINS?: string;
+  /** Invisible reCAPTCHA v2 — see `captcha.ts`. Both are Workers secrets. */
+  RECAPTCHA_SITE_KEY?: string;
+  RECAPTCHA_SECRET_KEY?: string;
   // S-11: FR-001's reset email finally has a transport. Both optional — with no
   // key, `resolveEmailTransport` logs instead of sending outside production.
   RESEND_API_KEY?: string;
@@ -90,6 +95,26 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
     );
   }
 
+  // Invisible reCAPTCHA v2 on `/sign-up/email`, `/sign-in/email` and
+  // `/request-password-reset` — the plugin's own defaults, which are exactly the
+  // three unauthenticated endpoints worth protecting. `/reset-password` is
+  // deliberately NOT among them: it already requires a valid emailed token.
+  //
+  // FAIL-CLOSED by the owner's decision (2026-09-01). Better Auth throws
+  // SERVICE_UNAVAILABLE when Google is unreachable, so an outage there is an
+  // outage of sign-in here. Accepted: a captcha that waves requests through
+  // under load fails exactly when it is needed, and a bot can create that load.
+  //
+  // `minScore` is NOT set — it is a v3 concept and these keys are v2 Invisible,
+  // whose `siteverify` answers `success` with no score. The plugin's `isV3()`
+  // guard already handles that; naming a threshold nothing reads would be worse
+  // than naming none.
+  //
+  // Absent outside production, so local dev, the unit suite and Playwright keep
+  // working without Google keys. In production `resolveCaptchaSecret` throws
+  // rather than let the control be silently off.
+  const captchaSecret = resolveCaptchaSecret(env);
+
   return betterAuth({
     appName: "SprintFlow",
     secret,
@@ -107,6 +132,9 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
         env?.BETTER_AUTH_TRUSTED_ORIGINS ??
         process.env.BETTER_AUTH_TRUSTED_ORIGINS,
     }),
+    plugins: captchaSecret
+      ? [captcha({ provider: "google-recaptcha", secretKey: captchaSecret })]
+      : [],
     database: drizzleAdapter(db, { provider: "pg", schema }),
     emailAndPassword: {
       enabled: true,
