@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useRecaptcha } from "@/components/organisms/auth/use-recaptcha";
 import { authClient } from "@/lib/auth-client";
 import { loginSchema, type LoginValues } from "@/lib/validations/auth";
 
@@ -32,7 +33,8 @@ import { loginSchema, type LoginValues } from "@/lib/validations/auth";
  * field errors inline and auth/network failures via toast, and redirects to
  * /dashboard on success.
  */
-export default function LoginForm() {
+export default function LoginForm({ siteKey }: { siteKey: string | null }) {
+  const recaptcha = useRecaptcha(siteKey);
   const router = useRouter();
   const form = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
@@ -41,10 +43,15 @@ export default function LoginForm() {
 
   async function onSubmit(values: LoginValues) {
     try {
-      const { error } = await authClient.signIn.email({
-        email: values.email,
-        password: values.password,
-      });
+      // FAIL-CLOSED: no token, no request. `headers()` throws when the widget
+      // has not loaded or Google never called back, and the catch below turns
+      // that into a failed submit rather than a request the server rejects.
+      const captchaHeaders = await recaptcha.headers();
+
+      const { error } = await authClient.signIn.email(
+        { email: values.email, password: values.password },
+        { headers: captchaHeaders },
+      );
 
       if (error) {
         toast.error(

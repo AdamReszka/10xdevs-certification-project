@@ -192,3 +192,28 @@ describe("createAuth — trustedOrigins", () => {
     ).not.toHaveLength(0);
   });
 });
+
+/**
+ * The captcha plugin is a SECURITY CONTROL, and the failure worth testing is not
+ * "it rejects a bot" — it is "it is quietly off". Both directions are pinned
+ * here, through the real `createAuth`, because the wiring is what the module's
+ * own tests cannot see.
+ */
+describe("createAuth — captcha", () => {
+  it("registers no plugin when no reCAPTCHA secret is configured", () => {
+    // The local-dev and CI path: no Google keys, and sign-in must still work.
+    const instance = createAuth({ BETTER_AUTH_SECRET: "test-secret" });
+
+    expect(instance.options.plugins ?? []).toHaveLength(0);
+  });
+
+  it("registers the captcha plugin when the secret IS configured", () => {
+    const instance = createAuth({
+      BETTER_AUTH_SECRET: "test-secret",
+      RECAPTCHA_SITE_KEY: "recaptcha-site",
+      RECAPTCHA_SECRET_KEY: "recaptcha-secret",
+    });
+
+    expect(instance.options.plugins?.map((p) => p.id)).toContain("captcha");
+  });
+});

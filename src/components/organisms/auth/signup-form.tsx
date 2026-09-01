@@ -24,6 +24,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { useRecaptcha } from "@/components/organisms/auth/use-recaptcha";
 import { authClient } from "@/lib/auth-client";
 import { signupSchema, type SignupValues } from "@/lib/validations/auth";
 
@@ -32,7 +33,8 @@ import { signupSchema, type SignupValues } from "@/lib/validations/auth";
  * signUp.email, surfaces field errors inline and failures (notably duplicate
  * email) via toast. Because autoSignIn is enabled, success lands on /dashboard.
  */
-export default function SignupForm() {
+export default function SignupForm({ siteKey }: { siteKey: string | null }) {
+  const recaptcha = useRecaptcha(siteKey);
   const router = useRouter();
   const form = useForm<SignupValues>({
     resolver: zodResolver(signupSchema),
@@ -46,11 +48,15 @@ export default function SignupForm() {
 
   async function onSubmit(values: SignupValues) {
     try {
-      const { error } = await authClient.signUp.email({
-        name: values.name,
-        email: values.email,
-        password: values.password,
-      });
+      // FAIL-CLOSED: no token, no request. `headers()` throws when the widget
+      // has not loaded or Google never called back, and the catch below turns
+      // that into a failed submit rather than a request the server rejects.
+      const captchaHeaders = await recaptcha.headers();
+
+      const { error } = await authClient.signUp.email(
+        { name: values.name, email: values.email, password: values.password },
+        { headers: captchaHeaders },
+      );
 
       if (error) {
         toast.error(error.message ?? "Could not create your account.");
