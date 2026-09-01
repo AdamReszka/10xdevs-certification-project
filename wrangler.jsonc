@@ -20,6 +20,23 @@
 		{
 			"binding": "HYPERDRIVE",
 			"id": "86417a117a96464e947d5005e56f2a21",
+			// SQL RESPONSE CACHING IS DISABLED on this config, set 2026-09-01 with
+			// `wrangler hyperdrive update <id> --caching-disabled`. It is recorded
+			// here because it lives on Cloudflare's side, not in this repo, and is
+			// therefore invisible to anyone reading the code.
+			//
+			// It was ON by default (~60s), and that made read-after-write return
+			// pre-write state in production: the demo door wrote its world and
+			// flipped `active_workspace` to DEMO, `/dashboard` then read `REAL`
+			// from cache, and the gate bounced the visitor back to the doorstep. A
+			// second press re-read a cached empty `findDemoOwner` and tried to
+			// insert the same demo owner twice. See `lessons.md`.
+			//
+			// Do NOT re-enable it. SprintFlow is an interactive per-user dashboard
+			// where nearly every action writes and then reads; there is no read
+			// volume to amortise a cache against, and every second of staleness is
+			// a visible defect. NOTHING LOCAL CAN CATCH A REGRESSION HERE — dev,
+			// unit, integration and Playwright all reach Postgres directly.
 			// localConnectionString is ONLY used by Miniflare's local Hyperdrive
 			// emulation — never in production (the deployed worker connects via the
 			// `id` above). It is required because `opennextjs-cloudflare deploy`
