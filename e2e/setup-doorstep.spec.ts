@@ -117,6 +117,10 @@ test.describe("first run — the gate on /dashboard", () => {
 
 test.describe("first run — the demo door", () => {
   const email = `e2e-doorstep-demo-${Date.now()}@example.test`;
+  // A SECOND account, created through the UI form inside the test — the API
+  // context above cannot perform the client-side push that plants the stale
+  // Client Cache entry this test exists to catch.
+  const uiEmail = `e2e-doorstep-demo-ui-${Date.now()}@example.test`;
 
   let context: BrowserContext;
 
@@ -128,6 +132,7 @@ test.describe("first run — the demo door", () => {
     // Deleting the real account cascades its demo tenancy row (`demo_of` is
     // ON DELETE CASCADE) and everything the demo fixture wrote under it.
     await deleteAccountByEmail(email);
+    await deleteAccountByEmail(uiEmail);
     await context?.close();
   });
 
@@ -139,9 +144,38 @@ test.describe("first run — the demo door", () => {
    * simply forgotten — the second `goto` below would bounce back to `/setup`
    * and this test would fail on a visitor holding zero real credentials.
    */
-  test("the demo door lands on a populated dashboard the gate no longer redirects", async () => {
-    const page = await context.newPage();
-    await page.goto("/setup");
+  test("the demo door lands on a populated dashboard the gate no longer redirects", async ({
+    browser,
+  }) => {
+    // SIGNS UP THROUGH THE UI, in this page, so the test walks the real path a
+    // visitor walks: form → `router.push("/dashboard")` → gate → `/setup` →
+    // demo door. The API-authenticated context above never performs that
+    // client-side push.
+    //
+    // HONEST LIMIT — THIS DOES NOT REPRODUCE THE 2026-09-01 PRODUCTION DEFECT,
+    // and it was verified not to: with the pre-fix `router.push("/dashboard")`
+    // restored, this test still passes. `playwright.config.ts` boots
+    // `npm run dev`, and in dev Next disables `<Link>` prefetching, so the
+    // Client Cache stays nearly empty — while the production build fills it.
+    // The stale `/dashboard` → `/setup` entry that made the door read as dead
+    // therefore cannot form here.
+    //
+    // Kept anyway because it exercises the true route, and named so nobody
+    // later mistakes a green run for coverage of that defect. What actually
+    // guards it is the hard navigation in `workspace-navigation.ts`, which no
+    // client cache can defeat, plus verification against production.
+    const fresh = await browser.newContext({
+      storageState: { cookies: [], origins: [] },
+    });
+    const page = await fresh.newPage();
+
+    await page.goto("/signup");
+    await page.getByLabel("Name").fill("Demo Door E2E");
+    await page.getByLabel("Email").fill(uiEmail);
+    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await page.getByLabel("Confirm password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Create account" }).click();
+    await page.waitForURL("**/setup");
 
     await page.getByRole("button", { name: "Zobacz demo" }).click();
 
@@ -160,6 +194,6 @@ test.describe("first run — the demo door", () => {
       page.getByRole("heading", { name: "Dashboard — Today" }),
     ).toBeVisible();
 
-    await page.close();
+    await fresh.close();
   });
 });
