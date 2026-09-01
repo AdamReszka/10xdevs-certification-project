@@ -4,6 +4,7 @@ import { cache } from "react";
 import { getDb, getDbWithPool } from "@/lib/db";
 import * as schema from "@/db/schema";
 import { dispatchPasswordReset } from "@/lib/auth-email";
+import { resolveTrustedOrigins } from "@/lib/auth-origins";
 import {
   resolveApiKey,
   resolveEmailTransport,
@@ -19,6 +20,8 @@ type AuthEnv = {
   HYPERDRIVE?: { connectionString: string };
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
+  /** Extra trusted origins, comma-separated — see `auth-origins.ts`. */
+  BETTER_AUTH_TRUSTED_ORIGINS?: string;
   // S-11: FR-001's reset email finally has a transport. Both optional — with no
   // key, `resolveEmailTransport` logs instead of sending outside production.
   RESEND_API_KEY?: string;
@@ -91,7 +94,19 @@ export function createAuth(env?: AuthEnv, deps?: AuthDeps) {
     appName: "SprintFlow",
     secret,
     baseURL,
-    trustedOrigins: baseURL ? [baseURL] : [],
+    // NOT `[baseURL]` (2026-09-01 incident). That made the whole origin check
+    // hang on one env value: with `BETTER_AUTH_URL` still pointing at localhost
+    // after the custom domain went up, every BROWSER sign-in returned 403
+    // `INVALID_ORIGIN` while the same request from `curl` succeeded — Better
+    // Auth's Fetch Metadata check only engages on requests carrying
+    // `Sec-Fetch-*`. `baseURL` stays this value (the absolute links in recap and
+    // reset emails are built from it); trust no longer depends on it alone.
+    trustedOrigins: resolveTrustedOrigins({
+      BETTER_AUTH_URL: baseURL,
+      BETTER_AUTH_TRUSTED_ORIGINS:
+        env?.BETTER_AUTH_TRUSTED_ORIGINS ??
+        process.env.BETTER_AUTH_TRUSTED_ORIGINS,
+    }),
     database: drizzleAdapter(db, { provider: "pg", schema }),
     emailAndPassword: {
       enabled: true,

@@ -147,3 +147,48 @@ describe("createAuth — sendResetPassword", () => {
     log.mockRestore();
   });
 });
+
+/**
+ * THROUGH THE REAL RESOLVER, not through `resolveTrustedOrigins` alone
+ * (`lessons.md`: injection bypasses exactly the code that runs first in
+ * production). `auth-origins.test.ts` covers the pure function; this covers the
+ * wiring, which is the half the 2026-09-01 incident actually broke — the module
+ * was fine, the one line calling it was not.
+ */
+describe("createAuth — trustedOrigins", () => {
+  it("trusts production even with NO BETTER_AUTH_URL configured", () => {
+    const instance = createAuth({ BETTER_AUTH_SECRET: "test-secret" });
+
+    expect(instance.options.trustedOrigins).toContain("https://sprintflow.pl");
+  });
+
+  it("trusts production even when BETTER_AUTH_URL points at localhost", () => {
+    // The incident's exact configuration: the secret was never updated after
+    // the custom domain went up, and every browser sign-in returned 403.
+    const instance = createAuth({
+      BETTER_AUTH_SECRET: "test-secret",
+      BETTER_AUTH_URL: "http://localhost:3000",
+    });
+
+    expect(instance.options.trustedOrigins).toContain("https://sprintflow.pl");
+    expect(instance.options.trustedOrigins).toContain("http://localhost:3000");
+  });
+
+  it("keeps baseURL as BETTER_AUTH_URL — the email links still come from it", () => {
+    const instance = createAuth({
+      BETTER_AUTH_SECRET: "test-secret",
+      BETTER_AUTH_URL: "https://app.test",
+    });
+
+    expect(instance.options.baseURL).toBe("https://app.test");
+    expect(instance.options.trustedOrigins).toContain("https://app.test");
+  });
+
+  it("never configures an empty trusted-origin list", () => {
+    // `[]` is what Better Auth honours as "trust nothing", and it is what the
+    // old `baseURL ? [baseURL] : []` produced whenever the secret was absent.
+    expect(
+      createAuth({ BETTER_AUTH_SECRET: "test-secret" }).options.trustedOrigins,
+    ).not.toHaveLength(0);
+  });
+});
