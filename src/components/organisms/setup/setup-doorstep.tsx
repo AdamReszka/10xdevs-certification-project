@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -15,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import type { ConfigureDoor } from "@/components/organisms/setup/setup-doorstep-view";
 import { exitDemoAction, openDemoAction } from "@/app/(app)/settings/demo/actions";
+import { navigateAfterWorkspaceSwitch } from "@/components/organisms/demo/workspace-navigation";
 
 /**
  * The first-run doorstep (`onboarding-routing` Phase 1, FR-008 / US-02).
@@ -65,7 +65,6 @@ export default function SetupDoorstep({
    */
   demoLabel: string;
 }) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [configuring, startConfiguring] = useTransition();
   const [failure, setFailure] = useState<string | null>(null);
@@ -94,8 +93,10 @@ export default function SetupDoorstep({
         setFailure(result.message);
         return;
       }
-      router.push(door.href);
-      router.refresh();
+      // A FULL load, not `router.push` — leaving demo changes which owner every
+      // cached route belongs to, and `router.refresh()` only clears the current
+      // one. See `workspace-navigation.ts`.
+      navigateAfterWorkspaceSwitch(door.href);
     });
   }
 
@@ -107,11 +108,12 @@ export default function SetupDoorstep({
         setFailure(result.message);
         return;
       }
-      // `openDemoAction` flips a database column and navigates nowhere, so
-      // without both of these the visitor presses the button and watches the
-      // doorstep stay exactly as it was.
-      router.push("/dashboard");
-      router.refresh();
+      // A FULL load. `router.push("/dashboard")` replayed the Client Cache
+      // entry written when sign-up pushed there and the un-onboarded gate
+      // redirected back — so the visitor pressed the button and watched the
+      // doorstep stay exactly as it was, with a fully loaded demo world behind
+      // it. `workspace-navigation.ts` has the whole account.
+      navigateAfterWorkspaceSwitch("/dashboard");
     });
   }
 

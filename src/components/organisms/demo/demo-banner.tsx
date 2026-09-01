@@ -2,12 +2,15 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { FlaskConical, Loader2 } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { exitDemoAction } from "@/app/(app)/settings/demo/actions";
+import {
+  navigateAfterWorkspaceSwitch,
+  reloadAfterWorkspaceSwitch,
+} from "@/components/organisms/demo/workspace-navigation";
 
 /**
  * The demo-mode banner (S-09 / FR-008).
@@ -36,7 +39,6 @@ export default function DemoBanner({
    */
   needsSetup?: boolean;
 }) {
-  const router = useRouter();
   const [exiting, startExiting] = useTransition();
   const [leaving, startLeaving] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +51,11 @@ export default function DemoBanner({
         setError(result.message);
         return;
       }
-      // Nothing in the URL changes when the mode does, so the refresh is what
-      // actually puts the real account back on screen.
-      router.refresh();
+      // Nothing in the URL changes when the mode does, so the reload is what
+      // actually puts the real account back on screen — and it is a RELOAD
+      // rather than `router.refresh()` because every other cached route still
+      // holds the demo owner's payload (`workspace-navigation.ts`).
+      reloadAfterWorkspaceSwitch();
     });
   }
 
@@ -76,8 +80,7 @@ export default function DemoBanner({
         setError(result.message);
         return;
       }
-      router.push("/setup");
-      router.refresh();
+      navigateAfterWorkspaceSwitch("/setup");
     });
   }
 
