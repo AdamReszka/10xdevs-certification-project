@@ -1936,7 +1936,24 @@ rozpisana wersja tych samych siedmiu leży w
       `allow-popups-to-escape-sandbox` linki wyglądałyby normalnie i **nie
       robiłyby nic**, czyli piąty atrybut z FR-014 byłby martwy.
 
-- [ ] **14.D** 🔒 (3.14) Cudzy recap zwraca **404**, a nie pustą stronę.
+- [x] **14.D** 🔒 (3.14) Cudzy recap zwraca **404**, a nie pustą stronę.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, po
+      raz pierwszy przeciw **prawdziwemu drugiemu kontu**, a nie atrapie: na
+      produkcji są teraz trzy realne konta (właściciel, testerka, trzecia osoba),
+      więc „cudzy wiersz" przestał być hipotezą.
+      Zalogowany jako `adam.reszka85@gmail.com`, trzy adresy
+      `/settings/recap/history/<id>`:
+      **(kontrola)** własny recap `7f90e686…` → **otwiera się**;
+      **(a)** zmyślony UUID `00000000-0000-4000-8000-000000000000` → **404**;
+      **(b)** prawdziwy, istniejący recap **innego właściciela** `9ed88093…`
+      (przestrzeń demo konta testerki) → **404, ta sama strona**.
+      Kontrola jest tu load-bearing: bez niej dwa 404 znaczyłyby tylko tyle, że
+      strona zawsze zwraca 404, a nie że odmawia dostępu. Aplikacja nie zdradza
+      nawet **faktu istnienia** cudzego wiersza — a inny komunikat dla cudzego
+      niż dla nieistniejącego sam w sobie byłby wyciekiem.
+      Predykat: `settings/recap/history/[id]/page.tsx:41-42` —
+      `getRecap(db, ownerId, id)` i `notFound()`; pod tabelą nie ma RLS, więc to
+      **jedyna** izolacja.
       *Gdzie:* `/settings/recap/history/<id>` z podmienionym `id`.
       *Co zrobić:* wejdź z (a) losowym, nieistniejącym UUID-em i (b) prawdziwym
       `id` recapu **innego konta** (`select id, owner_id, recap_day from
