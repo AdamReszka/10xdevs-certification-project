@@ -425,9 +425,10 @@ na `(auth)`, spójność tokenów w light i dark.
 
 ### F-01 `auth-provider-scaffold` — 1 pozycja
 
-- [ ] **1.8** (opcjonalne de-risk) trywialny redirect z `proxy.ts` odpala się na
-      zdeployowanym Workerze. *Źródło:* `context/changes/auth-provider-scaffold/plan.md`
-      Wymaga realnego deployu — sensowne dopiero przy pierwszym wdrożeniu.
+- [x] **1.8** (opcjonalne de-risk) trywialny redirect z `proxy.ts` odpala się na
+      zdeployowanym Workerze. **Zaliczone 2026-09-04** (sesja manualna, właściciel)
+      — ten sam test co **4.1**, odhaczone razem. *Źródło:*
+      `context/archive/2026-05-30-auth-provider-scaffold/plan.md` (wiersz 1.8).
 
 ---
 
@@ -515,8 +516,19 @@ testy produktu. Odhaczasz je, wykonując pierwszy deploy — nie wcześniej.
 Przypomnienie z pamięci projektu: przed pierwszym deployem są **3 twarde
 prerekwizyty** (migracja adaptera, sterownik DB, flaga CI).
 
-- [ ] **4.1** (F-01 wiersz 1.8) Trywialne przekierowanie z `proxy.ts` odpala się na
-      **wdrożonym** Workerze.
+- [x] **4.1** (F-01 wiersz 1.8) Trywialne przekierowanie z `proxy.ts` odpala się na
+      **wdrożonym** Workerze. **Zaliczone 2026-09-04** (sesja manualna,
+      właściciel; `sprintflow.pl`). Sprawdzone szerzej, niż wiersz wymagał:
+      **10 ścieżek chronionych** (`/dashboard`, `/dashboard/sprint-detail`,
+      `/settings/connections`, `/settings/anomalies`, `/team/roster`,
+      `/team/absences`, `/team/days-off`, `/team/cadence`, `/setup`,
+      `/refinement`) → wszystkie **307 → `/login`**, zero 500 i zero białych
+      stron. Dołożona druga połowa, której wiersz nie żądał, a `middleware.ts:31`
+      ostrzega przed nią wprost — że bramka **nie jest za szeroka**: `/`,
+      `/login`, `/signup`, `/reset` → **200**; `/api/auth/sign-in/email` → **400**
+      (bramka captcha, czyli żądanie doszło do endpointu); `/api/webhooks/resend`
+      → **401** (bramka podpisu, nie przekierowanie). Gdyby webhook był objęty
+      bramką, Resend dostawałby 302 na `/login` i endpoint byłby niewidoczny.
       *Gdzie:* wdrożony Worker, nie `next dev`.
       *Co zrobić:* po pierwszym deployu wejdź na gated route bez sesji.
       *Co musi być prawdą:* następuje przekierowanie na `/login`, a nie 500 ani
