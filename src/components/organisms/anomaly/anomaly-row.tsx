@@ -1,4 +1,5 @@
-import { ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink } from "lucide-react";
+import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -73,17 +74,40 @@ export default function AnomalyRow({ anomaly }: { anomaly: InboxAnomaly }) {
         <span>{anomaly.memberName ?? "Team-level"}</span>
         {detectedLabel ? <span>Detected {detectedLabel}</span> : null}
         {anomaly.sourceUrl ? (
-          <a
-            href={anomaly.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={cn(
-              "inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline",
-            )}
-          >
-            View source
-            <ExternalLink className="size-3" aria-hidden />
-          </a>
+          /*
+           * INTERNAL vs EXTERNAL, decided on the URL's own shape.
+           *
+           * Every source link used to be an outward one — a Jira issue, a GitHub
+           * PR — so this rendered `target="_blank"` with an external-link icon
+           * and the label "View source". Since DEVELOPER_INACTIVE points at
+           * `/team/absences` (2026-09-05) that presentation would lie three
+           * times over: a new tab for a page inside the app, an icon promising
+           * to leave it, and a label calling a workflow screen a "source".
+           *
+           * A relative URL is by construction one of ours, so the shape is the
+           * whole test — no extra field to keep in sync.
+           */
+          anomaly.sourceUrl.startsWith("/") ? (
+            <Link
+              href={anomaly.sourceUrl}
+              className="inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline"
+            >
+              Check absences
+              <ArrowRight className="size-3" aria-hidden />
+            </Link>
+          ) : (
+            <a
+              href={anomaly.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(
+                "inline-flex items-center gap-1 text-foreground underline-offset-4 hover:underline",
+              )}
+            >
+              View source
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          )
         ) : null}
       </div>
     </div>

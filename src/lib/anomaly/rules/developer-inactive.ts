@@ -7,6 +7,10 @@ import {
   workingHoursBefore,
 } from "@/lib/anomaly/rules/working-time";
 
+/** In-app destination for DEVELOPER_INACTIVE. Relative — see the note at its
+ *  use site. `recap/render.ts` and `anomaly-row.tsx` both resolve it. */
+export const ABSENCES_PATH = "/team/absences";
+
 /**
  * DEVELOPER_INACTIVE — a team member with active assigned work (≥1 In-Progress
  * ticket) but zero commits authored within the no-commit window. Correlates Jira
@@ -90,7 +94,24 @@ export const detectDeveloperInactive: Detector = (snapshot, effective, now) => {
         githubUsername: member.githubUsername,
         noCommitDays,
       },
-      sourceUrl: null,
+      // FR-014's fifth attribute, and the one destination that does not break
+      // the no-per-developer-framing guardrail (2026-09-05, owner's decision).
+      //
+      // NOT a link to this person's commits. The PRD is explicit that the
+      // product never presents data as performance-review material, and a link
+      // leading from "X has not committed" straight to X's commit list is
+      // exactly that framing. `/team/absences` answers the lead's real first
+      // question — "are they away?" — and is the screen where they can record it
+      // if so, which also silences this rule for the right reason (FR-010).
+      //
+      // RELATIVE ON PURPOSE. The absolute form cannot be built here: detection
+      // receives `{db, ownerId, now}` and no env, and on Workers the base URL is
+      // a secret binding rather than `process.env`. Threading it through the four
+      // `detectAnomalies` call sites to decorate one string would be a worse
+      // trade. Both surfaces resolve it instead — the dashboard renders it as an
+      // internal link, and the recap email makes it absolute against the base URL
+      // it already holds for its unsubscribe header.
+      sourceUrl: ABSENCES_PATH,
       relatedTeamMemberId: member.id,
       // Binary condition (active work + zero commits in window) → full magnitude.
       magnitude: 1,
