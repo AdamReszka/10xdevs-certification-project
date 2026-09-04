@@ -3320,7 +3320,26 @@ prawdziwym koncie.
 
 ### Nieblokujące (tylko tutaj)
 
-- [ ] **25.A** (faza 2, `plan.md` `2.5`) ⚠️ **NIE DA SIĘ JESZCZE WYKONAĆ** —
+- [x] **25.A** (faza 2, `plan.md` `2.5`) **Zaliczone 2026-09-04** (sesja
+      manualna, właściciel). Blokada zniesiona: `adam.reszka85@gmail.com`
+      podłączyło Jirę (projekt `FM`) i GitHuba na produkcji, a cykl crona przeszedł
+      o **19:45:12** (`JIRA=OK`, `GITHUB=OK`).
+      **Wynik:** `length_days` = **14** i `start_day` = **FRI** przy sprincie
+      „SCRUM Sprint 1" o datach `2026-08-21 (pt) → 2026-09-04 (pt)` = 14 dni —
+      zakres potwierdzony przez właściciela w samej Jirze. **`FRI` zostało `FRI`**,
+      dokładnie jak wiersz przewidywał.
+      **Dowód, że to auto-pull, a nie kreator:** wartości przetrwały uzgodnienie
+      przez synchronizację — kreator zapisał sprint o `19:34:28`, cron przepisał go
+      o `19:45:24` i kadencja się nie zmieniła, a przy okazji doszły
+      `committed_sp=18`, `completed_sp=8`, 5 ticketów i `time_zone=Europe/Warsaw`.
+      ⚠️ **Wiersz jest sprzed zmiany modelu:** kazał odczytać
+      `sprint.cadence_overridden`, a tej kolumny nie ma od S-32 (migracja `0024`).
+      Odpowiednik w obecnym modelu: rekord w `sprint_cadence_override` istnieje
+      (utworzony razem ze sprintem), ale `length_days`, `start_day` i
+      `working_days` są w nim **wszystkie NULL** — lead niczego nie nadpisał, więc
+      resolver spada do warstwy trzeciej, czyli wartości wyprowadzonych z dat
+      Jiry. To ten sam stan, który stara flaga `f` opisywała.
+      *Poprzednia treść blokady:* ⚠️ **NIE DAŁO SIĘ WYKONAĆ** —
       migracja `0022` poszła na produkcję 2026-08-31, ale ta baza ma **zero kont
       i zero wierszy `sprint`**. Ten wiersz sprawdza, że auto-pull FR-007 znowu
       *dosięga* prawdziwego konta; dopóki nikt się na produkcji nie zarejestruje

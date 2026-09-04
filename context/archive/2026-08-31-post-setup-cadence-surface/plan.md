@@ -773,7 +773,7 @@ refresh are ones no lead chose.
 #### Manual
 
 - [x] 2.4 `0022` applied to production; the real onboarded account reads `cadence_overridden = f` — applied 2026-08-31 via Supabase MCP + hand-written `drizzle.__drizzle_migrations` row (23 bookkeeping rows = 23 journal entries). ⚠️ Production holds **zero** `sprint` rows and zero users, so the UPDATE touched nothing and the clause about "the real onboarded account" has no subject there — that account is on the LOCAL database. Migration applied and recorded: yes. Fleet unfrozen on production: vacuously.
-- [ ] 2.5 After the next sync, that account's cadence matches what its Jira dates derive (`FRI` may legitimately stay)
+- [x] 2.5 After the next sync, that account's cadence matches what its Jira dates derive (`FRI` may legitimately stay) — verified 2026-09-04 on production: sprint "SCRUM Sprint 1" 2026-08-21 Fri → 2026-09-04 Fri, length_days=14, start_day=FRI, unchanged across the 19:45 cron reconcile that also filled committed_sp/completed_sp and the time zone. Jira's dates confirmed by the owner
 
 ### Phase 3: Hand the cadence back to Jira
 
