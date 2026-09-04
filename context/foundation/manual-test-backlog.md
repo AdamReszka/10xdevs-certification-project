@@ -1294,7 +1294,13 @@ a kolumną `jsonb` to `src/lib/validations/anomaly-settings.ts`**, a stoi ona po
 ciało progu niesprawdzonym rzutowaniem `as`, więc każdy wiersz niżej, który
 dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
 
-- [ ] **10.1** Formularz jest używalny przy szerokości **1024 px** (podłoga
+- [x] **10.1** Formularz jest używalny przy szerokości **1024 px** (podłoga
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      przy ~1024 px. Siatka nie wychodzi poza ekran, **Save** i **Reset to
+      defaults** klikalne bez przewijania w poziomie, siedem kubełków SP nie
+      nachodzi na sąsiednie pola. Sprawdzone na karcie *Ticket ageing in a
+      status*, najtrudniejszej z ośmiu — ma dziewięć pól w jednym rzędzie
+      logicznym, więc jeśli cokolwiek miało się rozjechać, to tam.
       tabletowa z NFR w PRD — poniżej niej wsparcie jest poza zakresem MVP).
       *Co musi być prawdą:* siatka pól nie wychodzi poza ekran, przyciski
       **Save** / **Reset to defaults** są klikalne bez przewijania w poziomie,
@@ -1365,7 +1371,15 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       sprint. To dokładnie lekcja „zawężający predykat zamienia złą wartość w
       pusty wynik" z `lessons.md`.
 
-- [ ] **10.5** Kubełek 21 SP jest zwykłym polem liczbowym i przeżywa
+- [x] **10.5** Kubełek 21 SP jest zwykłym polem liczbowym i przeżywa
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      21 SP `64` → `72`, Save, F5: **72** i odznaka *Modified* na tej jednej
+      karcie; po **Reset to defaults** i F5: **64**, bez odznaki. Komunikat
+      *Unsaved changes.* nie pojawił się w żadnym momencie — czyli formularz
+      nie uznaje wczytanych wartości za zmienione. `anomaly_settings` z
+      powrotem **0 wierszy** w całej instancji.
+      Potwierdza, że sentinel `"8_WORKING_DAYS"` zniknął naprawdę, a nie
+      został ukryty: pole przyjmuje dowolną liczbę godzin roboczych.
       przeładowanie (**przepisane 2026-08-30 przez S-28** — do tego dnia była to
       lista dwupozycyjna „120 hours (5 days)" / „8 working days", a ten wiersz
       kazał ją przełączać w obie strony; taka kontrolka już nie istnieje).
