@@ -1280,9 +1280,21 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       a siatka siedmiu kubełków SP nie nachodzi na sąsiednie pola.
       *Dlaczego odłożone:* to samo ryzyko co §7.5 — układ, nie dane.
 
-- [ ] **10.2** **Reset to defaults** przywraca wartość i gasi odznakę na każdej
+- [x] **10.2** **Reset to defaults** przywraca wartość i gasi odznakę na każdej
       z ośmiu kart, nie tylko na *Pull request too big* (wiersz D checklisty
       pokrywa jedną kartę).
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      **wszystkie osiem kart** przerobione po kolei: zmiana → Save → odznaka
+      **„Modified"** → **Reset to defaults** → wartość z `src/db/defaults.ts`
+      wraca, odznaka gaśnie, przycisk się wyszarza. Objęte także dwie karty
+      nietypowe: *Ticket ageing in a status* z dziewięcioma polami (siedem
+      kubełków SP + Code review + Testing) oraz *PR / ticket desync*, która nie
+      ma progów i resetuje samo severity do **LOW**.
+      **Dowód, że reset kasuje wiersz, a nie tylko czyści ekran:**
+      `anomaly_settings` dla tego konta ma po wszystkim **0 wierszy** i żadnego
+      osieroconego typu — czyli osiem zapisów powstało i osiem zostało
+      usuniętych. To jest dokładnie ta „cicha operacja pusta udająca sukces",
+      przed którą wiersz ostrzega. **Produkcja w stanie wyjściowym.**
       *Co musi być prawdą:* po resecie pole wraca do wartości z
       `src/db/defaults.ts`, odznaka **„Modified"** znika, a sam przycisk staje
       się wyszarzony.
