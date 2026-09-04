@@ -1322,7 +1322,12 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       *Dlaczego:* reset kasuje wiersz `anomaly_settings`; przycisk aktywny przy
       braku wiersza to cicha operacja pusta udająca sukces.
 
-- [ ] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
+- [x] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      konto realne bez żadnego wiersza w `anomaly_settings`, więc karty
+      pokazywały czyste `DEFAULT_THRESHOLDS`. Właściciel przeszedł wszystkie
+      osiem i potwierdził komplet wartości **po przeliczeniu S-28** wraz z
+      jednostkami *working hours* / *working days*.
       `DEFAULT_THRESHOLDS`. ⚠️ **Wartości przeliczone przez S-28 (2026-08-30)** —
       poprzednia wersja tego wiersza pinowała liczby sprzed zmiany jednostki i
       oblałaby się na poprawnym kodzie: PR review stalled → **8 working hours**;
@@ -1337,7 +1342,18 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       nie osiem godzin zegarowych — karta bez słowa „working" opisuje produkt,
       który już nie istnieje.
 
-- [ ] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
+- [x] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      3 SP → `32`, Save, F5: pozostałe sześć kubełków zachowało wartości
+      (1→8, 2→8, 5→24, 8→40, 13→40, **21→64**). Następnie *Reset to defaults*;
+      `anomaly_settings` z powrotem **0 wierszy**.
+      **Czego NIE obejrzano:** surowej zawartości kolumny `thresholds` (`jsonb`)
+      — właściciel zresetował kartę, zanim padło zapytanie. Wniosek opiera się
+      na ekranie po F5 **plus** na schemacie walidacji, i to drugie jest tu
+      mocniejsze: `validations/anomaly-settings.ts:125-131` wymaga **dokładnie
+      siedmiu** kluczy i jest `.strict()`, więc częściowa mapa nie ma jak trafić
+      do bazy — zostałaby odrzucona przy zapisie, z czerwonym komunikatem
+      zamiast zielonego toasta. Zapis przeszedł, więc mapa była kompletna.
       zostawia w bazie **wszystkie siedem**.
       *Co zrobić:* zmień 3 SP na `32`, zapisz, odśwież — sprawdź, że 1, 2, 5, 8,
       13 i 21 SP mają nadal swoje wartości (**21 SP dalej `64`**; do S-28 stała
