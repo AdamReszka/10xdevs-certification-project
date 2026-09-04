@@ -2578,8 +2578,15 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       błędu (żeby komunikat sterownika bazy nie trafił do przeglądarki), ale
       pokazuje **`digest`** — opakowany skrót, jedyna nić wiążąca ekran z
       wpisem w logu serwera. Przy tym wystąpieniu nikt go nie zanotował.
-      **Co zrobić przy następnym wystąpieniu:** przepisz `digest` z ekranu i
-      odszukaj go w `npx wrangler tail`; dopiero to powie, co rzuciło.
+      **`digest` okazał się w praktyce nie do odczytania** (zweryfikowane w tej
+      samej sesji): ekran znika po ułamku sekundy, bo render się podnosi. Czyli
+      jedyny identyfikator, jaki granica błędu oferuje, jest bezużyteczny
+      dokładnie dla tej klasy błędów, która sama mija — a to ta klasa, w której
+      użytkownik w ogóle zdąży coś zobaczyć.
+      **Co zrobić przy następnym wystąpieniu:** nie polegaj na `digest`. Trzymaj
+      włączone `npx wrangler tail --format json` w tle podczas klikania; wyjątek
+      po stronie serwera pojawi się tam z pełnym stosem, niezależnie od tego, czy
+      ktokolwiek zdąży przeczytać ekran.
       **Dlaczego to ma znaczenie:** granica błędu migająca przy zwykłej
       nawigacji to albo realny, przelotny błąd (np. zadławienie bazy), albo
       błąd renderu zależny od stanu. Jedno i drugie jest dziś **niewidoczne**:
