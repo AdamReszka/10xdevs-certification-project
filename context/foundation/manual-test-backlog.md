@@ -2561,6 +2561,31 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       opisują **inne**, wciąż ważne reguły — zmiana któregokolwiek z nich byłaby
       pomyłką, nie porządkami.
 
+- [ ] **17.J** Granica błędu mignęła podczas przechodzenia między ekranami.
+      *Zgłoszone przez właściciela 2026-09-04 na PRODUKCJI, w trakcie sesji
+      manualnej (testy 10.B/10.C, przechodzenie Ustawienia ↔ Dashboard).*
+      **Co zaobserwowano:** na moment pojawił się ekran **Something went wrong**,
+      jego słowami: *jakby podczas ładowania zamiast loadera*. Po chwili ekran
+      załadował się normalnie.
+      **Dlaczego to NIE jest ekran ładowania:** ten napis pochodzi z
+      `src/app/error.tsx:68`, jedynej granicy błędu w aplikacji. Renderuje się
+      wyłącznie wtedy, gdy render strony **rzucił wyjątkiem** — czyli coś
+      naprawdę padło i zaraz potem się podniosło. Wrażenie *zamiast loadera*
+      ma osobną przyczynę: w `src/app` **nie ma ani jednego pliku**
+      `loading.tsx`, a wszystkie strony pod `(app)` są `force-dynamic`, więc
+      każde przejście czeka na serwer bez stanu pośredniego.
+      **Czego brakuje do diagnozy:** `error.tsx` celowo nie pokazuje treści
+      błędu (żeby komunikat sterownika bazy nie trafił do przeglądarki), ale
+      pokazuje **`digest`** — opakowany skrót, jedyna nić wiążąca ekran z
+      wpisem w logu serwera. Przy tym wystąpieniu nikt go nie zanotował.
+      **Co zrobić przy następnym wystąpieniu:** przepisz `digest` z ekranu i
+      odszukaj go w `npx wrangler tail`; dopiero to powie, co rzuciło.
+      **Dlaczego to ma znaczenie:** granica błędu migająca przy zwykłej
+      nawigacji to albo realny, przelotny błąd (np. zadławienie bazy), albo
+      błąd renderu zależny od stanu. Jedno i drugie jest dziś **niewidoczne**:
+      użytkownik widzi tylko *coś poszło nie tak*, a nic w aplikacji nie
+      raportuje, że granica w ogóle się odpaliła.
+
 - [ ] **17.I** `MANUAL-CHECKLIST.md` tego slice'a
       (`context/changes/db-pool-teardown/MANUAL-CHECKLIST.md`) jest podpisana w
       całości (17.A–17.C).
