@@ -118,6 +118,7 @@ function snapshotOf(fx: DemoFixture): SprintSnapshot {
     teamMembers: fx.teamMembers as SelectTeamMember[],
     absences: fx.absences as SelectAbsence[],
     timeZone: "Europe/Warsaw",
+    sprintBoardUrl: null,
     // RESOLVED, exactly as `loadSprintSnapshot` hands it over (S-30). The demo
     // owner holds no `sprint_cadence_override` record, so the resolver lands on
     // its default — which is where this reads it from, S-32 having dropped the

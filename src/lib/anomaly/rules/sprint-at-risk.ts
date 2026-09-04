@@ -75,7 +75,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
           limit,
           teamMemberId: member.id,
         },
-        sourceUrl: null,
+        sourceUrl: snapshot.sprintBoardUrl,
         relatedTeamMemberId: member.id,
         magnitude: clamp01((count - limit) / limit),
       });
@@ -121,7 +121,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
              *  key keeps its name so stored anomaly contexts stay readable. */
             hoursLeft: round(hoursLeft),
           },
-          sourceUrl: null,
+          sourceUrl: snapshot.sprintBoardUrl,
           relatedTeamMemberId: null,
           magnitude,
         });
@@ -207,7 +207,7 @@ export const detectSprintAtRisk: Detector = (snapshot, effective, now) => {
           workingDaysLost,
           workingDaysLeft,
         },
-        sourceUrl: null,
+        sourceUrl: snapshot.sprintBoardUrl,
         relatedTeamMemberId: absence.teamMemberId,
         magnitude,
       });

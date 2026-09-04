@@ -5,6 +5,8 @@ import {
   githubCommit,
   githubPullRequest,
   githubReview,
+  jiraCredential,
+  jiraProject,
   jiraTicket,
   teamMember,
 } from "@/db/schema";
@@ -13,6 +15,7 @@ import { getJiraTimeZone } from "@/lib/dashboard/time-zone-reader";
 import type { getDb } from "@/lib/db";
 import { getActiveSprintRow } from "@/lib/sprint";
 import { getNonWorkingDays } from "@/lib/team-day-off-store";
+import { sprintBoardUrl } from "@/lib/anomaly/sprint-board-url";
 import type { PullRequestWithReviews, SprintSnapshot } from "@/lib/anomaly/types";
 
 /**
@@ -64,6 +67,7 @@ export async function loadSprintSnapshot(
     absences,
     nonWorkingDays,
     cadence,
+    jiraLocation,
   ] = await Promise.all([
     db
       .select()
@@ -109,6 +113,20 @@ export async function loadSprintSnapshot(
     // precisely because it does not. Joins this `Promise.all` rather than adding
     // serial latency, for the same reason the zone does.
     resolveCadenceFor(db, ownerId, chosen),
+    // FR-014's deep link for the two SPRINT-LEVEL rules. Joined to the SAME
+    // fan-out — it depends only on `ownerId`, so it costs no extra round trip
+    // (`lessons.md` #3: one handle, one fan-out). `limit(1)` because the schema
+    // pins one Jira project per account (`jira_project.owner_id` is UNIQUE).
+    db
+      .select({
+        workspaceUrl: jiraCredential.workspaceUrl,
+        projectKey: jiraProject.projectKey,
+        boardId: jiraProject.boardId,
+      })
+      .from(jiraProject)
+      .innerJoin(jiraCredential, eq(jiraCredential.id, jiraProject.credentialId))
+      .where(eq(jiraProject.ownerId, ownerId))
+      .limit(1),
   ]);
 
   const reviewsByPr = new Map<string, typeof reviews>();
@@ -130,6 +148,12 @@ export async function loadSprintSnapshot(
     teamMembers,
     absences,
     timeZone,
+    sprintBoardUrl: sprintBoardUrl({
+      workspaceUrl: jiraLocation[0]?.workspaceUrl,
+      projectKey: jiraLocation[0]?.projectKey,
+      boardId: jiraLocation[0]?.boardId,
+      jiraSprintId: chosen.jiraSprintId,
+    }),
     workingDays: cadence.workingDays,
     nonWorkingDays,
   };

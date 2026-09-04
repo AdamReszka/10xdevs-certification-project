@@ -38,7 +38,7 @@ export const detectScopeCreep: Detector = (snapshot, effective) => {
         actualPercent: round(actualPercent),
         thresholdPercent: percent,
       },
-      sourceUrl: null,
+      sourceUrl: snapshot.sprintBoardUrl,
       relatedTeamMemberId: null,
       magnitude: clamp01(actualPercent / (2 * percent)),
     },
