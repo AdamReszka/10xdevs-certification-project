@@ -235,7 +235,13 @@ export async function sendDailyRecap({
     const payload = await buildPayload({ db, ownerId, now, timeZone, sprint });
     // Headers are frozen WITH the body (impl-review F4): they travel in the
     // request body, so Resend compares them for the Idempotency-Key.
-    frozen = { ...render(payload), headers: unsubscribeHeaders(env) };
+    frozen = {
+      // The base URL the unsubscribe header already needs, handed to the
+      // renderer as well: an in-app `sourceUrl` (`/team/absences`) has to become
+      // absolute or the link is dead in the client (2026-09-05).
+      ...render(payload, env?.BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL),
+      headers: unsubscribeHeaders(env),
+    };
     // Persist BEFORE calling the transport. Load-bearing, not tidiness: this is
     // what makes attempts 2 and 3 byte-identical to attempt 1.
     await db

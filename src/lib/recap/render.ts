@@ -96,7 +96,21 @@ function toDate(iso: string | null | undefined): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-export function renderRecapEmail(payload: RecapPayload): RenderedEmail {
+export function renderRecapEmail(
+  payload: RecapPayload,
+  /**
+   * Absolute origin of the app, for anomalies whose `sourceUrl` is one of OUR
+   * paths rather than a Jira/GitHub URL (`DEVELOPER_INACTIVE` → `/team/absences`,
+   * 2026-09-05). A relative href in an email is dead — the client has nothing to
+   * resolve it against — so an in-app link that cannot be made absolute is
+   * dropped to the same plain-text line a null uses, rather than shipped broken.
+   *
+   * NOT part of `RecapPayload`, deliberately: the payload is frozen with the
+   * rendered bytes and replayed on retries, and the base URL is deployment
+   * configuration, not content.
+   */
+  appBaseUrl?: string,
+): RenderedEmail {
   const count = payload.anomalies.length;
   // NO `?? "your sprint"` (S-25). The fallback asserted a sprint the payload
   // could not name, in the one surface the lead reads without the app in front
@@ -112,14 +126,18 @@ export function renderRecapEmail(payload: RecapPayload): RenderedEmail {
 
   return {
     subject,
-    html: renderHtml(payload, subject),
+    html: renderHtml(payload, subject, appBaseUrl),
     text: renderText(payload),
   };
 }
 
 // --- HTML -------------------------------------------------------------------
 
-function renderHtml(payload: RecapPayload, subject: string): string {
+function renderHtml(
+  payload: RecapPayload,
+  subject: string,
+  appBaseUrl?: string,
+): string {
   const failing = failingIntegrations(payload);
   const identity = sprintIdentityLine(payload);
 
@@ -157,7 +175,7 @@ function renderHtml(payload: RecapPayload, subject: string): string {
     `<h2 style="margin:0 0 8px 0;font-size:15px">Anomalies</h2>`,
     payload.anomalies.length === 0
       ? renderEmptyHtml()
-      : payload.anomalies.map(renderAnomalyHtml).join(""),
+      : payload.anomalies.map((a) => renderAnomalyHtml(a, appBaseUrl)).join(""),
     `</td></tr>`,
     renderSprintHtml(payload),
     renderActivityHtml(payload),
@@ -181,7 +199,7 @@ function renderEmptyHtml(): string {
   );
 }
 
-function renderAnomalyHtml(a: RecapAnomaly): string {
+function renderAnomalyHtml(a: RecapAnomaly, appBaseUrl?: string): string {
   const label = a.identityLabel ? `${escapeHtml(a.identityLabel)} · ` : "";
   const who = a.memberName
     ? ` <span style="color:#52525b">· ${escapeHtml(a.memberName)}</span>`
@@ -194,10 +212,30 @@ function renderAnomalyHtml(a: RecapAnomaly): string {
   // A null `sourceUrl` renders as PLAIN TEXT, not a dead link. Not theoretical:
   // 4 of the 10 emit branches produce null (`developer-inactive.ts:74`,
   // `scope-creep.ts:41`, `sprint-at-risk.ts:78/111/184`).
-  const source = a.sourceUrl
-    ? `<p style="margin:6px 0 0 0;font-size:13px"><a href="${escapeHtml(a.sourceUrl)}" style="color:#2563eb">Open in ${
-        a.sourceUrl.includes("atlassian.net") ? "Jira" : "GitHub"
-      }</a></p>`
+  // An in-app path (`/team/absences`) is resolved against the deployment's own
+  // origin; without one it is treated as no link at all, because a relative href
+  // in an email resolves to nothing.
+  const href =
+    a.sourceUrl === null
+      ? null
+      : a.sourceUrl.startsWith("/")
+        ? appBaseUrl
+          ? `${appBaseUrl.replace(/\/+$/, "")}${a.sourceUrl}`
+          : null
+        : a.sourceUrl;
+
+  // The label followed the URL's host, so an in-app link would have read
+  // "Open in GitHub" — the label is now chosen from what the link actually is.
+  const linkTarget = href === null
+    ? null
+    : href.includes("atlassian.net")
+      ? "Jira"
+      : a.sourceUrl?.startsWith("/")
+        ? "SprintFlow"
+        : "GitHub";
+
+  const source = href
+    ? `<p style="margin:6px 0 0 0;font-size:13px"><a href="${escapeHtml(href)}" style="color:#2563eb">Open in ${linkTarget}</a></p>`
     : `<p style="margin:6px 0 0 0;font-size:12px;color:#71717a">No direct link — this one is about the sprint or the team, not a single artifact.</p>`;
 
   return [

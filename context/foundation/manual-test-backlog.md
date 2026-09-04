@@ -509,36 +509,35 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
-- [ ] **S-07 FR-014-link-dev** `DEVELOPER_INACTIVE` nie ma deep-linku — i nie
-      jest oczywiste, dokąd miałby prowadzić.
-      *Wydzielone 2026-09-04 z `S-07 FR-014-link` na wyraźną prośbę
-      właściciela. Tamten wiersz objął reguły na poziomie SPRINTU i został
-      zamknięty (`dbf179a`); ta jest na poziomie OSOBY i celowo nie została
-      wciągnięta po cichu do tamtej zmiany.*
-      **Gdzie:** `src/lib/anomaly/rules/developer-inactive.ts:93` —
-      `sourceUrl: null`. Kontekst reguły niesie `githubUsername` i
-      `teamMemberId`, więc dane do zbudowania odnośnika **są**.
-      ⚠️ **Dlaczego to nie jest zwykłe „dodaj link":** gwarancja z PRD mówi, że
-      produkt **nigdy** nie prezentuje danych jako materiału do oceny
-      pracownika. Odnośnik prowadzący z anomalii „ta osoba nie commitowała"
-      wprost do listy jej commitów jest dokładnie tym kadrowaniem, przed którym
-      ta gwarancja stoi. To jest decyzja produktowa, nie techniczna.
-      **Kandydaci do rozważenia:**
-      1. **Nic — i zapisać dlaczego.** Reguła dotyczy osoby, a produkt
-         świadomie nie kieruje leada na jej aktywność. Wtedy `null` zostaje,
-         ale przestaje być milczący: jedno zdanie w kodzie i wyjątek nazwany
-         w FR-014.
-      2. **`/team/absences`** — wewnętrznie, nie do GitHuba. Pierwsze pytanie
-         leada przy „nie commitował" brzmi zwykle *czy on nie jest na urlopie*,
-         a to jest ekran, na którym może to sprawdzić i uzupełnić.
-      3. **Commity w monitorowanych repo, filtrowane po autorze** — najbliżej
-         litery FR-014, najdalej od gwarancji. Dodatkowo niejednoznaczne:
-         monitorowanych repozytoriów bywa wiele, więc „to repo" nie istnieje.
-      **Co musi być prawdą po rozstrzygnięciu:** albo reguła niesie odnośnik,
-      albo `null` ma przy sobie zapisany powód. Dziś nie ma ani jednego, ani
-      drugiego — a `developer-inactive.test.ts:44` asercjonuje ten `null`, więc
-      suita utrwala stan, którego nikt nie wybrał. Ten sam kształt co przy
-      regułach sprintowych, gdzie test też pinował lukę.
+- [x] **S-07 FR-014-link-dev** `DEVELOPER_INACTIVE` nie ma deep-linku — i nie
+      ✅ **ROZSTRZYGNIĘTE I NAPRAWIONE 2026-09-05.** Decyzja właściciela:
+      **wariant 2 — `/team/absences`**, czyli wewnętrznie, nie do GitHuba.
+      Reguła niosła `sourceUrl: null`; teraz niesie ścieżkę do ekranu, na
+      którym lead odpowiada na swoje pierwsze pytanie („czy on nie jest na
+      urlopie?") i może je od razu uzupełnić — co przy okazji wycisza tę
+      regułę z właściwego powodu (FR-010). Gwarancja o braku kadrowania
+      per-developer zostaje nienaruszona: nigdzie nie prowadzimy leada na
+      aktywność konkretnej osoby.
+      ⚠️ **Samo wpisanie ścieżki wprowadziłoby trzy usterki naraz** i dlatego
+      zmiana objęła cztery pliki, nie jeden:
+      • **mail** — względny `href` jest w kliencie pocztowym **martwy**;
+        `render.ts` rozwija go teraz do bezwzględnego, a **gdy nie ma base
+        URL-a, świadomie NIE pokazuje linku** i wraca do zdania „No direct
+        link…" — martwy link jest gorszy niż jego brak;
+      • **etykieta w mailu** — wybierana była po obecności `atlassian.net`,
+        więc `/team/absences` dostałoby **„Open in GitHub"**; teraz mówi
+        „Open in SprintFlow";
+      • **dashboard** — `anomaly-row.tsx` renderował każdy odnośnik jako
+        zewnętrzny (`target="_blank"`, ikona *ExternalLink*, etykieta „View
+        source"). Dla strony wewnątrz aplikacji wszystkie trzy kłamały; link
+        względny jest teraz rozpoznawany po samym kształcie i renderowany
+        jako wewnętrzny („Check absences").
+      ⚠️ **`developer-inactive.test.ts:44` asercjonował `null`** — czyli suita
+      utrwalała ten stan, dokładnie jak przy regułach sprintowych. Poprawione.
+      **Do sprawdzenia manualnie po deployu:** kliknąć „Check absences" przy
+      anomalii `DEVELOPER_INACTIVE` na `/dashboard` (musi otworzyć
+      `/team/absences` **w tej samej karcie**) oraz obejrzeć recap-mail, czy
+      niesie „Open in SprintFlow" z pełnym adresem.
 
 - [x] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
       ✅ **NAPRAWIONE 2026-09-04** (`dbf179a`) — `SPRINT_AT_RISK` (3 miejsca)

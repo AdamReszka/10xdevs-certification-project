@@ -41,7 +41,11 @@ describe("detectDeveloperInactive", () => {
       dedupKey: "DEVELOPER_INACTIVE:member:member-1",
       relatedTeamMemberId: "member-1",
       magnitude: 1,
-      sourceUrl: null,
+      // `/team/absences`, not null and not a link to this person's commits: the
+      // lead's real first question is "are they away?", and that is the screen
+      // where they can answer it. This line used to pin the null, so the suite
+      // was holding in place a state nobody had chosen.
+      sourceUrl: "/team/absences",
     });
     expect(out[0].description).toContain("Alex Dev");
     // The unit is stated, because the window no longer counts calendar days.

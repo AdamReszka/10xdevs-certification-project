@@ -429,3 +429,58 @@ describe("renderRecapEmail — sprint identity (S-25)", () => {
     expect(text).not.toContain("17.08");
   });
 });
+
+/**
+ * In-app `sourceUrl` values (2026-09-05). `DEVELOPER_INACTIVE` points at
+ * `/team/absences`, which is a path rather than a Jira or GitHub URL — and a
+ * relative href in an email resolves to nothing, so the renderer has to make it
+ * absolute or say there is no link at all.
+ */
+describe("renderRecapEmail — in-app source links", () => {
+  const inApp = () => payload({ anomalies: [anomaly({ sourceUrl: "/team/absences" })] });
+
+  it("makes an in-app path absolute against the deployment origin", () => {
+    const html = renderRecapEmail(inApp(), "https://sprintflow.pl").html;
+
+    expect(html).toContain('href="https://sprintflow.pl/team/absences"');
+    expect(html).not.toContain('href="/team/absences"');
+  });
+
+  it("labels it SprintFlow, not GitHub", () => {
+    // The label used to be picked by testing the URL for "atlassian.net" and
+    // calling everything else GitHub — so an in-app link read "Open in GitHub".
+    const html = renderRecapEmail(inApp(), "https://sprintflow.pl").html;
+
+    expect(html).toContain("Open in SprintFlow");
+    expect(html).not.toContain("Open in GitHub");
+  });
+
+  it("does not double the slash when the origin has a trailing one", () => {
+    expect(renderRecapEmail(inApp(), "https://sprintflow.pl/").html).toContain(
+      'href="https://sprintflow.pl/team/absences"',
+    );
+  });
+
+  it("DROPS the link when there is no origin, rather than shipping a dead one", () => {
+    // A relative href in an email is not a weak link, it is a broken one. With
+    // no base URL the anomaly falls back to the same plain-text line a null
+    // uses — the reader is told there is no direct link instead of being handed
+    // one that goes nowhere.
+    const html = renderRecapEmail(inApp()).html;
+
+    expect(html).not.toContain("href=\"/team/absences\"");
+    expect(html).toContain("No direct link");
+  });
+
+  it("leaves an external URL untouched and still labels it Jira", () => {
+    const html = renderRecapEmail(
+      payload({
+        anomalies: [anomaly({ sourceUrl: "https://acme.atlassian.net/browse/SF-1" })],
+      }),
+      "https://sprintflow.pl",
+    ).html;
+
+    expect(html).toContain('href="https://acme.atlassian.net/browse/SF-1"');
+    expect(html).toContain("Open in Jira");
+  });
+});
