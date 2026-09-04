@@ -1180,7 +1180,18 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
 
 ### Blokujące (odpowiadają wierszom 3.5–3.11 w `plan.md`)
 
-- [ ] **10.A** (3.5 + 3.6) Zakładka **Anomaly rules** istnieje i pokazuje osiem reguł.
+- [x] **10.A** (3.5 + 3.6) Zakładka **Anomaly rules** istnieje i pokazuje osiem reguł.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, na
+      koncie `adam.reszka85@gmail.com`, które ma **zero wierszy** w
+      `anomaly_settings`. To czyni test wyczerpującym w sensie, o który chodzi:
+      osiem kart z kompletem domyślnych dowodzi, że odczyt składa domyślne dla
+      reguł bez zapisu, zamiast pokazywać tylko to, co ktoś kiedyś zapisał.
+      Potwierdzone przez właściciela w całości: zakładka stoi **przed** Demo;
+      osiem kart; *Pull request too big* = **500**; *Ticket ageing in a status* =
+      **siedem** kubełków SP, wszystkie jako pola liczbowe, w tym 21 SP = **64**
+      (sentinel `"8_WORKING_DAYS"` zniknął wraz z S-28); *PR / ticket desync* —
+      **tylko Severity**, bez pola liczbowego; jednostki nazwane („working hours"
+      / „working days"); **żadnej** odznaki „Modified".
       *Gdzie:* `/settings` → **Anomaly rules** (piąta w kolejności, tuż przed
       **Demo**). Dowolne zalogowane konto.
       *Co zrobić:* Ustawienia → kliknij **Anomaly rules**.

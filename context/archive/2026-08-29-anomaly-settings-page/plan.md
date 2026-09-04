@@ -759,8 +759,8 @@ to backfill.
 
 #### Manual
 
-- [ ] 3.5 Settings shows a sixth tab "Anomaly rules", before Demo, and it opens
-- [ ] 3.6 All eight rules render; `PR_TICKET_DESYNC` shows severity only
+- [x] 3.5 Settings shows a sixth tab "Anomaly rules", before Demo, and it opens — verified 2026-09-04 on production
+- [x] 3.6 All eight rules render; `PR_TICKET_DESYNC` shows severity only — verified 2026-09-04 on production, on an account with ZERO anomaly_settings rows, so the eight cards prove defaults are composed for unsaved rules. PR too big = 500; ticket ageing = seven SP buckets all numeric incl. 21 SP = 64; no Modified badges
 - [ ] 3.7 Changing `PR_TOO_BIG` → `maxLines` and saving toasts, and the value survives a reload with a "Modified" badge on that card alone
 - [ ] 3.8 In the DEMO workspace (no active sprint ⇒ detect skips silently): after that save, the Anomaly Inbox reflects the new threshold immediately, without "Sync now" and without waiting for the cron cycle (the D1 proof)
 - [ ] 3.9 "Reset to defaults" clears the badge and restores the shipped number
