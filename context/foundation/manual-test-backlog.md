@@ -1260,7 +1260,17 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       uruchomienia detekcji lead zmieniłby liczbę i przez kwadrans nie widziałby
       różnicy. Roadmapa mówiła kiedyś coś przeciwnego (poprawione 2026-08-29).
 
-- [ ] **10.D** (3.10) Wartość `0` jest odrzucana i **nic** nie zostaje zapisane.
+- [x] **10.D** (3.10) Wartość `0` jest odrzucana i **nic** nie zostaje zapisane.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      konto realne. Cztery próby odrzucone: *Pull request too big* z `0` i `-5`,
+      oraz kubełek **21 SP** karty *Ticket ageing in a status* z `0` i `-5`.
+      Po F5: PR limit **500**, kubełek 21 SP **64**, obie karty **bez odznaki**.
+      **Dowód mocniejszy niż brak odznaki:** `anomaly_settings` ma **0 wierszy**
+      w całej instancji — czyli nie zapisał się żaden wiersz, a nie tylko ekran
+      wygląda na czysty.
+      ➕ **Lepiej, niż wiersz wymagał:** walidacja odzywa się już **w trakcie
+      wpisywania** wartości ujemnej, nie dopiero po **Save** — lead nie zdąży
+      nawet kliknąć zapisu. (Obserwacja właściciela.)
       *Gdzie:* `/settings/anomalies`, karta *Pull request too big*.
       *Co zrobić:* najpierw **Reset to defaults**, jeśli karta ma odznakę po
       10.B; potem wpisz `0` → **Save**; potem `-5` → **Save**; F5.

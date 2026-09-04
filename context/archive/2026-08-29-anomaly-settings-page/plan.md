@@ -764,7 +764,7 @@ to backfill.
 - [x] 3.7 Changing `PR_TOO_BIG` → `maxLines` and saving toasts, and the value survives a reload with a "Modified" badge on that card alone — verified 2026-09-04 on production: PR size limit 500 -> 50 -> Save -> F5 kept 50, Modified badge on exactly one card, Reset to defaults enabled only there. The subsequent reset removed the row (anomaly_settings back to 0), so the button is not a silent no-op
 - [x] 3.8 In the DEMO workspace (no active sprint ⇒ detect skips silently): after that save, the Anomaly Inbox reflects the new threshold immediately, without "Sync now" and without waiting for the cron cycle (the D1 proof) — verified 2026-09-04 in demo on production. Predicted from the fixture before testing and hit exactly: PR sizes 960/234/192/126/72, so 500 catches one and 50 catches all five. Measured PR_TOO_BIG 1 -> 5 (total anomalies 14 -> 18) on Save plus a menu navigation, with no Sync now
 - [ ] 3.9 "Reset to defaults" clears the badge and restores the shipped number
-- [ ] 3.10 Entering `0` or a negative is refused inline and nothing is written
+- [x] 3.10 Entering `0` or a negative is refused inline and nothing is written — verified 2026-09-04 on production: 0 and -5 refused on both PR too big and the 21 SP bucket; after reload 500 and 64 with no Modified badge; anomaly_settings 0 rows instance-wide. Negatives are refused while typing, before Save
 - [ ] 3.11 The form is usable at 1024 px width
 
 ### Phase 4: Closure — roadmap correction and manual-test documentation
