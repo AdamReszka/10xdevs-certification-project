@@ -272,7 +272,7 @@ No automated framework this slice (deferred). Verification is:
 - [x] 1.5 Deployed to Workers: `npm run deploy` succeeds — 11354aa
 - [x] 1.6 `/api/auth-smoke` returns `ok: true` with small `ms` (no 500/timeout) — 11354aa
 - [x] 1.7 `wrangler tail --status error` shows no `exceededCpu` / no-response / `@noble` fallback — 11354aa
-- [ ] 1.8 (Optional de-risk) trivial `proxy.ts` redirect fires on deployed Worker
+- [x] 1.8 (Optional de-risk) trivial `proxy.ts` redirect fires on deployed Worker — verified 2026-09-04 against sprintflow.pl (manual session): 10 gated routes 307 → /login, public routes and both API prefixes unredirected
 - [x] 1.9 Smoke route deleted after gate passes — 11354aa
 
 ### Phase 2: Auth Schema + Migration

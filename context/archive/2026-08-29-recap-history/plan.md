@@ -922,7 +922,7 @@ in this slice; a rollback is a restore.
 
 #### Manual
 
-- [ ] 2.11 A full real cron cycle logs a purge count and completes every other step
+- [x] 2.11 A full real cron cycle logs a purge count and completes every other step — PARTIAL, verified 2026-09-04 on production (20:00:14 cycle, real Jira+GitHub account): every other step completed, proven by artefacts — sync OK/OK with 5 tickets, 4 anomalies, 1 sprint_measurement, 1 daily_recap, new row in Recent sync attempts. The PURGE-COUNT CLAUSE IS NOT SATISFIABLE as written: scheduled.ts:212 logs only when deleted > 0, so a zero leaves no line at all, and retention.ts:71 returns null below 3 recorded sprints so the delete never runs. Split out as backlog row 14.I
 
 ### Phase 3: The history surface and the demo fixture
 
@@ -971,8 +971,8 @@ in this slice; a rollback is a restore.
 
 #### Manual
 
-- [ ] 4.18 The Resend endpoint exists, is subscribed to both events, secret is set
-- [ ] 4.19 A panel test delivery returns 200; a tampered signature returns 401
+- [x] 4.18 The Resend endpoint exists, is subscribed to both events, secret is set — verified 2026-09-04. Found DISABLED by Resend: the panel pointed at www.sprintflow.pl, which had no DNS until 2026-09-01 and still 301s to the apex. URL corrected to the apex and re-enabled by the owner
+- [x] 4.19 A panel test delivery returns 200; a tampered signature returns 401 — verified 2026-09-04 on production via wrangler tail: panel delivery 200 (svix-id msg_3IbceZ…, UA Svix-Webhooks/rolling, log "BOUNCE_PERMANENT disabled 0 owner(s)"); garbage signature 401; and a REPLAYED real signature on a different body also 401, which the row did not ask for and which rules out replay. recap_settings unchanged at 0 rows
 - [ ] 4.20 A send to `bounced@resend.dev` disables the recap with an explanation
 - [ ] 4.21 Re-enabling clears the explanation
 - [ ] 4.22 `MANUAL-CHECKLIST.md` is signed off in full

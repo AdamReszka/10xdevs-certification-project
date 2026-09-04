@@ -425,9 +425,10 @@ na `(auth)`, spójność tokenów w light i dark.
 
 ### F-01 `auth-provider-scaffold` — 1 pozycja
 
-- [ ] **1.8** (opcjonalne de-risk) trywialny redirect z `proxy.ts` odpala się na
-      zdeployowanym Workerze. *Źródło:* `context/changes/auth-provider-scaffold/plan.md`
-      Wymaga realnego deployu — sensowne dopiero przy pierwszym wdrożeniu.
+- [x] **1.8** (opcjonalne de-risk) trywialny redirect z `proxy.ts` odpala się na
+      zdeployowanym Workerze. **Zaliczone 2026-09-04** (sesja manualna, właściciel)
+      — ten sam test co **4.1**, odhaczone razem. *Źródło:*
+      `context/archive/2026-05-30-auth-provider-scaffold/plan.md` (wiersz 1.8).
 
 ---
 
@@ -488,8 +489,16 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
-- [ ] **28.A** Zmiana monitorowanego projektu Jira zeruje `jira_project.time_zone`
-      i cały zegar godzin roboczych przechodzi na UTC.
+- [ ] **S-28 F9** Zmiana monitorowanego projektu Jira zeruje
+      `jira_project.time_zone` i cały zegar godzin roboczych przechodzi na UTC.
+      > **Przenumerowane 2026-09-04 z `28.A`.** Ten wiersz i wiersz **28.A** w
+      > §28 nosiły ten sam numer, a są o czym innym: tamten należy do serii
+      > `28.A`–`28.K` slice'a **S-17** (kalendarz dni wolnych), ten jest długiem
+      > kodu z impl-review **S-28**. Kolizja wzięła się stąd, że §3 numeruje
+      > wiersze oznaczeniem z planu źródłowego (jak `6.6` z S-26), a §28 numeruje
+      > je własną serią — i „28" znaczyło w obu miejscach co innego. Nazwa
+      > `S-28 F9` nie może już z niczym kolidować i sama mówi, skąd pochodzi.
+      > Ryzyko było realne: odhaczenie „28.A" mogło zamknąć nie ten wiersz.
       **Gdzie:** `src/lib/integrations/jira-store.ts:233` —
       `...(projectChanged ? { boardId: null, timeZone: null } : {})`.
       **Co się dzieje:** dopóki krok zespołu nie przeliczy strefy z Jiry
@@ -515,8 +524,19 @@ testy produktu. Odhaczasz je, wykonując pierwszy deploy — nie wcześniej.
 Przypomnienie z pamięci projektu: przed pierwszym deployem są **3 twarde
 prerekwizyty** (migracja adaptera, sterownik DB, flaga CI).
 
-- [ ] **4.1** (F-01 wiersz 1.8) Trywialne przekierowanie z `proxy.ts` odpala się na
-      **wdrożonym** Workerze.
+- [x] **4.1** (F-01 wiersz 1.8) Trywialne przekierowanie z `proxy.ts` odpala się na
+      **wdrożonym** Workerze. **Zaliczone 2026-09-04** (sesja manualna,
+      właściciel; `sprintflow.pl`). Sprawdzone szerzej, niż wiersz wymagał:
+      **10 ścieżek chronionych** (`/dashboard`, `/dashboard/sprint-detail`,
+      `/settings/connections`, `/settings/anomalies`, `/team/roster`,
+      `/team/absences`, `/team/days-off`, `/team/cadence`, `/setup`,
+      `/refinement`) → wszystkie **307 → `/login`**, zero 500 i zero białych
+      stron. Dołożona druga połowa, której wiersz nie żądał, a `middleware.ts:31`
+      ostrzega przed nią wprost — że bramka **nie jest za szeroka**: `/`,
+      `/login`, `/signup`, `/reset` → **200**; `/api/auth/sign-in/email` → **400**
+      (bramka captcha, czyli żądanie doszło do endpointu); `/api/webhooks/resend`
+      → **401** (bramka podpisu, nie przekierowanie). Gdyby webhook był objęty
+      bramką, Resend dostawałby 302 na `/login` i endpoint byłby niewidoczny.
       *Gdzie:* wdrożony Worker, nie `next dev`.
       *Co zrobić:* po pierwszym deployu wejdź na gated route bez sesji.
       *Co musi być prawdą:* następuje przekierowanie na `/login`, a nie 500 ani
@@ -1845,7 +1865,27 @@ rozpisana wersja tych samych siedmiu leży w
       Jira kasowało **całe archiwum recapów** ownera i dzisiejszy wiersz-claim,
       co dawało **drugiego maila za ten sam dzień**.
 
-- [ ] **14.B** (2.11) Pełny cykl crona loguje purge i nie psuje pozostałych kroków.
+- [x] **14.B** (2.11) Pełny cykl crona loguje purge i nie psuje pozostałych kroków.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, na
+      koncie `adam.reszka85@gmail.com` z prawdziwymi credentialami Jiry i
+      GitHuba. Cykl o **20:00:14**, wszystkie kroki dowiedzione artefaktami w
+      bazie: sync (`JIRA=OK`, `GITHUB=OK`, 5 ticketów), detekcja (**4 anomalie**),
+      pomiar sprintu (**1** `sprint_measurement`), recap (**1** `daily_recap`).
+      Nowy wiersz w „Recent sync attempts" potwierdzony na ekranie.
+      ⚠️ **Klauzula o liczniku purge w logu jest NIEWYKONALNA w obecnym kodzie**
+      i to rozjazd wiersz↔kod, nie usterka cyklu: `scheduled.ts:212` loguje
+      purge **wyłącznie** gdy `deleted > 0`, więc przy zerze nie powstaje żadna
+      linia — a wiersz oczekuje, że zobaczysz licznik pokazujący 0. Zdarzenie
+      crona złapane przez `wrangler tail` nie wyprodukowało ani jednej linii,
+      co się z tym zgadza. Wyjątek z purge'a **jest** logowany (`catch` z
+      `console.error`), więc awaria nie przepadnie; ginie tylko rozróżnienie
+      „wykonał się i nie miał czego skasować" od „pętla do niego nie doszła".
+      Dodatkowe sprawdzenie wydzielone do **14.I**.
+      *Kiedy sama klauzula stanie się sprawdzalna:* `retention.ts:71` zwraca
+      `null` przy mniej niż **3** rekordach `sprint_measurement` i wtedy DELETE w
+      ogóle nie startuje. Trzeba więc 3 zapisanych sprintów **i** recapu
+      starszego niż start trzeciego od końca — przy 14-dniowych sprintach ~6–8
+      tygodni realnego używania produkcji, albo zaseedowania tego lokalnie.
       *Gdzie:* terminal + `/settings/connections`, konto z prawdziwymi credentialami.
       *Co zrobić:* wywołaj pełny cykl crona (sync → detekcja → recap → pomiar
       sprintu) i przeczytaj log cyklu.
@@ -1858,6 +1898,23 @@ rozpisana wersja tych samych siedmiu leży w
       wykonywane po nim — a te wysyłają maile i zamykają pomiar sprintu.
       „0 usuniętych" jest wynikiem pozytywnym: model świadomie zawodzi w stronę
       **zachowania danych**.
+
+- [ ] **14.I** Udany purge o wyniku **zero** nie zostawia w logu żadnego śladu.
+      *Wydzielone 2026-09-04 z 14.B, gdzie ta klauzula okazała się niewykonalna.*
+      **Gdzie:** `src/lib/integrations/sync/scheduled.ts:212` — `if (deleted > 0)`.
+      **Co się dzieje:** purge jest jedynym krokiem cyklu, który **trwale kasuje
+      wiersze**, i chodzi co 15 minut. Gdy nie ma czego skasować — czyli w
+      całym normalnym życiu konta przed trzecim zamkniętym sprintem — nie
+      wypisuje nic. Operator nie odróżni „purge wykonał się i skasował 0" od
+      „pętla nigdy do purge'a nie doszła".
+      **Co musi być prawdą po naprawie:** cykl zostawia w logu licznik purge
+      także wtedy, gdy wynosi 0 (albo inny jednoznaczny ślad, że krok się
+      wykonał). Wtedy klauzula z 14.B staje się sprawdzalna na dowolnym koncie,
+      od pierwszego dnia, zamiast po ~6–8 tygodniach.
+      **Dlaczego to ma znaczenie:** to ten sam kształt, co reguła z
+      `lessons.md` o cronie, który przez dobę pchał się do martwej bazy —
+      wynik pusty albo niezbadany czytany jako sukces. Tu dotyczy kroku, który
+      jako jedyny w całym cyklu kasuje dane nieodwracalnie.
 
 - [ ] **14.C** (3.11 + 3.12 + 3.13) Historia jest osiągalna, kompletna i otwiera się.
       *Gdzie:* `/settings/recap` → `/settings/recap/history` → wiersz listy.
@@ -1922,20 +1979,33 @@ rozpisana wersja tych samych siedmiu leży w
 > **Bez sekretu endpoint odpowiada 500 i NIE dotyka bazy** — to zachowanie
 > zamierzone (`lessons.md` #6), nie awaria.
 
-- [ ] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
-      *Gdzie:* panel Resenda → **Send test event**; potem `curl` z terminala.
-      *Co zrobić:* wyślij testową dostawę z panelu; potem powtórz to samo ciało
-      żądania z **byle jakim** podpisem (`svix-signature: v1,ZmFrZQ==`).
-      *Co musi być prawdą:* dostawa z panelu → **200**; sfałszowana → **401**;
-      po tej drugiej recap w `/settings/recap` **dalej jest włączony**, a
-      `select … from recap_settings where disabled_reason is not null` nie
-      pokazuje nowego wiersza.
-      *Dlaczego to łapie:* to **jedyna** publiczna, nieuwierzytelniona trasa w
-      całym repo, a podpis jest **całą** jej ochroną — gdyby przepuszczał
-      cokolwiek, dowolna osoba w internecie wyłączałaby recap dowolnemu
-      ownerowi, podając jego adres e-mail. 16 testów jednostkowych sprawdza
-      algorytm, ale **żaden nie dowodzi, że prawdziwy Resend podpisuje tak
-      samo** — 200 z panelu jest jedynym dowodem na to.
+- [x] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel), za drugim podejściem.
+      **Pierwsze podejście wykryło prawdziwą awarię produkcji** i to jest
+      najcenniejsza rzecz z tego wiersza: webhook był **wyłączony przez samego
+      Resenda** po serii dostaw kończących się `error making request: client
+      error (Connect)`. Endpoint wskazywał na `https://www.sprintflow.pl/...`, a
+      ten host **nie miał żadnego rekordu DNS** do 2026-09-01 ~16:30 i nawet po
+      jego dodaniu zwraca **301** na apex — nadawcy webhooków zwykle nie podążają
+      za przekierowaniem przy POST. Właściciel poprawił URL na apex i włączył
+      webhook z powrotem.
+      **Wynik po naprawie** (odczyt z `wrangler tail`, produkcja):
+      dostawa z panelu → **200**, `svix-id: msg_3IbceZ…`, `UA: Svix-Webhooks/rolling`,
+      log `BOUNCE_PERMANENT disabled 0 owner(s)` (poprawnie — testowy adres nie
+      należy do żadnego konta). To jedyny możliwy dowód, że **prawdziwy Resend
+      podpisuje tak, jak nasz weryfikator sprawdza**, i że sekret w panelu zgadza
+      się z `RESEND_WEBHOOK_SECRET` na Workerze — 16 testów jednostkowych pokrywa
+      sam algorytm i żaden z nich tego nie dotyka.
+      **Druga strona bramki**, sprawdzona mocniej niż wiersz wymagał: śmieciowy
+      podpis (`v1,ZmFrZQ==`) → **401**; a także **prawdziwy podpis przechwycony z
+      dostawy, która przed chwilą przeszła, podstawiony pod inne ciało** → **401**.
+      Ten drugi wariant wyklucza atak przez powtórzenie: podpis jest związany z
+      treścią, nie tylko sprawdzany na obecność. Żądanie bez nagłówków → 401
+      `rejected (missing-headers)`.
+      **Bez śladów:** `recap_settings` 0 wierszy przed i po, `disabled_reason`
+      nigdzie, `daily_recap` 16 wierszy bez zmian.
+      *Notatka `S-12-14.F-webhook-resend-wylaczony.md` usunięta wraz z naprawą,
+      zgodnie z konwencją z `CLAUDE.md`; jej treść merytoryczna jest powyżej.*
 
 - [ ] **14.G** (4.20 + 4.21) Bounce wyłącza recap, mówi dlaczego, a ręczne
       wyłączenie **nie** udaje awarii.
@@ -2383,7 +2453,23 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       Jest pokryta testami automatycznymi (`npm test`, `npm run test:e2e`,
       testy integracyjne), więc to wiersz „na wszelki wypadek", nie blokujący.
 
-- [ ] **17.G** (faza 3, `3.4`–`3.7`) **Gdzie:** terminal, nie przeglądarka —
+- [x] **17.G** (faza 3, `3.4`–`3.7`) **Zaliczone 2026-09-04** (sesja manualna,
+      właściciel). Zmierzone na żywo, nie odczytane z archiwum: szczyt połączeń
+      aplikacji **7** przy `POOL_MAX=5` (suma 19 wobec 12 bezczynnych), i **zero**
+      wystąpień `53300` / „remaining connection slots" w trzech pełnych biegach.
+      Przed zmianą było 24–48 połączeń, czyli 3–4 na żądanie. Suita: **21/21**
+      na równoległych workerach.
+      ⚠️ **Jedna klauzula wiersza NIE potwierdziła się i to jest świadoma decyzja
+      właściciela, nie przeoczenie:** „nie wolniejsza niż wersja seryjna" nie
+      zachodzi — seryjnie 31,5 s i 33,2 s, równolegle 55,1 s i 48,8 s, czyli
+      **~60% wolniej**, konsekwentnie w dwóch pomiarach każdego trybu. W
+      archiwum było odwrotnie (16,9 s vs 21 s), ale suita urosła z 15 do 21
+      testów. Prawdopodobna przyczyna: `next dev` trzyma JEDNĄ pulę `POOL_MAX=5`
+      na cały proces, więc workery kolejkują się po te same 5 połączeń — ta sama
+      zmiana, która zamknęła wyczerpywanie slotów, ogranicza też przepustowość.
+      Odhaczone mimo to, bo przedmiotem S-21 było wyczerpywanie połączeń, a
+      klauzula o czasie była obserwacją z pomiaru, nie bronioną własnością.
+      **Gdzie:** terminal, nie przeglądarka —
       wiersz dla właściciela, nie dla testerki.
       **Co zrobić:** przeczytaj
       `context/changes/db-pool-teardown/measurements.md` i porównaj tabelę
@@ -3292,7 +3378,26 @@ prawdziwym koncie.
 
 ### Nieblokujące (tylko tutaj)
 
-- [ ] **25.A** (faza 2, `plan.md` `2.5`) ⚠️ **NIE DA SIĘ JESZCZE WYKONAĆ** —
+- [x] **25.A** (faza 2, `plan.md` `2.5`) **Zaliczone 2026-09-04** (sesja
+      manualna, właściciel). Blokada zniesiona: `adam.reszka85@gmail.com`
+      podłączyło Jirę (projekt `FM`) i GitHuba na produkcji, a cykl crona przeszedł
+      o **19:45:12** (`JIRA=OK`, `GITHUB=OK`).
+      **Wynik:** `length_days` = **14** i `start_day` = **FRI** przy sprincie
+      „SCRUM Sprint 1" o datach `2026-08-21 (pt) → 2026-09-04 (pt)` = 14 dni —
+      zakres potwierdzony przez właściciela w samej Jirze. **`FRI` zostało `FRI`**,
+      dokładnie jak wiersz przewidywał.
+      **Dowód, że to auto-pull, a nie kreator:** wartości przetrwały uzgodnienie
+      przez synchronizację — kreator zapisał sprint o `19:34:28`, cron przepisał go
+      o `19:45:24` i kadencja się nie zmieniła, a przy okazji doszły
+      `committed_sp=18`, `completed_sp=8`, 5 ticketów i `time_zone=Europe/Warsaw`.
+      ⚠️ **Wiersz jest sprzed zmiany modelu:** kazał odczytać
+      `sprint.cadence_overridden`, a tej kolumny nie ma od S-32 (migracja `0024`).
+      Odpowiednik w obecnym modelu: rekord w `sprint_cadence_override` istnieje
+      (utworzony razem ze sprintem), ale `length_days`, `start_day` i
+      `working_days` są w nim **wszystkie NULL** — lead niczego nie nadpisał, więc
+      resolver spada do warstwy trzeciej, czyli wartości wyprowadzonych z dat
+      Jiry. To ten sam stan, który stara flaga `f` opisywała.
+      *Poprzednia treść blokady:* ⚠️ **NIE DAŁO SIĘ WYKONAĆ** —
       migracja `0022` poszła na produkcję 2026-08-31, ale ta baza ma **zero kont
       i zero wierszy `sprint`**. Ten wiersz sprawdza, że auto-pull FR-007 znowu
       *dosięga* prawdziwego konta; dopóki nikt się na produkcji nie zarejestruje
