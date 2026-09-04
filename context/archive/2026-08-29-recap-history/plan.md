@@ -944,7 +944,7 @@ in this slice; a rollback is a restore.
 - [ ] 3.11 `/settings/recap` links to the history; the tab stays highlighted
 - [ ] 3.12 The list shows real recaps newest-first with a readable status
 - [ ] 3.13 A recap opens and shows the message as it was sent
-- [ ] 3.14 Another account's recap id returns 404
+- [x] 3.14 Another account's recap id returns 404 — verified 2026-09-04 on production against a genuine second account: own recap opens (control), a fabricated UUID 404s, and a REAL recap row belonging to another owner returns the identical 404. No date, status or mail body leaks, and the two 404s are indistinguishable, so the response does not confirm the row exists
 - [ ] 3.15 Demo shows several recaps including the failed one
 
 ### Phase 4: The Resend bounce and complaint webhook

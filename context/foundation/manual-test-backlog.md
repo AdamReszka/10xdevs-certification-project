@@ -378,7 +378,27 @@ powierzchnie zweryfikowałeś w `MANUAL-CHECKLIST.md` sekcja B (5.6–5.10):
 | 4.5 | re-sort i filtrowanie | pokryte przez S-10 **5.6** ✅ |
 | 4.6 | freshness per integracja + baner błędu | pokryte przez S-10 **5.7** i **4.10** ✅ |
 
-Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.2, 5.3, 5.4, 5.5**.
+Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.3, 5.4, 5.5**.
+
+> ✅ **5.2 ZALICZONE 2026-09-04** — pierwsze kryterium sukcesu z PRD ma wreszcie
+> dowód. Wykonane **na produkcji**, co jest mocniejsze niż `wrangler dev` z
+> oryginalnego brzmienia: konto `adam.reszka85@gmail.com` z prawdziwą Jirą
+> (projekt FM) i GitHubem, zsynchronizowane przez cykl crona o 20:00, wygenerowało
+> **cztery prawdziwe anomalie**. Właściciel potwierdził na ekranie komplet pięciu
+> atrybutów FR-014 na `TICKET_STATUS_AGING` oraz że **deep-link otwiera realne
+> zadanie FM-1 w Jirze**. Risk score renderuje się (78 przy HIGH
+> `SPRINT_AT_RISK`, 67 przy pozostałych).
+> Wiersz był nieosiągalny od sierpnia, bo żadne konto produkcyjne nie miało
+> podpiętej Jiry — odblokował go onboarding wykonany tego samego dnia.
+>
+> 🔎 **Obserwacja przy okazji, nie defekt tego wiersza:** `SPRINT_AT_RISK` i
+> `SCOPE_CREEP` mają `source_url = NULL` (`sprint-at-risk.ts:78,124,210`,
+> `scope-creep.ts:41`). Obie są anomaliami **na poziomie sprintu** — ich kontekst
+> niesie `sprintId`, nie ticket — więc nie ma jednego zadania do podlinkowania i
+> wygląda to na decyzję, a nie przeoczenie. **Nie ma jej jednak nigdzie zapisanej**,
+> a FR-014 mówi o deep-linku przy *każdej* anomalii. Warte rozstrzygnięcia:
+> albo link do tablicy sprintu w Jirze, albo jedno zdanie w kodzie mówiące, czemu
+> go nie ma. 5.2 to nie blokuje — wymaga **≥1** anomalii z kompletem, a takie są dwie.
 
 > 🔴 **S-07 5.2 to nie jest zwykły wiersz.** „Realny sync + detect pod
 > `wrangler dev` renderuje ≥1 anomalię z 5 atrybutami i deep-linkiem" jest
@@ -488,6 +508,28 @@ implementujący na końcu fazy 6.
 **S-28 `working-day-aging` — dług przekrojowy znaleziony przy impl-review (F9).**
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
+
+- [ ] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+      *Znalezione i **rozstrzygnięte co do kierunku** 2026-09-04 przy S-07 5.2;
+      decyzja właściciela: **link do tablicy sprintu w Jirze**.*
+      **Gdzie:** `src/lib/anomaly/rules/sprint-at-risk.ts:78,124,210` oraz
+      `src/lib/anomaly/rules/scope-creep.ts:41` — wszystkie ustawiają
+      `sourceUrl: null`.
+      **Co jest:** `SPRINT_AT_RISK` i `SCOPE_CREEP` trafiają na produkcyjny
+      dashboard bez odnośnika do źródła. Obie są anomaliami na poziomie
+      **sprintu** — ich kontekst niesie `sprintId`, nie ticket — więc brak
+      jednego zadania do podlinkowania jest zrozumiały. Ale **FR-014 obiecuje
+      deep-link przy każdej anomalii**, a powodu tego wyjątku nie ma nigdzie
+      zapisanego: ani komentarza w kodzie, ani noty w planie. Czytelnik
+      zastanie `null` bez wyjaśnienia.
+      **Co musi być prawdą po naprawie:** obie reguły niosą odnośnik do
+      **tablicy sprintu w Jirze** (decyzja właściciela 2026-09-04), a nie
+      `null`. Lead klikający anomalię sprintową ma trafić tam, gdzie może z
+      nią coś zrobić.
+      **Dlaczego to ma znaczenie:** deep-link jest jednym z pięciu atrybutów,
+      które FR-014 wymienia jako komplet. Dwie z ośmiu reguł go nie mają, więc
+      obietnica „każda anomalia prowadzi do źródła" jest dziś nieprawdziwa dla
+      jednej czwartej silnika — w tym dla **jedynej reguły o wadze HIGH**.
 
 - [ ] **S-28 F9** Zmiana monitorowanego projektu Jira zeruje
       `jira_project.time_zone` i cały zegar godzin roboczych przechodzi na UTC.
@@ -1180,7 +1222,18 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
 
 ### Blokujące (odpowiadają wierszom 3.5–3.11 w `plan.md`)
 
-- [ ] **10.A** (3.5 + 3.6) Zakładka **Anomaly rules** istnieje i pokazuje osiem reguł.
+- [x] **10.A** (3.5 + 3.6) Zakładka **Anomaly rules** istnieje i pokazuje osiem reguł.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, na
+      koncie `adam.reszka85@gmail.com`, które ma **zero wierszy** w
+      `anomaly_settings`. To czyni test wyczerpującym w sensie, o który chodzi:
+      osiem kart z kompletem domyślnych dowodzi, że odczyt składa domyślne dla
+      reguł bez zapisu, zamiast pokazywać tylko to, co ktoś kiedyś zapisał.
+      Potwierdzone przez właściciela w całości: zakładka stoi **przed** Demo;
+      osiem kart; *Pull request too big* = **500**; *Ticket ageing in a status* =
+      **siedem** kubełków SP, wszystkie jako pola liczbowe, w tym 21 SP = **64**
+      (sentinel `"8_WORKING_DAYS"` zniknął wraz z S-28); *PR / ticket desync* —
+      **tylko Severity**, bez pola liczbowego; jednostki nazwane („working hours"
+      / „working days"); **żadnej** odznaki „Modified".
       *Gdzie:* `/settings` → **Anomaly rules** (piąta w kolejności, tuż przed
       **Demo**). Dowolne zalogowane konto.
       *Co zrobić:* Ustawienia → kliknij **Anomaly rules**.
@@ -1200,7 +1253,17 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       odczyt jest wyczerpujący: konto bez ani jednego wiersza w
       `anomaly_settings` musi zobaczyć komplet domyślnych, nie pustą listę.
 
-- [ ] **10.B** (3.7) Zapis przeżywa przeładowanie i oznacza **dokładnie jedną** kartę.
+- [x] **10.B** (3.7) Zapis przeżywa przeładowanie i oznacza **dokładnie jedną** kartę.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      *PR size limit* 500 → 50 → Save → F5: toast, wartość 50 przetrwała
+      przeładowanie, odznaka **„Modified"** na **jednej** karcie, **Reset to
+      defaults** aktywny wyłącznie tam i wyszarzony na pozostałych siedmiu.
+      Właściciel wykonał następnie **Reset to defaults** na tej karcie i wartość
+      wróciła do 500. Potwierdzone w bazie: `anomaly_settings` dla tego konta ma
+      z powrotem **0 wierszy** — czyli reset skasował wiersz, a nie tylko
+      wyczyścił pole na ekranie. **Produkcja jest w stanie wyjściowym.**
+      *Nie zamyka to **10.2***, który wymaga resetu na **każdej** z ośmiu kart;
+      tu sprawdzono jedną.
       *Gdzie:* `/settings/anomalies`, karta **Pull request too big**.
       *Co zrobić:* zmień **PR size limit** z `500` na `50` → **Save** → F5.
       *Co musi być prawdą:* zielony toast „Pull request too big saved."; po F5 w
@@ -1211,7 +1274,18 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       że zapis napisał wiersze dla reguł, których nikt nie ruszał; brak odznaki po
       F5 — że nie zapisał nic, a toast skłamał.
 
-- [ ] **10.C** (3.8) 🔴 Zmiana progu widać w Anomaly Inbox **natychmiast**, bez „Sync now".
+- [x] **10.C** (3.8) 🔴 Zmiana progu widać w Anomaly Inbox **natychmiast**, bez „Sync now".
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — w trybie demo, jak
+      wiersz wymaga. Wynik **przewidziany z danych przed testem i trafiony co do
+      sztuki**: fixture demo ma pięć PR-ów o rozmiarach **960, 234, 192, 126, 72**
+      linii, więc próg 500 łapie jeden, a próg 50 łapie wszystkie pięć. Zmierzone:
+      `PR_TOO_BIG` **1 → 5** (anomalie ogółem 14 → 18), po samym **Save** i
+      przejściu w menu — bez **Sync now** i bez czekania na cykl.
+      Przewidzenie liczby z góry czyni ten test ostrym: wynik pośredni, np. 1 → 3,
+      byłby znaleziskiem, a nie samym *jest więcej*.
+      Dowód na decyzję **D1**: próg i severity są stemplowane na wierszu anomalii
+      w momencie detekcji, więc bez ponownego przeliczenia lead zmieniłby próg i
+      przez kwadrans patrzył na stare liczby.
       ⚠️ **KONIECZNIE w trybie demo.** Na koncie **bez aktywnego sprintu**
       `detectAnomalies` kończy się cichym `skipped: no_sprint`, a akcja połyka ten
       wynik — więc zapis pokaże zielony toast przy nieruszonym inboxie,
@@ -1228,7 +1302,17 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       uruchomienia detekcji lead zmieniłby liczbę i przez kwadrans nie widziałby
       różnicy. Roadmapa mówiła kiedyś coś przeciwnego (poprawione 2026-08-29).
 
-- [ ] **10.D** (3.10) Wartość `0` jest odrzucana i **nic** nie zostaje zapisane.
+- [x] **10.D** (3.10) Wartość `0` jest odrzucana i **nic** nie zostaje zapisane.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      konto realne. Cztery próby odrzucone: *Pull request too big* z `0` i `-5`,
+      oraz kubełek **21 SP** karty *Ticket ageing in a status* z `0` i `-5`.
+      Po F5: PR limit **500**, kubełek 21 SP **64**, obie karty **bez odznaki**.
+      **Dowód mocniejszy niż brak odznaki:** `anomaly_settings` ma **0 wierszy**
+      w całej instancji — czyli nie zapisał się żaden wiersz, a nie tylko ekran
+      wygląda na czysty.
+      ➕ **Lepiej, niż wiersz wymagał:** walidacja odzywa się już **w trakcie
+      wpisywania** wartości ujemnej, nie dopiero po **Save** — lead nie zdąży
+      nawet kliknąć zapisu. (Obserwacja właściciela.)
       *Gdzie:* `/settings/anomalies`, karta *Pull request too big*.
       *Co zrobić:* najpierw **Reset to defaults**, jeśli karta ma odznakę po
       10.B; potem wpisz `0` → **Save**; potem `-5` → **Save**; F5.
@@ -1252,23 +1336,46 @@ a kolumną `jsonb` to `src/lib/validations/anomaly-settings.ts`**, a stoi ona po
 ciało progu niesprawdzonym rzutowaniem `as`, więc każdy wiersz niżej, który
 dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
 
-- [ ] **10.1** Formularz jest używalny przy szerokości **1024 px** (podłoga
+- [x] **10.1** Formularz jest używalny przy szerokości **1024 px** (podłoga
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      przy ~1024 px. Siatka nie wychodzi poza ekran, **Save** i **Reset to
+      defaults** klikalne bez przewijania w poziomie, siedem kubełków SP nie
+      nachodzi na sąsiednie pola. Sprawdzone na karcie *Ticket ageing in a
+      status*, najtrudniejszej z ośmiu — ma dziewięć pól w jednym rzędzie
+      logicznym, więc jeśli cokolwiek miało się rozjechać, to tam.
       tabletowa z NFR w PRD — poniżej niej wsparcie jest poza zakresem MVP).
       *Co musi być prawdą:* siatka pól nie wychodzi poza ekran, przyciski
       **Save** / **Reset to defaults** są klikalne bez przewijania w poziomie,
       a siatka siedmiu kubełków SP nie nachodzi na sąsiednie pola.
       *Dlaczego odłożone:* to samo ryzyko co §7.5 — układ, nie dane.
 
-- [ ] **10.2** **Reset to defaults** przywraca wartość i gasi odznakę na każdej
+- [x] **10.2** **Reset to defaults** przywraca wartość i gasi odznakę na każdej
       z ośmiu kart, nie tylko na *Pull request too big* (wiersz D checklisty
       pokrywa jedną kartę).
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      **wszystkie osiem kart** przerobione po kolei: zmiana → Save → odznaka
+      **„Modified"** → **Reset to defaults** → wartość z `src/db/defaults.ts`
+      wraca, odznaka gaśnie, przycisk się wyszarza. Objęte także dwie karty
+      nietypowe: *Ticket ageing in a status* z dziewięcioma polami (siedem
+      kubełków SP + Code review + Testing) oraz *PR / ticket desync*, która nie
+      ma progów i resetuje samo severity do **LOW**.
+      **Dowód, że reset kasuje wiersz, a nie tylko czyści ekran:**
+      `anomaly_settings` dla tego konta ma po wszystkim **0 wierszy** i żadnego
+      osieroconego typu — czyli osiem zapisów powstało i osiem zostało
+      usuniętych. To jest dokładnie ta „cicha operacja pusta udająca sukces",
+      przed którą wiersz ostrzega. **Produkcja w stanie wyjściowym.**
       *Co musi być prawdą:* po resecie pole wraca do wartości z
       `src/db/defaults.ts`, odznaka **„Modified"** znika, a sam przycisk staje
       się wyszarzony.
       *Dlaczego:* reset kasuje wiersz `anomaly_settings`; przycisk aktywny przy
       braku wiersza to cicha operacja pusta udająca sukces.
 
-- [ ] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
+- [x] **10.3** Każda z ośmiu kart renderuje **swoje prawdziwe pola**, zgodne z
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      konto realne bez żadnego wiersza w `anomaly_settings`, więc karty
+      pokazywały czyste `DEFAULT_THRESHOLDS`. Właściciel przeszedł wszystkie
+      osiem i potwierdził komplet wartości **po przeliczeniu S-28** wraz z
+      jednostkami *working hours* / *working days*.
       `DEFAULT_THRESHOLDS`. ⚠️ **Wartości przeliczone przez S-28 (2026-08-30)** —
       poprzednia wersja tego wiersza pinowała liczby sprzed zmiany jednostki i
       oblałaby się na poprawnym kodzie: PR review stalled → **8 working hours**;
@@ -1283,7 +1390,18 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       nie osiem godzin zegarowych — karta bez słowa „working" opisuje produkt,
       który już nie istnieje.
 
-- [ ] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
+- [x] **10.4** Edycja **jednego** kubełka SP w karcie *Ticket ageing in a status*
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      3 SP → `32`, Save, F5: pozostałe sześć kubełków zachowało wartości
+      (1→8, 2→8, 5→24, 8→40, 13→40, **21→64**). Następnie *Reset to defaults*;
+      `anomaly_settings` z powrotem **0 wierszy**.
+      **Czego NIE obejrzano:** surowej zawartości kolumny `thresholds` (`jsonb`)
+      — właściciel zresetował kartę, zanim padło zapytanie. Wniosek opiera się
+      na ekranie po F5 **plus** na schemacie walidacji, i to drugie jest tu
+      mocniejsze: `validations/anomaly-settings.ts:125-131` wymaga **dokładnie
+      siedmiu** kluczy i jest `.strict()`, więc częściowa mapa nie ma jak trafić
+      do bazy — zostałaby odrzucona przy zapisie, z czerwonym komunikatem
+      zamiast zielonego toasta. Zapis przeszedł, więc mapa była kompletna.
       zostawia w bazie **wszystkie siedem**.
       *Co zrobić:* zmień 3 SP na `32`, zapisz, odśwież — sprawdź, że 1, 2, 5, 8,
       13 i 21 SP mają nadal swoje wartości (**21 SP dalej `64`**; do S-28 stała
@@ -1295,7 +1413,15 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       sprint. To dokładnie lekcja „zawężający predykat zamienia złą wartość w
       pusty wynik" z `lessons.md`.
 
-- [ ] **10.5** Kubełek 21 SP jest zwykłym polem liczbowym i przeżywa
+- [x] **10.5** Kubełek 21 SP jest zwykłym polem liczbowym i przeżywa
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      21 SP `64` → `72`, Save, F5: **72** i odznaka *Modified* na tej jednej
+      karcie; po **Reset to defaults** i F5: **64**, bez odznaki. Komunikat
+      *Unsaved changes.* nie pojawił się w żadnym momencie — czyli formularz
+      nie uznaje wczytanych wartości za zmienione. `anomaly_settings` z
+      powrotem **0 wierszy** w całej instancji.
+      Potwierdza, że sentinel `"8_WORKING_DAYS"` zniknął naprawdę, a nie
+      został ukryty: pole przyjmuje dowolną liczbę godzin roboczych.
       przeładowanie (**przepisane 2026-08-30 przez S-28** — do tego dnia była to
       lista dwupozycyjna „120 hours (5 days)" / „8 working days", a ten wiersz
       kazał ją przełączać w obie strony; taka kontrolka już nie istnieje).
@@ -1313,8 +1439,22 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       nadpisanie razem z severity, gdy kształt się nie zgadza — dlatego brak
       „Unsaved changes." jest tu równie ważny jak sama liczba.
 
-- [ ] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
+- [x] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
       cofany przez **„Zresetuj dane demo"**.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      obie połowy.
+      **Izolacja demo → realne:** po zapisie progu 50 w demie karta *Pull
+      request too big* w **realnym** workspace pokazywała **500 bez odznaki**
+      *Modified* — potwierdzone na ekranie przez właściciela i w bazie:
+      `anomaly_settings` **1 wiersz pod właścicielem demo, 0 pod realnym**.
+      To jest rachunek za świadomą decyzję, że zakładka **nie** odmawia zapisu
+      w demie (bo tylko demo ma gwarantowany aktywny sprint — patrz 10.C).
+      **Cofnięcie przez *Zresetuj dane demo*:** właściciel użył tego przycisku,
+      nie *Reset to defaults* na karcie (dopytane, bo w bazie oba dają ten sam
+      skutek i sam odczyt by ich nie rozróżnił). Po resecie `anomaly_settings`
+      pod demo **1 → 0**, a `PR_TOO_BIG` **5 → 1**, czyli reset danych demo
+      sprząta również nadpisane progi, a nie tylko tickety i PR-y, i pociąga za
+      sobą ponowną detekcję.
       *Co zrobić:* w demie zmień próg, zapisz, wróć do trybu realnego i sprawdź,
       że karta w realnym workspace ma nadal wartość domyślną; potem w demie
       kliknij **„Zresetuj dane demo"** i sprawdź, że nadpisanie zniknęło.
@@ -1323,7 +1463,19 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       tylko tam widać efekt D1. Cena tej decyzji to izolacja demo↔real, którą ten
       wiersz sprawdza.
 
-- [ ] **10.7** Zmiana progu potrafi naruszyć **wciąż otwarte** wiersze S-07:
+- [x] **10.7** Zmiana progu potrafi naruszyć **wciąż otwarte** wiersze S-07:
+      **Zweryfikowane 2026-09-04** (sesja manualna, właściciel). To nie jest
+      test do zaliczenia, tylko **warunek wstępny** dla wierszy S-07 — i on
+      zachodzi: `anomaly_settings` ma **0 wierszy w całej instancji**, zero
+      odznak *Modified*, więc inbox jest liczony przeciw czystym
+      `DEFAULT_THRESHOLDS`. Ustalone przy okazji 10.D i 10.5 tego samego dnia.
+      ⚠️ **Warunek jest odnawialny, nie jednorazowy:** kto ruszy progi później,
+      musi sprawdzić to ponownie, zanim wróci do wierszy S-07.
+      **Co to odblokowuje:** wiersze S-07 **1.5, 2.5, 3.5, 3.6, 4.7, 5.2–5.5**,
+      w tym **5.2**, opisany w §2 jako najważniejsza pozycja w całym tym pliku
+      (pierwsze kryterium sukcesu z PRD). Do dziś był nieosiągalny, bo żadne
+      konto produkcyjne nie miało podpiętej Jiry; właściciel podpiął ją
+      2026-09-04 i tym samym go odblokował.
       1.5, 2.5, 3.5, 3.6, 4.7 i 5.2–5.5 dotyczą zawartości Anomaly Inbox.
       *Co musi być prawdą:* jeśli robisz te wiersze po S-14, **najpierw** upewnij
       się, że reguły są na domyślnych (brak odznak „Modified" na
@@ -1936,7 +2088,24 @@ rozpisana wersja tych samych siedmiu leży w
       `allow-popups-to-escape-sandbox` linki wyglądałyby normalnie i **nie
       robiłyby nic**, czyli piąty atrybut z FR-014 byłby martwy.
 
-- [ ] **14.D** 🔒 (3.14) Cudzy recap zwraca **404**, a nie pustą stronę.
+- [x] **14.D** 🔒 (3.14) Cudzy recap zwraca **404**, a nie pustą stronę.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, po
+      raz pierwszy przeciw **prawdziwemu drugiemu kontu**, a nie atrapie: na
+      produkcji są teraz trzy realne konta (właściciel, testerka, trzecia osoba),
+      więc „cudzy wiersz" przestał być hipotezą.
+      Zalogowany jako `adam.reszka85@gmail.com`, trzy adresy
+      `/settings/recap/history/<id>`:
+      **(kontrola)** własny recap `7f90e686…` → **otwiera się**;
+      **(a)** zmyślony UUID `00000000-0000-4000-8000-000000000000` → **404**;
+      **(b)** prawdziwy, istniejący recap **innego właściciela** `9ed88093…`
+      (przestrzeń demo konta testerki) → **404, ta sama strona**.
+      Kontrola jest tu load-bearing: bez niej dwa 404 znaczyłyby tylko tyle, że
+      strona zawsze zwraca 404, a nie że odmawia dostępu. Aplikacja nie zdradza
+      nawet **faktu istnienia** cudzego wiersza — a inny komunikat dla cudzego
+      niż dla nieistniejącego sam w sobie byłby wyciekiem.
+      Predykat: `settings/recap/history/[id]/page.tsx:41-42` —
+      `getRecap(db, ownerId, id)` i `notFound()`; pod tabelą nie ma RLS, więc to
+      **jedyna** izolacja.
       *Gdzie:* `/settings/recap/history/<id>` z podmienionym `id`.
       *Co zrobić:* wejdź z (a) losowym, nieistniejącym UUID-em i (b) prawdziwym
       `id` recapu **innego konta** (`select id, owner_id, recap_day from
@@ -2499,6 +2668,38 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       ograniczenie. Cztery pominięte miejsca używają tego samego słownictwa, ale
       opisują **inne**, wciąż ważne reguły — zmiana któregokolwiek z nich byłaby
       pomyłką, nie porządkami.
+
+- [ ] **17.J** Granica błędu mignęła podczas przechodzenia między ekranami.
+      *Zgłoszone przez właściciela 2026-09-04 na PRODUKCJI, w trakcie sesji
+      manualnej (testy 10.B/10.C, przechodzenie Ustawienia ↔ Dashboard).*
+      **Co zaobserwowano:** na moment pojawił się ekran **Something went wrong**,
+      jego słowami: *jakby podczas ładowania zamiast loadera*. Po chwili ekran
+      załadował się normalnie.
+      **Dlaczego to NIE jest ekran ładowania:** ten napis pochodzi z
+      `src/app/error.tsx:68`, jedynej granicy błędu w aplikacji. Renderuje się
+      wyłącznie wtedy, gdy render strony **rzucił wyjątkiem** — czyli coś
+      naprawdę padło i zaraz potem się podniosło. Wrażenie *zamiast loadera*
+      ma osobną przyczynę: w `src/app` **nie ma ani jednego pliku**
+      `loading.tsx`, a wszystkie strony pod `(app)` są `force-dynamic`, więc
+      każde przejście czeka na serwer bez stanu pośredniego.
+      **Czego brakuje do diagnozy:** `error.tsx` celowo nie pokazuje treści
+      błędu (żeby komunikat sterownika bazy nie trafił do przeglądarki), ale
+      pokazuje **`digest`** — opakowany skrót, jedyna nić wiążąca ekran z
+      wpisem w logu serwera. Przy tym wystąpieniu nikt go nie zanotował.
+      **`digest` okazał się w praktyce nie do odczytania** (zweryfikowane w tej
+      samej sesji): ekran znika po ułamku sekundy, bo render się podnosi. Czyli
+      jedyny identyfikator, jaki granica błędu oferuje, jest bezużyteczny
+      dokładnie dla tej klasy błędów, która sama mija — a to ta klasa, w której
+      użytkownik w ogóle zdąży coś zobaczyć.
+      **Co zrobić przy następnym wystąpieniu:** nie polegaj na `digest`. Trzymaj
+      włączone `npx wrangler tail --format json` w tle podczas klikania; wyjątek
+      po stronie serwera pojawi się tam z pełnym stosem, niezależnie od tego, czy
+      ktokolwiek zdąży przeczytać ekran.
+      **Dlaczego to ma znaczenie:** granica błędu migająca przy zwykłej
+      nawigacji to albo realny, przelotny błąd (np. zadławienie bazy), albo
+      błąd renderu zależny od stanu. Jedno i drugie jest dziś **niewidoczne**:
+      użytkownik widzi tylko *coś poszło nie tak*, a nic w aplikacji nie
+      raportuje, że granica w ogóle się odpaliła.
 
 - [ ] **17.I** `MANUAL-CHECKLIST.md` tego slice'a
       (`context/changes/db-pool-teardown/MANUAL-CHECKLIST.md`) jest podpisana w
