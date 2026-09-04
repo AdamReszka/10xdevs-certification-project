@@ -405,7 +405,7 @@ No schema/data migration. `dedupKey` already exists on `anomaly` (`src/db/schema
 
 #### Manual
 
-- [ ] 5.2 Real sync+detect under `wrangler dev` renders ≥1 anomaly with all 5 attributes + deep-link
+- [x] 5.2 Real sync+detect under `wrangler dev` renders ≥1 anomaly with all 5 attributes + deep-link — verified 2026-09-04 on PRODUCTION, which is stronger than `wrangler dev`: a real account (Jira project FM + GitHub) synced by the 20:00 cron produced 4 real anomalies. Owner confirmed on screen that a TICKET_STATUS_AGING row carries all five FR-014 attributes and that its deep-link opens the actual Jira issue FM-1. Risk scores render (78 for the HIGH SPRINT_AT_RISK, 67 for the rest). This is the PRD's first success criterion, unproven since the project began
 - [ ] 5.3 Real per-integration timestamps (Jira separate from GitHub)
 - [ ] 5.4 Induced integration error shows banner + last cached inbox (never blank)
 - [ ] 5.5 "No active sprint" renders its distinct state

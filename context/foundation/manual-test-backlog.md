@@ -378,7 +378,27 @@ powierzchnie zweryfikowałeś w `MANUAL-CHECKLIST.md` sekcja B (5.6–5.10):
 | 4.5 | re-sort i filtrowanie | pokryte przez S-10 **5.6** ✅ |
 | 4.6 | freshness per integracja + baner błędu | pokryte przez S-10 **5.7** i **4.10** ✅ |
 
-Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.2, 5.3, 5.4, 5.5**.
+Realnie otwarte zostają: **1.5, 2.5, 3.5, 3.6, 4.7, 5.3, 5.4, 5.5**.
+
+> ✅ **5.2 ZALICZONE 2026-09-04** — pierwsze kryterium sukcesu z PRD ma wreszcie
+> dowód. Wykonane **na produkcji**, co jest mocniejsze niż `wrangler dev` z
+> oryginalnego brzmienia: konto `adam.reszka85@gmail.com` z prawdziwą Jirą
+> (projekt FM) i GitHubem, zsynchronizowane przez cykl crona o 20:00, wygenerowało
+> **cztery prawdziwe anomalie**. Właściciel potwierdził na ekranie komplet pięciu
+> atrybutów FR-014 na `TICKET_STATUS_AGING` oraz że **deep-link otwiera realne
+> zadanie FM-1 w Jirze**. Risk score renderuje się (78 przy HIGH
+> `SPRINT_AT_RISK`, 67 przy pozostałych).
+> Wiersz był nieosiągalny od sierpnia, bo żadne konto produkcyjne nie miało
+> podpiętej Jiry — odblokował go onboarding wykonany tego samego dnia.
+>
+> 🔎 **Obserwacja przy okazji, nie defekt tego wiersza:** `SPRINT_AT_RISK` i
+> `SCOPE_CREEP` mają `source_url = NULL` (`sprint-at-risk.ts:78,124,210`,
+> `scope-creep.ts:41`). Obie są anomaliami **na poziomie sprintu** — ich kontekst
+> niesie `sprintId`, nie ticket — więc nie ma jednego zadania do podlinkowania i
+> wygląda to na decyzję, a nie przeoczenie. **Nie ma jej jednak nigdzie zapisanej**,
+> a FR-014 mówi o deep-linku przy *każdej* anomalii. Warte rozstrzygnięcia:
+> albo link do tablicy sprintu w Jirze, albo jedno zdanie w kodzie mówiące, czemu
+> go nie ma. 5.2 to nie blokuje — wymaga **≥1** anomalii z kompletem, a takie są dwie.
 
 > 🔴 **S-07 5.2 to nie jest zwykły wiersz.** „Realny sync + detect pod
 > `wrangler dev` renderuje ≥1 anomalię z 5 atrybutami i deep-linkiem" jest
