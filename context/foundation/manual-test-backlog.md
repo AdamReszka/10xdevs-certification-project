@@ -1979,28 +1979,33 @@ rozpisana wersja tych samych siedmiu leży w
 > **Bez sekretu endpoint odpowiada 500 i NIE dotyka bazy** — to zachowanie
 > zamierzone (`lessons.md` #6), nie awaria.
 
-- [ ] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
-      ⛔ **Nieudany 2026-09-04** — `context/manual-tests/S-12-14.F-webhook-resend-wylaczony.md`.
-      Nie dało się dojść do przedmiotu testu: webhook w panelu Resend jest
-      **wyłączony przez samego Resenda** po serii dostaw kończących się
-      `error making request: client error (Connect)`. Endpoint w panelu wskazuje
-      na `https://www.sprintflow.pl/...`, a ten host **nie miał rekordu DNS** do
-      2026-09-01 ~16:30 i **dziś zwraca 301** na apex — samo włączenie webhooka
-      z powrotem prawdopodobnie nie wystarczy. Aplikacja nie wygląda na winną:
-      POST na apex i na `workers.dev` zwraca 401, czyli bramka podpisu działa.
-      *Gdzie:* panel Resenda → **Send test event**; potem `curl` z terminala.
-      *Co zrobić:* wyślij testową dostawę z panelu; potem powtórz to samo ciało
-      żądania z **byle jakim** podpisem (`svix-signature: v1,ZmFrZQ==`).
-      *Co musi być prawdą:* dostawa z panelu → **200**; sfałszowana → **401**;
-      po tej drugiej recap w `/settings/recap` **dalej jest włączony**, a
-      `select … from recap_settings where disabled_reason is not null` nie
-      pokazuje nowego wiersza.
-      *Dlaczego to łapie:* to **jedyna** publiczna, nieuwierzytelniona trasa w
-      całym repo, a podpis jest **całą** jej ochroną — gdyby przepuszczał
-      cokolwiek, dowolna osoba w internecie wyłączałaby recap dowolnemu
-      ownerowi, podając jego adres e-mail. 16 testów jednostkowych sprawdza
-      algorytm, ale **żaden nie dowodzi, że prawdziwy Resend podpisuje tak
-      samo** — 200 z panelu jest jedynym dowodem na to.
+- [x] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel), za drugim podejściem.
+      **Pierwsze podejście wykryło prawdziwą awarię produkcji** i to jest
+      najcenniejsza rzecz z tego wiersza: webhook był **wyłączony przez samego
+      Resenda** po serii dostaw kończących się `error making request: client
+      error (Connect)`. Endpoint wskazywał na `https://www.sprintflow.pl/...`, a
+      ten host **nie miał żadnego rekordu DNS** do 2026-09-01 ~16:30 i nawet po
+      jego dodaniu zwraca **301** na apex — nadawcy webhooków zwykle nie podążają
+      za przekierowaniem przy POST. Właściciel poprawił URL na apex i włączył
+      webhook z powrotem.
+      **Wynik po naprawie** (odczyt z `wrangler tail`, produkcja):
+      dostawa z panelu → **200**, `svix-id: msg_3IbceZ…`, `UA: Svix-Webhooks/rolling`,
+      log `BOUNCE_PERMANENT disabled 0 owner(s)` (poprawnie — testowy adres nie
+      należy do żadnego konta). To jedyny możliwy dowód, że **prawdziwy Resend
+      podpisuje tak, jak nasz weryfikator sprawdza**, i że sekret w panelu zgadza
+      się z `RESEND_WEBHOOK_SECRET` na Workerze — 16 testów jednostkowych pokrywa
+      sam algorytm i żaden z nich tego nie dotyka.
+      **Druga strona bramki**, sprawdzona mocniej niż wiersz wymagał: śmieciowy
+      podpis (`v1,ZmFrZQ==`) → **401**; a także **prawdziwy podpis przechwycony z
+      dostawy, która przed chwilą przeszła, podstawiony pod inne ciało** → **401**.
+      Ten drugi wariant wyklucza atak przez powtórzenie: podpis jest związany z
+      treścią, nie tylko sprawdzany na obecność. Żądanie bez nagłówków → 401
+      `rejected (missing-headers)`.
+      **Bez śladów:** `recap_settings` 0 wierszy przed i po, `disabled_reason`
+      nigdzie, `daily_recap` 16 wierszy bez zmian.
+      *Notatka `S-12-14.F-webhook-resend-wylaczony.md` usunięta wraz z naprawą,
+      zgodnie z konwencją z `CLAUDE.md`; jej treść merytoryczna jest powyżej.*
 
 - [ ] **14.G** (4.20 + 4.21) Bounce wyłącza recap, mówi dlaczego, a ręczne
       wyłączenie **nie** udaje awarii.

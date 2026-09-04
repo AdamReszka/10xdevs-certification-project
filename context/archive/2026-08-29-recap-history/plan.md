@@ -971,8 +971,8 @@ in this slice; a rollback is a restore.
 
 #### Manual
 
-- [ ] 4.18 The Resend endpoint exists, is subscribed to both events, secret is set
-- [ ] 4.19 A panel test delivery returns 200; a tampered signature returns 401
+- [x] 4.18 The Resend endpoint exists, is subscribed to both events, secret is set — verified 2026-09-04. Found DISABLED by Resend: the panel pointed at www.sprintflow.pl, which had no DNS until 2026-09-01 and still 301s to the apex. URL corrected to the apex and re-enabled by the owner
+- [x] 4.19 A panel test delivery returns 200; a tampered signature returns 401 — verified 2026-09-04 on production via wrangler tail: panel delivery 200 (svix-id msg_3IbceZ…, UA Svix-Webhooks/rolling, log "BOUNCE_PERMANENT disabled 0 owner(s)"); garbage signature 401; and a REPLAYED real signature on a different body also 401, which the row did not ask for and which rules out replay. recap_settings unchanged at 0 rows
 - [ ] 4.20 A send to `bounced@resend.dev` disables the recap with an explanation
 - [ ] 4.21 Re-enabling clears the explanation
 - [ ] 4.22 `MANUAL-CHECKLIST.md` is signed off in full
