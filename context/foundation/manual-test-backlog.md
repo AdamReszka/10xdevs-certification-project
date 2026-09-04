@@ -2395,7 +2395,23 @@ dane zostają. **Po testach uruchom bazę z powrotem.**
       Jest pokryta testami automatycznymi (`npm test`, `npm run test:e2e`,
       testy integracyjne), więc to wiersz „na wszelki wypadek", nie blokujący.
 
-- [ ] **17.G** (faza 3, `3.4`–`3.7`) **Gdzie:** terminal, nie przeglądarka —
+- [x] **17.G** (faza 3, `3.4`–`3.7`) **Zaliczone 2026-09-04** (sesja manualna,
+      właściciel). Zmierzone na żywo, nie odczytane z archiwum: szczyt połączeń
+      aplikacji **7** przy `POOL_MAX=5` (suma 19 wobec 12 bezczynnych), i **zero**
+      wystąpień `53300` / „remaining connection slots" w trzech pełnych biegach.
+      Przed zmianą było 24–48 połączeń, czyli 3–4 na żądanie. Suita: **21/21**
+      na równoległych workerach.
+      ⚠️ **Jedna klauzula wiersza NIE potwierdziła się i to jest świadoma decyzja
+      właściciela, nie przeoczenie:** „nie wolniejsza niż wersja seryjna" nie
+      zachodzi — seryjnie 31,5 s i 33,2 s, równolegle 55,1 s i 48,8 s, czyli
+      **~60% wolniej**, konsekwentnie w dwóch pomiarach każdego trybu. W
+      archiwum było odwrotnie (16,9 s vs 21 s), ale suita urosła z 15 do 21
+      testów. Prawdopodobna przyczyna: `next dev` trzyma JEDNĄ pulę `POOL_MAX=5`
+      na cały proces, więc workery kolejkują się po te same 5 połączeń — ta sama
+      zmiana, która zamknęła wyczerpywanie slotów, ogranicza też przepustowość.
+      Odhaczone mimo to, bo przedmiotem S-21 było wyczerpywanie połączeń, a
+      klauzula o czasie była obserwacją z pomiaru, nie bronioną własnością.
+      **Gdzie:** terminal, nie przeglądarka —
       wiersz dla właściciela, nie dla testerki.
       **Co zrobić:** przeczytaj
       `context/changes/db-pool-teardown/measurements.md` i porównaj tabelę

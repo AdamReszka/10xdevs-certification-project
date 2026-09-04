@@ -804,10 +804,10 @@ fires.
 
 #### Manual
 
-- [ ] 3.4 After-measurement recorded next to the Phase 1 baseline
-- [ ] 3.5 Peak connections no longer scale with concurrency past `POOL_MAX`
-- [ ] 3.6 No `53300` / "remaining connection slots" in the E2E output
-- [ ] 3.7 Dev headroom holds at `POOL_MAX = 5` — no timeout failures, wall-clock not worse than the serial baseline
+- [x] 3.4 After-measurement recorded next to the Phase 1 baseline — re-measured live 2026-09-04 (manual session)
+- [x] 3.5 Peak connections no longer scale with concurrency past `POOL_MAX` — verified 2026-09-04: peak app connections 7, total 19 vs idle 12, against 24–48 (3–4/req) before
+- [x] 3.6 No `53300` / "remaining connection slots" in the E2E output — verified 2026-09-04: zero occurrences across three full parallel runs
+- [x] 3.7 Dev headroom holds at `POOL_MAX = 5` — no timeout failures, wall-clock not worse than the serial baseline — PARTIAL, ticked by owner decision 2026-09-04. Headroom and no-timeout hold (21/21 parallel). The WALL-CLOCK CLAUSE DOES NOT: serial 31.5s/33.2s vs parallel 55.1s/48.8s, ~60% slower, two measurements each. The suite grew 15 → 21 tests and `next dev` shares ONE process-global POOL_MAX=5, so workers queue on the same 5 connections. Ticked because S-21's subject was connection exhaustion; the timing clause was an observation from the original measurement, not a defended property
 
 ### Phase 4: "No session" stops meaning "could not tell"
 
