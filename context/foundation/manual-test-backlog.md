@@ -554,9 +554,17 @@ odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
       czym jest.
       ⚠️ **`sprint-at-risk.test.ts` asercjonował `sourceUrl: null`** — czyli
       suita utrwalała tę lukę. Asercja poprawiona wraz z kodem.
-      **Do sprawdzenia manualnie po deployu:** kliknij anomalię
-      `SPRINT_AT_RISK` na `/dashboard` i potwierdź, że odnośnik otwiera tablicę
-      sprintu w Jirze.
+      ✅ **Zweryfikowane na produkcji 2026-09-04** (deploy 21:57:07, przeliczenie
+      przez cron o 22:00). W bazie obie reguły sprintowe niosą
+      `https://foxmind.atlassian.net/jira/software/projects/FM/boards/1?sprint=1`,
+      a właściciel kliknął odnośnik `SPRINT_AT_RISK` na `/dashboard` i
+      **potwierdził, że otwiera tablicę sprintu**. Wszystkie osiem reguł ma teraz
+      komplet pięciu atrybutów FR-014.
+      🔎 **Warte zapamiętania przy następnej takiej weryfikacji:** `detected_at`
+      **nie zmienił się** (dalej 19:45:12) — detekcja nadpisuje istniejące wiersze
+      po `dedupKey`, zamiast tworzyć nowe. To poprawne (to ten sam problem, nie
+      nowy), ale kto patrzy wyłącznie na znacznik czasu, uzna, że nic się nie
+      wydarzyło. Patrz na `source_url`, nie na `detected_at`.
       *Znalezione i **rozstrzygnięte co do kierunku** 2026-09-04 przy S-07 5.2;
       decyzja właściciela: **link do tablicy sprintu w Jirze**.*
       **Gdzie:** `src/lib/anomaly/rules/sprint-at-risk.ts:78,124,210` oraz
