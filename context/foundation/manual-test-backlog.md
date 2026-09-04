@@ -1211,7 +1211,17 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       odczyt jest wyczerpujący: konto bez ani jednego wiersza w
       `anomaly_settings` musi zobaczyć komplet domyślnych, nie pustą listę.
 
-- [ ] **10.B** (3.7) Zapis przeżywa przeładowanie i oznacza **dokładnie jedną** kartę.
+- [x] **10.B** (3.7) Zapis przeżywa przeładowanie i oznacza **dokładnie jedną** kartę.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI.
+      *PR size limit* 500 → 50 → Save → F5: toast, wartość 50 przetrwała
+      przeładowanie, odznaka **„Modified"** na **jednej** karcie, **Reset to
+      defaults** aktywny wyłącznie tam i wyszarzony na pozostałych siedmiu.
+      Właściciel wykonał następnie **Reset to defaults** na tej karcie i wartość
+      wróciła do 500. Potwierdzone w bazie: `anomaly_settings` dla tego konta ma
+      z powrotem **0 wierszy** — czyli reset skasował wiersz, a nie tylko
+      wyczyścił pole na ekranie. **Produkcja jest w stanie wyjściowym.**
+      *Nie zamyka to **10.2***, który wymaga resetu na **każdej** z ośmiu kart;
+      tu sprawdzono jedną.
       *Gdzie:* `/settings/anomalies`, karta **Pull request too big**.
       *Co zrobić:* zmień **PR size limit** z `500` na `50` → **Save** → F5.
       *Co musi być prawdą:* zielony toast „Pull request too big saved."; po F5 w
