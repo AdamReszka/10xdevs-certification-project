@@ -1980,6 +1980,14 @@ rozpisana wersja tych samych siedmiu leży w
 > zamierzone (`lessons.md` #6), nie awaria.
 
 - [ ] **14.F** 🔒 (4.18 + 4.19) Podpis jest jedyną bramką — sprawdź obie strony.
+      ⛔ **Nieudany 2026-09-04** — `context/manual-tests/S-12-14.F-webhook-resend-wylaczony.md`.
+      Nie dało się dojść do przedmiotu testu: webhook w panelu Resend jest
+      **wyłączony przez samego Resenda** po serii dostaw kończących się
+      `error making request: client error (Connect)`. Endpoint w panelu wskazuje
+      na `https://www.sprintflow.pl/...`, a ten host **nie miał rekordu DNS** do
+      2026-09-01 ~16:30 i **dziś zwraca 301** na apex — samo włączenie webhooka
+      z powrotem prawdopodobnie nie wystarczy. Aplikacja nie wygląda na winną:
+      POST na apex i na `workers.dev` zwraca 401, czyli bramka podpisu działa.
       *Gdzie:* panel Resenda → **Send test event**; potem `curl` z terminala.
       *Co zrobić:* wyślij testową dostawę z panelu; potem powtórz to samo ciało
       żądania z **byle jakim** podpisem (`svix-signature: v1,ZmFrZQ==`).
