@@ -922,7 +922,7 @@ in this slice; a rollback is a restore.
 
 #### Manual
 
-- [ ] 2.11 A full real cron cycle logs a purge count and completes every other step
+- [x] 2.11 A full real cron cycle logs a purge count and completes every other step — PARTIAL, verified 2026-09-04 on production (20:00:14 cycle, real Jira+GitHub account): every other step completed, proven by artefacts — sync OK/OK with 5 tickets, 4 anomalies, 1 sprint_measurement, 1 daily_recap, new row in Recent sync attempts. The PURGE-COUNT CLAUSE IS NOT SATISFIABLE as written: scheduled.ts:212 logs only when deleted > 0, so a zero leaves no line at all, and retention.ts:71 returns null below 3 recorded sprints so the delete never runs. Split out as backlog row 14.I
 
 ### Phase 3: The history surface and the demo fixture
 

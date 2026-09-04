@@ -1865,7 +1865,27 @@ rozpisana wersja tych samych siedmiu leży w
       Jira kasowało **całe archiwum recapów** ownera i dzisiejszy wiersz-claim,
       co dawało **drugiego maila za ten sam dzień**.
 
-- [ ] **14.B** (2.11) Pełny cykl crona loguje purge i nie psuje pozostałych kroków.
+- [x] **14.B** (2.11) Pełny cykl crona loguje purge i nie psuje pozostałych kroków.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI, na
+      koncie `adam.reszka85@gmail.com` z prawdziwymi credentialami Jiry i
+      GitHuba. Cykl o **20:00:14**, wszystkie kroki dowiedzione artefaktami w
+      bazie: sync (`JIRA=OK`, `GITHUB=OK`, 5 ticketów), detekcja (**4 anomalie**),
+      pomiar sprintu (**1** `sprint_measurement`), recap (**1** `daily_recap`).
+      Nowy wiersz w „Recent sync attempts" potwierdzony na ekranie.
+      ⚠️ **Klauzula o liczniku purge w logu jest NIEWYKONALNA w obecnym kodzie**
+      i to rozjazd wiersz↔kod, nie usterka cyklu: `scheduled.ts:212` loguje
+      purge **wyłącznie** gdy `deleted > 0`, więc przy zerze nie powstaje żadna
+      linia — a wiersz oczekuje, że zobaczysz licznik pokazujący 0. Zdarzenie
+      crona złapane przez `wrangler tail` nie wyprodukowało ani jednej linii,
+      co się z tym zgadza. Wyjątek z purge'a **jest** logowany (`catch` z
+      `console.error`), więc awaria nie przepadnie; ginie tylko rozróżnienie
+      „wykonał się i nie miał czego skasować" od „pętla do niego nie doszła".
+      Dodatkowe sprawdzenie wydzielone do **14.I**.
+      *Kiedy sama klauzula stanie się sprawdzalna:* `retention.ts:71` zwraca
+      `null` przy mniej niż **3** rekordach `sprint_measurement` i wtedy DELETE w
+      ogóle nie startuje. Trzeba więc 3 zapisanych sprintów **i** recapu
+      starszego niż start trzeciego od końca — przy 14-dniowych sprintach ~6–8
+      tygodni realnego używania produkcji, albo zaseedowania tego lokalnie.
       *Gdzie:* terminal + `/settings/connections`, konto z prawdziwymi credentialami.
       *Co zrobić:* wywołaj pełny cykl crona (sync → detekcja → recap → pomiar
       sprintu) i przeczytaj log cyklu.
@@ -1878,6 +1898,23 @@ rozpisana wersja tych samych siedmiu leży w
       wykonywane po nim — a te wysyłają maile i zamykają pomiar sprintu.
       „0 usuniętych" jest wynikiem pozytywnym: model świadomie zawodzi w stronę
       **zachowania danych**.
+
+- [ ] **14.I** Udany purge o wyniku **zero** nie zostawia w logu żadnego śladu.
+      *Wydzielone 2026-09-04 z 14.B, gdzie ta klauzula okazała się niewykonalna.*
+      **Gdzie:** `src/lib/integrations/sync/scheduled.ts:212` — `if (deleted > 0)`.
+      **Co się dzieje:** purge jest jedynym krokiem cyklu, który **trwale kasuje
+      wiersze**, i chodzi co 15 minut. Gdy nie ma czego skasować — czyli w
+      całym normalnym życiu konta przed trzecim zamkniętym sprintem — nie
+      wypisuje nic. Operator nie odróżni „purge wykonał się i skasował 0" od
+      „pętla nigdy do purge'a nie doszła".
+      **Co musi być prawdą po naprawie:** cykl zostawia w logu licznik purge
+      także wtedy, gdy wynosi 0 (albo inny jednoznaczny ślad, że krok się
+      wykonał). Wtedy klauzula z 14.B staje się sprawdzalna na dowolnym koncie,
+      od pierwszego dnia, zamiast po ~6–8 tygodniach.
+      **Dlaczego to ma znaczenie:** to ten sam kształt, co reguła z
+      `lessons.md` o cronie, który przez dobę pchał się do martwej bazy —
+      wynik pusty albo niezbadany czytany jako sukces. Tu dotyczy kroku, który
+      jako jedyny w całym cyklu kasuje dane nieodwracalnie.
 
 - [ ] **14.C** (3.11 + 3.12 + 3.13) Historia jest osiągalna, kompletna i otwiera się.
       *Gdzie:* `/settings/recap` → `/settings/recap/history` → wiersz listy.
