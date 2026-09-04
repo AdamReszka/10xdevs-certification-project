@@ -1421,7 +1421,19 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       tylko tam widać efekt D1. Cena tej decyzji to izolacja demo↔real, którą ten
       wiersz sprawdza.
 
-- [ ] **10.7** Zmiana progu potrafi naruszyć **wciąż otwarte** wiersze S-07:
+- [x] **10.7** Zmiana progu potrafi naruszyć **wciąż otwarte** wiersze S-07:
+      **Zweryfikowane 2026-09-04** (sesja manualna, właściciel). To nie jest
+      test do zaliczenia, tylko **warunek wstępny** dla wierszy S-07 — i on
+      zachodzi: `anomaly_settings` ma **0 wierszy w całej instancji**, zero
+      odznak *Modified*, więc inbox jest liczony przeciw czystym
+      `DEFAULT_THRESHOLDS`. Ustalone przy okazji 10.D i 10.5 tego samego dnia.
+      ⚠️ **Warunek jest odnawialny, nie jednorazowy:** kto ruszy progi później,
+      musi sprawdzić to ponownie, zanim wróci do wierszy S-07.
+      **Co to odblokowuje:** wiersze S-07 **1.5, 2.5, 3.5, 3.6, 4.7, 5.2–5.5**,
+      w tym **5.2**, opisany w §2 jako najważniejsza pozycja w całym tym pliku
+      (pierwsze kryterium sukcesu z PRD). Do dziś był nieosiągalny, bo żadne
+      konto produkcyjne nie miało podpiętej Jiry; właściciel podpiął ją
+      2026-09-04 i tym samym go odblokował.
       1.5, 2.5, 3.5, 3.6, 4.7 i 5.2–5.5 dotyczą zawartości Anomaly Inbox.
       *Co musi być prawdą:* jeśli robisz te wiersze po S-14, **najpierw** upewnij
       się, że reguły są na domyślnych (brak odznak „Modified" na
