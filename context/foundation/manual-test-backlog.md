@@ -509,6 +509,28 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
+- [ ] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+      *Znalezione i **rozstrzygnięte co do kierunku** 2026-09-04 przy S-07 5.2;
+      decyzja właściciela: **link do tablicy sprintu w Jirze**.*
+      **Gdzie:** `src/lib/anomaly/rules/sprint-at-risk.ts:78,124,210` oraz
+      `src/lib/anomaly/rules/scope-creep.ts:41` — wszystkie ustawiają
+      `sourceUrl: null`.
+      **Co jest:** `SPRINT_AT_RISK` i `SCOPE_CREEP` trafiają na produkcyjny
+      dashboard bez odnośnika do źródła. Obie są anomaliami na poziomie
+      **sprintu** — ich kontekst niesie `sprintId`, nie ticket — więc brak
+      jednego zadania do podlinkowania jest zrozumiały. Ale **FR-014 obiecuje
+      deep-link przy każdej anomalii**, a powodu tego wyjątku nie ma nigdzie
+      zapisanego: ani komentarza w kodzie, ani noty w planie. Czytelnik
+      zastanie `null` bez wyjaśnienia.
+      **Co musi być prawdą po naprawie:** obie reguły niosą odnośnik do
+      **tablicy sprintu w Jirze** (decyzja właściciela 2026-09-04), a nie
+      `null`. Lead klikający anomalię sprintową ma trafić tam, gdzie może z
+      nią coś zrobić.
+      **Dlaczego to ma znaczenie:** deep-link jest jednym z pięciu atrybutów,
+      które FR-014 wymienia jako komplet. Dwie z ośmiu reguł go nie mają, więc
+      obietnica „każda anomalia prowadzi do źródła" jest dziś nieprawdziwa dla
+      jednej czwartej silnika — w tym dla **jedynej reguły o wadze HIGH**.
+
 - [ ] **S-28 F9** Zmiana monitorowanego projektu Jira zeruje
       `jira_project.time_zone` i cały zegar godzin roboczych przechodzi na UTC.
       > **Przenumerowane 2026-09-04 z `28.A`.** Ten wiersz i wiersz **28.A** w
