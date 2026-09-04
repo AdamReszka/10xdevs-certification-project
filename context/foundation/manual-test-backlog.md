@@ -1232,7 +1232,18 @@ reszta: nic nie zostało wyrzucone, tylko odłożone, każdy wiersz z powodem.
       że zapis napisał wiersze dla reguł, których nikt nie ruszał; brak odznaki po
       F5 — że nie zapisał nic, a toast skłamał.
 
-- [ ] **10.C** (3.8) 🔴 Zmiana progu widać w Anomaly Inbox **natychmiast**, bez „Sync now".
+- [x] **10.C** (3.8) 🔴 Zmiana progu widać w Anomaly Inbox **natychmiast**, bez „Sync now".
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — w trybie demo, jak
+      wiersz wymaga. Wynik **przewidziany z danych przed testem i trafiony co do
+      sztuki**: fixture demo ma pięć PR-ów o rozmiarach **960, 234, 192, 126, 72**
+      linii, więc próg 500 łapie jeden, a próg 50 łapie wszystkie pięć. Zmierzone:
+      `PR_TOO_BIG` **1 → 5** (anomalie ogółem 14 → 18), po samym **Save** i
+      przejściu w menu — bez **Sync now** i bez czekania na cykl.
+      Przewidzenie liczby z góry czyni ten test ostrym: wynik pośredni, np. 1 → 3,
+      byłby znaleziskiem, a nie samym *jest więcej*.
+      Dowód na decyzję **D1**: próg i severity są stemplowane na wierszu anomalii
+      w momencie detekcji, więc bez ponownego przeliczenia lead zmieniłby próg i
+      przez kwadrans patrzył na stare liczby.
       ⚠️ **KONIECZNIE w trybie demo.** Na koncie **bez aktywnego sprintu**
       `detectAnomalies` kończy się cichym `skipped: no_sprint`, a akcja połyka ten
       wynik — więc zapis pokaże zielony toast przy nieruszonym inboxie,
