@@ -509,7 +509,54 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
-- [ ] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+- [ ] **S-07 FR-014-link-dev** `DEVELOPER_INACTIVE` nie ma deep-linku — i nie
+      jest oczywiste, dokąd miałby prowadzić.
+      *Wydzielone 2026-09-04 z `S-07 FR-014-link` na wyraźną prośbę
+      właściciela. Tamten wiersz objął reguły na poziomie SPRINTU i został
+      zamknięty (`dbf179a`); ta jest na poziomie OSOBY i celowo nie została
+      wciągnięta po cichu do tamtej zmiany.*
+      **Gdzie:** `src/lib/anomaly/rules/developer-inactive.ts:93` —
+      `sourceUrl: null`. Kontekst reguły niesie `githubUsername` i
+      `teamMemberId`, więc dane do zbudowania odnośnika **są**.
+      ⚠️ **Dlaczego to nie jest zwykłe „dodaj link":** gwarancja z PRD mówi, że
+      produkt **nigdy** nie prezentuje danych jako materiału do oceny
+      pracownika. Odnośnik prowadzący z anomalii „ta osoba nie commitowała"
+      wprost do listy jej commitów jest dokładnie tym kadrowaniem, przed którym
+      ta gwarancja stoi. To jest decyzja produktowa, nie techniczna.
+      **Kandydaci do rozważenia:**
+      1. **Nic — i zapisać dlaczego.** Reguła dotyczy osoby, a produkt
+         świadomie nie kieruje leada na jej aktywność. Wtedy `null` zostaje,
+         ale przestaje być milczący: jedno zdanie w kodzie i wyjątek nazwany
+         w FR-014.
+      2. **`/team/absences`** — wewnętrznie, nie do GitHuba. Pierwsze pytanie
+         leada przy „nie commitował" brzmi zwykle *czy on nie jest na urlopie*,
+         a to jest ekran, na którym może to sprawdzić i uzupełnić.
+      3. **Commity w monitorowanych repo, filtrowane po autorze** — najbliżej
+         litery FR-014, najdalej od gwarancji. Dodatkowo niejednoznaczne:
+         monitorowanych repozytoriów bywa wiele, więc „to repo" nie istnieje.
+      **Co musi być prawdą po rozstrzygnięciu:** albo reguła niesie odnośnik,
+      albo `null` ma przy sobie zapisany powód. Dziś nie ma ani jednego, ani
+      drugiego — a `developer-inactive.test.ts:44` asercjonuje ten `null`, więc
+      suita utrwala stan, którego nikt nie wybrał. Ten sam kształt co przy
+      regułach sprintowych, gdzie test też pinował lukę.
+
+- [x] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+      ✅ **NAPRAWIONE 2026-09-04** (`dbf179a`) — `SPRINT_AT_RISK` (3 miejsca)
+      i `SCOPE_CREEP` (1) niosą teraz link do tablicy sprintu. Format
+      **zweryfikowany ręcznie na żywej Jirze**, nie zgadnięty:
+      `{workspace}/jira/software/projects/{KEY}/boards/{boardId}?sprint={id}`
+      — z trzech kandydatów ten jeden wchodzi na sam sprint, nie tylko na
+      tablicę. Degradacja zamiast `null`, który ten wiersz miał usunąć: brak
+      `board_id` → `{workspace}/browse/{KEY}`, brak id sprintu → sam adres
+      tablicy. `null` zostaje wyłącznie, gdy nie znamy workspace'u lub klucza
+      projektu — wymyślony link na rozłączonym credentialu byłby martwy, a
+      martwy link czyta się jak defekt, podczas gdy brak linku czyta się jak to,
+      czym jest.
+      ⚠️ **`sprint-at-risk.test.ts` asercjonował `sourceUrl: null`** — czyli
+      suita utrwalała tę lukę. Asercja poprawiona wraz z kodem.
+      **Do sprawdzenia manualnie po deployu:** kliknij anomalię
+      `SPRINT_AT_RISK` na `/dashboard` i potwierdź, że odnośnik otwiera tablicę
+      sprintu w Jirze.
       *Znalezione i **rozstrzygnięte co do kierunku** 2026-09-04 przy S-07 5.2;
       decyzja właściciela: **link do tablicy sprintu w Jirze**.*
       **Gdzie:** `src/lib/anomaly/rules/sprint-at-risk.ts:78,124,210` oraz

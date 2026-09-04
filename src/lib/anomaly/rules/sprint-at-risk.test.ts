@@ -201,7 +201,12 @@ describe("detectSprintAtRisk — unplanned absence (FR-010)", () => {
       dedupKey: "SPRINT_AT_RISK:absence:absence-1",
       relatedTeamMemberId: "member-1",
       magnitude: 1,
-      sourceUrl: null,
+      // The board link, not null: SPRINT_AT_RISK is sprint-level and has no
+      // ticket of its own, so FR-014's deep-link comes from the snapshot
+      // (`sprint-board-url.ts`). This line used to pin the null and was
+      // therefore pinning the gap.
+      sourceUrl:
+        "https://example.atlassian.net/jira/software/projects/SF/boards/1?sprint=1",
     });
     expect(out[0].context).toMatchObject({
       condition: "absence",

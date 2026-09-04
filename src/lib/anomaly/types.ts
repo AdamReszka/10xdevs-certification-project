@@ -54,6 +54,22 @@ export type SprintSnapshot = {
    */
   timeZone: string | null;
   /**
+   * Where a SPRINT-LEVEL anomaly points (FR-014, added 2026-09-04).
+   *
+   * Arrives as DATA for the same reason `timeZone` does: rules are pure over the
+   * snapshot, so a rule that needs the workspace origin, the project key and the
+   * board id cannot go and read three tables for them. `sprint-board-url.ts`
+   * composes it; `SPRINT_AT_RISK` and `SCOPE_CREEP` are its only consumers,
+   * because they are the two rules with no ticket or PR of their own to borrow a
+   * link from.
+   *
+   * Null when the workspace or the project key is unknown — a disconnected
+   * credential still leaves anomaly rows on screen, and a fabricated URL there
+   * would be a dead link, which reads as a defect where an absent one reads as
+   * what it is.
+   */
+  sprintBoardUrl: string | null;
+  /**
    * The working-day pattern that applies to this sprint (S-30, FR-007).
    *
    * TOP-LEVEL, beside `timeZone` and `nonWorkingDays`, for exactly their reason:

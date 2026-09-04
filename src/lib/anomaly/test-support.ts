@@ -173,6 +173,10 @@ export function makeSnapshot(over: Partial<SprintSnapshot> = {}): SprintSnapshot
     pullRequests: [],
     commits: [],
     teamMembers: [],
+    // A REAL-shaped board link by default, so a rule that forgets to carry it
+    // fails loudly in its own test rather than passing on a null.
+    sprintBoardUrl:
+      "https://example.atlassian.net/jira/software/projects/SF/boards/1?sprint=1",
     absences: [],
     // UTC by default so every rule expectation reads as a plain calendar fact,
     // independent of the machine the suite runs on.
