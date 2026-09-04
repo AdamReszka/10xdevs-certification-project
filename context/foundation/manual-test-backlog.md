@@ -489,8 +489,16 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
-- [ ] **28.A** Zmiana monitorowanego projektu Jira zeruje `jira_project.time_zone`
-      i cały zegar godzin roboczych przechodzi na UTC.
+- [ ] **S-28 F9** Zmiana monitorowanego projektu Jira zeruje
+      `jira_project.time_zone` i cały zegar godzin roboczych przechodzi na UTC.
+      > **Przenumerowane 2026-09-04 z `28.A`.** Ten wiersz i wiersz **28.A** w
+      > §28 nosiły ten sam numer, a są o czym innym: tamten należy do serii
+      > `28.A`–`28.K` slice'a **S-17** (kalendarz dni wolnych), ten jest długiem
+      > kodu z impl-review **S-28**. Kolizja wzięła się stąd, że §3 numeruje
+      > wiersze oznaczeniem z planu źródłowego (jak `6.6` z S-26), a §28 numeruje
+      > je własną serią — i „28" znaczyło w obu miejscach co innego. Nazwa
+      > `S-28 F9` nie może już z niczym kolidować i sama mówi, skąd pochodzi.
+      > Ryzyko było realne: odhaczenie „28.A" mogło zamknąć nie ten wiersz.
       **Gdzie:** `src/lib/integrations/jira-store.ts:233` —
       `...(projectChanged ? { boardId: null, timeZone: null } : {})`.
       **Co się dzieje:** dopóki krok zespołu nie przeliczy strefy z Jiry
