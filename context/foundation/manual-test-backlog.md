@@ -1357,8 +1357,22 @@ dotyka kształtu ciała, chroni przed awarią detekcji, a nie przed brzydkim UI.
       nadpisanie razem z severity, gdy kształt się nie zgadza — dlatego brak
       „Unsaved changes." jest tu równie ważny jak sama liczba.
 
-- [ ] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
+- [x] **10.6** W trybie demo zapis progu **ląduje pod właścicielem demo** i jest
       cofany przez **„Zresetuj dane demo"**.
+      **Zaliczone 2026-09-04** (sesja manualna, właściciel) — na PRODUKCJI,
+      obie połowy.
+      **Izolacja demo → realne:** po zapisie progu 50 w demie karta *Pull
+      request too big* w **realnym** workspace pokazywała **500 bez odznaki**
+      *Modified* — potwierdzone na ekranie przez właściciela i w bazie:
+      `anomaly_settings` **1 wiersz pod właścicielem demo, 0 pod realnym**.
+      To jest rachunek za świadomą decyzję, że zakładka **nie** odmawia zapisu
+      w demie (bo tylko demo ma gwarantowany aktywny sprint — patrz 10.C).
+      **Cofnięcie przez *Zresetuj dane demo*:** właściciel użył tego przycisku,
+      nie *Reset to defaults* na karcie (dopytane, bo w bazie oba dają ten sam
+      skutek i sam odczyt by ich nie rozróżnił). Po resecie `anomaly_settings`
+      pod demo **1 → 0**, a `PR_TOO_BIG` **5 → 1**, czyli reset danych demo
+      sprząta również nadpisane progi, a nie tylko tickety i PR-y, i pociąga za
+      sobą ponowną detekcję.
       *Co zrobić:* w demie zmień próg, zapisz, wróć do trybu realnego i sprawdź,
       że karta w realnym workspace ma nadal wartość domyślną; potem w demie
       kliknij **„Zresetuj dane demo"** i sprawdź, że nadpisanie zniknęło.
