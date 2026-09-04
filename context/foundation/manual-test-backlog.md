@@ -509,7 +509,23 @@ implementujący na końcu fazy 6.
 Nie jest to test do wyklikania ani zobowiązanie dokumentacyjne — to defekt kodu,
 odłożony świadomie, bo powstał przed S-28 i nie należy do jego zakresu.
 
-- [ ] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+- [x] **S-07 FR-014-link** Anomalie na poziomie sprintu nie mają deep-linku.
+      ✅ **NAPRAWIONE 2026-09-04** (`dbf179a`) — `SPRINT_AT_RISK` (3 miejsca)
+      i `SCOPE_CREEP` (1) niosą teraz link do tablicy sprintu. Format
+      **zweryfikowany ręcznie na żywej Jirze**, nie zgadnięty:
+      `{workspace}/jira/software/projects/{KEY}/boards/{boardId}?sprint={id}`
+      — z trzech kandydatów ten jeden wchodzi na sam sprint, nie tylko na
+      tablicę. Degradacja zamiast `null`, który ten wiersz miał usunąć: brak
+      `board_id` → `{workspace}/browse/{KEY}`, brak id sprintu → sam adres
+      tablicy. `null` zostaje wyłącznie, gdy nie znamy workspace'u lub klucza
+      projektu — wymyślony link na rozłączonym credentialu byłby martwy, a
+      martwy link czyta się jak defekt, podczas gdy brak linku czyta się jak to,
+      czym jest.
+      ⚠️ **`sprint-at-risk.test.ts` asercjonował `sourceUrl: null`** — czyli
+      suita utrwalała tę lukę. Asercja poprawiona wraz z kodem.
+      **Do sprawdzenia manualnie po deployu:** kliknij anomalię
+      `SPRINT_AT_RISK` na `/dashboard` i potwierdź, że odnośnik otwiera tablicę
+      sprintu w Jirze.
       *Znalezione i **rozstrzygnięte co do kierunku** 2026-09-04 przy S-07 5.2;
       decyzja właściciela: **link do tablicy sprintu w Jirze**.*
       **Gdzie:** `src/lib/anomaly/rules/sprint-at-risk.ts:78,124,210` oraz
